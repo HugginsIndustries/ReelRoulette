@@ -234,6 +234,9 @@ exports[`page structure > keeps the starting markup 1`] = `
           <div class="stats-tab-header">
             <h2>
               "Stats"
+            <button aria-label="Show exact times" class="icon-btn" id="stats-exact-times-btn" title="Show exact times" type="button">
+              <span aria-hidden="true" class="material-symbol-icon">
+                "calendar_clock"
           <div class="stats-body themed-scrollbar" id="stats-body">
             <section aria-labelledby="stats-file-heading" class="stats-section">
               <h3 id="stats-file-heading">

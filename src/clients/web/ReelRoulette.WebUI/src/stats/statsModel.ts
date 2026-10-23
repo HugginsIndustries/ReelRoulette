@@ -4,6 +4,7 @@ import type { NormalizationAdjustment } from "../playback/loudnessNormalization"
 import { formatPlaybackTime } from "../playback/nowPlaying";
 import type { TagCatalogSnapshot } from "../tags/tagCatalog";
 import { bySortOrderThenName, isUncategorizedCategoryId, normalizeTagKey } from "../tags/tagEditorModel";
+import { exactTimeText } from "../time/timeText";
 import type { components } from "../types/openapi.generated";
 
 export type LibraryStats = components["schemas"]["LibraryStatsResponse"];
@@ -47,24 +48,31 @@ export interface StatsView {
 
 const yesNo = (value: boolean): string => (value ? "Yes" : "No");
 
-/** How long ago `utcMs` was, as Last played says it, or Never for null. */
-export function playedAgo(utcMs: number | null, nowMs: number): string {
-  if (utcMs === null) {
-    return "Never";
-  }
+/**
+ * How long ago `utcMs` was: Just now, then minutes, hours, and days, then months once a whole calendar month has
+ * passed, and years once a whole year has, such as "2 minutes ago" or "3 months ago". A time after `nowMs` is Just now.
+ */
+export function timeAgo(utcMs: number, nowMs: number): string {
+  const ago = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"} ago`;
   const minutes = Math.floor(Math.max(0, nowMs - utcMs) / 60_000);
   if (minutes < 1) {
     return "Just now";
   }
   if (minutes < 60) {
-    return `${minutes} min ago`;
+    return ago(minutes, "minute");
   }
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+    return ago(hours, "hour");
   }
-  const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
+  const now = new Date(nowMs);
+  const then = new Date(utcMs);
+  // Whole calendar months on this device, one fewer while this month hasn't reached the day of the month it was on.
+  const months = (now.getFullYear() - then.getFullYear()) * 12 + now.getMonth() - then.getMonth() - (now.getDate() < then.getDate() ? 1 : 0);
+  if (months < 1) {
+    return ago(Math.floor(hours / 24), "day");
+  }
+  return months < 12 ? ago(months, "month") : ago(Math.floor(months / 12), "year");
 }
 
 /** Yes, No, or Unknown before the loudness scan has looked at the file. */
@@ -108,14 +116,29 @@ export function adjustmentText(adjustment: NormalizationAdjustment, enhanced: bo
 }
 
 /**
- * The current file's rows: plays, the time before this play, favorite, and blacklisted, then for a video its duration
- * and audio, with the adjustment normalization applies to it. The rating comes before them and the tags after, in the
+ * The current file's rows: plays, the time before this play, when the file was added and created, favorite, and
+ * blacklisted, then for a video its duration and audio, with the adjustment normalization applies to it. The three
+ * times say how long ago, or with `exactTimes` the time itself. The rating comes before them and the tags after, in the
  * tab.
  */
-export function fileRows(item: LibraryProjectionItem, lastPlayedUtcMs: number | null, nowMs: number, adjustment: string): StatsRow[] {
+export function fileRows(
+  item: LibraryProjectionItem,
+  lastPlayedUtcMs: number | null,
+  nowMs: number,
+  adjustment: string,
+  exactTimes: boolean
+): StatsRow[] {
+  const time = (utcMs: number | null, none: string) => {
+    if (utcMs === null) {
+      return none;
+    }
+    return exactTimes ? exactTimeText(utcMs) : timeAgo(utcMs, nowMs);
+  };
   const rows: StatsRow[] = [
     { label: "Plays", value: String(item.playCount) },
-    { label: "Last played", value: playedAgo(lastPlayedUtcMs, nowMs) },
+    { label: "Last played", value: time(lastPlayedUtcMs, "Never") },
+    { label: "Added", value: time(item.dateAddedUtcMs, "Unknown") },
+    { label: "Created", value: time(item.dateCreatedUtcMs, "Unknown") },
     { label: "Favorite", value: yesNo(item.isFavorite) },
     { label: "Blacklisted", value: yesNo(item.isBlacklisted) }
   ];

@@ -4,6 +4,8 @@
  */
 
 import { parseRating } from "../rating/rating";
+import { splitDuration, twoDigits } from "../time/timeText";
+import { copyDateRange, readDateRange, type FilterDateRange } from "./filterDateRange";
 import type { components } from "../types/openapi.generated";
 
 /** A filter state as it goes over the wire, holding durations as text. */
@@ -41,6 +43,10 @@ export interface FilterState {
   includedSourceIds: string[];
   minDurationSeconds: number | null;
   maxDurationSeconds: number | null;
+  /** Only files whose date added falls in this range, or null for any time. */
+  addedRange: FilterDateRange | null;
+  /** Only files whose date created, their modified time, falls in this range, or null for any time. */
+  createdRange: FilterDateRange | null;
 }
 
 export function createDefaultFilterState(): FilterState {
@@ -61,7 +67,9 @@ export function createDefaultFilterState(): FilterState {
     excludedTags: [],
     includedSourceIds: [],
     minDurationSeconds: null,
-    maxDurationSeconds: null
+    maxDurationSeconds: null,
+    addedRange: null,
+    createdRange: null
   };
 }
 
@@ -282,7 +290,9 @@ export function cloneFilterState(source: FilterState): FilterState {
     includedSourceIds: [...source.includedSourceIds],
     categoryLocalMatchModes: source.categoryLocalMatchModes
       ? { ...source.categoryLocalMatchModes }
-      : null
+      : null,
+    addedRange: copyDateRange(source.addedRange),
+    createdRange: copyDateRange(source.createdRange)
   };
 }
 
@@ -291,14 +301,11 @@ export function formatDurationForDisplay(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
     return "";
   }
-  const s = Math.floor(totalSeconds);
-  const hours = Math.floor(s / 3600);
-  const minutes = Math.floor((s % 3600) / 60);
-  const secs = s % 60;
+  const { hours, minutes, seconds } = splitDuration(totalSeconds);
   if (hours >= 1) {
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    return `${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}`;
   }
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return `${twoDigits(minutes)}:${twoDigits(seconds)}`;
 }
 
 /**
@@ -310,11 +317,8 @@ export function formatDurationForApi(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
     return "00:00:00";
   }
-  const s = Math.floor(totalSeconds);
-  const hours = Math.floor(s / 3600);
-  const minutes = Math.floor((s % 3600) / 60);
-  const secs = s % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const { hours, minutes, seconds } = splitDuration(totalSeconds);
+  return `${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}`;
 }
 
 /**
@@ -384,13 +388,10 @@ export function parseServerDuration(text: string): number | null | "invalid" {
   return "invalid";
 }
 
-function durationToApiValue(seconds: number): string {
-  return formatDurationForApi(seconds);
-}
-
 /**
- * Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode, and the minimum rating
- * and each duration only when the filter has one.
+ * Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode, and the minimum rating,
+ * each duration, and each date range only when the filter has one. A custom range is written as `from` then `to`, so
+ * the preset comparison, which compares the written text, reads two copies of it alike.
  */
 export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
   const out: ApiFilterState = {
@@ -421,10 +422,16 @@ export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
     out.minRating = state.minRating;
   }
   if (state.minDurationSeconds != null && Number.isFinite(state.minDurationSeconds)) {
-    out.minDuration = durationToApiValue(state.minDurationSeconds);
+    out.minDuration = formatDurationForApi(state.minDurationSeconds);
   }
   if (state.maxDurationSeconds != null && Number.isFinite(state.maxDurationSeconds)) {
-    out.maxDuration = durationToApiValue(state.maxDurationSeconds);
+    out.maxDuration = formatDurationForApi(state.maxDurationSeconds);
+  }
+  if (state.addedRange !== null) {
+    out.addedRange = copyDateRange(state.addedRange);
+  }
+  if (state.createdRange !== null) {
+    out.createdRange = copyDateRange(state.createdRange);
   }
 
   return out;
@@ -546,6 +553,9 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
 
   base.minDurationSeconds = readDurationFromUnknown(o.minDuration);
   base.maxDurationSeconds = readDurationFromUnknown(o.maxDuration);
+  // Locked to shared/fixtures/filter-date-ranges.json.
+  base.addedRange = readDateRange(o.addedRange);
+  base.createdRange = readDateRange(o.createdRange);
 
   return base;
 }
@@ -590,7 +600,8 @@ function comparablePresetSnapshot(state: FilterState): string {
  * Preset comparison, which no preset may share with another or with the default filter. An unset global match mode
  * means AND, so it equals an explicit AND, and a category's AND mode counts as no entry. Tags compare as
  * case-insensitive sets, source IDs as sets, so a list naming every source differs from all sources, category modes
- * by key in any order, and durations in whole seconds. Core's FilterStateComparison is the C# copy. Locked to
+ * by key in any order, durations in whole seconds, and date ranges by the choice, so Last 30 days differs from a
+ * custom range of the same days. Core's FilterStateComparison is the C# copy. Locked to
  * shared/fixtures/preset-filter-equality.json.
  */
 export function filterStatesEqualForPresetMatch(a: FilterState, b: FilterState): boolean {

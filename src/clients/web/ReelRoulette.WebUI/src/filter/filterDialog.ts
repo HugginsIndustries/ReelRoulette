@@ -12,6 +12,7 @@ import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import type { TagCatalog } from "../tags/tagCatalog";
+import { localDayText } from "../time/timeText";
 import type { components } from "../types/openapi.generated";
 import {
   actionBlock,
@@ -28,14 +29,17 @@ import {
   FILTER_FIELD_SECTION,
   NO_CHOSEN_PRESET_REASON,
   editPresetNameProblem,
+  filterAsFieldsRead,
   filterFieldProblems,
   filterWithGeneralDraft,
-  filterWithTypedDurations,
+  generalDraftAfterApply,
   generalDraftFromFilter,
   presetLoopReason,
   presetRowsFromApi,
   sharedFilterReason,
   toggleFilterTag,
+  type DateRangeChoice,
+  type DateRangeDraft,
   type FilterAction,
   type FilterField,
   type FilterSource,
@@ -114,7 +118,7 @@ export interface FilterActionBlock extends ActionBlock<GeneralField> {
 export interface FilterDialogView extends FilterDialogState {
   /**
    * The working filter's preset, as the preset dropdown will name it once applied, starred while the filter, with each
-   * duration as its field reads, differs from that preset's.
+   * duration and date range as its fields read, differs from that preset's.
    */
   heading: string;
   /** The preset list differs from the saved one, so Apply saves it. */
@@ -122,19 +126,20 @@ export interface FilterDialogView extends FilterDialogState {
   /** The applied filter, which the unsaved-changes dots compare the working filter against. */
   applied: FilterState;
   /**
-   * The tab holds unsaved changes: a working filter, with its durations as their fields read, that differs from the
-   * applied filter, as after Clear all, or a preset list that differs from the saved one. Its tab, the panel button, and
-   * Apply show a dot, and it keeps them when it shows again. Apply and Discard changes work only while it does.
+   * The tab holds unsaved changes: a working filter, as its General fields read, that differs from the applied filter,
+   * as after Clear all, or a preset list that differs from the saved one. Its tab, the panel button, and Apply show a
+   * dot, and it keeps them when it shows again. Apply and Discard changes work only while it does.
    */
   unsaved: boolean;
   /**
-   * The working filter, with its durations as their fields read, is the default filter by the preset comparison, which
-   * disables Clear all filters and the actions that save it as a preset. A duration whose text isn't valid isn't.
+   * The working filter, as its General fields read, is the default filter by the preset comparison, which disables
+   * Clear all filters and the actions that save it as a preset. A duration whose text isn't valid isn't, nor is a
+   * custom range with a problem.
    */
   defaultFilter: boolean;
   /**
-   * Load would leave the filter as it is: the working filter, with each duration as its field reads, is the chosen
-   * preset's, or the default filter for None. Load is then disabled, saying nothing more.
+   * Load would leave the filter as it is: the working filter, as its General fields read, is the chosen preset's, or
+   * the default filter for None. Load is then disabled, saying nothing more.
    */
   loadDisabled: boolean;
   /** Each field's problem, or null while its value is valid. */
@@ -196,10 +201,17 @@ export interface FilterDialog {
   /** Goes back to the default filter and the saved presets, which Apply then applies. */
   clearAll(): void;
   /** Takes General tab fields the user changed. An empty duration means no limit. */
-  changeGeneral(change: Partial<Omit<GeneralDraft, "sourceChecked" | "startSourceIds">>): void;
+  changeGeneral(change: Partial<Omit<GeneralDraft, "sourceChecked" | "startSourceIds" | "added" | "created">>): void;
   checkSource(index: number, checked: boolean): void;
   /** Takes a duration's text while it is typed. The working filter takes it when the field changes. */
   typeDuration(which: "min" | "max", text: string): void;
+  /**
+   * Chooses a date filter's range. Custom range fills an empty From or To with today on this device, so the range is
+   * valid at once; another choice keeps the dates in their fields until Apply.
+   */
+  chooseDateRange(range: "added" | "created", choice: DateRangeChoice): void;
+  /** Takes a custom range's From or To, YYYY-MM-DD or empty. */
+  changeDate(range: "added" | "created", end: "from" | "to", text: string): void;
   toggleTag(name: string, action: TagChipAction): void;
   /** True combines categories with AND, false with OR. */
   setGlobalMatch(and: boolean): void;
@@ -283,9 +295,9 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   /**
    * Works out the heading, the unsaved changes, whether the filter is the default one, and the fields' and actions'
    * problems. The heading's preset follows the working filter: None for the default filter, a saved preset with the
-   * same filter, or else the last preset. The heading stars it while the filter, with each duration as its field reads,
-   * differs from its filter, as while a duration's text isn't valid. The chosen preset stays where it was put, or None
-   * once the list no longer has it. Presets go by id.
+   * same filter, or else the last preset. The heading stars it while the filter, as its General fields read, differs
+   * from its filter, as while a duration's text isn't valid or a custom range has a problem. The chosen preset stays
+   * where it was put, or None once the list no longer has it. Presets go by id.
    */
   function settled(state: FilterDialogState): FilterDialogView {
     const problems = filterFieldProblems(state.general, state.newPresetName, state.presets);
@@ -294,8 +306,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     const applied = store.appliedFilter.peek();
     const presetsChanged = !presetListsEqual(state.presets, state.savedPresets);
     // A duration still being typed isn't in the working filter yet, so it counts as its field reads. Text that isn't
-    // valid differs from every filter.
-    const typed = filterWithTypedDurations(state.working, state.general);
+    // valid, or a custom range with a problem, differs from every filter.
+    const typed = filterAsFieldsRead(state.working, state.general);
     // The preset follows the working filter, so text passed through while typing, such as an emptied field, doesn't
     // change it; only the heading's star follows the text.
     const headingPreset = dialogPresetBase(state.working, state.presets, state.headingPreset);
@@ -320,13 +332,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       defaultFilter,
       loadDisabled: !!typed && filterStatesEqualForPresetMatch(typed, chosen?.filterState ?? createDefaultFilterState()),
       problems,
-      flagged: {
-        flagModes: isFlagged(problems.flagModes),
-        ratingFilters: isFlagged(problems.ratingFilters),
-        minDuration: isFlagged(problems.minDuration),
-        maxDuration: isFlagged(problems.maxDuration),
-        newPresetName: isFlagged(problems.newPresetName)
-      },
+      flagged: Object.fromEntries(Object.entries(problems).map(([field, problem]) => [field, isFlagged(problem)])) as Record<FilterField, boolean>,
       actions: {
         apply: loop ? { disabled: false, heldBy: null, reason: loop.text, blocked: { logText: loop.logText } } : blockOf("apply", problems, null),
         addPreset: blockOf("addPreset", problems, filterReason),
@@ -674,17 +680,23 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   });
 
   // The applied preset's new filter from another device: the working filter takes it while it was the applied filter,
-  // with each duration as its field reads, and otherwise stays as the user left it. The tab doesn't start over, so its
+  // as its General fields read, and otherwise stays as the user left it. The tab doesn't start over, so its
   // preset changes, a typed new preset name, and an open Edit Preset stay. The view's applied filter is the one before,
   // until this update settles it again.
   function followApplied(): void {
     const current = view.peek();
-    const typed = current ? filterWithTypedDurations(current.working, current.general) : null;
+    const typed = current ? filterAsFieldsRead(current.working, current.general) : null;
     if (!current || !typed || !filterStatesEqualForPresetMatch(typed, current.applied)) {
       return;
     }
     const working = cloneFilterState(store.appliedFilter.peek());
     update({ working, general: generalDraftFromFilter(working, current.sources) });
+  }
+
+  /** A date filter's fields, which the working filter takes at once, but for a custom range with a problem. */
+  function takeDateRange(current: FilterDialogView, range: "added" | "created", draft: DateRangeDraft): void {
+    const general = { ...current.general, [range]: draft };
+    update({ general, working: filterWithGeneralDraft(current.working, general, current.sources) });
   }
 
   const dialog: FilterDialog = {
@@ -736,8 +748,14 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         store.activePresetId.value = dialogPresetBase(working, current.presets, current.headingPreset);
         store.appliedFilter.value = cloneFilterState(working);
       });
-      // Choose Preset starts over on the applied preset, as the tab does.
-      update({ working, headingPreset: store.activePresetId.peek(), chosenPreset: store.activePresetId.peek() });
+      // Choose Preset starts over on the applied preset, as the tab does. A date filter not on Custom range drops the
+      // dates its fields kept.
+      update({
+        working,
+        general: generalDraftAfterApply(current.general),
+        headingPreset: store.activePresetId.peek(),
+        chosenPreset: store.activePresetId.peek()
+      });
       await reloadPresets();
       void panel.closeIfOverlay();
       notifications.notify({ kind: "actions", text: "Filters applied.", key: "filter" });
@@ -788,6 +806,28 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       if (current) {
         const general = which === "min" ? { ...current.general, minText: text } : { ...current.general, maxText: text };
         update({ general });
+      }
+    },
+
+    chooseDateRange(range, choice) {
+      const current = view.peek();
+      if (!current) {
+        return;
+      }
+      const before = current.general[range];
+      const today = localDayText(new Date());
+      const after: DateRangeDraft =
+        choice === "custom"
+          ? { choice, fromText: before.fromText || today, toText: before.toText || today }
+          : { ...before, choice };
+      takeDateRange(current, range, after);
+    },
+
+    changeDate(range, end, text) {
+      const current = view.peek();
+      if (current) {
+        const before = current.general[range];
+        takeDateRange(current, range, end === "from" ? { ...before, fromText: text } : { ...before, toText: text });
       }
     },
 

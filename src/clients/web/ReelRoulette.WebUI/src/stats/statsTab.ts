@@ -8,6 +8,7 @@ import { playingFileName } from "../playback/nowPlaying";
 import type { ItemRatings } from "../rating/itemRatings";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 import { noLibraryText } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
@@ -23,10 +24,13 @@ import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, t
  * fails the compatibility check, runs without a library, or asks for pairing, nor once the connection stops, as when
  * the page closes, not even a load that was waiting. Beside the file's path, Show in File Manager opens the server
  * machine's file manager at it where the server offers that, and Copy Path copies it everywhere else. Under it, the
- * file's rating shows and is set once its stats load.
+ * file's rating shows and is set once its stats load. Show exact times, which this device remembers, shows the file's
+ * times themselves in place of how long ago they were.
  */
 export interface StatsTab {
   readonly view: ReadonlySignal<StatsView>;
+  /** Show exact times is on, off until this device turns it on. */
+  readonly exactTimes: ReadonlySignal<boolean>;
   /** The tab shows: it loads. */
   open(): void;
   /** The tab hides: nothing loads until it shows again. */
@@ -39,6 +43,8 @@ export interface StatsTab {
   setRating(rating: number | null, options: { byKey: boolean }): void;
   /** Sends a key's rating still waiting, as when focus leaves the stars. */
   sendRating(): void;
+  /** Turns Show exact times on or off, which this device remembers. */
+  toggleExactTimes(): void;
 }
 
 export interface StatsTabOptions {
@@ -57,7 +63,11 @@ export interface StatsTabOptions {
   notifications: Pick<Notifications, "notify">;
   /** The ratings this device sets and shows. */
   ratings: Pick<ItemRatings, "shown" | "set" | "send">;
+  /** Where this device remembers Show exact times. */
+  device: DeviceStore;
 }
+
+const EXACT_TIMES_KEY = "stats.exactTimes";
 
 interface LoadedItem {
   itemId: string;
@@ -65,13 +75,14 @@ interface LoadedItem {
 }
 
 export function createStatsTab(options: StatsTabOptions): StatsTab {
-  const { store, api, connection, tagCatalog, normalization, enhanced, dialogs, notifications, ratings } = options;
+  const { store, api, connection, tagCatalog, normalization, enhanced, dialogs, notifications, ratings, device } = options;
   const fileLocation = createFileLocation({ api, dialogs, notifications });
   const isOpen = signal(false);
   const stats = signal<LibraryStats | null>(null);
   const loadedItem = signal<LoadedItem | null>(null);
   /** Why the last load failed, while the library has never loaded. */
   const failure = signal<string | null>(null);
+  const exactTimes = signal(device.read(EXACT_TIMES_KEY, false, isBoolean));
   const lastPlayed = createLastPlayedBeforePlay();
   /** Changes with what the playback events said about the time before this play. */
   const lastPlayedChanged = signal(0);
@@ -102,7 +113,13 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
         path: playing.id,
         canShowInFileManager: !!playing.itemId && store.serverCapabilities.value.includes(SHOW_IN_FILE_MANAGER_CAPABILITY),
         rows: item
-          ? fileRows(item, lastPlayed.shownFor(item.lastPlayedUtcMs), Date.now(), adjustmentText(normalization.adjustment.value, enhanced.value))
+          ? fileRows(
+              item,
+              lastPlayed.shownFor(item.lastPlayedUtcMs),
+              Date.now(),
+              adjustmentText(normalization.adjustment.value, enhanced.value),
+              exactTimes.value
+            )
           : null,
         rating: item ? ratings.shown(playing.itemId, item.rating) : null,
         tags: item ? orderTags(item.tags, tagCatalog.catalog.value) : []
@@ -201,6 +218,7 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
 
   return {
     view,
+    exactTimes,
     open() {
       isOpen.value = true;
       request();
@@ -228,6 +246,10 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
     },
     sendRating() {
       ratings.send();
+    },
+    toggleExactTimes() {
+      exactTimes.value = !exactTimes.peek();
+      device.write(EXACT_TIMES_KEY, exactTimes.peek());
     }
   };
 }

@@ -1,7 +1,7 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
 import { errorType } from "../logging/relayLogLines";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 import { compressionGainDb, COMPRESSOR_OFF, type CompressorSetting } from "./compression";
 import { dbToGain } from "./loudnessNormalization";
 
@@ -247,10 +247,6 @@ function isVolume(value: unknown): value is number {
 
 function isVolumeStep(value: unknown): value is VolumeStep {
   return VOLUME_STEPS.includes(value as VolumeStep);
-}
-
-function isBoolean(value: unknown): value is boolean {
-  return typeof value === "boolean";
 }
 
 export function createAudioStage(options: AudioStageOptions): AudioStage {

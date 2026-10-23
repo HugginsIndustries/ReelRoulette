@@ -187,7 +187,7 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Custom range (Filter tab, General)</h2>
-    <p class="group-note">Added and Created each offer Custom range, with From and To from the device's date picker. Choosing it fills an empty date with today, so the range is valid at once. A range needs both dates, so an emptied date is flagged, and a To before its From is flagged on To. Each icon sits just after its field, as a dropdown's does, since a desktop browser draws its calendar button at the field's right end. Apply, Add Preset, and Update preset can't proceed until the range is corrected, and pressing one moves to the flagged date.</p>
+    <p class="group-note">Added and Created each offer Custom range, with From and To from the device's date picker. Choosing it fills an empty date with today, so the range is valid at once. A range needs both dates, so an emptied date is flagged, and so is a date outside 1970 to 2099, and a To before its From is flagged on To. Each icon sits just after its field, as a dropdown's does, since a desktop browser draws its calendar button at the field's right end. Apply, Add Preset, and Update preset can't proceed until the range is corrected, and pressing one moves to the flagged date.</p>
     <div class="specimens">
       <figure class="specimen" data-date-range>
         <div class="filter-stack duration-stack">
@@ -211,6 +211,14 @@ h1 { font-size: 1.4rem; margin: 0; }
           <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value=""><span class="vfield-icon material-symbol-icon">error</span></span></div>
         </div>
         <figcaption><b>To emptied</b>Flagged; tooltip held open here so it shows.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-date-range data-pinned>
+        <div class="filter-stack duration-stack">
+          <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added from" value="1969-12-31"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+          <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value="2026-03-31"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>From before 1970</b>Flagged; tooltip held open here so it shows.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
     </div>

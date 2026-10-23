@@ -40,6 +40,8 @@ describe("filterStateModel", () => {
     expect(json.selectedTags).toEqual([]);
     expect(json).not.toHaveProperty("minDuration");
     expect(json).not.toHaveProperty("maxDuration");
+    expect(json).not.toHaveProperty("addedRange");
+    expect(json).not.toHaveProperty("createdRange");
   });
 
   it("writes Only files this browser can play, and reads it as off unless it is true", () => {
@@ -131,6 +133,13 @@ describe("filterStateModel", () => {
     b.selectedTags.push("y");
     expect(a.selectedTags).toEqual(["x"]);
     expect(b.selectedTags).toEqual(["x", "y"]);
+  });
+
+  it("cloneFilterState copies a custom range, so the copy shares none with the filter", () => {
+    const a: FilterState = { ...createDefaultFilterState(), addedRange: { from: "2026-01-03", to: "2026-03-31" }, createdRange: "thisYear" };
+    const b = cloneFilterState(a);
+    expect(b).toMatchObject({ addedRange: { from: "2026-01-03", to: "2026-03-31" }, createdRange: "thisYear" });
+    expect(b.addedRange).not.toBe(a.addedRange);
   });
 
   it("filterStatesEqualForPresetMatch matches serialized payload", () => {
@@ -342,6 +351,40 @@ describe("minimum rating shared fixture", () => {
   });
 });
 
+interface DateRangesCase {
+  name: string;
+  filter: ApiFilterState;
+  addedRange: ApiFilterState["addedRange"];
+  createdRange: ApiFilterState["createdRange"];
+}
+
+// Core reads the same fixture.
+const dateRangeCases = readFixture<DateRangesCase[]>("filter-date-ranges.json");
+
+describe("date ranges shared fixture", () => {
+  it.each(dateRangeCases)("$name", ({ filter, addedRange, createdRange }) => {
+    const read = filterStateFromApiObject(filter);
+    expect(read.addedRange).toEqual(addedRange);
+    expect(read.createdRange).toEqual(createdRange);
+  });
+});
+
+describe("date ranges", () => {
+  it("are written only when set, a custom range as from then to, and read back", () => {
+    const written = serializeFilterStateForApi({
+      ...createDefaultFilterState(),
+      addedRange: "last30Days",
+      createdRange: { to: "2026-03-31", from: "2026-01-03" } as unknown as FilterState["createdRange"]
+    });
+    expect(written.addedRange).toBe("last30Days");
+    expect(Object.keys(written.createdRange as object)).toEqual(["from", "to"]);
+    expect(filterStateFromApiObject(written)).toMatchObject({
+      addedRange: "last30Days",
+      createdRange: { from: "2026-01-03", to: "2026-03-31" }
+    });
+  });
+});
+
 describe("rating filters", () => {
   it("read a stored filter without them as Only unrated off and no minimum", () => {
     const read = filterStateFromApiObject({ favoritesMode: "only" });
@@ -388,7 +431,9 @@ function writtenFixtureFilter(): FilterState {
     onlyKnownLoudness: false,
     onlyBrowserPlayable: true,
     onlyUnrated: false,
-    minRating: 3.5
+    minRating: 3.5,
+    addedRange: "last30Days",
+    createdRange: { from: "2026-01-03", to: "2026-03-31" }
   };
 }
 

@@ -191,7 +191,7 @@ export function readPopupSettings(device: DeviceStore): PopupSettings {
 }
 
 /** A message's time in the list: "Just now", "{n} min ago", then the time of day. */
-export function timeAgo(time: number, now: number): string {
+export function messageTime(time: number, now: number): string {
   const seconds = Math.round((now - time) / 1000);
   if (seconds < 60) {
     return "Just now";

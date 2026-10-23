@@ -1,9 +1,12 @@
 import type { JSX, RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import type { FilterDialogTab, FilterDialogView } from "../filter/filterDialog";
+import { EARLIEST_DAY, LATEST_DAY } from "../filter/filterDateRange";
 import {
   AUDIO_FILTERS,
   BASIC_FILTERS,
+  DATE_FILTERS,
+  DATE_RANGE_CHOICES,
   FILTER_FIELD_SECTION,
   MEDIA_TYPES,
   MIN_RATING_LABEL,
@@ -11,6 +14,7 @@ import {
   filterHeldReason,
   filterTagCategories,
   sourceLabel,
+  type DateRangeChoice,
   type FilterAction,
   type FilterField,
   type FilterTagCategory,
@@ -236,7 +240,93 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
           <DurationRow which="max" view={view} />
         </div>
       </div>
+      <div class="filter-section">
+        <h3>Date Filter</h3>
+        <div class="filter-stack duration-stack">
+          {DATE_FILTERS.map((filter) => (
+            <DateFilterRows key={filter.range} filter={filter} view={view} />
+          ))}
+        </div>
+      </div>
     </>
+  );
+}
+
+/** A date filter dropdown's option value for a choice: Any time is empty. */
+function dateChoiceValue(choice: DateRangeChoice): string {
+  return choice ?? "";
+}
+
+/**
+ * A date filter: its dropdown, and while Custom range is chosen, its From and To, each the device's date picker. A
+ * picker may report a date only on `change`, so each field takes both `input` and `change`.
+ */
+function DateFilterRows({ filter, view }: { filter: (typeof DATE_FILTERS)[number]; view: FilterDialogView }) {
+  const { filterDialog } = useApp();
+  const { range, label } = filter;
+  const draft = view.general[range];
+  const id = `filter-${range}`;
+  return (
+    <>
+      <div class="filter-row">
+        <label class="date-label" for={id}>{label}</label>
+        <select
+          class="ctl date-choice"
+          id={id}
+          value={dateChoiceValue(draft.choice)}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            const choice = DATE_RANGE_CHOICES.find((entry) => dateChoiceValue(entry.value) === value);
+            if (choice) {
+              filterDialog.chooseDateRange(range, choice.value);
+            }
+          }}
+        >
+          {DATE_RANGE_CHOICES.map((choice) => (
+            <option key={dateChoiceValue(choice.value)} value={dateChoiceValue(choice.value)}>{choice.label}</option>
+          ))}
+        </select>
+      </div>
+      {draft.choice === "custom" ? (
+        <div class="date-range" id={`${id}-range`}>
+          <DateRow filter={filter} end="from" view={view} />
+          <DateRow filter={filter} end="to" view={view} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * A custom range's From or To, from the years the server can resolve. Its icon sits after the field, since a desktop
+ * browser draws its calendar button at the field's right end.
+ */
+function DateRow({ filter, end, view }: { filter: (typeof DATE_FILTERS)[number]; end: "from" | "to"; view: FilterDialogView }) {
+  const { filterDialog } = useApp();
+  const { range, label } = filter;
+  const draft = view.general[range];
+  const field = end === "from" ? (`${range}From` as const) : (`${range}To` as const);
+  const take = (event: { currentTarget: HTMLInputElement }) => filterDialog.changeDate(range, end, event.currentTarget.value);
+  return (
+    <div class="filter-row">
+      <span class="date-label">{end === "from" ? "From" : "To"}</span>
+      <ValidatedField class="vfield-after" problem={view.problems[field]} flagged={view.flagged[field]} reveal={{ from: filterDialog.reveal, field, show: () => showSection(filterDialog.tab.peek()) }}>
+        {(control) => (
+          <input
+            {...control}
+            class="ctl date-field"
+            type="date"
+            id={`filter-${range}-${end}`}
+            aria-label={`${label} ${end}`}
+            min={EARLIEST_DAY}
+            max={LATEST_DAY}
+            value={end === "from" ? draft.fromText : draft.toText}
+            onInput={take}
+            onChange={take}
+          />
+        )}
+      </ValidatedField>
+    </div>
   );
 }
 

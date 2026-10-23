@@ -3619,13 +3619,16 @@ filterBody.addEventListener("change", (event) => durationsTyped.delete(event.tar
 filterBody.addEventListener("focusout", (event) => {
   if (durationsTyped.delete(event.target)) renderApply();
 }, true);
-// The tab's working filter: its filter with each duration as last read, one that isn't valid as no limit.
+// The tab's working filter: its filter with each duration as last read, one that isn't valid keeping the duration read
+// before it, so the heading's preset doesn't change while it is corrected.
+const durationsKept = new Map();
 function workingValue() {
   const value = filterValue();
   durationKeys.forEach((key, input) => {
     if (!durationsTyped.has(input)) durationsRead.set(input, input.value);
     const seconds = parseDuration(durationsRead.get(input) ?? "");
-    value[key] = seconds === "invalid" ? null : seconds;
+    if (seconds !== "invalid") durationsKept.set(input, seconds);
+    value[key] = durationsKept.get(input) ?? null;
   });
   return value;
 }

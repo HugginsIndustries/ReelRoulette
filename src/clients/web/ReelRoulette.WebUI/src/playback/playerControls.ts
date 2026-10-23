@@ -1,5 +1,5 @@
 import { computed, effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 
 /**
  * When the player's controls hide: after a time with no activity, on a click or tap on the player, or never.
@@ -27,10 +27,6 @@ export function isHideControlsMode(value: unknown): value is HideControlsMode {
 
 function isHideAfter(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= HIDE_AFTER_RANGE.min && (value as number) <= HIDE_AFTER_RANGE.max;
-}
-
-function isBoolean(value: unknown): value is boolean {
-  return typeof value === "boolean";
 }
 
 /**

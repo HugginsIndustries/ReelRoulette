@@ -1,7 +1,10 @@
 import { ratingText } from "../rating/rating";
+import { localDay } from "../time/timeText";
+import { DATE_RANGE_PRESETS, type FilterDateRange } from "./filterDateRange";
 import {
   AUDIO_FILTERS,
   BASIC_FILTERS,
+  DATE_FILTERS,
   MEDIA_TYPES,
   ONLY_UNRATED_LABEL,
   containsIgnoringCase,
@@ -19,10 +22,22 @@ function counted(count: number, noun: string): string {
 }
 
 /**
+ * How the Filters line names a date filter's range after its label: "in last 30 days", "this year", or a custom range
+ * in the device's own date format, such as "Jan 3 – Mar 31, 2026". `locale` is the device's unless given.
+ */
+export function dateRangeSummary(range: FilterDateRange, locale?: string): string {
+  if (typeof range === "string") {
+    return DATE_RANGE_PRESETS.find((preset) => preset.value === range)!.phrase;
+  }
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).formatRange(localDay(range.from), localDay(range.to));
+}
+
+/**
  * The applied filters as the Library tab's Filters line names them, in order: Favorites only or excluded, Blacklisted
  * only, each checked Basic Filters option by its label, Only unrated, the minimum rating, such as "Min 3.5 stars", a
  * media type or audio choice other than the first, the sources checked out of all, the minimum and maximum duration,
- * and the included and excluded tags. Blacklisted excluded, the default, isn't named. Empty when no filter applies.
+ * the Added and Created ranges, such as "Added in last 30 days", and the included and excluded tags. Blacklisted
+ * excluded, the default, isn't named. Empty when no filter applies.
  *
  * `sources` is the list the Filter tab shows, or null while it isn't known, when the sources are only counted.
  */
@@ -69,6 +84,12 @@ export function filterSummaryParts(filter: FilterState, sources: readonly Filter
   }
   if (filter.maxDurationSeconds != null) {
     parts.push(`Max ${formatDurationForDisplay(filter.maxDurationSeconds)}`);
+  }
+  for (const { field, label } of DATE_FILTERS) {
+    const range = filter[field];
+    if (range !== null) {
+      parts.push(`${label} ${dateRangeSummary(range)}`);
+    }
   }
   if (filter.selectedTags.length > 0) {
     parts.push(counted(filter.selectedTags.length, "tag"));

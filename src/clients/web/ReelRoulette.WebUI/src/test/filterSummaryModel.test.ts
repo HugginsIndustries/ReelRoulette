@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FilterSource } from "../filter/filterDialogModel";
 import { AUDIO_FILTER, MEDIA_TYPE_FILTER, createDefaultFilterState, type FilterState } from "../filter/filterStateModel";
-import { filterSummaryParts } from "../filter/filterSummaryModel";
+import { dateRangeSummary, filterSummaryParts } from "../filter/filterSummaryModel";
 
 function filter(changes: Partial<FilterState>): FilterState {
   return { ...createDefaultFilterState(), ...changes };
@@ -69,6 +69,24 @@ describe("filterSummaryParts", () => {
     expect(filterSummaryParts(filter({ minDurationSeconds: 0, maxDurationSeconds: 75 }), null)).toEqual(["Min 00:00", "Max 01:15"]);
   });
 
+  it("names each date range after Added or Created by its choice", () => {
+    expect(filterSummaryParts(filter({ addedRange: "last30Days" }), null)).toEqual(["Added in last 30 days"]);
+    expect(filterSummaryParts(filter({ addedRange: "last7Days" }), null)).toEqual(["Added in last 7 days"]);
+    expect(filterSummaryParts(filter({ createdRange: "last90Days" }), null)).toEqual(["Created in last 90 days"]);
+    expect(filterSummaryParts(filter({ createdRange: "thisYear" }), null)).toEqual(["Created this year"]);
+    const range = { from: "2026-01-03", to: "2026-03-31" };
+    const shown = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).formatRange(new Date(2026, 0, 3), new Date(2026, 2, 31));
+    expect(filterSummaryParts(filter({ addedRange: range }), null)).toEqual([`Added ${shown}`]);
+  });
+
+  it("names a custom range in the device's own date format", () => {
+    // Intl puts thin spaces around the dash.
+    expect(dateRangeSummary({ from: "2026-01-03", to: "2026-03-31" }, "en-US")).toBe("Jan 3\u2009\u2013\u2009Mar 31, 2026");
+    expect(dateRangeSummary({ from: "2025-12-30", to: "2026-01-02" }, "en-US")).toBe("Dec 30, 2025\u2009\u2013\u2009Jan 2, 2026");
+    expect(dateRangeSummary({ from: "2026-02-28", to: "2026-02-28" }, "en-US")).toBe("Feb 28, 2026");
+    expect(dateRangeSummary("thisYear")).toBe("this year");
+  });
+
   it("counts the included and excluded tags", () => {
     expect(filterSummaryParts(filter({ selectedTags: ["Beach"] }), null)).toEqual(["1 tag"]);
     expect(filterSummaryParts(filter({ selectedTags: ["Beach", "Sunset", "Dogs"] }), null)).toEqual(["3 tags"]);
@@ -88,6 +106,8 @@ describe("filterSummaryParts", () => {
       includedSourceIds: ["source-2"],
       minDurationSeconds: 30,
       maxDurationSeconds: 600,
+      addedRange: "thisYear",
+      createdRange: "last7Days",
       selectedTags: ["Beach", "Sunset"],
       excludedTags: ["Rain"]
     });
@@ -102,6 +122,8 @@ describe("filterSummaryParts", () => {
       "1 of 3 sources",
       "Min 00:30",
       "Max 10:00",
+      "Added this year",
+      "Created in last 7 days",
       "2 tags",
       "1 tag excluded"
     ]);

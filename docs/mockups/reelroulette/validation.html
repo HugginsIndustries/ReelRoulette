@@ -844,7 +844,7 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Custom range (Filter tab, General)</h2>
-    <p class="group-note">Added and Created each offer Custom range, with From and To from the device's date picker. Choosing it fills an empty date with today, so the range is valid at once. A range needs both dates, so an emptied date is flagged, and a To before its From is flagged on To. Each icon sits just after its field, as a dropdown's does, since a desktop browser draws its calendar button at the field's right end. Apply, Add Preset, and Update preset can't proceed until the range is corrected, and pressing one moves to the flagged date.</p>
+    <p class="group-note">Added and Created each offer Custom range, with From and To from the device's date picker. Choosing it fills an empty date with today, so the range is valid at once. A range needs both dates, so an emptied date is flagged, and so is a date outside 1970 to 2099, and a To before its From is flagged on To. Each icon sits just after its field, as a dropdown's does, since a desktop browser draws its calendar button at the field's right end. Apply, Add Preset, and Update preset can't proceed until the range is corrected, and pressing one moves to the flagged date.</p>
     <div class="specimens">
       <figure class="specimen" data-date-range>
         <div class="filter-stack duration-stack">
@@ -868,6 +868,14 @@ h1 { font-size: 1.4rem; margin: 0; }
           <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value=""><span class="vfield-icon material-symbol-icon">error</span></span></div>
         </div>
         <figcaption><b>To emptied</b>Flagged; tooltip held open here so it shows.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-date-range data-pinned>
+        <div class="filter-stack duration-stack">
+          <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added from" value="1969-12-31"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+          <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value="2026-03-31"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>From before 1970</b>Flagged; tooltip held open here so it shows.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
     </div>
@@ -1338,18 +1346,29 @@ function ratingPairField(unratedBox, minimum, stars, options) {
 
 /**
  * A custom range of the Filter tab's Date Filter: From and To, each the device's date picker, holding `YYYY-MM-DD`,
- * which compares as text in date order. A range needs both dates, so an emptied one is flagged, and a To before its
- * From is flagged on To. Each icon sits after its field, as a dropdown's does, since a desktop browser draws its
- * calendar button at the field's right end. A picker may report a date only on `change`, and a change to From checks
- * To again. Returns the two fields.
+ * which compares as text in date order. A range needs both dates, so an emptied one is flagged, and so is a date
+ * outside 1970 to 2099, which the server can't always resolve at the calendar's ends, and a To before its From is
+ * flagged on To. Each icon sits after its field, as a dropdown's does, since a desktop browser draws its calendar
+ * button at the field's right end. A picker may report a date only on `change`, and a change to From checks To again.
+ * Returns the two fields.
  */
 const DATE_START_PROBLEM = "Choose a start date.";
 const DATE_END_PROBLEM = "Choose an end date.";
 const DATE_ORDER_PROBLEM = "Choose an end date on or after the start date.";
+const EARLIEST_DAY = "1970-01-01";
+const LATEST_DAY = "2099-12-31";
+const DATE_YEARS_PROBLEM = `Choose a date from ${EARLIEST_DAY.slice(0, 4)} to ${LATEST_DAY.slice(0, 4)}.`;
 function dateRangeFields(fromInput, toInput, options) {
-  const from = new ValidatedField(fromInput, (value) => (value ? null : { message: DATE_START_PROBLEM }), options);
+  // A browser keeps a date outside these and only marks it, so the check below flags it.
+  [fromInput, toInput].forEach((input) => Object.assign(input, { min: EARLIEST_DAY, max: LATEST_DAY }));
+  const outside = (value) => value < EARLIEST_DAY || value > LATEST_DAY;
+  const from = new ValidatedField(fromInput, (value) => {
+    if (!value) return { message: DATE_START_PROBLEM };
+    return outside(value) ? { message: DATE_YEARS_PROBLEM } : null;
+  }, options);
   const to = new ValidatedField(toInput, (value) => {
     if (!value) return { message: DATE_END_PROBLEM };
+    if (outside(value)) return { message: DATE_YEARS_PROBLEM };
     return fromInput.value && value < fromInput.value ? { message: DATE_ORDER_PROBLEM } : null;
   }, options);
   fromInput.addEventListener("change", () => from.update());

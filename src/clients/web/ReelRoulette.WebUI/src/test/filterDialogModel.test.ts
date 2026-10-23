@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   UNCATEGORIZED_COLLAPSE_KEY,
   filterTagCategories,
+  DATE_END_PROBLEM,
+  DATE_ORDER_PROBLEM,
+  DATE_RANGE_CHOICES,
+  DATE_START_PROBLEM,
+  DATE_YEARS_PROBLEM,
   DURATION_PROBLEM,
   FILTER_ACTION_BESIDE,
   FILTER_ACTION_FIELDS,
@@ -9,13 +14,15 @@ import {
   RATING_FILTERS_PROBLEM,
   editPresetNameProblem,
   filterFieldProblems,
+  filterAsFieldsRead,
   filterHeldReason,
   filterWithGeneralDraft,
-  filterWithTypedDurations,
+  generalDraftAfterApply,
   generalDraftFromFilter,
   presetRowsFromApi,
   sourceLabel,
   toggleFilterTag,
+  type DateRangeDraft,
   type FilterSource,
   type GeneralDraft
 } from "../filter/filterDialogModel";
@@ -37,6 +44,10 @@ function filter(change: Partial<FilterState> = {}): FilterState {
 
 function draft(change: Partial<GeneralDraft> = {}): GeneralDraft {
   return { ...generalDraftFromFilter(filter(), SOURCES), ...change };
+}
+
+function custom(fromText: string, toText: string): DateRangeDraft {
+  return { choice: "custom", fromText, toText };
 }
 
 describe("generalDraftFromFilter", () => {
@@ -75,6 +86,16 @@ describe("generalDraftFromFilter", () => {
 
   it("checks the stored sources, ignoring case", () => {
     expect(generalDraftFromFilter(filter({ includedSourceIds: ["source-1"] }), SOURCES).sourceChecked).toEqual([true, false, false]);
+  });
+
+  it("shows each date range as its choice, with a custom range's dates and no dates otherwise", () => {
+    const shown = generalDraftFromFilter(filter({ addedRange: "last30Days", createdRange: { from: "2026-01-03", to: "2026-03-31" } }), SOURCES);
+    expect(shown.added).toEqual({ choice: "last30Days", fromText: "", toText: "" });
+    expect(shown.created).toEqual(custom("2026-01-03", "2026-03-31"));
+    expect(generalDraftFromFilter(filter(), SOURCES)).toMatchObject({
+      added: { choice: null, fromText: "", toText: "" },
+      created: { choice: null, fromText: "", toText: "" }
+    });
   });
 });
 
@@ -141,11 +162,38 @@ describe("filterWithGeneralDraft", () => {
     expect(filterWithGeneralDraft(current, shown, sources)).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
   });
 
-  it("stores no duration for an empty field or text that is not valid", () => {
+  it("stores no duration for an empty field, and keeps the filter's duration while the text is not valid", () => {
     expect(filterWithGeneralDraft(filter(), draft({ maxText: "abc" }), SOURCES).maxDurationSeconds).toBeNull();
     expect(filterWithGeneralDraft(filter(), draft({ maxText: "12abc" }), SOURCES).maxDurationSeconds).toBeNull();
+    expect(filterWithGeneralDraft(filter({ maxDurationSeconds: 60 }), draft({ maxText: "abc" }), SOURCES).maxDurationSeconds).toBe(60);
+    expect(filterWithGeneralDraft(filter({ minDurationSeconds: 30 }), draft({ minText: "1:2:3:4" }), SOURCES).minDurationSeconds).toBe(30);
     expect(filterWithGeneralDraft(filter({ maxDurationSeconds: 60 }), draft({ maxText: "" }), SOURCES).maxDurationSeconds).toBeNull();
     expect(filterWithGeneralDraft(filter(), draft({ maxText: "1:00" }), SOURCES).maxDurationSeconds).toBe(60);
+  });
+
+  it("stores each date range's choice and a custom range as its dates, and keeps the filter's range while a custom range has a problem", () => {
+    const read = (added: DateRangeDraft, created: DateRangeDraft, from = filter()) => {
+      const { addedRange, createdRange } = filterWithGeneralDraft(from, draft({ added, created }), SOURCES);
+      return { addedRange, createdRange };
+    };
+    expect(read({ choice: "thisYear", fromText: "2026-01-03", toText: "2026-03-31" }, custom("2026-01-03", "2026-03-31"))).toEqual({
+      addedRange: "thisYear",
+      createdRange: { from: "2026-01-03", to: "2026-03-31" }
+    });
+    expect(read({ choice: null, fromText: "2026-01-03", toText: "2026-03-31" }, custom("2026-03-31", "2026-01-03"))).toEqual({
+      addedRange: null,
+      createdRange: null
+    });
+    expect(read(custom("", "2026-03-31"), custom("1969-12-31", "2026-03-31"))).toEqual({ addedRange: null, createdRange: null });
+    const ranged = filter({ addedRange: { from: "2026-01-03", to: "2026-03-31" }, createdRange: "last7Days" });
+    expect(read(custom("", "2026-03-31"), custom("2026-03-31", "2026-01-03"), ranged)).toEqual({
+      addedRange: { from: "2026-01-03", to: "2026-03-31" },
+      createdRange: "last7Days"
+    });
+    expect(read({ choice: null, fromText: "", toText: "2026-03-31" }, custom("2026-01-03", "2026-03-31"), ranged)).toEqual({
+      addedRange: null,
+      createdRange: { from: "2026-01-03", to: "2026-03-31" }
+    });
   });
 
   it("stores the checked sources, and none once all are checked", () => {
@@ -178,20 +226,58 @@ describe("filterWithGeneralDraft", () => {
   });
 });
 
-describe("filterWithTypedDurations", () => {
+describe("filterAsFieldsRead", () => {
   it("reads each duration as its field's text, empty as no limit, and nothing while either text isn't valid", () => {
     const applied = filter({ minDurationSeconds: 90, maxDurationSeconds: 600 });
-    expect(filterWithTypedDurations(applied, draft({ minText: "", maxText: "" }))).toMatchObject({
+    expect(filterAsFieldsRead(applied, draft({ minText: "", maxText: "" }))).toMatchObject({
       minDurationSeconds: null,
       maxDurationSeconds: null
     });
-    expect(filterWithTypedDurations(filter(), draft({ minText: "90", maxText: "10:00" }))).toMatchObject({
+    expect(filterAsFieldsRead(filter(), draft({ minText: "90", maxText: "10:00" }))).toMatchObject({
       minDurationSeconds: 90,
       maxDurationSeconds: 600
     });
-    expect(filterWithTypedDurations(filter(), draft({ minText: "abc" }))).toBeNull();
-    expect(filterWithTypedDurations(filter(), draft({ maxText: "1:75" }))).toBeNull();
+    expect(filterAsFieldsRead(filter(), draft({ minText: "abc" }))).toBeNull();
+    expect(filterAsFieldsRead(filter(), draft({ maxText: "1:75" }))).toBeNull();
     expect(applied).toMatchObject({ minDurationSeconds: 90, maxDurationSeconds: 600 });
+  });
+
+  it("reads each date range as its fields, and nothing while a custom range has a problem", () => {
+    const applied = filter({ addedRange: "last7Days", createdRange: "thisYear" });
+    expect(filterAsFieldsRead(applied, draft({ added: custom("2026-01-03", "2026-01-03") }))).toMatchObject({
+      addedRange: { from: "2026-01-03", to: "2026-01-03" },
+      createdRange: null
+    });
+    expect(filterAsFieldsRead(applied, draft({ added: custom("", "2026-01-03") }))).toBeNull();
+    expect(filterAsFieldsRead(applied, draft({ created: custom("2026-01-03", "2100-01-01") }))).toBeNull();
+    expect(filterAsFieldsRead(applied, draft({ created: custom("2026-03-31", "2026-01-03") }))).toBeNull();
+    // Dates kept for another choice aren't read.
+    expect(filterAsFieldsRead(applied, draft({ added: { choice: "last90Days", fromText: "", toText: "2026-01-03" } }))).toMatchObject({
+      addedRange: "last90Days"
+    });
+  });
+});
+
+describe("generalDraftAfterApply", () => {
+  it("drops the dates a date filter not on Custom range kept, and keeps a custom range's", () => {
+    const after = generalDraftAfterApply(
+      draft({ added: { choice: "last7Days", fromText: "2026-01-03", toText: "2026-03-31" }, created: custom("2026-01-03", "2026-03-31") })
+    );
+    expect(after.added).toEqual({ choice: "last7Days", fromText: "", toText: "" });
+    expect(after.created).toEqual(custom("2026-01-03", "2026-03-31"));
+  });
+});
+
+describe("DATE_RANGE_CHOICES", () => {
+  it("offers Any time, the presets, and Custom range, in the mockup's order", () => {
+    expect(DATE_RANGE_CHOICES).toEqual([
+      { value: null, label: "Any time" },
+      { value: "last7Days", label: "Last 7 days" },
+      { value: "last30Days", label: "Last 30 days" },
+      { value: "last90Days", label: "Last 90 days" },
+      { value: "thisYear", label: "This year" },
+      { value: "custom", label: "Custom range" }
+    ]);
   });
 });
 
@@ -204,6 +290,10 @@ describe("filterFieldProblems", () => {
       ratingFilters: null,
       minDuration: null,
       maxDuration: null,
+      addedFrom: null,
+      addedTo: null,
+      createdFrom: null,
+      createdTo: null,
       newPresetName: null
     });
     for (const text of ["1:7x", "12abc", "1:75"]) {
@@ -213,6 +303,34 @@ describe("filterFieldProblems", () => {
     expect(filterFieldProblems(draft({ minText: "" }), "Mine", PRESETS).minDuration).toBeNull();
     expect(filterFieldProblems(draft({ minText: "  " }), "Mine", PRESETS).minDuration).toBeNull();
     expect(filterFieldProblems(draft({ minText: "90:00" }), "Mine", PRESETS).minDuration).toBeNull();
+  });
+
+  it("flags a custom range's empty date, a date outside 1970 to 2099, and a To before its From", () => {
+    const problems = (added: DateRangeDraft) => {
+      const { addedFrom, addedTo } = filterFieldProblems(draft({ added }), "Mine", PRESETS);
+      return { addedFrom, addedTo };
+    };
+    expect(problems(custom("2026-01-03", "2026-03-31"))).toEqual({ addedFrom: null, addedTo: null });
+    expect(problems(custom("2026-01-03", "2026-01-03"))).toEqual({ addedFrom: null, addedTo: null });
+    expect(problems(custom("", ""))).toEqual({ addedFrom: { message: DATE_START_PROBLEM }, addedTo: { message: DATE_END_PROBLEM } });
+    expect(problems(custom("1969-12-31", "2100-01-01"))).toEqual({
+      addedFrom: { message: DATE_YEARS_PROBLEM },
+      addedTo: { message: DATE_YEARS_PROBLEM }
+    });
+    expect(problems(custom("1970-01-01", "2099-12-31"))).toEqual({ addedFrom: null, addedTo: null });
+    expect(problems(custom("2026-03-31", "2026-01-03"))).toEqual({ addedFrom: null, addedTo: { message: DATE_ORDER_PROBLEM } });
+    expect(problems(custom("", "2026-01-03"))).toEqual({ addedFrom: { message: DATE_START_PROBLEM }, addedTo: null });
+    expect(isFlagged(problems(custom("", "")).addedFrom)).toBe(true);
+    expect(DATE_YEARS_PROBLEM).toBe("Choose a date from 1970 to 2099.");
+    const created = filterFieldProblems(draft({ created: custom("2026-03-31", "") }), "Mine", PRESETS);
+    expect(created).toMatchObject({ createdFrom: null, createdTo: { message: DATE_END_PROBLEM }, addedFrom: null, addedTo: null });
+  });
+
+  it("finds no date problem unless the choice is Custom range, whatever dates its fields kept", () => {
+    for (const choice of [null, "last7Days", "thisYear"] as const) {
+      const { addedFrom, addedTo } = filterFieldProblems(draft({ added: { choice, fromText: "", toText: "" } }), "Mine", PRESETS);
+      expect({ addedFrom, addedTo }, String(choice)).toEqual({ addedFrom: null, addedTo: null });
+    }
   });
 
   it("finds an empty new preset name required, without a flag, and flags a saved preset's name ignoring case", () => {
@@ -284,14 +402,16 @@ describe("filterHeldReason", () => {
     expect(filterHeldReason("apply", "ratingFilters")).toBe("Clear Only unrated or Min Rating to apply.");
     expect(filterHeldReason("updatePreset", "ratingFilters")).toBe("Clear Only unrated or Min Rating first.");
     expect(filterHeldReason("addPreset", "ratingFilters")).toBe("Clear Only unrated or Min Rating first.");
+    expect(filterHeldReason("apply", "addedFrom")).toBe("Correct the Added dates to apply.");
+    expect(filterHeldReason("apply", "addedTo")).toBe("Correct the Added dates to apply.");
+    expect(filterHeldReason("apply", "createdTo")).toBe("Correct the Created dates to apply.");
+    expect(filterHeldReason("addPreset", "addedTo")).toBe("Correct the Added dates first.");
+    expect(filterHeldReason("updatePreset", "createdFrom")).toBe("Correct the Created dates first.");
   });
 
   it("checks the General fields for every action and Add Preset's name first, which sits beside it", () => {
-    expect(FILTER_ACTION_FIELDS).toEqual({
-      apply: ["flagModes", "ratingFilters", "minDuration", "maxDuration"],
-      addPreset: ["newPresetName", "flagModes", "ratingFilters", "minDuration", "maxDuration"],
-      updatePreset: ["flagModes", "ratingFilters", "minDuration", "maxDuration"]
-    });
+    const general = ["flagModes", "ratingFilters", "minDuration", "maxDuration", "addedFrom", "addedTo", "createdFrom", "createdTo"];
+    expect(FILTER_ACTION_FIELDS).toEqual({ apply: general, addPreset: ["newPresetName", ...general], updatePreset: general });
     expect(FILTER_ACTION_BESIDE).toEqual({ apply: [], addPreset: ["newPresetName"], updatePreset: [] });
   });
 });

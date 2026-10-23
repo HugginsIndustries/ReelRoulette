@@ -21,7 +21,7 @@ import { createItemStateCache, type ItemStateCache } from "../library/currentIte
 import { statusLogLine } from "../logging/relayLogLines";
 import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds";
 import type { components } from "../types/openapi.generated";
-import type { DeviceStore } from "./deviceStore";
+import { isBoolean, type DeviceStore } from "./deviceStore";
 
 /** The Settings tab's Advance after, the timer both autoplay modes use, in the per-device store. */
 const ADVANCE_AFTER_KEY = "playback.advanceAfter";
@@ -265,10 +265,6 @@ function isAdvanceAfter(value: unknown): value is number {
 
 function isAutoplayMode(value: unknown): value is AutoplayMode {
   return value === "normal" || value === "timer";
-}
-
-function isBoolean(value: unknown): value is boolean {
-  return typeof value === "boolean";
 }
 
 function readRandomizationMode(storage: StorageLike): string {

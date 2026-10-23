@@ -13,6 +13,11 @@ export interface DeviceStore {
   write(key: string, value: unknown): void;
 }
 
+/** Takes a setting kept as true or false, for `read`. */
+export function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
 export type DeviceStorage = Pick<Storage, "getItem" | "setItem">;
 
 export function createDeviceStore(storage: DeviceStorage | null): DeviceStore {

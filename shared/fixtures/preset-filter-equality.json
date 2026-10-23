@@ -60,5 +60,16 @@
   { "name": "different minimum ratings", "left": { "minRating": 3 }, "right": { "minRating": 3.5 }, "same": false },
   { "name": "a minimum rating that isn't a rating equals unset", "left": { "minRating": 3.2 }, "right": {}, "same": true },
   { "name": "a minimum rating as a string equals unset", "left": { "minRating": "3" }, "right": {}, "same": true },
-  { "name": "only unrated differs from a minimum rating", "left": { "onlyUnrated": true }, "right": { "minRating": 0.5 }, "same": false }
+  { "name": "only unrated differs from a minimum rating", "left": { "onlyUnrated": true }, "right": { "minRating": 0.5 }, "same": false },
+  { "name": "the same date added preset is the same filter", "left": { "addedRange": "last30Days" }, "right": { "addedRange": "last30Days" }, "same": true },
+  { "name": "a date preset in another case is the same filter", "left": { "addedRange": "LAST30DAYS" }, "right": { "addedRange": "last30Days" }, "same": true },
+  { "name": "different date presets", "left": { "createdRange": "last7Days" }, "right": { "createdRange": "last90Days" }, "same": false },
+  { "name": "a date range differs from none", "left": { "createdRange": "thisYear" }, "right": {}, "same": false },
+  { "name": "a null date range equals none", "left": { "addedRange": null, "createdRange": null }, "right": {}, "same": true },
+  { "name": "last 30 days differs from a custom range of 30 days", "left": { "addedRange": "last30Days" }, "right": { "addedRange": { "from": "2026-09-23", "to": "2026-10-22" } }, "same": false },
+  { "name": "the same custom range is the same filter", "left": { "createdRange": { "from": "2026-01-03", "to": "2026-03-31" } }, "right": { "createdRange": { "to": "2026-03-31", "from": "2026-01-03" } }, "same": true },
+  { "name": "custom ranges a day apart differ", "left": { "createdRange": { "from": "2026-01-03", "to": "2026-03-31" } }, "right": { "createdRange": { "from": "2026-01-03", "to": "2026-04-01" } }, "same": false },
+  { "name": "added and created with the same choice differ", "left": { "addedRange": "last7Days" }, "right": { "createdRange": "last7Days" }, "same": false },
+  { "name": "both date ranges together are the same filter", "left": { "addedRange": "thisYear", "createdRange": { "from": "2020-01-01", "to": "2020-12-31" } }, "right": { "addedRange": "thisYear", "createdRange": { "from": "2020-01-01", "to": "2020-12-31" } }, "same": true },
+  { "name": "a custom range that ends before it starts equals none", "left": { "addedRange": { "from": "2026-03-31", "to": "2026-01-03" } }, "right": {}, "same": true }
 ]

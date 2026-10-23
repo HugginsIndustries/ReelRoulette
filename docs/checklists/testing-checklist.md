@@ -125,6 +125,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] In a desktop browser, hovering the stars previews the rating in place of the set one, which shows again when the pointer leaves, and a click sets it.
 - [ ] On the iPad and an Android phone in both orientations, and in a desktop browser, the player's star shows the playing item's rating in its badge, and its popover sets one by touch or click and closes.
 - [ ] In the WebUI, Only unrated and a Min Rating each limit browse and random play, the rating sort orders the library, and a preset saved with a Min Rating keeps it.
+- [ ] In the WebUI, Added and Created limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
 
 ## Release Flow
 

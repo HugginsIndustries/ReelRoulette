@@ -1393,6 +1393,29 @@ describe("Filters line", () => {
     expect(filtersLine().textContent).toBe("Filters: Min 1 star");
   });
 
+  it("names the Added and Created ranges by their choice, after the durations and before the tags", async () => {
+    const range = { from: "2026-01-03", to: "2026-03-31" };
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () =>
+        json([
+          { id: "preset-recent", name: "Recent", filterState: { addedRange: "last30Days" } },
+          { id: "preset-year", name: "Year", filterState: { maxDuration: "00:10:00", createdRange: "thisYear", addedRange: "last7Days", selectedTags: ["Beach"] } },
+          { id: "preset-custom", name: "Custom", filterState: { addedRange: range, createdRange: "last90Days" } }
+        ])
+      );
+    });
+    await openLibrary();
+
+    await pickPreset("preset-recent");
+    expect(filtersLine().textContent).toBe("Filters: Added in last 30 days");
+    await pickPreset("preset-year");
+    expect(filtersLine().textContent).toBe("Filters: Max 10:00 · Added in last 7 days · Created this year · 1 tag");
+    await pickPreset("preset-custom");
+    // In the device's own date format, which Intl gives.
+    const shown = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).formatRange(new Date(2026, 0, 3), new Date(2026, 2, 31));
+    expect(filtersLine().textContent).toBe(`Filters: Added ${shown} · Created in last 90 days`);
+  });
+
   it("counts the chosen sources out of all the sources, loading them for a source filter", async () => {
     const { server } = await mountLibrary(libraryItems(3), (fake) => {
       fake.on("GET", "/api/presets", () => json([ONE_SOURCE_PRESET]));

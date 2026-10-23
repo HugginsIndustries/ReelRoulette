@@ -2685,7 +2685,7 @@ components:
         addedRange:
           anyOf:
             - $ref: "#/components/schemas/FilterDateRangePreset"
-            - $ref: "#/components/schemas/FilterDateRange"
+            - $ref: "#/components/schemas/FilterCustomDateRange"
             - type: "null"
           description: |
             The days an item's date added, when its file came into the library, must fall in: a preset, which rolls
@@ -2697,7 +2697,7 @@ components:
         createdRange:
           anyOf:
             - $ref: "#/components/schemas/FilterDateRangePreset"
-            - $ref: "#/components/schemas/FilterDateRange"
+            - $ref: "#/components/schemas/FilterCustomDateRange"
             - type: "null"
           description: |
             The days an item's date created, its file's modified time, must fall in, written and read as
@@ -2712,7 +2712,7 @@ components:
         - last90Days
         - thisYear
 
-    FilterDateRange:
+    FilterCustomDateRange:
       type: object
       description: A custom range of whole days, as a filter's `addedRange` or `createdRange`.
       required:

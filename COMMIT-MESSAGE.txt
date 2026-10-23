@@ -20,10 +20,12 @@ Instructions:
 
 Commit Message:
 
-M12k5: Filter and sort by date added and date created on the server
+M12k5: Filter by date added and date created in the WebUI, and show both in the Stats tab
 
-- Filters: addedRange and createdRange keep files by when they were added and created, as a preset or a custom range resolved to whole days in the server's time zone, in the library query, its counts, and random selection, and Core's preset comparison tells presets apart by them.
-- Sorts: Date added sorts by the date added and a new Date created sort by the modified time, each on its own index, and the WebUI's Library tab lists Date created.
-- Items: the item read and the query page send dateAddedUtc and dateCreatedUtc in place of lastWriteTimeUtc, and LibraryProjectionItem names every field the item read sends.
-- Contract: OpenAPI, the generated WebUI types, and shared/fixtures/filter-date-ranges.json, which locks how the server reads the fields.
-- Docs: docs/api.md, CONTEXT.md, docs/domain-inventory.md, CHANGELOG.md, and MILESTONES.md, which records the Contract slice as complete with its evidence and drops what it did from the WebUI slice.
+- Filter tab: a Date Filter section with Added and Created, each Any time, Last 7, 30, or 90 days, This year, or a custom range from the device's date picker, from 1970 to 2099, flagged with the field validation pattern while a date is missing, outside those years, or out of order. A flagged range, and now a Min or Max whose text isn't valid, which counted as no limit before, keeps the working filter's value, so the preset the tab is named for stays as it was.
+- Presets and the Filters line: both ranges are sent, saved, and compared by the choice, read as the server reads them, locked to filter-date-ranges.json, which gains leap-day cases, with date cases in preset-filter-equality.json, and named on the Filters line.
+- Stats tab: Added and Created after Last played, all three worded as how long ago up to months and years, and Show exact times in the header, kept per device.
+- Contract: the OpenAPI schema for a custom range is FilterCustomDateRange, since Core and the WebUI call a preset or a custom range FilterDateRange.
+- Cleanup: one isBoolean device-setting check in deviceStore.ts replaces nine copies, the new timeText.ts holds the day and exact time formatters and one twoDigits and duration split, which the seek row's time and the filter's durations share, and the notifications list's timeAgo is messageTime, apart from the Stats tab's.
+- Mockup: the custom range's 1970 to 2099 limit and its message, and a working filter that keeps a duration whose text isn't valid, as the app's does.
+- Docs: CONTEXT.md, ISSUES.md, docs/api.md, docs/domain-inventory.md, CHANGELOG.md, the testing checklist's Release Specific manual check, and MILESTONES.md, which records the WebUI slice's evidence and moves the completed milestone to MILESTONES-COMPLETED.md.

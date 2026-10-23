@@ -19,6 +19,7 @@ describe("nowPlaying", () => {
     [Number.NaN, Number.NaN, "0:00 / 0:00"],
     // A video whose length the browser doesn't know, as a WebM without one in its header.
     [5, Number.POSITIVE_INFINITY, "0:05 / 0:00"],
+    [3700, Number.POSITIVE_INFINITY, "61:40 / 0:00"],
     // Under ten minutes, one minute digit.
     [36, 97, "0:36 / 1:37"],
     [61.7, 125, "1:01 / 2:05"],

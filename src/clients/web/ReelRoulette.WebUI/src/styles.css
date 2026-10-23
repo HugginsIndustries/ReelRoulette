@@ -1084,6 +1084,8 @@ html.theme-light .ambient canvas {
   text-overflow: ellipsis;
 }
 .icon-btn.has-pending { color: var(--huggins-orange); }
+/* A header's toggle, such as the Stats tab's Show exact times, is orange while it is on. */
+.icon-btn.active { color: var(--huggins-orange); }
 /* Auto Tag, over the whole page: a modal in the top layer that fills the viewport. */
 .autotag-overlay {
   position: fixed;
@@ -1380,6 +1382,15 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 .filter-row.choose-preset-row { flex-wrap: nowrap; }
 .choose-preset-row > select { flex: 1 1 0; min-width: 0; }
 .duration-field { width: 14rem; max-width: 100%; }
+/* Date Filter: Added and Created, each a label and its choice, and while Custom range is chosen, From and To on rows of
+   their own below it, as Duration Filter has Min and Max. The labels share a width, so the fields line up, and From
+   and To sit indented under their choice. */
+.date-label { flex: 0 0 4.5rem; }
+.date-range { display: flex; flex-direction: column; gap: 10px; }
+.date-range .date-label { padding-left: 1rem; }
+.date-choice, .date-field { width: 12rem; max-width: 100%; }
+/* iOS centers a date field's text; the app's fields start theirs at the left. */
+.date-field::-webkit-date-and-time-value { text-align: left; }
 .new-preset-field { flex: 1 1 180px; }
 .filter-local-mode { min-height: 36px; font-size: 0.85rem; }
 /* Its icon buttons, as the Tags tab's: Apply turns orange and shows the unsaved-changes dot while there are changes.

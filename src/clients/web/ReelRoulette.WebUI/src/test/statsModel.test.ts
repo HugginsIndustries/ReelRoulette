@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
-import { adjustmentText, fileRows, libraryCards, loudnessText, orderTags, playedAgo, truePeakText, type LibraryStats } from "../stats/statsModel";
+import { adjustmentText, fileRows, libraryCards, loudnessText, orderTags, timeAgo, truePeakText, type LibraryStats } from "../stats/statsModel";
 
 const NOW = Date.parse("2026-10-13T20:00:00Z");
 const MINUTE = 60_000;
@@ -11,20 +11,30 @@ function item(fields: Record<string, unknown>): LibraryProjectionItem {
   return parseLibraryItem({ id: "item-1", sourceId: "s1", fileName: "clip.mp4", mediaType: 0, ...fields })!;
 }
 
-const rowsOf = (from: LibraryProjectionItem) => Object.fromEntries(fileRows(from, from.lastPlayedUtcMs, NOW, "Off").map((row) => [row.label, row.value]));
+const rowsOf = (from: LibraryProjectionItem, exactTimes = false) =>
+  Object.fromEntries(fileRows(from, from.lastPlayedUtcMs, NOW, "Off", exactTimes).map((row) => [row.label, row.value]));
+
+/** Noon on 22 October 2026 on this device, which the calendar wording counts from. */
+const LOCAL_NOW = new Date(2026, 9, 22, 12, 0, 0).getTime();
 
 describe("stats model", () => {
   it.each([
-    [null, "Never"],
-    [NOW - 20_000, "Just now"],
-    [NOW - MINUTE, "1 min ago"],
-    [NOW - 59 * MINUTE, "59 min ago"],
-    [NOW - HOUR, "1 hour ago"],
-    [NOW - 23 * HOUR, "23 hours ago"],
-    [NOW - DAY, "1 day ago"],
-    [NOW - 300 * DAY, "300 days ago"]
-  ])("says a last play at %s as %s", (at, text) => {
-    expect(playedAgo(at, NOW)).toBe(text);
+    ["30 seconds before", "Just now", LOCAL_NOW - 30_000],
+    ["a time after now", "Just now", LOCAL_NOW + 5 * MINUTE],
+    ["a minute before", "1 minute ago", LOCAL_NOW - MINUTE],
+    ["2 minutes before", "2 minutes ago", LOCAL_NOW - 2 * MINUTE],
+    ["59 minutes before", "59 minutes ago", LOCAL_NOW - 59 * MINUTE],
+    ["an hour before", "1 hour ago", LOCAL_NOW - HOUR],
+    ["a second short of a day before", "23 hours ago", LOCAL_NOW - DAY + 1_000],
+    ["a day before", "1 day ago", LOCAL_NOW - DAY],
+    ["23 September at midnight, a day short of a month", "29 days ago", new Date(2026, 8, 23, 0, 0, 0).getTime()],
+    ["22 September at 13:00, on the month's own day", "1 month ago", new Date(2026, 8, 22, 13, 0, 0).getTime()],
+    ["3 months before", "3 months ago", new Date(2026, 6, 10, 9, 0, 0).getTime()],
+    ["23 October last year, a day short of a year", "11 months ago", new Date(2025, 9, 23, 12, 0, 0).getTime()],
+    ["22 October last year", "1 year ago", new Date(2025, 9, 22, 12, 0, 0).getTime()],
+    ["5 years before", "5 years ago", new Date(2021, 2, 1, 8, 0, 0).getTime()]
+  ])("says %s as %s", (_, text, at) => {
+    expect(timeAgo(at, LOCAL_NOW)).toBe(text);
   });
 
   it.each([
@@ -51,12 +61,23 @@ describe("stats model", () => {
     expect(adjustmentText(adjustment, enhanced)).toBe(text);
   });
 
-  it("lists a video's plays, last played, flags, duration, and audio", () => {
-    const video = item({ playCount: 3, isFavorite: true, durationSeconds: 3725, hasAudio: true, integratedLoudness: -20, peakDb: -0.5 });
+  it("lists a video's plays, last played, added, created, flags, duration, and audio", () => {
+    const video = item({
+      playCount: 3,
+      isFavorite: true,
+      durationSeconds: 3725,
+      hasAudio: true,
+      integratedLoudness: -20,
+      peakDb: -0.5,
+      dateAddedUtc: new Date(NOW - 5 * DAY).toISOString(),
+      dateCreatedUtc: new Date(NOW - 3 * HOUR).toISOString()
+    });
 
-    expect(fileRows(video, NOW - 2 * DAY, NOW, "+2.0 dB")).toEqual([
+    expect(fileRows(video, NOW - 2 * DAY, NOW, "+2.0 dB", false)).toEqual([
       { label: "Plays", value: "3" },
       { label: "Last played", value: "2 days ago" },
+      { label: "Added", value: "5 days ago" },
+      { label: "Created", value: "3 hours ago" },
       { label: "Favorite", value: "Yes" },
       { label: "Blacklisted", value: "No" },
       { label: "Duration", value: "1:02:05" },
@@ -68,9 +89,27 @@ describe("stats model", () => {
   });
 
   it("leaves a photo's duration and audio out, and says Unknown for a video without a duration", () => {
-    expect(Object.keys(rowsOf(item({ mediaType: 1 })))).toEqual(["Plays", "Last played", "Favorite", "Blacklisted"]);
+    expect(Object.keys(rowsOf(item({ mediaType: 1 })))).toEqual(["Plays", "Last played", "Added", "Created", "Favorite", "Blacklisted"]);
     expect(rowsOf(item({})).Duration).toBe("Unknown");
     expect(rowsOf(item({}))["Has audio"]).toBe("Unknown");
+  });
+
+  it("shows a photo's added and created, and says Never and Unknown for a file without the times", () => {
+    const photo = item({ mediaType: 1, dateAddedUtc: new Date(NOW - 40 * MINUTE).toISOString(), dateCreatedUtc: new Date(NOW - DAY).toISOString() });
+    expect([rowsOf(photo).Added, rowsOf(photo).Created]).toEqual(["40 minutes ago", "1 day ago"]);
+
+    const unknown = rowsOf(item({}));
+    expect([unknown["Last played"], unknown.Added, unknown.Created]).toEqual(["Never", "Unknown", "Unknown"]);
+    const unknownExact = rowsOf(item({}), true);
+    expect([unknownExact["Last played"], unknownExact.Added, unknownExact.Created]).toEqual(["Never", "Unknown", "Unknown"]);
+  });
+
+  it("shows all three times exactly with exact times on", () => {
+    const [played, added, created] = [new Date(2026, 9, 12, 7, 8, 9), new Date(2024, 0, 2, 23, 59, 58), new Date(2019, 5, 30, 0, 0, 1)];
+    const video = item({ lastPlayedUtc: played.toISOString(), dateAddedUtc: added.toISOString(), dateCreatedUtc: created.toISOString() });
+
+    const exact = rowsOf(video, true);
+    expect([exact["Last played"], exact.Added, exact.Created]).toEqual(["2026-10-12 07:08:09", "2024-01-02 23:59:58", "2019-06-30 00:00:01"]);
   });
 
   it("gives the library's cards in the mockup's order", () => {

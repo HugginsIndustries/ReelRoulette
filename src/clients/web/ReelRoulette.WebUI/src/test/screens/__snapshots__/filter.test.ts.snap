@@ -137,6 +137,42 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               "Max"
             <span class="vfield duration-field">
               <input aria-label="Maximum duration" autocomplete="off" class="ctl" id="filter-max-dur-text" placeholder="No maximum" type="text" value="01:01:40">
+      <div class="filter-section">
+        <h3>
+          "Date Filter"
+        <div class="filter-stack duration-stack">
+          <div class="filter-row">
+            <label class="date-label" for="filter-added">
+              "Added"
+            <select class="ctl date-choice" id="filter-added">
+              <option selected="true" value="">
+                "Any time"
+              <option selected="false" value="last7Days">
+                "Last 7 days"
+              <option selected="false" value="last30Days">
+                "Last 30 days"
+              <option selected="false" value="last90Days">
+                "Last 90 days"
+              <option selected="false" value="thisYear">
+                "This year"
+              <option selected="false" value="custom">
+                "Custom range"
+          <div class="filter-row">
+            <label class="date-label" for="filter-created">
+              "Created"
+            <select class="ctl date-choice" id="filter-created">
+              <option selected="true" value="">
+                "Any time"
+              <option selected="false" value="last7Days">
+                "Last 7 days"
+              <option selected="false" value="last30Days">
+                "Last 30 days"
+              <option selected="false" value="last90Days">
+                "Last 90 days"
+              <option selected="false" value="thisYear">
+                "This year"
+              <option selected="false" value="custom">
+                "Custom range"
     <div class="filter-panel" id="filter-panel-tags" style="display: none">
       <div class="filter-section">
         <h3>
@@ -473,6 +509,42 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               "Max"
             <span class="vfield duration-field">
               <input aria-label="Maximum duration" autocomplete="off" class="ctl" id="filter-max-dur-text" placeholder="No maximum" type="text" value="01:01:40">
+      <div class="filter-section">
+        <h3>
+          "Date Filter"
+        <div class="filter-stack duration-stack">
+          <div class="filter-row">
+            <label class="date-label" for="filter-added">
+              "Added"
+            <select class="ctl date-choice" id="filter-added">
+              <option selected="true" value="">
+                "Any time"
+              <option selected="false" value="last7Days">
+                "Last 7 days"
+              <option selected="false" value="last30Days">
+                "Last 30 days"
+              <option selected="false" value="last90Days">
+                "Last 90 days"
+              <option selected="false" value="thisYear">
+                "This year"
+              <option selected="false" value="custom">
+                "Custom range"
+          <div class="filter-row">
+            <label class="date-label" for="filter-created">
+              "Created"
+            <select class="ctl date-choice" id="filter-created">
+              <option selected="true" value="">
+                "Any time"
+              <option selected="false" value="last7Days">
+                "Last 7 days"
+              <option selected="false" value="last30Days">
+                "Last 30 days"
+              <option selected="false" value="last90Days">
+                "Last 90 days"
+              <option selected="false" value="thisYear">
+                "This year"
+              <option selected="false" value="custom">
+                "Custom range"
     <div class="filter-panel" id="filter-panel-tags" style="display: none">
       <div class="filter-section">
         <h3>
@@ -809,6 +881,42 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               "Max"
             <span class="vfield duration-field">
               <input aria-label="Maximum duration" autocomplete="off" class="ctl" id="filter-max-dur-text" placeholder="No maximum" type="text" value="01:01:40">
+      <div class="filter-section">
+        <h3>
+          "Date Filter"
+        <div class="filter-stack duration-stack">
+          <div class="filter-row">
+            <label class="date-label" for="filter-added">
+              "Added"
+            <select class="ctl date-choice" id="filter-added">
+              <option selected="true" value="">
+                "Any time"
+              <option selected="false" value="last7Days">
+                "Last 7 days"
+              <option selected="false" value="last30Days">
+                "Last 30 days"
+              <option selected="false" value="last90Days">
+                "Last 90 days"
+              <option selected="false" value="thisYear">
+                "This year"
+              <option selected="false" value="custom">
+                "Custom range"
+          <div class="filter-row">
+            <label class="date-label" for="filter-created">
+              "Created"
+            <select class="ctl date-choice" id="filter-created">
+              <option selected="true" value="">
+                "Any time"
+              <option selected="false" value="last7Days">
+                "Last 7 days"
+              <option selected="false" value="last30Days">
+                "Last 30 days"
+              <option selected="false" value="last90Days">
+                "Last 90 days"
+              <option selected="false" value="thisYear">
+                "This year"
+              <option selected="false" value="custom">
+                "Custom range"
     <div class="filter-panel" id="filter-panel-tags" style="display: block">
       <div class="filter-section">
         <h3>

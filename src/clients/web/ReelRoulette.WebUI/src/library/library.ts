@@ -10,7 +10,7 @@ import type { PanelHost } from "../panel/panelHost";
 import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 import { noLibraryText, playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { RuntimeConfig } from "../types/runtimeConfig";
@@ -57,10 +57,6 @@ const SORT_KEY = "library.sort";
 interface RememberedSort {
   mode: LibrarySortMode;
   descending: boolean;
-}
-
-function isBoolean(value: unknown): value is boolean {
-  return typeof value === "boolean";
 }
 
 function isRememberedSort(value: unknown): value is RememberedSort {

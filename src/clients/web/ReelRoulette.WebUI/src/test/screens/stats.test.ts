@@ -48,6 +48,16 @@ const VIDEO = {
   isBlacklisted: false
 };
 
+const PHOTO = {
+  ...VIDEO,
+  id: "C:\\media\\beach.jpg",
+  itemId: "item-photo",
+  displayName: "beach.jpg",
+  mediaType: "photo",
+  durationSeconds: null as unknown as number,
+  mediaUrl: "/api/media/item-photo?token=t"
+};
+
 /** A random pick, which carries the video's loudness and peak when the scan measured them. */
 type PickedItem = typeof VIDEO & { integratedLoudness?: number; peakDb?: number };
 
@@ -389,6 +399,89 @@ describe("Stats tab", () => {
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
     await waitFor(() => expect(rows()["Last played"]).toBe("2 days ago"));
+  });
+
+  it("shows when the file was added and created right after Last played, how long ago through months and years, or Unknown without them", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 22, 12, 0, 0));
+    const dated = itemRow(VIDEO, { dateAddedUtc: new Date(2026, 6, 10, 9, 0, 0).toISOString(), dateCreatedUtc: new Date(2021, 2, 1, 8, 0, 0).toISOString() });
+    const { page } = await mountStats({ items: [dated, itemRow(OTHER_VIDEO)], picks: [VIDEO, OTHER_VIDEO] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+
+    await waitFor(() => expect([rows().Added, rows().Created]).toEqual(["3 months ago", "5 years ago"]));
+    const labels = Object.keys(rows());
+    expect(labels.slice(labels.indexOf("Last played"), labels.indexOf("Favorite") + 1)).toEqual(["Last played", "Added", "Created", "Favorite"]);
+
+    emit(page, "playbackRecorded", { itemId: "item-video", playCount: 1, previousLastPlayedUtc: new Date(2026, 9, 22, 11, 58, 0).toISOString() });
+    await waitFor(() => expect(rows()["Last played"]).toBe("2 minutes ago"));
+
+    await playNext(OTHER_VIDEO);
+    await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
+    await waitFor(() => expect([rows().Added, rows().Created]).toEqual(["Unknown", "Unknown"]));
+  });
+
+  it("shows a photo's added and created too", async () => {
+    const photo = itemRow(PHOTO, {
+      mediaType: 1,
+      durationSeconds: undefined,
+      hasAudio: undefined,
+      integratedLoudness: undefined,
+      peakDb: undefined,
+      dateAddedUtc: new Date(Date.now() - 2 * DAY).toISOString()
+    });
+    await mountStats({ play: false, items: [photo], picks: [PHOTO] });
+    fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach.jpg"));
+    fireEvent.click(document.getElementById("now-playing-name")!);
+
+    await waitFor(() => expect(rows().Added).toBe("2 days ago"));
+    expect(Object.keys(rows())).toEqual(["Plays", "Last played", "Added", "Created", "Favorite", "Blacklisted"]);
+    expect(rows().Created).toBe("Unknown");
+  });
+
+  it("shows all three times as YYYY-MM-DD HH:MM:SS on this device with Show exact times, off at first, orange while on, and remembered", async () => {
+    useStylesheet();
+    const dated = itemRow(VIDEO, {
+      lastPlayedUtc: new Date(2026, 9, 12, 7, 8, 9).toISOString(),
+      dateAddedUtc: new Date(2024, 0, 2, 23, 59, 58).toISOString(),
+      dateCreatedUtc: new Date(2019, 5, 30, 0, 0, 1).toISOString()
+    });
+    const undated = itemRow(OTHER_VIDEO, { lastPlayedUtc: undefined });
+    const times = () => [rows()["Last played"], rows().Added, rows().Created];
+    const exact = ["2026-10-12 07:08:09", "2024-01-02 23:59:58", "2019-06-30 00:00:01"];
+    const button = () => document.getElementById("stats-exact-times-btn")!;
+    const orange = () => currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim();
+    const first = await mountStats({ items: [dated, undated], picks: [VIDEO, OTHER_VIDEO] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(rows().Plays).toBe("1"));
+
+    expect(button().closest(".stats-tab-header")).not.toBeNull();
+    expect([button().getAttribute("aria-label"), button().title, button().textContent]).toEqual(["Show exact times", "Show exact times", "calendar_clock"]);
+    expect(button().classList.contains("active")).toBe(false);
+    expect(currentStyle(button()).color).not.toBe(orange());
+    expect(times().some((time) => exact.includes(time ?? ""))).toBe(false);
+
+    fireEvent.click(button());
+    await settle();
+    expect(times()).toEqual(exact);
+    expect(button().classList.contains("active")).toBe(true);
+    expect(currentStyle(button()).color).toBe(orange());
+    expect([button().getAttribute("aria-label"), button().title]).toEqual(["Show exact times", "Show exact times"]);
+    expect(localStorage.getItem("rr_device.stats.exactTimes")).toBe("true");
+
+    // A page refresh keeps it on, and a file without the times still says Never and Unknown.
+    first.page.unmount();
+    await mountStats({ items: [dated, undated], picks: [VIDEO, OTHER_VIDEO] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(times()).toEqual(exact));
+    expect(button().classList.contains("active")).toBe(true);
+    await playNext(OTHER_VIDEO);
+    await waitFor(() => expect(times()).toEqual(["Never", "Unknown", "Unknown"]));
+
+    fireEvent.click(button());
+    await settle();
+    expect(button().classList.contains("active")).toBe(false);
+    expect(localStorage.getItem("rr_device.stats.exactTimes")).toBe("false");
   });
 
   it("shows the file's tags in the tag catalog's category order, from the catalog the Tags tab loaded, kept by its events", async () => {

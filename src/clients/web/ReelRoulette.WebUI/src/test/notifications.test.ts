@@ -9,7 +9,7 @@ import {
   POPUP_SETTINGS_KEY,
   readPopupSettings,
   SAMPLE_POPUP_KEY,
-  timeAgo
+  messageTime
 } from "../notifications/notifications";
 import { createDeviceStore } from "../state/deviceStore";
 
@@ -197,9 +197,9 @@ describe("notifications", () => {
     notes.notify({ kind: "actions", text: "Filters applied." });
     const sent = notes.entries.value[0]!.time;
     notes.openList();
-    expect(timeAgo(sent, notes.now.value)).toBe("Just now");
+    expect(messageTime(sent, notes.now.value)).toBe("Just now");
     vi.advanceTimersByTime(LIST_TIME_REFRESH_MS * 3);
-    expect(timeAgo(sent, notes.now.value)).toBe("1 min ago");
+    expect(messageTime(sent, notes.now.value)).toBe("1 min ago");
     notes.closeList();
     const closedAt = notes.now.value;
     vi.advanceTimersByTime(LIST_TIME_REFRESH_MS * 4);
@@ -208,10 +208,10 @@ describe("notifications", () => {
 
   it("reads a message's time as Just now, minutes ago, then the time of day", () => {
     const sent = new Date(2026, 9, 13, 10, 0, 0).getTime();
-    expect(timeAgo(sent, sent + 59_000)).toBe("Just now");
-    expect(timeAgo(sent, sent + 60_000)).toBe("1 min ago");
-    expect(timeAgo(sent, sent + 59 * 60_000)).toBe("59 min ago");
-    expect(timeAgo(sent, sent + 60 * 60_000)).toBe(new Date(sent).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    expect(messageTime(sent, sent + 59_000)).toBe("Just now");
+    expect(messageTime(sent, sent + 60_000)).toBe("1 min ago");
+    expect(messageTime(sent, sent + 59 * 60_000)).toBe("59 min ago");
+    expect(messageTime(sent, sent + 60 * 60_000)).toBe(new Date(sent).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
   });
 
   it("reads the popup settings kept on this device, each field falling back to its default", () => {

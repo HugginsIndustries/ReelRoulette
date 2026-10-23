@@ -6,6 +6,283 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12k5 - Date Added and Date Filters
+
+- **Status**: ✅ Complete
+- **Goal**: The catalog records when each file was added, browse and random play can filter and sort by the date added and the date created, and the Stats tab shows both.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- A file's date added is when the source stage of the refresh that first finds it started, so the files one refresh adds share it and the Date added sort orders them by name.
+- A file already in the catalog when it upgrades takes its modified time as its date added.
+- A file's date created is its modified time (`last_write_time_utc`), which is what "created" usually means for media files.
+- The API, the WebUI, and the fixtures call it `DateCreated`, and the code's comments say it is the modified time.
+- The Library tab's sort offers Date added and Date created: `DateAdded` sorts by the date added, and a new `DateCreated` sorts by the modified time, which `DateAdded` read before.
+- Two filters, Added and Created, can be used together. Each is Any time, Last 7 days, Last 30 days, Last 90 days, This year, or Custom range, a range of two dates from the device's date picker.
+- Both sit in a Date Filter section at the end of the Filter tab's General section, after Duration Filter, each a dropdown labeled Added or Created.
+- The FilterState fields are `addedRange` and `createdRange`.
+- The Filters line names each as "Added in last 30 days", "Added this year", or a custom range in the device's own date format, such as "Added Jan 3 – Mar 31, 2026", and Created the same way.
+- A filter stores the choice, never resolved dates, so a preset with Last 30 days always means the last 30 days, and preset matching compares the choice.
+- The server resolves a range in its own time zone, to whole days: Last {N} days is today and the {N − 1} days before it, This year starts on 1 January, and a custom range covers its first and last days.
+- Choosing Custom range fills an empty From or To with today, so the range is valid at once.
+- A custom range needs both dates, so an emptied date is flagged with the field validation pattern, and so is a range that ends before it starts.
+- A file without a date is outside every range of that date.
+- The Stats tab's Current file section shows Added and Created right after Last played, or "Unknown" for a file without that date.
+- Last played, Added, and Created say how long ago: "Just now", then minutes, hours, and days, then months once a whole calendar month has passed, and years once a whole year has, such as "2 minutes ago" or "3 months ago". Last played's "2 min ago" becomes "2 minutes ago".
+- Show exact times, a `calendar_clock` icon button at the right of the Stats tab's header, as Auto Tag sits in the Tags tab's, shows all three as YYYY-MM-DD HH:MM:SS in 24-hour time in the device's local time. It is off by default, orange while on, and remembered on each device.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | Added and Created in the Filter tab with the custom range's date picker, their Filters line wording, Date added and Date created in the sort list, and Added and Created in the Stats tab with Show exact times, approved on a desktop browser, the iPad, and an Android phone. |
+| Server | ✅ Complete | The date added column in a new catalog schema step with its sort indexes, the modified-time sort indexes renamed for Date created, and every file the refresh's source stage adds given the time the stage started. |
+| Contract | ✅ Complete | `addedRange` and `createdRange` in the FilterState schema, applied by the server in the list query, its counts, and random selection, and compared by Core's preset comparison, the `DateAdded` and `DateCreated` sorts with Date created in the Library tab's sort list, the item read's dates with every field it sends named in `LibraryProjectionItem`, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ✅ Complete | Added and Created in the Filter tab and the Filters line, saved in presets and compared in preset matching, and the Stats tab's Added and Created rows. |
+
+#### Mockup slice
+
+**Scope**
+
+- In `docs/mockups/reelroulette/`, the Date Filter section with Added and Created as the Decisions describe, each with From and To on their own rows below its dropdown while Custom range is chosen, as Duration Filter has Min and Max.
+- An emptied date is flagged with "Choose a start date." or "Choose an end date.", and a To before its From with "Choose an end date on or after the start date.", the icon after the field, as a dropdown's is. They hold Apply, Add Preset, and Update with "Correct the Added dates to apply." or "Correct the Created dates first.", and show the General tab's problem badge.
+- The Filters line names them after the durations, as the Decisions word them.
+- Date added and Date created in the Library tab's sort list, in place of today's Date added, after Duration, each with "Newest → Oldest" and "Oldest → Newest" and starting on Newest → Oldest.
+- Each sort reads the item's own value, so Last played and Play count sort by the last-played time and the play count, as the app does.
+- The mockup's items get a date added and a date created from each item's id, so the filters and sorts work on them, and a "Recently added" preset holds Added Last 30 days.
+- The date picker brings its own icon, and Show exact times adds `calendar_clock` to the mockup's icon subset.
+- The Stats tab's Current file section shows Added and Created after Last played, as the Decisions describe.
+- Show exact times in the Stats tab's header, as the Decisions describe.
+- The validation page gets a Custom range group, and the index page describes the filters, the sorts, and the Stats tab's rows.
+- Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone, including the date picker on each.
+
+**Traps**
+
+- The mockup's items have no dates, and its Date added sort uses a key made up for it, which Last played and Play count share (`layout.src.html`).
+- Drawing the dates from `statRand` would shift every random value drawn after them (inferred).
+- No date input exists in the WebUI or the mockup (measured).
+- `<input type="date">` opens each platform's own picker, so its look can only be judged on the devices (inferred).
+- `check.mjs` runs the pages in happy-dom, with no layout.
+- `calendar_today`, `date_range`, `calendar_month`, and `event` aren't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list (measured).
+- `calendar_clock` is in the WebUI's icon font, which `build_font.py` cuts the mockup's subset from (measured).
+- The Filter tab's General section holds Basic Filters, Media Type, Sources, Audio Filter, and Duration Filter, and Browser-Playable Filter and Rating Filter and Sort add to it.
+- `readApplied` builds the mockup's Filters line parts, which `renderFilterSummary` shows (`layout.src.html`).
+- A date input's `valueAsDate` is midnight UTC, which is the day before in a time zone west of UTC, so a date's text is read as a local day (measured in happy-dom).
+- happy-dom keeps a valid `YYYY-MM-DD` in a date input and empties one that isn't, as browsers do, and has no `showPicker` (measured).
+
+**Acceptance**
+
+- The mockup shows Added and Created, their Filters line wording, both date sorts, and the Stats tab's rows and Show exact times as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- `layout.src.html` has the Mockup slice's Scope:
+  - The Date Filter section at the end of General, with From and To checked by `dateRangeFields` in `common.js`. The tab's filter value, its default, Load, Discard changes, Clear all, Apply, and the filter each device remembers carry `addedRange` and `createdRange`.
+  - The General section's checked fields in one list, `generalFields`, which Apply, Add Preset, and Update use, and which is checked again in full when another device changes the applied preset, where only the durations were before.
+  - The Filters line's wording, and `inDateRange`, which limits the grid and random picks to whole days in the device's time zone, standing in for the server's.
+  - Date created in the sort list, and each sort reading the item's own value, with equal values by name, A–Z in both directions, as the server orders them; the mockup used to reverse them in descending sorts.
+  - Each item's date added and date created from its id, and a "Recently added" preset.
+  - The Stats tab's Added and Created rows, how-long-ago wording for Last played, Added, and Created, and Show exact times in its header, orange with an `active` class.
+- In the review, the dropdowns became Added and Created, without "in", the FilterState fields `addedRange` and `createdRange`, the Stats tab gained the rows and Show exact times, and the toggle marks its state only with its color. The Decisions record each.
+- The admin page's Add Source starts a refresh, restarting one that runs, and its path check flags a folder inside a source or holding one, as Admin Source Management's Decisions record.
+- `common.css` has the Date Filter's styles, the validation page has a Custom range group, the index page describes the changes, and `build_font.py` adds `calendar_clock`, cut with the rest by running it.
+- A scratch script, deleted afterward, drove the page in happy-dom on 2026-10-22 (measured): Added matched 4, 8, 11, and 15 tiles and Created 2, 3, 5, and 7 for Last 7, 30, and 90 days and This year; Custom range filled today; a reversed range was flagged on To and held Apply with "Correct the Added dates to apply."; Show exact times switched the three rows and was remembered; and the wording ran from "Just now" through "2 minutes ago", "29 days ago", and "3 months ago" to "1 year ago".
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The user approved the mockup in their review.
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to the next schema version, with its own upgrade step from the version before that adds a nullable `date_added_utc` column last in `items`, sets it to each item's `last_write_time_utc`, and adds the date added sort indexes, one per direction, on `COALESCE(date_added_utc, 0)` and the name key. A new catalog has the same.
+- The step renames the modified-time sort indexes from `idx_items_date_added_asc` and `idx_items_date_added_desc` to `idx_items_date_created_asc` and `idx_items_date_created_desc`.
+- The new and renamed indexes go in a constant of their own, run for a new catalog and by the new step.
+- `InsertItem` writes the date added it is given, and the refresh's source stage gives every file it adds the time the stage started.
+
+**Traps**
+
+- No schema version after 3 has shipped: v0.14.0 shipped 2 and v0.14.1 shipped 3 (measured). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the column, so the column takes its own step.
+- Item Ratings gives the shipped 2→3 step its own index SQL, so a change to the indexes a new catalog gets can't change that step.
+- `ItemColumnsBySchemaVersion` needs the column for the new version.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version.
+- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and each index's SQL as text, so the column is last in a new catalog's table and each index's SQL is the same in both.
+- SQLite can't rename an index, so renaming one drops and creates it.
+- On a copy of the developer's 49,228-item catalog the step took about 590 ms in one transaction, and the catalog grew from 94.2 to 100.9 MB, 3.06 MB per new index (measured).
+- Every new row goes through `InsertItem` (`LibraryCatalogSession.cs`), which names its columns, and the refresh's source stage calls it through `InsertDiscoveredItem` (`RefreshPipelineService.cs`).
+- The refresh keeps a file's row when it moves or is renamed within one source, matched by a ready fingerprint, the same media type and size, and the same fingerprint (`PersistMovedItem` and `UpdateItemIdentity`), so the file keeps its date added.
+- A move to another source, or a move of a file whose content also changed, is a delete and an insert, so the file gets a new date added.
+- Every item in the developer's catalog has a ready fingerprint (measured).
+- Catalog transfer and backup restore upgrade an older catalog through the same steps, so they get the backfill.
+- A refresh writes a file's modified time again whenever it changes (`SetLastWriteTime`), so a file's date created moves when the file is modified.
+- The source stage reads a new file's size and modified time before inserting its row and writes them with it (`InsertDiscoveredItem`), so a file has no date created only when that read fails, until the fingerprint stage writes them.
+- An item without a modified time when the catalog upgrades gets no date added (inferred).
+- The developer's modified times cluster on the days batches were copied, 12,042 files on one day in 2018 and 6,161 on one day in June 2026, so after the step a file's date added is often its copy day too (measured).
+
+**Acceptance**
+
+- A catalog at each older version opens upgraded and imports upgraded with the column set to each item's modified time and both pairs of indexes, and matches a new catalog's schema, in the catalog upgrade tests.
+- Every file the refresh's source stage adds gets the time the stage started as its date added, and a file moved within a source keeps its date added, in server tests of the source stage.
+- `dotnet test ReelRoulette.sln` passes.
+
+**Evidence**
+
+- `LibraryCatalogStore.SchemaVersion` is 9. `UpgradeSchema8To9` adds `date_added_utc INTEGER NULL` last in `items`, sets it to `last_write_time_utc`, drops `idx_items_date_added_asc` and `idx_items_date_added_desc`, and runs `DateSortIndexesSql`: `idx_items_date_created_asc` and `idx_items_date_created_desc` on `COALESCE(last_write_time_utc, 0)`, and `idx_items_date_added_asc` and `idx_items_date_added_desc` on `COALESCE(date_added_utc, 0)`, each with the name key.
+- A new catalog has the column last and runs `DateSortIndexesSql` too. `SortIndexesSql` no longer holds the date indexes, and `Schema3SortIndexesSql` is unchanged.
+- `LibraryCatalogItem.DateAddedUtc` carries the date added, and `InsertItem` writes it. The refresh's source stage takes the time once when it starts and gives it to every file it adds. `ReadListedItem` doesn't read it yet.
+- `ImportSourceFolder` is unchanged, so the files `POST /api/sources/import` inserts get no date added. No client calls the route, and the Not included section names the milestone that removes its direct insert.
+- `LibraryCatalogStore.Read`, which only tests use, still reads only schema 2's columns, so tests read the date added with `CatalogSeed.ReadDatesAdded`.
+- `CatalogSeed` has version 9's tables and keeps the modified-time indexes under the date added's names for versions 3 to 8, and `SeedItem.DateAddedUtc` writes a date added from version 9.
+- The upgrade theories run from every version from 2 to 8 and check that each item's date added is its modified time after open and after import, and none after open for an item without one.
+- New test: `SourceRefresh_GivesTheFilesItAddsItsStartAsTheirDateAdded_AndKeepsTheDateOfAFileItHolds`. `SourceRefresh_ShouldReconcileMovedFile_ByFingerprintWithoutAddRemove` checks that the moved file keeps its date added.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): the step without the backfill, and the step without its index changes, each failed both upgrade theories at every version; a new catalog without the date indexes failed the seed's schema test and both theories; the source stage writing no date added, or a time per insert, failed the new refresh test; and a move that rewrote the date added failed the moved-file test.
+- A scratch harness, deleted afterward, ran the real step on a copy of the developer's 49,451-item catalog on 2026-10-22 (measured): it upgraded from 8 in 613 ms, the file grew by 7.1 MB, from 100.1 to 107.1 MB, every item's date added equals its modified time with none missing, the integrity check passes, and the Date added sort's page query reads `idx_items_date_created_desc` and `idx_items_date_created_asc`.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 577 Core tests and 19 ServerApp tests, and `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
+- CONTEXT.md, `docs/domain-inventory.md`, and `docs/dev-setup.md` say `user_version` 9 and describe the 8→9 step, and CONTEXT.md and `docs/domain-inventory.md` say a refresh gives the files it adds the time its source stage started and that the `DateAdded` sort still orders by the modified time.
+
+#### Contract slice
+
+**Scope**
+
+- `addedRange` and `createdRange` in the FilterState schema, each null for no limit, a preset (`last7Days`, `last30Days`, `last90Days`, or `thisYear`), or a custom range of `from` and `to` dates, applied by the server in the list query, its counts, and random selection.
+- The server resolves each range as the Decisions describe, with a clock and a time zone that tests can set.
+- A date condition is written on `COALESCE({column}, 0)`, the expression its sort index has.
+- `DateAdded` sorts by the date added and `DateCreated` by the modified time, each reading its own index in both directions.
+- The item read (`POST /api/library/item`) and the library query's page send `dateAddedUtc` and `dateCreatedUtc`, the modified time, in place of `lastWriteTimeUtc`, each an ISO UTC string left out for an item without that date, as `lastPlayedUtc` is, and `LibraryProjectionItem` names both.
+- A shared fixture under `shared/fixtures/` locks how the server's filter parser reads `addedRange` and `createdRange`: each preset, a custom range, a range that ends before it starts, an unknown preset, a date that isn't one, and null. Core tests read it, and the WebUI slice adds the WebUI's reader.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the fields, the time zone and whole days, both sorts, and the item read's dates.
+- Core's preset comparison compares both ranges by the choice, so the API doesn't refuse a preset whose only setting is a range as the default filter, or one that differs from another only by its range.
+- `LibraryProjectionItem` names every field the item read sends, and its contract test checks an item with every optional value.
+- Date created in the Library tab's sort list, after Date added, with its direction labels, since the WebUI's typecheck needs every sort mode there.
+- `parseQueryItem` reads `dateAddedUtc` and `dateCreatedUtc` in place of `lastWriteTimeUtc`.
+
+**Traps**
+
+- FilterState goes through `FilterStateModel` (`FilteringContracts.cs`), `LibraryListFilterParser`, and `AppendFilter` in `LibraryCatalogListQuery.cs`, which the list query, its counts, and random selection share.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` finds the fields the parser reads by the text `(element, "name"`, so a field with fields of its own is read through a helper called that way.
+- `AppendFilter` is static and has no clock, and `QueryRandomCandidates` builds its own `LibraryListRequest` (`LibraryCatalogSession.cs`), so the clock and the time zone have to reach both (inferred).
+- Nothing in the server or the WebUI handles time zones today, and only backup file names and log timestamps use local time (measured).
+- A date condition uses an index only when it is written on the index's expression: on the developer's catalog a 30-day count on `COALESCE(items.last_write_time_utc, 0)` took 0.1 ms, and on the plain column, which scans the table, 10.8 ms (measured).
+- Random selection with a date condition was never slower than without one (measured).
+- The catalog has no `sqlite_stat1`, and without it a play-count sort with a 7-day condition walked the whole play-count index in 21.3 ms, and a name sort with a 365-day condition took 62.3 ms at offset 10,000 (measured).
+- Counts are cached by the WHERE text and its values until the next catalog write, 64 entries at most, all dropped when full. A bound that changed with every request would miss on every page and move the range between pages, while a bound at the start of a day stays the same all day (inferred).
+- `COALESCE` reads a missing date as 0, so a range leaves out files without that date.
+- Of the developer's 49,228 files, 140 were modified in the last 7 days, 475 in the last 30, 1,449 in the last 90, and 10,786 this year (measured).
+- `BuildOrderBy` sorts `DateAdded` by `COALESCE(items.last_write_time_utc, 0)` today, which reads `idx_items_date_created_asc` and `idx_items_date_created_desc` since the Server slice (measured).
+- The sort modes are the `LibraryListSort` names, which `TryParseSort` (`LibraryOperationsService.cs`) matches ignoring case, and its message for an unknown mode lists the enum's names, so it names `DateCreated` with no change of its own. `QueryLibrary_RejectsInvalidPagingSortAndFilter_AndEnrichesOnlyThePage` (`LibraryListQueryTests.cs`) checks that message word for word.
+- A device that remembers the `DateAdded` sort keeps it, and right after the upgrade it orders as before, since the date added starts as the modified time (inferred).
+- `LIBRARY_SORTS` in the WebUI's `src/library/libraryBrowseModel.ts` is keyed by the contract's sort modes, so once the generated types have `DateCreated`, the WebUI's typecheck in `npm run verify` fails until `LIBRARY_SORTS` has its name in the sort list and its direction labels (measured).
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+- The Stats tab's Current file section reads `POST /api/library/item`, and `LibraryCatalogSession.ToItem` builds that read and each item of the query's page as JSON, so a field `ToItem` sends goes on both.
+- `ToItem` sends the modified time as `lastWriteTimeUtc`, an ISO UTC string left out when null, which the WebUI parses into `lastWriteTimeUtcMs` and reads only in tests and a placeholder item (`libraryGridController.ts`).
+- `LibraryProjectionItem` allows fields it doesn't name and names neither `lastPlayedUtc` nor `lastWriteTimeUtc` (measured), so the generated WebUI types have neither.
+- `LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio` (`ItemIdContractTests`) fails only for a field the server always sends, so a date left out when null needs its own check that the schema names it.
+- `ReadListedItem` reads `ListedItemColumnsSql` by position, so a new column goes last. It doesn't read `LibraryCatalogItem.DateAddedUtc` yet, which `InsertItem` writes.
+- `LibraryCatalogStore.Read`, which only tests use, reads only schema 2's columns so the upgrade tests can read a catalog before it upgrades, so it gets no dates. `CatalogSeed.ReadDatesAdded` reads the date added, and `SeedItem.DateAddedUtc` seeds one.
+- Random pick and direct play answer with `RandomResponse`, which carries no dates, and the Stats tab takes only the playing item's id, name, and path from it.
+
+**Acceptance**
+
+- Each preset and a custom range of Added and Created keep only files whose date falls in the range, each alone and both together, and without them results are unchanged, in server tests for the fields in the list query, its counts, and random selection with a set clock and time zone.
+- Last {N} days, This year, and a custom range resolve to whole days in the server's time zone, in Core tests of range resolution.
+- A stored preset without the fields filters with no date limit, in server tests of a stored preset without them.
+- The server's parser reads the fields as the shared fixture says, in Core tests of the fixture.
+- `DateAdded` and `DateCreated` order by their dates in both directions and read their indexes, and a date condition reads its index, in server tests of the sorts and their query plans.
+- The item read and the query's page send `dateAddedUtc` and `dateCreatedUtc`, and leave each out for an item without it, in server tests of the item read.
+- OpenAPI and the generated WebUI types carry the fields, the sorts, and the item read's dates, in contract tests, and `docs/api.md` describes them, checked by reading it.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `FilterDateRange` (`Core/Filtering/FilterDateRange.cs`) holds a preset or a custom range, the choice a filter keeps, and resolves it against a `FilterClock`, the time and time zone, to UTC ticks from the start of its first day to the start of the day after its last, each day at its own offset. This year ends on 31 December. `FilterStateModel` has `AddedRange` and `CreatedRange`.
+- `LibraryCatalogSession.Time` is a `TimeProvider`, `TimeProvider.System` unless a test sets it. `QueryList` reads it once for its counts and page, and `QueryRandomCandidates` once for its candidates. `AppendDateRange` writes `COALESCE({column}, 0) >= {from} AND COALESCE({column}, 0) < {to}`.
+- The parser reads both fields through `DateRange(element, …)`, preset names in any case, a custom range's days through `FilterDateRange.TryParseDay`, whose format `ComparisonKey` writes them in too, and anything else as no limit. `shared/fixtures/filter-date-ranges.json` locks that reading in 18 cases, which `Parser_ReadsDateRanges_AsTheSharedFixtureSays` checks.
+- `FilterStateComparison` compares both ranges by the choice: a preset's name or a custom range's days.
+- `LibraryListSort.DateCreated` follows `DateAdded`. `DateAdded` sorts by `date_added_utc` and `DateCreated` by `last_write_time_utc`. `ReadListedItem` reads `date_added_utc`, and `ToItem` sends `dateAddedUtc` and `dateCreatedUtc` in place of `lastWriteTimeUtc`.
+- OpenAPI has both fields as a `FilterDateRangePreset`, a `FilterDateRange`, or null, and `DateCreated` in `sortMode`. `LibraryProjectionItem` names every field the item read sends: the two dates, and `lastPlayedUtc`, `loudnessError`, `fileSizeBytes`, `fingerprint`, `fingerprintLastUtc`, and `fingerprintStatus`, which it left out before. `npm run generate:contracts` regenerated the WebUI's types.
+- The WebUI's `LIBRARY_SORTS` has Date created after Date added, with its direction labels in `sort-direction-labels.json`, the Library screen test's option list, and four snapshot blocks. `parseQueryItem` reads `dateAddedUtc` and `dateCreatedUtc` into `dateAddedUtcMs` and `dateCreatedUtcMs`, in place of `lastWriteTimeUtcMs`, which nothing read.
+- New tests: `FilterDateRangeTests`, in a fixed zone five hours behind UTC and in a zone whose daylight saving time starts within the range; `LibraryQueryAndRandomPick_ApplyDateRanges`, `StoredPresets_PickWithNoDateLimitWithoutTheFields_AndTheirRangesDaysWithThem`, and `Comparison_TellsFiltersApartByDateRangeChoice` (`FilterStateTests`), whose catalog clock stops at 22:00 on 21 October 2030 in that zone, with dates near each range's edge, some on another day in UTC; `DateSortsAndRanges_ReadTheirIndexes`; `LibraryItems_CarryTheirDatesAddedAndCreated_AndLeaveThemOutWhenUnknown`; `FilterDateRangePresets_MatchTheServersPresets`; and the Library screen's Date created test.
+- `LibraryProjectionItem_NamesEveryFieldTheServerSends` replaces the test that checked only the fields the server always sends: an item with every optional value sends exactly the schema's fields, but the page's thumbnail fields. The every-sort test covers `DateCreated`, with dates added that differ from the modified times.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): Last 7 days covering 8 days, the resolver reading today in UTC, preset names matched only in their own case, the date condition on the plain column, which failed the query plan test, Date added sorting by the modified time, the item JSON without `dateAddedUtc`, the comparison without the ranges, the comparison without a custom range's first day, and the session reading the system clock in place of its own.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 593 Core tests and 19 ServerApp tests, `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes, and `npm run verify` passes, with 2,022 WebUI tests.
+- `docs/api.md` has a Date filter paragraph, the sorts, the item read's dates, and the comparison of the ranges. CONTEXT.md describes the filters, the sorts, and the item dates, and lists Date created in the Library tab's sorts. `docs/domain-inventory.md` describes the sorts and has an entry for `FilterDateRange.cs`.
+- The mockup already has Date created in the sort list, so it doesn't change.
+
+#### WebUI slice
+
+**Scope**
+
+- Added and Created in the Filter tab, as the approved mockup places them, each with Any time, the four presets, and Custom range, whose From and To take the device's date picker (`<input type="date">`).
+- With Custom range chosen, an empty date or a range that ends before it starts is flagged with the field validation pattern and holds Apply, Add Preset, and Update, as a duration that isn't valid does.
+- A custom range's From and To take days from 1970 to 2099, and a date outside them is flagged with "Choose a date from 1970 to 2099." the same way, in the app and the mockup, since the server can't resolve a range at the calendar's ends.
+- Both are saved in presets and compared in preset matching by the choice, never resolved dates, with cases in `preset-filter-equality.json`.
+- The Filters line names each as the mockup words it.
+- The WebUI reads the fields as the shared fixture says.
+- The Stats tab's Current file section shows Added and Created right after Last played, for photos too, from the item read's `dateAddedUtc` and `dateCreatedUtc`, as the Decisions describe.
+- Show exact times in the Stats tab's header, kept in the device store, and Last played, Added, and Created worded as the Decisions describe, in place of `playedAgo`'s wording.
+
+**Traps**
+
+- `serializeFilterStateForApi`, `filterStateFromApiObject`, and `filterStatesEqualForPresetMatch` in `src/filter/filterStateModel.ts` write, read, and compare FilterState, and a field the serializer writes joins preset matching.
+- Core's filter comparison (`FilterStateComparison.cs`), behind the preset routes' refusal of a filter another preset holds, already compares the ranges by the choice and reads `shared/fixtures/preset-filter-equality.json` too, so the fixture's date cases check both languages.
+- `shared/fixtures/filter-date-ranges.json` locks the server's reading of the fields, which `FilterStateTests` checks. `filter-min-rating.json`'s WebUI reader in `filterStateModel.test.ts` is the pattern for the WebUI's.
+- The WebUI drops filter fields it doesn't know when it reads a filter and writes only the ones it knows, so until it knows the ranges, updating a preset's filter in the Filter tab drops them.
+- The Filter tab's fields with problems go through `filterFieldProblems` and `FilterField` (`src/filter/filterDialogModel.ts`).
+- The server's range resolution (`FilterDateRange.Resolve`) throws for a custom range that ends on 9999-12-31, or starts on 0001-01-01 on a server ahead of UTC, which fails the library query and every random pick of a preset that holds it, so the custom range's date fields limit the years they accept, and such a date can't be sent or saved (inferred).
+- `filterSummaryParts` (`src/filter/filterSummaryModel.ts`) builds the Filters line in an order its comment documents.
+- Dates change only in a refresh, and a finished refresh reloads the loaded window once, so the tile effect rule (`library-tile-effect.json`) needs no date change kind (inferred).
+- A rolling range moves with the clock without an event, so a window loaded before midnight keeps its tiles until it next reloads (inferred).
+- `fileRows` (`src/stats/statsModel.ts`) builds the Current file rows, which `src/ui/StatsTab.tsx` renders. `statsModel.test.ts` checks a video's and a photo's full row lists, and `stats.test.ts` a slice of them.
+- No WebUI code formats a date as YYYY-MM-DD HH:MM:SS. `playedAgo` (`statsModel.ts`) words Last played as "N min ago" and stops at days, and `statsModel.test.ts` and `stats.test.ts` check its wording. The mockup's `timeAgo` and `dateTimeText` give the new wording.
+- The Stats tab's header (`src/ui/StatsTab.tsx`) holds only its title, and the Tags tab's puts Auto Tag after its title (`src/ui/TagEditor.tsx`).
+- The player's toggles turn orange with `icon-glyph-toggle`'s `active` class (`src/ui/Player.tsx`, `styles.css`), as the mockup's Show exact times does with `active`.
+- Per-device choices go through `createDeviceStore` (`src/state/deviceStore.ts`).
+- Vitest pins no time zone and CI runs on Windows, so a test builds its times with a local `new Date(year, month, day, hours, minutes, seconds)` rather than writing out a UTC time's local reading.
+- `parseQueryItem` (`src/library/libraryProjectionModel.ts`) reads `dateAddedUtc` and `dateCreatedUtc` into `dateAddedUtcMs` and `dateCreatedUtcMs`, which nothing reads yet.
+- The Stats tab loads again on `refreshCompleted`, so a date a refresh changes shows with no event of its own (inferred).
+
+**Acceptance**
+
+- Added and Created are saved in presets and compared in preset matching by the choice, so Last 30 days matches Last 30 days and not the same days as a custom range, in tests of `preset-filter-equality.json`.
+- A custom range with an empty date, a date outside 1970 to 2099, or one that ends before it starts, is flagged and holds Apply, Add Preset, and Update, in Filter screen tests.
+- The Filters line names each choice as the mockup words it, in Library screen tests.
+- The WebUI reads the fields as the shared fixture says, in WebUI filter model tests.
+- The Stats tab shows Added and Created after Last played, or Unknown for a file without the date, for photos too, and all three say how long ago through months and years, in Stats model and Stats screen tests.
+- Show exact times shows all three as YYYY-MM-DD HH:MM:SS in local time, starts off, turns orange while on, and is remembered on the device, in Stats screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check of the date picker on the user's phone.
+
+**Evidence**
+
+- `src/filter/filterDateRange.ts` holds a range, a preset or a custom range, the presets with their labels and Filters line wording, keyed by the contract's presets so a new one fails the typecheck until it has its wording, the years a custom range may hold, `EARLIEST_DAY` and `LATEST_DAY`, `readDateRange`, which reads a stored range as the server's parser does, and `isDayText`. `src/time/timeText.ts` holds the day helpers `localDayText` and `localDay`, which read a day in the device's own time, and `exactTimeText`, with one `twoDigits` and one `splitDuration`.
+- FilterState has `addedRange` and `createdRange`, null by default. The serializer writes each only when it is set, a custom range as `from` then `to`, so the default filter and every stored preset compare as before, and the reader reads them through `readDateRange`.
+- The Filter tab's General section ends with the Date Filter section in the mockup's markup. `chooseDateRange` fills an empty From or To with the device's today on Custom range, `changeDate` takes a date on `input` or `change`, and Apply's `generalDraftAfterApply` drops the dates a range not on Custom range kept. While a custom range has a problem, as while a desktop browser's field passes through a year such as 0002, `filterWithGeneralDraft` keeps the working filter's range, so the preset the tab is named for doesn't change. A Min or Max whose text isn't valid keeps the working filter's duration the same way, where before this slice it read as no limit, so leaving such text on a preset holding only a duration named the tab None.
+- `addedFrom`, `addedTo`, `createdFrom`, and `createdTo` follow Max duration in the fields each action uses, with "Choose a start date.", "Choose an end date.", "Choose a date from 1970 to 2099.", and "Choose an end date on or after the start date.", and hold Apply with "Correct the Added dates to apply." or "Correct the Created dates to apply.", and Add Preset and Update with "Correct the Added dates first." or "Correct the Created dates first.". `filterWithTypedDurations` is `filterAsFieldsRead`, which reads the ranges too.
+- `dateRangeSummary` words each range on the Filters line after the durations and before the tags, a custom range through `Intl.DateTimeFormat`'s `formatRange` with `dateStyle: "medium"` in the device's locale.
+- `shared/fixtures/preset-filter-equality.json` has 11 date cases, which the WebUI's comparison test and Core's `Comparison_AgreesWithEveryCaseOfTheSharedFixture` both check, with no C# change. `shared/fixtures/filter-date-ranges.json` gained a leap day, a century year's 29 February, and year zero, which both readers check, since the WebUI's `isDayText` writes out the calendar's rules.
+- The OpenAPI schema for a custom range is `FilterCustomDateRange`, since Core and the WebUI call a preset or a custom range `FilterDateRange`, and the WebUI's types are regenerated.
+- The Stats tab's `fileRows` shows Added and Created after Last played for every file, or Unknown without the date, `timeAgo` replaces `playedAgo` with the mockup's wording, and `exactTimeText` writes the local time. Show exact times is a `calendar_clock` icon button in the header, kept per device as `stats.exactTimes`, orange through a new `.icon-btn.active` rule.
+- In the plan's review, the user chose 1970 to 2099 for a custom range's days. The approved mockup had no limit, so its `dateRangeFields` in `common.js` gained the limit and its message, its validation page a From before 1970 specimen, and its index page the rule. Its working filter keeps a duration whose text isn't valid as the app's does; the mockup needed no other change.
+- One `isBoolean` in `deviceStore.ts` replaces the copies in `library.ts`, `playerControls.ts`, `audioStage.ts`, `panelHost.ts`, and `appStore.ts`, and the inline checks in `loudnessNormalization.ts`, `compression.ts`, and `settings.ts`. `twoDigits` and `splitDuration` replace the seek row's own padding and split in `nowPlaying.ts` and the durations' in `filterStateModel.ts`, whose display and API formats each did their own, and `serializeFilterStateForApi` calls `formatDurationForApi` without the wrapper that only passed its value on. The notifications list's `timeAgo` is `messageTime`, so it isn't confused with the Stats tab's.
+- New tests: `filterDateRange.test.ts`; `timeText.test.ts`, with the padding, the split, the days, and the exact time; the seek row's time an hour into a video whose length isn't known in `nowPlaying.test.ts`; the date ranges shared fixture and the ranges' writing in `filterStateModel.test.ts`; the drafts, `filterAsFieldsRead`, `generalDraftAfterApply`, `DATE_RANGE_CHOICES`, and the date problems in `filterDialogModel.test.ts`; the ranges' wording in `filterSummaryModel.test.ts`; the Filter screen's Date Filter tests and its General tab test of a duration that isn't valid keeping the preset; the Library screen's "names the Added and Created ranges by their choice, after the durations and before the tags"; the rows in `statsModel.test.ts`, whose `timeAgo` cases run from Just now to years with the day of the month; and the Stats screen's Added and Created, photo, and Show exact times tests.
+- The Filter tab's snapshots gained only the Date Filter section, and the page's snapshot only the Show exact times button.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): the serializer without the ranges, preset names matched only in their own case, a reversed range not flagged, the ranges after the tags on the Filters line, Custom range without today, Apply keeping the dates, months without the day of the month, days never turning into months, exact times ignored, the setting not written or not read, the view not following the toggle, the button without `active`, Added and Created for videos only, and a custom range with a problem or a duration that isn't valid read into the working filter as no limit.
+- The model tests for the times pass in the UTC, America/Los_Angeles, Pacific/Auckland, and Asia/Kolkata time zones (measured).
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 593 Core tests and 19 ServerApp tests, `npm run verify` passes, with 2,108 WebUI tests, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The user's spot check on the Android phone passed: From opened the phone's date picker, the Filters line read "Added" and the chosen dates after Apply, and the Stats tab's Added and Created rows and Show exact times worked.
+- CONTEXT.md describes the Date Filter, the Filters line's ranges, and the Stats tab's rows and Show exact times, `docs/api.md` says the WebUI reads and compares the ranges, and `docs/domain-inventory.md` has entries for `filterDateRange.ts` and `timeText.ts`.
+
+#### Release checks
+
+- Manual: In the WebUI, Added and Created limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
+
+#### Not included
+
+- A file's real creation time, from the file system or its metadata.
+- A date added for the files `POST /api/sources/import` inserts, since that direct insert goes, which is Admin Source Management.
+- Ranges in the device's own time zone.
+- Favoring newly added or newly created files in random picks, which is Random Pick Options.
+
 ### M12k4 - Rating Filter and Sort
 
 - **Status**: ✅ Complete

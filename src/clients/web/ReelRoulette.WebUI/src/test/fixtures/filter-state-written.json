@@ -16,6 +16,8 @@
     "categoryLocalMatchModes": { "people": 1 },
     "minRating": 3.5,
     "minDuration": "00:01:30",
-    "maxDuration": "01:30:00"
+    "maxDuration": "01:30:00",
+    "addedRange": "last30Days",
+    "createdRange": { "from": "2026-01-03", "to": "2026-03-31" }
   }
 }

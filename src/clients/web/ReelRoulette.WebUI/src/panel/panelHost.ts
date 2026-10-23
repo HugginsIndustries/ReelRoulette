@@ -1,5 +1,5 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 
 export type PanelTab = "library" | "filter" | "tags" | "stats" | "settings";
 export type PanelSide = "left" | "right";
@@ -30,10 +30,6 @@ const OPEN_KEY = "panel.open";
 const TAB_KEY = "panel.tab";
 const SIDE_KEY = "panel.side";
 const WIDTH_KEY = "panel.width";
-
-function isBoolean(value: unknown): value is boolean {
-  return typeof value === "boolean";
-}
 
 function isPanelTab(value: unknown): value is PanelTab {
   return (PANEL_TABS as readonly unknown[]).includes(value);

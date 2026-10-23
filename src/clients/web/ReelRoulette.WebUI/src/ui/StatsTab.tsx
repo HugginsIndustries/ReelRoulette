@@ -4,16 +4,27 @@ import { useApp } from "./appContext";
 import { RatingStars } from "./RatingStars";
 
 /**
- * The panel's Stats tab, as the mockup lays it out: the playing file first, since the header's file name opens the tab,
- * then the library's cards.
+ * The panel's Stats tab, as the mockup lays it out: Show exact times in its header, orange while on, then the playing
+ * file first, since the header's file name opens the tab, then the library's cards.
  */
 export function StatsTab() {
   const { statsTab } = useApp();
   const view = statsTab.view.value;
+  const exactTimes = statsTab.exactTimes.value;
   return (
     <div id="stats-tab" class="stats-tab">
       <div class="stats-tab-header">
         <h2>Stats</h2>
+        <button
+          id="stats-exact-times-btn"
+          class={exactTimes ? "icon-btn active" : "icon-btn"}
+          type="button"
+          aria-label="Show exact times"
+          title="Show exact times"
+          onClick={() => statsTab.toggleExactTimes()}
+        >
+          <span class="material-symbol-icon" aria-hidden="true">calendar_clock</span>
+        </button>
       </div>
       <div id="stats-body" class="stats-body themed-scrollbar">
         <section class="stats-section" aria-labelledby="stats-file-heading">

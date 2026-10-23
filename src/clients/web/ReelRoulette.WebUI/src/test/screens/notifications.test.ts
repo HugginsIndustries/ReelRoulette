@@ -2,7 +2,7 @@
 import { fireEvent, waitFor, within } from "@testing-library/preact";
 import { h, render as renderInto } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { POPUP_SETTINGS_KEY, timeAgo, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
+import { POPUP_SETTINGS_KEY, messageTime, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
 import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
 import { createAppServices, type AppServices } from "../../state/appServices";
 import { RECONNECTING_DETAIL } from "../../state/lastingStates";
@@ -678,7 +678,7 @@ describe("the list", () => {
     await wait(30_000);
     expect(rows("recent").map((row) => row.time)).toEqual(["1 min ago", "4 min ago"]);
     await wait(60 * 60_000);
-    expect(rows("recent")[1]!.time).toBe(timeAgo(first, Date.now()));
+    expect(rows("recent")[1]!.time).toBe(messageTime(first, Date.now()));
     expect(rows("recent")[1]!.time).toBe(new Date(first).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
 
     // Once seen, it is no longer marked.

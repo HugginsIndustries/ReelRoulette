@@ -173,7 +173,8 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     enhanced: audio.enhanced,
     dialogs,
     notifications,
-    ratings
+    ratings,
+    device
   });
   const settings = createSettings({ device });
   const ambient = createAmbient({

@@ -1,5 +1,5 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 
 /** The per-device store's keys for Loudness normalization and its settings. */
 export const NORMALIZATION_KEY = "audio.normalization";
@@ -179,7 +179,7 @@ function measured(value: number | null | undefined): number | null {
 
 export function createLoudnessNormalization(options: LoudnessNormalizationOptions): LoudnessNormalization {
   const { device, current, baseline } = options;
-  const enabled = signal(device.read(NORMALIZATION_KEY, true, (value): value is boolean => typeof value === "boolean"));
+  const enabled = signal(device.read(NORMALIZATION_KEY, true, isBoolean));
   const settings = signal(readNormalizationSettings(device));
 
   const adjustment = computed<NormalizationAdjustment>(() => {

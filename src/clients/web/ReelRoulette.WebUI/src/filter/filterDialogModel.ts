@@ -1,6 +1,15 @@
 import { compareTagNames } from "../library/tagNameOrder";
 import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 import {
+  DATE_RANGE_PRESETS,
+  EARLIEST_DAY,
+  LATEST_DAY,
+  isDayText,
+  isDayWithinLimits,
+  type FilterDateRange,
+  type FilterDateRangePreset
+} from "./filterDateRange";
+import {
   AUDIO_FILTER,
   MEDIA_TYPE_FILTER,
   TAG_MATCH_MODE,
@@ -52,6 +61,32 @@ export const AUDIO_FILTERS = [
   { value: AUDIO_FILTER.WithoutAudioOnly, label: "Only videos without audio" }
 ] as const;
 
+/** What a date filter's dropdown offers: Any time, which is null, a preset, or Custom range. */
+export type DateRangeChoice = FilterDateRangePreset | "custom" | null;
+
+/** A date filter dropdown's choices, in the order it offers them. */
+export const DATE_RANGE_CHOICES: readonly { value: DateRangeChoice; label: string }[] = [
+  { value: null, label: "Any time" },
+  ...DATE_RANGE_PRESETS.map(({ value, label }) => ({ value, label })),
+  { value: "custom", label: "Custom range" }
+];
+
+/** The General tab's date filters, in the order they show, each with the label the Filters line names it by too. */
+export const DATE_FILTERS: readonly { range: "added" | "created"; field: "addedRange" | "createdRange"; label: string }[] = [
+  { range: "added", field: "addedRange", label: "Added" },
+  { range: "created", field: "createdRange", label: "Created" }
+];
+
+/**
+ * A date filter's fields: its choice, and the From and To dates of a custom range, each YYYY-MM-DD or empty. The dates
+ * stay while another choice is made, so choosing Custom range again brings them back, until Apply clears them.
+ */
+export interface DateRangeDraft {
+  choice: DateRangeChoice;
+  fromText: string;
+  toText: string;
+}
+
 /** A media source as `GET /api/sources` returns it. */
 export interface FilterSource {
   id: string;
@@ -75,8 +110,9 @@ const DEFAULT_BLACKLISTED_CHOICE: FlagFilterChoice = "excluded";
 
 /**
  * What the General tab's fields show. It is filled from the working filter when the dialog opens or starts over,
- * and otherwise keeps what the user left, such as a duration that is not valid, or a Favorites or Blacklisted choice
- * whose checkbox is off, which the working filter cannot hold. An empty duration means no limit.
+ * and otherwise keeps what the user left, such as a duration that is not valid, a Favorites or Blacklisted choice
+ * whose checkbox is off, or a custom range's dates while another choice is made, which the working filter cannot hold.
+ * An empty duration means no limit.
  */
 export interface GeneralDraft {
   favoritesOn: boolean;
@@ -94,6 +130,8 @@ export interface GeneralDraft {
   audioFilter: AudioFilterMode;
   minText: string;
   maxText: string;
+  added: DateRangeDraft;
+  created: DateRangeDraft;
   /** Whether each source is checked, in the order of the sources list. */
   sourceChecked: boolean[];
   /**
@@ -160,6 +198,13 @@ function flagMode(on: boolean, choice: FlagFilterChoice): FlagFilterMode {
   return on ? choice : "off";
 }
 
+function dateRangeDraft(range: FilterDateRange | null): DateRangeDraft {
+  if (range !== null && typeof range === "object") {
+    return { choice: "custom", fromText: range.from, toText: range.to };
+  }
+  return { choice: range, fromText: "", toText: "" };
+}
+
 export function generalDraftFromFilter(filter: FilterState, sources: readonly FilterSource[]): GeneralDraft {
   return {
     favoritesOn: filter.favoritesMode !== "off",
@@ -176,6 +221,8 @@ export function generalDraftFromFilter(filter: FilterState, sources: readonly Fi
     audioFilter: filter.audioFilter,
     minText: filter.minDurationSeconds != null ? formatDurationForDisplay(filter.minDurationSeconds) : "",
     maxText: filter.maxDurationSeconds != null ? formatDurationForDisplay(filter.maxDurationSeconds) : "",
+    added: dateRangeDraft(filter.addedRange),
+    created: dateRangeDraft(filter.createdRange),
     sourceChecked: sourcesChecked(filter.includedSourceIds, sources),
     startSourceIds: [...filter.includedSourceIds]
   };
@@ -187,12 +234,41 @@ function sourcesChecked(sourceIds: readonly string[], sources: readonly FilterSo
 }
 
 /**
- * An empty duration is no limit. One that is not valid counts as none too: it holds the actions that would use it,
- * so none of them takes it.
+ * A duration as its field reads, empty as no limit, or the working filter's duration while the text is not valid. The
+ * preset the dialog is named for follows the working filter, so text that is not valid doesn't change it, and the
+ * problem holds the actions that would use the duration.
  */
-function draftDuration(text: string): number | null {
+function draftDurationOrKept(text: string, kept: number | null): number | null {
   const seconds = parseTypedDuration(text);
-  return seconds === "invalid" ? null : seconds;
+  return seconds === "invalid" ? kept : seconds;
+}
+
+/** A date filter's range as its fields read, or "invalid" while it is a custom range with a problem. */
+function draftDateRange(range: DateRangeDraft): FilterDateRange | null | "invalid" {
+  if (range.choice !== "custom") {
+    return range.choice;
+  }
+  const problems = dateRangeProblems(range);
+  return problems.from || problems.to ? "invalid" : { from: range.fromText, to: range.toText };
+}
+
+/**
+ * A date filter's range as its fields read, or the working filter's range while it is a custom range with a problem,
+ * as while a date is typed. The preset the dialog is named for follows the working filter, so a date passing through a
+ * problem doesn't change it, and the problem holds the actions that would use the range.
+ */
+function draftDateRangeOrKept(range: DateRangeDraft, kept: FilterDateRange | null): FilterDateRange | null {
+  const read = draftDateRange(range);
+  return read === "invalid" ? kept : read;
+}
+
+/**
+ * The General tab's fields after Apply: a date filter not on Custom range drops the dates its fields kept, as the
+ * applied filter has none.
+ */
+export function generalDraftAfterApply(draft: GeneralDraft): GeneralDraft {
+  const cleared = (range: DateRangeDraft): DateRangeDraft => (range.choice === "custom" ? range : { ...range, fromText: "", toText: "" });
+  return { ...draft, added: cleared(draft.added), created: cleared(draft.created) };
 }
 
 /**
@@ -215,8 +291,10 @@ export function filterWithGeneralDraft(
   next.minRating = draft.minRating;
   next.mediaTypeFilter = draft.mediaTypeFilter;
   next.audioFilter = draft.audioFilter;
-  next.minDurationSeconds = draftDuration(draft.minText);
-  next.maxDurationSeconds = draftDuration(draft.maxText);
+  next.minDurationSeconds = draftDurationOrKept(draft.minText, next.minDurationSeconds);
+  next.maxDurationSeconds = draftDurationOrKept(draft.maxText, next.maxDurationSeconds);
+  next.addedRange = draftDateRangeOrKept(draft.added, next.addedRange);
+  next.createdRange = draftDateRangeOrKept(draft.created, next.createdRange);
   const startChecked = sourcesChecked(draft.startSourceIds, sources);
   if (startChecked.every((checked, index) => checked === !!draft.sourceChecked[index])) {
     next.includedSourceIds = [...draft.startSourceIds];
@@ -228,33 +306,48 @@ export function filterWithGeneralDraft(
 }
 
 /**
- * The filter with each duration as its General field's text reads, so a duration still being typed, which typing
- * doesn't read into the working filter, counts as it shows: empty text is no limit. Null while either text isn't a
- * valid duration, which differs from every filter.
+ * The filter with each duration and date range as its General fields read, so a duration still being typed, which
+ * typing doesn't read into the working filter, counts as it shows: empty text is no limit. Null while a duration's
+ * text isn't valid or a custom range has a problem, which differs from every filter.
  */
-export function filterWithTypedDurations(filter: FilterState, draft: GeneralDraft): FilterState | null {
+export function filterAsFieldsRead(filter: FilterState, draft: GeneralDraft): FilterState | null {
   const min = parseTypedDuration(draft.minText);
   const max = parseTypedDuration(draft.maxText);
-  if (min === "invalid" || max === "invalid") {
+  const added = draftDateRange(draft.added);
+  const created = draftDateRange(draft.created);
+  if (min === "invalid" || max === "invalid" || added === "invalid" || created === "invalid") {
     return null;
   }
-  return { ...cloneFilterState(filter), minDurationSeconds: min, maxDurationSeconds: max };
+  return { ...cloneFilterState(filter), minDurationSeconds: min, maxDurationSeconds: max, addedRange: added, createdRange: created };
 }
 
 /**
  * The filter dialog's fields that can hold a value that is not valid. The flag modes are the Favorites and Blacklisted
- * filters, and the rating filters are Only unrated and Min Rating, each checked as a pair.
+ * filters, and the rating filters are Only unrated and Min Rating, each checked as a pair. The date fields are each
+ * date filter's From and To.
  */
-export type FilterField = "flagModes" | "ratingFilters" | "minDuration" | "maxDuration" | "newPresetName";
+export type FilterField =
+  | "flagModes"
+  | "ratingFilters"
+  | "minDuration"
+  | "maxDuration"
+  | "addedFrom"
+  | "addedTo"
+  | "createdFrom"
+  | "createdTo"
+  | "newPresetName";
+
+/** The General fields, in their order on screen. */
+const GENERAL_FIELDS = ["flagModes", "ratingFilters", "minDuration", "maxDuration", "addedFrom", "addedTo", "createdFrom", "createdTo"] as const;
 
 /** The filter dialog's actions that use those fields. */
 export type FilterAction = "apply" | "addPreset" | "updatePreset";
 
 /** The fields each action uses, in the order a held action moves to them, which is their order on screen. */
 export const FILTER_ACTION_FIELDS: Readonly<Record<FilterAction, readonly FilterField[]>> = {
-  apply: ["flagModes", "ratingFilters", "minDuration", "maxDuration"],
-  addPreset: ["newPresetName", "flagModes", "ratingFilters", "minDuration", "maxDuration"],
-  updatePreset: ["flagModes", "ratingFilters", "minDuration", "maxDuration"]
+  apply: GENERAL_FIELDS,
+  addPreset: ["newPresetName", ...GENERAL_FIELDS],
+  updatePreset: GENERAL_FIELDS
 };
 
 /** The fields right next to each action, any problem in which disables it: Add Preset's name sits beside it. */
@@ -269,14 +362,17 @@ export type GeneralField = Exclude<FilterField, "newPresetName">;
 
 /** The dialog section each field is in. */
 export const FILTER_FIELD_SECTION: Readonly<Record<FilterField, "general" | "presets">> = {
-  flagModes: "general",
-  ratingFilters: "general",
-  minDuration: "general",
-  maxDuration: "general",
+  ...(Object.fromEntries(GENERAL_FIELDS.map((field) => [field, "general"])) as Record<GeneralField, "general">),
   newPresetName: "presets"
 };
 
 export const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
+
+/** A custom range needs both dates, from the years the server can resolve, and must not end before it starts. */
+export const DATE_START_PROBLEM = "Choose a start date.";
+export const DATE_END_PROBLEM = "Choose an end date.";
+export const DATE_ORDER_PROBLEM = "Choose an end date on or after the start date.";
+export const DATE_YEARS_PROBLEM = `Choose a date from ${EARLIEST_DAY.slice(0, 4)} to ${LATEST_DAY.slice(0, 4)}.`;
 
 /** A preset name another preset has, ignoring case. */
 export const PRESET_NAME_PROBLEM = "Use a name no other preset has.";
@@ -302,7 +398,32 @@ function durationProblem(text: string): FieldProblem | null {
   return parseTypedDuration(text) === "invalid" ? { message: DURATION_PROBLEM } : null;
 }
 
-/** Each field's problem, or null while its value is valid. An empty duration is valid: it means no limit. */
+function dayProblem(text: string, emptyMessage: string): FieldProblem | null {
+  // A date field holds a day or nothing.
+  if (!isDayText(text)) {
+    return { message: emptyMessage };
+  }
+  return isDayWithinLimits(text) ? null : { message: DATE_YEARS_PROBLEM };
+}
+
+/**
+ * The problems of a date filter's From and To, which only Custom range has. An emptied date is flagged, since the range
+ * needs both, and so is a To before its From.
+ */
+function dateRangeProblems(range: DateRangeDraft): { from: FieldProblem | null; to: FieldProblem | null } {
+  if (range.choice !== "custom") {
+    return { from: null, to: null };
+  }
+  const to = dayProblem(range.toText, DATE_END_PROBLEM);
+  // Days written YYYY-MM-DD order as text does.
+  const reversed = !to && isDayText(range.fromText) && range.toText < range.fromText;
+  return { from: dayProblem(range.fromText, DATE_START_PROBLEM), to: reversed ? { message: DATE_ORDER_PROBLEM } : to };
+}
+
+/**
+ * Each field's problem, or null while its value is valid. An empty duration is valid: it means no limit. An empty date
+ * of a custom range is flagged.
+ */
 export function filterFieldProblems(
   draft: GeneralDraft,
   newPresetName: string,
@@ -311,11 +432,17 @@ export function filterFieldProblems(
   const name = newPresetName.trim();
   const bothOnly =
     draft.favoritesOn && draft.favoritesChoice === "only" && draft.blacklistedOn && draft.blacklistedChoice === "only";
+  const added = dateRangeProblems(draft.added);
+  const created = dateRangeProblems(draft.created);
   return {
     flagModes: bothOnly ? { message: FLAG_MODES_PROBLEM } : null,
     ratingFilters: draft.onlyUnrated && draft.minRating !== null ? { message: RATING_FILTERS_PROBLEM } : null,
     minDuration: durationProblem(draft.minText),
     maxDuration: durationProblem(draft.maxText),
+    addedFrom: added.from,
+    addedTo: added.to,
+    createdFrom: created.from,
+    createdTo: created.to,
     newPresetName: !name
       ? EMPTY_FIELD
       : presets.some((row) => namesEqualIgnoringCase(row.name, name))
@@ -367,6 +494,10 @@ export function filterHeldReason(action: FilterAction, field: GeneralField): str
   }
   if (field === "ratingFilters") {
     return `Clear ${ONLY_UNRATED_LABEL} or ${MIN_RATING_LABEL} ${ending}.`;
+  }
+  const date = DATE_FILTERS.find(({ range }) => field === `${range}From` || field === `${range}To`);
+  if (date) {
+    return `Correct the ${date.label} dates ${ending}.`;
   }
   return `Correct the ${field === "minDuration" ? "minimum" : "maximum"} duration ${ending}.`;
 }

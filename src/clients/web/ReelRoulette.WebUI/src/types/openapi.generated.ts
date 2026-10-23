@@ -1385,12 +1385,12 @@ export interface components {
              *     added are left out. Another value, such as an unknown preset, a date that isn't one, or a range that
              *     ends before it starts, counts as missing, which is no limit. Defaults to no limit.
              */
-            addedRange?: components["schemas"]["FilterDateRangePreset"] | components["schemas"]["FilterDateRange"] | null;
+            addedRange?: components["schemas"]["FilterDateRangePreset"] | components["schemas"]["FilterCustomDateRange"] | null;
             /**
              * @description The days an item's date created, its file's modified time, must fall in, written and read as
              *     `addedRange` is. Items without a date created are left out. Defaults to no limit.
              */
-            createdRange?: components["schemas"]["FilterDateRangePreset"] | components["schemas"]["FilterDateRange"] | null;
+            createdRange?: components["schemas"]["FilterDateRangePreset"] | components["schemas"]["FilterCustomDateRange"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -1400,7 +1400,7 @@ export interface components {
          */
         FilterDateRangePreset: "last7Days" | "last30Days" | "last90Days" | "thisYear";
         /** @description A custom range of whole days, as a filter's `addedRange` or `createdRange`. */
-        FilterDateRange: {
+        FilterCustomDateRange: {
             /**
              * Format: date
              * @description The range's first day, written YYYY-MM-DD.

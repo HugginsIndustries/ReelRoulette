@@ -4,7 +4,7 @@ import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "..
 import { BOOST_LIMIT_RANGE, MANUAL_TARGET_RANGE } from "../playback/loudnessNormalization";
 import { HIDE_AFTER_RANGE } from "../playback/playerControls";
 import { MAX_ADVANCE_AFTER_SECONDS, MIN_ADVANCE_AFTER_SECONDS } from "../state/appStore";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 import type { FieldProblem } from "../validation/fieldValidation";
 import { DEFAULT_THEME_CHOICE, isThemeChoice, THEME_KEY, type ThemeChoice } from "./theme";
 
@@ -118,9 +118,9 @@ export function createSettings(options: { device: DeviceStore }): Settings {
   const { device } = options;
   const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
   const theme = signal(device.read(THEME_KEY, DEFAULT_THEME_CHOICE, isThemeChoice));
-  const ambient = signal(device.read(AMBIENT_KEY, true, (value): value is boolean => typeof value === "boolean"));
+  const ambient = signal(device.read(AMBIENT_KEY, true, isBoolean));
   const ambientTuning = signal(readAmbientTuning(device));
-  const tileNames = signal(device.read(TILE_NAMES_KEY, false, (value): value is boolean => typeof value === "boolean"));
+  const tileNames = signal(device.read(TILE_NAMES_KEY, false, isBoolean));
   const popupSettingsRequest = signal(0);
   const seekStep = signal(device.read(SEEK_STEP_KEY, DEFAULT_SEEK_STEP, isSeekStep));
   const shortcutsRequest = signal(0);

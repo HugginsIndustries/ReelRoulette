@@ -1,5 +1,5 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
-import type { DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 import { dbToGain } from "./loudnessNormalization";
 
 /** The per-device store's keys for Compression and its settings. */
@@ -149,7 +149,7 @@ export interface Compression {
 
 export function createCompression(options: { device: DeviceStore }): Compression {
   const { device } = options;
-  const enabled = signal(device.read(COMPRESSION_KEY, false, (value): value is boolean => typeof value === "boolean"));
+  const enabled = signal(device.read(COMPRESSION_KEY, false, isBoolean));
   const settings = signal(readCompressionSettings(device));
 
   function keep(next: CompressionSettings): void {

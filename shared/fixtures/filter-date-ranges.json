@@ -39,6 +39,24 @@
     "createdRange": null
   },
   {
+    "name": "a leap day",
+    "filter": { "createdRange": { "from": "2024-02-29", "to": "2024-03-01" } },
+    "addedRange": null,
+    "createdRange": { "from": "2024-02-29", "to": "2024-03-01" }
+  },
+  {
+    "name": "a leap day in a century year that isn't a leap year reads as no limit",
+    "filter": { "addedRange": { "from": "1900-02-29", "to": "1900-03-01" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  {
+    "name": "year zero reads as no limit",
+    "filter": { "addedRange": { "from": "0000-01-01", "to": "2026-03-31" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  {
     "name": "a date written another way reads as no limit",
     "filter": { "createdRange": { "from": "01/03/2026", "to": "2026-03-31" } },
     "addedRange": null,

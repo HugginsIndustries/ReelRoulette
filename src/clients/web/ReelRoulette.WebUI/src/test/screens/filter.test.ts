@@ -1242,6 +1242,28 @@ describe("General tab", () => {
     expect((await applyAndWait(server)).maxDuration).toBe("01:00:00");
   });
 
+  it("keeps the preset it is named for while a duration that is not valid is left, and Apply keeps it", async () => {
+    const short = { id: "preset-short", name: "Short", filterState: { maxDuration: "00:01:00" } };
+    const { server } = await mountFilter([FAVORITES_PRESET, short]);
+    await pickPreset("preset-short");
+    await openDialog();
+    expect(heading()).toBe("Preset: Short");
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
+
+    // Without the duration, the filter would be the default one, named None.
+    await type(max, "abc");
+    expect(heading()).toBe("Preset: Short*");
+    await click(box("Only never played"));
+    await click(box("Only never played"));
+    expect(heading()).toBe("Preset: Short*");
+    await type(max, "2:00");
+    expect(heading()).toBe("Preset: Short*");
+
+    expect((await applyAndWait(server)).maxDuration).toBe("00:02:00");
+    expect(heading()).toBe("Preset: Short*");
+    expect(selectedPresetLabel()).toBe("Short*");
+  });
+
   it("stores only the checked sources, and no sources once all are checked", async () => {
     const { server } = await mountFilter();
     await openDialog();
@@ -1573,6 +1595,260 @@ describe("Only unrated and Min Rating", () => {
     await showTab("General");
     expect(sliderValue(minRatingStars())).toEqual(["2.5", "2.5 stars"]);
     expect(heading()).toBe("Preset: Good ones");
+  });
+});
+
+type DateFilterName = "Added" | "Created";
+
+/** Today on this device while a test chooses Custom range: 22 October 2026. */
+const TODAY = new Date(2026, 9, 22, 12, 0, 0);
+
+const RANGE_PRESET = {
+  id: "preset-ranges",
+  name: "Recently added",
+  filterState: { addedRange: "last30Days", createdRange: { from: "2020-01-01", to: "2020-12-31" } }
+};
+
+function dateSelect(name: DateFilterName): HTMLSelectElement {
+  return byId<HTMLSelectElement>(`filter-${name.toLowerCase()}`);
+}
+
+/** A custom range's From or To, which shows only while Custom range is chosen. */
+function dateField(name: DateFilterName, end: "from" | "to"): HTMLInputElement {
+  return byId<HTMLInputElement>(`filter-${name.toLowerCase()}-${end}`);
+}
+
+/** Chooses a date filter's range by its option value, on `TODAY`, which Custom range fills an empty date with. */
+async function chooseRange(name: DateFilterName, value: string): Promise<void> {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(TODAY);
+  try {
+    fireEvent.change(dateSelect(name), { target: { value } });
+  } finally {
+    vi.useRealTimers();
+  }
+  await settle();
+}
+
+describe("Date Filter", () => {
+  it("sits at the end of General after Duration Filter, Added and Created each a dropdown, with From and To only while Custom range is chosen", async () => {
+    await mountFilter();
+    await openDialog();
+    const sections = [...byId("filter-panel-general").querySelectorAll(".filter-section > h3")].map((h3) => h3.textContent);
+    expect(sections.slice(-2)).toEqual(["Duration Filter", "Date Filter"]);
+    for (const name of ["Added", "Created"] as const) {
+      expect(within(dialog()).getByLabelText(name)).toBe(dateSelect(name));
+      expect([...dateSelect(name).options].map((option) => [option.value, option.textContent])).toEqual([
+        ["", "Any time"],
+        ["last7Days", "Last 7 days"],
+        ["last30Days", "Last 30 days"],
+        ["last90Days", "Last 90 days"],
+        ["thisYear", "This year"],
+        ["custom", "Custom range"]
+      ]);
+      expect(dateSelect(name).value).toBe("");
+      expect(byId(`filter-${name.toLowerCase()}-range`)).toBeNull();
+    }
+
+    await chooseRange("Created", "custom");
+    expect(byId("filter-added-range")).toBeNull();
+    for (const end of ["from", "to"] as const) {
+      const field = dateField("Created", end);
+      expect(field.type).toBe("date");
+      expect(field.getAttribute("aria-label")).toBe(`Created ${end}`);
+      expect([field.min, field.max]).toEqual(["1970-01-01", "2099-12-31"]);
+      expect(field.closest(".date-range")?.id).toBe("filter-created-range");
+    }
+    await chooseRange("Created", "thisYear");
+    expect(byId("filter-created-range")).toBeNull();
+  });
+
+  it("choosing Custom range fills an empty From and To with today, a date picker's change alone sets a date, and Apply sends each choice", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+
+    await chooseRange("Added", "custom");
+    expect([dateField("Added", "from").value, dateField("Added", "to").value]).toEqual(["2026-10-22", "2026-10-22"]);
+    expect(fieldIcon(dateField("Added", "from"))).toBeNull();
+    expect(heldState(applyButton()).held).toBe(false);
+    expect(applyShowsChanges()).toBe(true);
+    expect(heading()).toBe("Preset: None*");
+
+    // Some date pickers report only on change.
+    fireEvent.change(dateField("Added", "from"), { target: { value: "2026-01-03" } });
+    await settle();
+    await chooseRange("Created", "last30Days");
+    let applied = await applyAndWait(server);
+    expect(applied.addedRange).toEqual({ from: "2026-01-03", to: "2026-10-22" });
+    expect(Object.keys(applied.addedRange)).toEqual(["from", "to"]);
+    expect(applied.createdRange).toBe("last30Days");
+    expect((await nextPick(server)).filterState).toMatchObject({ addedRange: { from: "2026-01-03", to: "2026-10-22" }, createdRange: "last30Days" });
+
+    // A date already there stays.
+    await chooseRange("Created", "custom");
+    await type(dateField("Created", "to"), "2026-03-31");
+    await chooseRange("Created", "thisYear");
+    await type(dateField("Added", "to"), "2026-01-31");
+    await chooseRange("Created", "custom");
+    expect([dateField("Created", "from").value, dateField("Created", "to").value]).toEqual(["2026-10-22", "2026-03-31"]);
+
+    await chooseRange("Added", "");
+    await chooseRange("Created", "");
+    applied = await applyAndWait(server);
+    expect(applied).not.toHaveProperty("addedRange");
+    expect(applied).not.toHaveProperty("createdRange");
+  });
+
+  it("leaving Custom range keeps its dates until Apply, which sends the preset and drops them", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+
+    await chooseRange("Added", "custom");
+    await type(dateField("Added", "from"), "2026-01-03");
+    await type(dateField("Added", "to"), "2026-03-31");
+    await chooseRange("Added", "last7Days");
+    expect(byId("filter-added-range")).toBeNull();
+    await chooseRange("Added", "custom");
+    expect([dateField("Added", "from").value, dateField("Added", "to").value]).toEqual(["2026-01-03", "2026-03-31"]);
+
+    // Dates kept for another choice don't count, so the filter reads as Last 7 days.
+    await chooseRange("Added", "last7Days");
+    expect(await applyAndWait(server)).toMatchObject({ addedRange: "last7Days" });
+    await chooseRange("Added", "custom");
+    expect([dateField("Added", "from").value, dateField("Added", "to").value]).toEqual(["2026-10-22", "2026-10-22"]);
+  });
+
+  it("flags an empty date, a date outside 1970 to 2099, and a To before its From, holding Apply, Add Preset, and Update, and a held press moves to the date", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await loadInDialog("Favorites");
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await showTab("General");
+    await chooseRange("Added", "custom");
+    const queries = libraryQueries(server).length;
+    const logsBefore = server.logLines().length;
+    const from = dateField("Added", "from");
+    const to = dateField("Added", "to");
+    const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
+
+    await type(from, "");
+    expect(fieldIcon(from)).not.toBeNull();
+    expect(from.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
+    expect(tooltipOf(from)?.textContent).toBe("Choose a start date.");
+    expect(fieldIcon(to)).toBeNull();
+    expect(tabMarked("General")).toBe(true);
+    expect(heading()).toBe("Preset: Favorites*");
+    for (const button of [applyButton(), presetButton("Add preset"), presetButton("Update preset")]) {
+      expect(heldState(button), button.id).toEqual({ held: true, marked: true });
+    }
+    expect(applyButton().title).toBe("Correct the Added dates to apply.");
+    expect(presetButton("Add preset").title).toBe("Correct the Added dates first.");
+    expect(presetButton("Update preset").title).toBe("Correct the Added dates first.");
+
+    for (const button of ["Update preset", "Add preset"]) {
+      await showTab("Presets");
+      await click(dialogButton(button));
+      expect(selectedTab(), button).toBe("General");
+      expect(document.activeElement, button).toBe(from);
+    }
+    await showTab("Tags");
+    await apply();
+    expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(from);
+
+    await type(from, "2026-10-23");
+    expect(fieldIcon(from)).toBeNull();
+    expect(fieldIcon(to)).not.toBeNull();
+    expect(tooltipOf(to)?.textContent).toBe("Choose an end date on or after the start date.");
+    await showTab("Tags");
+    await apply();
+    expect(document.activeElement).toBe(to);
+
+    await type(to, "2100-01-01");
+    expect(tooltipOf(to)?.textContent).toBe("Choose a date from 1970 to 2099.");
+    await type(to, "");
+    expect(tooltipOf(to)?.textContent).toBe("Choose an end date.");
+
+    await chooseRange("Created", "custom");
+    await type(dateField("Created", "from"), "1969-12-31");
+    expect(tooltipOf(dateField("Created", "from"))?.textContent).toBe("Choose a date from 1970 to 2099.");
+    expect(applyButton().title).toBe("Correct the Added dates to apply.");
+    await type(to, "2026-12-31");
+    expect(applyButton().title).toBe("Correct the Created dates to apply.");
+    expect(presetButton("Update preset").title).toBe("Correct the Created dates first.");
+    await showTab("Tags");
+    await apply();
+    expect(document.activeElement).toBe(dateField("Created", "from"));
+    expect(presetRows()).toEqual(["Favorites"]);
+    expect(presets.writes).toHaveLength(0);
+    expect(libraryQueries(server)).toHaveLength(queries);
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
+
+    // Leaving Custom range clears its problems.
+    await chooseRange("Created", "");
+    expect(tabMarked("General")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    expect(await applyAndWait(server)).toMatchObject({ favoritesMode: "only", addedRange: { from: "2026-10-23", to: "2026-12-31" } });
+  });
+
+  it("are saved in a preset, which shows unstarred when picked or loaded, and Update keeps them", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET, RANGE_PRESET]);
+    await pickPreset("preset-ranges");
+    expect(selectedPresetLabel()).toBe("Recently added");
+    await openDialog();
+    expect(heading()).toBe("Preset: Recently added");
+    expect(dateSelect("Added").value).toBe("last30Days");
+    expect(byId("filter-added-range")).toBeNull();
+    expect(dateSelect("Created").value).toBe("custom");
+    expect([dateField("Created", "from").value, dateField("Created", "to").value]).toEqual(["2020-01-01", "2020-12-31"]);
+    expect(applyShowsChanges()).toBe(false);
+
+    await click(box("Only never played"));
+    expect(heading()).toBe("Preset: Recently added*");
+    await showTab("Presets");
+    await click(dialogButton("Update preset"));
+    expect(heading()).toBe("Preset: Recently added");
+    await applyAndWait(server);
+    expect(presets.summaries()).toEqual(["update preset-ranges"]);
+    expect(presets.list[1]!.filterState).toMatchObject({
+      onlyNeverPlayed: true,
+      addedRange: "last30Days",
+      createdRange: { from: "2020-01-01", to: "2020-12-31" }
+    });
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Recently added"));
+
+    await click(clearAllButton());
+    await showTab("Presets");
+    await loadInDialog("Recently added");
+    expect(heading()).toBe("Preset: Recently added");
+    await showTab("General");
+    expect(dateSelect("Created").value).toBe("custom");
+    expect(applyShowsChanges()).toBe(false);
+  });
+
+  it("keeps the preset it is named for while a custom date is typed or has a problem, and Apply keeps it", async () => {
+    const q1 = { id: "preset-q1", name: "Q1", filterState: { addedRange: { from: "2026-01-03", to: "2026-03-31" } } };
+    const { server } = await mountFilter([FAVORITES_PRESET, q1]);
+    await pickPreset("preset-q1");
+    await openDialog();
+    expect(heading()).toBe("Preset: Q1");
+
+    // A desktop browser's date field is empty while a part is cleared, and passes through years such as 0002 while a
+    // year is typed. Without the range, the filter would be the default one, named None.
+    for (const text of ["", "0002-02-01", "0020-02-01", "0202-02-01", "2026-02-01"]) {
+      await type(dateField("Added", "from"), text);
+      expect(heading(), text).toBe("Preset: Q1*");
+    }
+    await click(box("Only never played"));
+    await type(dateField("Added", "from"), "");
+    await click(box("Only never played"));
+    await type(dateField("Added", "from"), "2026-02-01");
+    expect(heading()).toBe("Preset: Q1*");
+
+    expect(await applyAndWait(server)).toMatchObject({ addedRange: { from: "2026-02-01", to: "2026-03-31" } });
+    expect(heading()).toBe("Preset: Q1*");
+    expect(selectedPresetLabel()).toBe("Q1*");
   });
 });
 

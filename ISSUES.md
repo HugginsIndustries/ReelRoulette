@@ -105,7 +105,7 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **Since**: v0.15.0, not yet released, where the Filter tab's dot compares the tab with the applied filter.
 - **Where**:
   - `DurationRow` in `src/clients/web/ReelRoulette.WebUI/src/ui/FilterDialog.tsx` reads each keystroke with `typeDuration` and the field's change event with `changeGeneral`.
-  - `filterWithTypedDurations` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts` reads each duration as its field's text for the dot, the heading's star, and Apply.
+  - `filterAsFieldsRead` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts` reads each duration as its field's text for the dot, the heading's star, and Apply.
   - The Filter screen tests "a minimum of "1:00" typed, left, and erased with a browser's events…", for both fields and both texts, and the mockup's matching checks replay a browser's events for these steps and pass (measured). The cause is likely how iPadOS orders its events when focus moves by a tap (inferred).
 
 ## Field validation pattern

@@ -1,3 +1,5 @@
+import { splitDuration, twoDigits } from "../time/timeText";
+
 /** The playing item as the header's now-playing line needs it. */
 export interface NowPlayingItem {
   id?: string | null;
@@ -22,12 +24,13 @@ function wholeSeconds(seconds: number | null | undefined): number {
 }
 
 /** Whole `seconds` as h:mm:ss with hours, or m:ss, its first part padded to `digits`. */
-function timeInShape(seconds: number, withHours: boolean, digits: number): string {
-  const two = (value: number) => String(value).padStart(2, "0");
+function timeInShape(totalSeconds: number, withHours: boolean, digits: number): string {
+  const { hours, minutes, seconds } = splitDuration(totalSeconds);
   if (withHours) {
-    return `${String(Math.floor(seconds / 3600)).padStart(digits, "0")}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`;
+    return `${String(hours).padStart(digits, "0")}:${twoDigits(minutes)}:${twoDigits(seconds)}`;
   }
-  return `${String(Math.floor(seconds / 60)).padStart(digits, "0")}:${two(seconds % 60)}`;
+  // Without hours, the minutes go past 59, as for an hour into a video whose length isn't known.
+  return `${String(hours * 60 + minutes).padStart(digits, "0")}:${twoDigits(seconds)}`;
 }
 
 /** Formats seconds as m:ss, or h:mm:ss from an hour; an unknown or zero time is 0:00. */

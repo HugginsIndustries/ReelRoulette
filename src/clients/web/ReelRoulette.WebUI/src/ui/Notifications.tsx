@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { timeAgo, type NotificationEntry, type Popup } from "../notifications/notifications";
+import { messageTime, type NotificationEntry, type Popup } from "../notifications/notifications";
 import { activeLastingStates, lastingStateText } from "../state/lastingStates";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
@@ -271,7 +271,7 @@ export function NotificationList() {
         icon: entry.icon,
         text: entry.text,
         detail: entry.detail || null,
-        time: timeAgo(entry.time, at),
+        time: messageTime(entry.time, at),
         className: entryClass(entry)
       }))
     : [];
