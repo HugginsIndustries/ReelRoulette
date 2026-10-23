@@ -200,7 +200,7 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 
 - **What goes wrong**: The server keeps one random-pick shuffle state per client and session id, taken from requests, and never removes any, so its memory grows until it restarts.
 - **How to make it happen**: Open the WebUI in new tabs or app launches over time, each of which brings a new session id, and pick at random in each.
-- **How much it matters**: Moderate for a server that runs for weeks. Each state can hold a shuffle of the whole eligible set (inferred).
+- **How much it matters**: Moderate for a server that runs for weeks. Each state holds the folder of every file in its last eligible set and up to 30 days of picks, up to about 400 KB at 49,000 eligible files (inferred).
 - **Since**: v0.9.0.
 - **Where**: `LibraryPlaybackService._clientRandomizationStates` in `src/core/ReelRoulette.Server/Services/LibraryPlaybackService.cs`.
 

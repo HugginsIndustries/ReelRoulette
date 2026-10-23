@@ -158,12 +158,13 @@ Last milestone completed: M12k5
 - A pick older than the window drops out, and a change to the eligible set or to the options keeps the rest.
 - Every random pick goes into the memory, whether Shuffle is on or not, and a server restart clears it.
 - When every eligible file has been picked within the window, those files start a new cycle and their picks are cleared, but the most recent pick is never picked again right away.
-- Reset now clears this device's shuffle memory at once.
+- Reset now clears this device's shuffle memory and its last pick at once, and keeps the last 16 picks Spread looks at, since they aren't shuffle memory, so the pick after a reset still skips recent folders.
 - Spread by folder skips the folders of the last 16 picks, or of half the eligible set's folder count when that is smaller, and every other file is equally likely.
 - A folder is the file's immediate parent.
 - When the skipped folders hold every file left to pick, the skip is ignored.
 - Spread by tags is All tags, where every tag counts, or By category, where only the chosen categories' tags count.
-- Spread by tags looks at the last 16 picks, and a tag counts only for its appearances there beyond what its share of the eligible set would bring: `max(0, c − 16 × n ÷ E)`, where `c` is how many of the last 16 picks had the tag, `n` the eligible files with it, and `E` the eligible files.
+- Spread by tags looks at the last 16 picks that are in the eligible set, and a tag counts only for its appearances there beyond what its share of the eligible set would bring: `max(0, c − m × n ÷ E)`, where `m` is how many of the last 16 picks are eligible, `c` how many of those had the tag, `n` the eligible files with it, and `E` the eligible files.
+- Sharing by the picks counted rather than by 16 holds a common tag to its share from the first picks after a server restart, on a new device, or after a filter change, and equals `16 × n ÷ E` once 16 eligible picks count.
 - A tag's rarity is `ln(E ÷ n) ÷ ln(E)`, from 0 for a tag on every eligible file to 1 for a tag on one, so rarer tags count for more.
 - Spread by tags divides each file's weight by `1 + 10 × penalty`, where the penalty adds up, over the file's tags, each tag's rarity times its counted appearances.
 - Counting only the appearances beyond a tag's share keeps common tags at their usual share: counting every appearance, at the same strength and with Spread by folder off, cut the most common tag from 45.6% to 27.5% of picks and untagged files from 15.0% to 10.9%, while counting the excess kept them at 44.6% and 14.0% and cut a rare tag's return within 16 picks from 1.41% with Shuffle alone to 0.27% (measured).
@@ -205,7 +206,7 @@ Last milestone completed: M12k5
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The Randomization tab with the cycle card, every option, Remember plays for, Reset now, and Random behavior, the Random line, the Library tab without the randomization dropdown, the reordered tabs and their keys, and the settled strengths, approved on a desktop browser, the iPad, and an Android phone. |
-| Engine | ⏳ Planned | The options, Shuffle's rolling memory and cycles, folder and tag spread, the Favor shares and weights, and the cycle numbers in Core, with tests whose randomness is seeded or scripted. |
+| Engine | ✅ Complete | The options, Shuffle's rolling memory and cycles, folder and tag spread, the Favor shares and weights, and the cycle numbers in Core, with tests whose randomness is seeded or scripted. |
 | Contract | ⏳ Planned | The options in place of `randomizationMode` on `POST /api/random`, the cycle numbers in its response, the cycle and reset routes, the candidate read with both dates, the rating, and item tags, state per device, the pick log line, OpenAPI, the generated WebUI types, and `docs/api.md`. |
 | WebUI | ⏳ Planned | The Randomization tab with its cycle card and Random behavior, the Random line, the options kept per device and sent with each pick, the randomization dropdown removed, and the tabs reordered with their keys. |
 
@@ -270,6 +271,14 @@ Last milestone completed: M12k5
 - The Favor pool with its share, and the Favor weights, with the strengths the Decisions give.
 - The cycle numbers: picked this cycle, eligible now, and remaining.
 - Each file's folder, its tags, and each tag's rarity are kept per eligible set rather than worked out on every pick.
+- The cache is keyed by a signature of the eligible files' ids, paths, and tags with their categories, so a moved file or a tag edit rebuilds it, while play counts, dates, and ratings are read on every pick.
+- Half the eligible set's folder count rounds down, so 3 folders skip the last pick's folder and 1 folder skips none.
+- A file is in the pool from its date through 14 days after, so a file dated in the future isn't in it until that date, one without the date never is, and with both Favor new options on and one date missing, the other counts.
+- A pick exactly as old as the window drops out.
+- Reading the cycle numbers counts only picks inside the window and changes nothing.
+- A recent pick's folder is kept from its path when it was picked, so Spread by folder keeps working across a filter change, and its tags are read from the eligible set.
+- A tag's rarity is 0 while one file is eligible.
+- Until the Contract slice, `LibraryPlaybackService` picks each randomization mode as its combination of the options, with `RandomizationModeValue` as a private enum there.
 - Tests set every draw with a seeded or scripted `Random` and test the weights as exact values.
 
 **Traps**
@@ -302,6 +311,16 @@ Last milestone completed: M12k5
 - The cycle numbers count the picked, eligible, and remaining files, in engine tests of the cycle numbers.
 - `dotnet test ReelRoulette.sln` passes.
 
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passed with no warnings, `dotnet test ReelRoulette.sln` passed 637 Core tests and 19 ServerApp tests, against 593 and 19 before, as the old engine's 19 test cases gave way to 63, and SystemChecks passed.
+- The engine's tests are `RandomPickModeTests`, `RandomPickShuffleTests`, `RandomPickSpreadTests`, `RandomPickFavorTests`, and `RandomPickCycleTests`, with `RandomPickTestSupport`: they check each file's odds as exact values through `ComputeOdds`, script each roll, and seed the runs of many Shuffle picks.
+- Breaking each rule once, from a copy under `artifacts/scratch/` restored byte for byte, failed its tests: the Shuffle exclusion (9 tests), the last pick left out of a new cycle, the window drop and its boundary, the folder skip (10), its half-count cap and its fallback, the tag excess over its share (8), the chosen categories in the tag cache's check, the pool's share (8), newness (6), the rating weight (7), and a repeat counted twice in the cycle numbers.
+- The server tests of each mode, `FilterStateTests.PickIds`, the pick log test, and `ItemIdContractTests` pass unchanged.
+- Tag spread's share counts the last 16 picks that are in the eligible set, at the user's choice while the slice was planned, and Reset now keeps the last 16 picks Spread looks at, as the approved plan settled; the Decisions were updated to match.
+- Each pick hashes every eligible file's id, path, and tags for the signature, which wasn't timed at 49,000 files; a few milliseconds is inferred.
+- `CONTEXT.md` describes the modes as combinations of the options, and `CHANGELOG.md` records Smart shuffle's and Spread's new picks.
+
 #### Contract slice
 
 **Scope**
@@ -326,11 +345,17 @@ Last milestone completed: M12k5
 - `ParseRandomizationMode` (`LibraryPlaybackService.cs`) reads an empty or unknown mode as SmartShuffle.
 - `LibraryPlaybackService` keeps its states in `_clientRandomizationStates`, keyed by `BuildRandomizationScopeKey(clientId, sessionId)`, and never removes one.
 - The WebUI keeps its session id in `sessionStorage`, so each new tab, and each relaunch of the installed app, brings a new session id (inferred for the relaunch).
-- Today's Smart shuffle state for the developer's 49,179 eligible items holds 5.0 MB (measured).
+- A device's `RandomPickMemory` holds its picks, its last 16 picks, each eligible file's folder index, and under tag spread each eligible file's counted tags. At 49,179 eligible items that is about 400 KB with 30 days of picks at 47 a day, about 7 MB once it holds a pick of every eligible file under "until everything has played", and about 1.7 MB more under tag spread (inferred).
+- `LibraryPlaybackService` picks each mode as its combination of the options in `PickOptionsFor`, with `RandomizationModeValue` as a private enum beside it.
+- `RandomSelectionEngineCore.SelectItem` and `GetCycle` take the time, and the service passes `DateTime.UtcNow`, so tests of the window and of dropping a device's state need the service to take a clock.
+- `RandomPickMemory`'s members are internal to Core, so telling that a device's window has emptied its memory needs a public member.
+- The engine's weights read each eligible file's `Tags`, each tag's folded name and its category id, only while tag spread is on, and read a recent pick's tags from the eligible set, so the candidate read needs tags only then. The eligible set's signature hashes every file's tags on every pick, though, so a read that adds tags only under tag spread rebuilds the cached folders each time tag spread is turned on or off.
+- `RandomSelectionEngineCore.Reset` clears the picks and the last pick and keeps the last 16 picks Spread looks at.
+- `SelectItem`, `GetCycle`, and `Reset` read and change a device's `RandomPickMemory`, whose collections aren't thread-safe, so the cycle and reset routes need `_randomizationLock`, which picks already hold.
 - `QueryRandomCandidates` took 54 ms median at 49,179 eligible items, and reading three more columns added 6 to 17 ms (measured).
 - Reading every `item_tags` row took 12 to 22 ms, and reading them joined to the candidates 65 to 81 ms (measured).
 - Picks use `Random.Shared`. The flaky test gives the never-played item weight 1.4 and the heavily played one the floor of 0.05, and needs 35 wins in 40 picks, so it fails about 0.24% of runs (computed).
-- The test that each mode picks every eligible item is unseeded too, and fails about 2 runs in a million for WeightedRandom (computed).
+- The test that each mode picks every eligible item is unseeded too, and fails about 7 runs in a million for WeightedWithSpread: Spread alternates its 2 folders, so `b` gets about 30 tries at 33% (computed).
 - `ItemIdContractTests` checks the random and play routes' responses against `RandomResponse` with `OpenApiSpec.AssertMatchesSchema`, which needs the fields returned and the schema's to be the same set.
 - `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
 - `npm run verify:contracts` only checks that the generated types match the OpenAPI file.

@@ -20,10 +20,11 @@ Instructions:
 
 Commit Message:
 
-M12k6: Add the Randomization tab, the Random line, and the reordered panel tabs to the mockup, and settle the random pick strengths
+M12k6: Pick random files with combined options in Core's random engine
 
-- Panel: the tabs are Library, Tags, Stats, Filter, Randomization, and Settings, and 1 to 6 open them in that order, with the shortcut list's row to match.
-- Randomization tab: the Shuffle cycle card, with Picked this cycle, Eligible now, and Remaining, which opens and closes and starts open; Shuffle with Remember plays for and Reset now; Spread by folder and Spread by tags, by All tags or By category, flagged while no category is chosen; the four Favor options; and Random behavior, where Insert puts a pick from the Random button or R right after the current item. The mockup's Shuffle picks nothing twice until every eligible item has played.
-- Library tab: the randomization dropdown is gone, Preset and Search share a row above Sort, and the Random line under the Filters line, such as "Random: Shuffle · Spread by folder", always shows and opens the Randomization tab.
-- Cleanup: the Stats tab's server messages and card grid are serverMessage and statCards, which the cycle card shares, and the index page says how R and the Random button place a pick.
-- MILESTONES.md: Random Pick Options' Mockup slice is complete. Its Decisions take the settled design and the strengths simulated on a copy of the developer's catalog: one 20% pool for files added or created in the last 14 days, held back by Spread by folder; today's Weighted random weight for Favor less played; (stars ÷ 2.5)² for Favor higher rated; and tag spread over 16 picks at strength 10, counting only each tag's appearances beyond its share. The tab is named Randomization throughout, with the new tab order, in the entry, the Planned Releases outline, and Profile Tag and Preset Visibility.
+- Core: one random pick whose options combine replaces the five randomization modes. Shuffle remembers each device's picks by file and time for its window and starts a new cycle without repeating the last pick, Spread by folder skips the folders of recent picks, Spread by tags holds back files whose tags came up beyond their share, and Favor less played, newly added, newly created, and higher rated weigh the rest, with new files taking one 20% share.
+- Core: each pick reports the cycle's picked, eligible, and remaining files, the cycle numbers can be read without picking, and Reset clears the device's Shuffle memory. Each file's folder and tags are worked out once per eligible set.
+- Server: until the random route takes the options, each randomization mode picks as its combination of them, so Smart shuffle keeps its picks when the filter changes and Spread skips recent folders.
+- Tests: the engine's tests check each option's odds as exact values, with scripted and seeded randomness, replacing the old engine's tests.
+- MILESTONES.md: Random Pick Options' Engine slice is complete. Tag spread's share counts the recent picks that are in the eligible set, Reset keeps the recent folders Spread skips, and the Contract slice's Traps say what the engine leaves for it.
+- CONTEXT.md and CHANGELOG.md describe Smart shuffle's and Spread's new picks, and ISSUES.md says what each piled-up random pick state now holds.

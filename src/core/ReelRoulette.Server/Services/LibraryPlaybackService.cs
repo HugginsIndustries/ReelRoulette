@@ -14,7 +14,7 @@ public sealed class LibraryPlaybackService
     private readonly ILogger<LibraryPlaybackService> _logger;
     private readonly ServerLogService? _serverLog;
     private readonly object _randomizationLock = new();
-    private readonly Dictionary<string, RandomizationRuntimeStateCore> _clientRandomizationStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RandomPickMemory> _clientRandomizationStates = new(StringComparer.OrdinalIgnoreCase);
 
     public LibraryPlaybackService(
         ServerMediaTokenStore tokenStore,
@@ -115,30 +115,25 @@ public sealed class LibraryPlaybackService
 
         var scopeKey = BuildRandomizationScopeKey(request.ClientId, request.SessionId);
 
-        RandomizationItem? picked;
+        RandomPickResult picked;
         lock (_randomizationLock)
         {
-            if (!_clientRandomizationStates.TryGetValue(scopeKey, out var state))
+            if (!_clientRandomizationStates.TryGetValue(scopeKey, out var memory))
             {
-                state = new RandomizationRuntimeStateCore();
-                _clientRandomizationStates[scopeKey] = state;
+                memory = new RandomPickMemory();
+                _clientRandomizationStates[scopeKey] = memory;
             }
 
+            // The engine picks nothing only from an empty eligible set, which returned above.
             picked = RandomSelectionEngineCore.SelectItem(
-                state,
-                randomizationMode,
+                memory,
                 eligible,
-                Random.Shared);
+                PickOptionsFor(randomizationMode),
+                DateTime.UtcNow,
+                Random.Shared)!;
         }
 
-        if (picked == null)
-        {
-            error = "No media could be selected.";
-            statusCode = StatusCodes.Status500InternalServerError;
-            return false;
-        }
-
-        var selected = _catalog.Session.ReadPlaybackItemById(picked.Id);
+        var selected = _catalog.Session.ReadPlaybackItemById(picked.Item.Id);
         if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
         {
             error = "Selected item not found.";
@@ -236,7 +231,7 @@ public sealed class LibraryPlaybackService
     }
 
     /// <summary>
-    /// Isolates shuffle-bag / folder-spread state per browser tab (session), keeping a client that
+    /// Isolates the random pick memory per browser tab (session), keeping a client that
     /// omits its session on one scope per client id, and anonymous clients that omit their session on a
     /// single shared scope.
     /// </summary>
@@ -344,6 +339,28 @@ public sealed class LibraryPlaybackService
     private static double? DurationSeconds(long? ticks)
     {
         return ticks is long value ? value / (double)TimeSpan.TicksPerSecond : null;
+    }
+
+    private enum RandomizationModeValue
+    {
+        PureRandom = 0,
+        WeightedRandom = 1,
+        SmartShuffle = 2,
+        SpreadMode = 3,
+        WeightedWithSpread = 4
+    }
+
+    /// <summary>The random pick options each randomization mode stands for, with the default window.</summary>
+    private static RandomPickOptions PickOptionsFor(RandomizationModeValue mode)
+    {
+        return mode switch
+        {
+            RandomizationModeValue.PureRandom => new RandomPickOptions { Shuffle = false, SpreadByFolder = false },
+            RandomizationModeValue.WeightedRandom => new RandomPickOptions { Shuffle = false, SpreadByFolder = false, FavorLessPlayed = true },
+            RandomizationModeValue.SpreadMode => new RandomPickOptions { Shuffle = false, SpreadByFolder = true },
+            RandomizationModeValue.WeightedWithSpread => new RandomPickOptions { Shuffle = false, SpreadByFolder = true, FavorLessPlayed = true },
+            _ => new RandomPickOptions { Shuffle = true, SpreadByFolder = false }
+        };
     }
 
     private static RandomizationModeValue ParseRandomizationMode(string? mode)

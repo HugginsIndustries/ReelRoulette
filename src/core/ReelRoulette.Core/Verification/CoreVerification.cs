@@ -25,20 +25,19 @@ public static class CoreVerification
 
     private static void VerifyRandomization(VerificationResult result)
     {
-        var rng = new Random(7);
-        var state = new RandomizationRuntimeStateCore();
+        var memory = new RandomPickMemory();
         var items = new List<RandomizationItem>
         {
             new() { Id = "one", FullPath = @"C:\one.mp4" },
             new() { Id = "two", FullPath = @"C:\two.mp4" }
         };
-        var selected = RandomSelectionEngineCore.SelectItem(state, RandomizationModeValue.SmartShuffle, items, rng);
+        var selected = RandomSelectionEngineCore.SelectItem(memory, items, RandomPickOptions.Default, DateTime.UtcNow, new Random(7));
         if (selected == null)
         {
             result.Issues.Add(new VerificationIssue
             {
                 Name = "Randomization",
-                Message = "Expected SmartShuffle selection to return an item."
+                Message = "Expected a random pick with the default options to return an item."
             });
         }
     }
