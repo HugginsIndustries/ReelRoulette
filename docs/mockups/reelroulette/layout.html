@@ -1274,8 +1274,12 @@ kbd {
 }
 .is-off { opacity: 0.5; }
 
-/* Library controls and the filter line collapse to give the grid room. Preset and randomization share a row from a
-   panel about 440 px wide: the controls are 26 px narrower than the panel (its border and padding). */
+/* Randomization tab: the Settings tab's sections, with the Shuffle cycle card styled like the Stats tab's. */
+.cycle-body { padding-top: 4px; }
+#rnd-window { min-width: 12rem; }
+
+/* Library controls and the Filters and Random lines collapse to give the grid room. Preset and search share a row from
+   a panel about 440 px wide: the controls are 26 px narrower than the panel (its border and padding). */
 .lib-controls { container: lib-controls / inline-size; }
 .lib-pair { display: flex; flex-direction: column; gap: 8px; }
 @container lib-controls (min-width: 414px) {
@@ -1296,6 +1300,8 @@ body.short-screen .panel-page-head { min-height: 36px; }
 body.short-screen .panel-page-head h2 { font-size: 1rem; }
 body.short-screen .lib-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 body.short-screen .lib-pair { display: contents; }
+/* Preset and search on the first row, and sort with its direction across both columns below them. */
+body.short-screen .lib-sort { grid-column: 1 / -1; }
 body.short-screen .ctl, body.short-screen .btn { min-height: 38px; }
 body.short-screen .text-tab { min-height: 38px; font-size: 1rem; }
 body.short-screen .app-dialog { max-height: calc(100dvh - 12px); }
@@ -1552,9 +1558,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       <div class="panel-tabs">
         <div class="panel-tablist" role="tablist" aria-label="Panel tabs">
           <button class="tab panel-tab" role="tab" id="tab-btn-library" data-tab="library" aria-controls="tab-library" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
-          <button class="tab panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-controls="tab-filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
           <button class="tab panel-tab" role="tab" id="tab-btn-tags" data-tab="tags" aria-controls="tab-tags" aria-label="Tags" title="Tags"><span class="material-symbol-icon">tag</span><span class="unsaved-dot" hidden></span></button>
           <button class="tab panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-controls="tab-stats" aria-label="Stats" title="Stats"><span class="material-symbol-icon">bar_chart</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-controls="tab-filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-randomization" data-tab="randomization" aria-controls="tab-randomization" aria-label="Randomization" title="Randomization"><span class="material-symbol-icon">casino</span></button>
           <button class="tab panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-controls="tab-settings" aria-label="Settings" title="Settings"><span class="material-symbol-icon">settings</span></button>
         </div>
         <span class="panel-tabs-spacer"></span>
@@ -1565,9 +1572,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div class="panel-page-head">
           <h2>Library</h2>
           <p id="lib-summary" class="lib-summary grow" aria-live="polite"></p>
-          <button class="icon-btn" type="button" id="lib-collapse" aria-expanded="true" aria-controls="lib-controls lib-filters" aria-label="Hide library controls and filters" title="Hide controls &amp; filters"><span class="material-symbol-icon">unfold_less</span></button>
+          <button class="icon-btn" type="button" id="lib-collapse" aria-expanded="true" aria-controls="lib-controls lib-filters lib-random" aria-label="Hide library controls and filters" title="Hide controls &amp; filters"><span class="material-symbol-icon">unfold_less</span></button>
         </div>
         <button type="button" id="lib-filters" class="lib-filters" title="Open the Filter tab" hidden></button>
+        <button type="button" id="lib-random" class="lib-filters" title="Open the Randomization tab"></button>
         <div class="lib-controls" id="lib-controls">
           <div class="lib-pair">
           <select class="ctl" id="lib-preset" aria-label="Choose preset">
@@ -1576,13 +1584,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <option>Short clips</option>
             <option>Photos only</option>
           </select>
-          <select class="ctl" id="lib-mode" aria-label="Choose randomization mode">
-            <option>Smart Shuffle</option>
-            <option>Pure Random</option>
-            <option>Weighted Random</option>
-            <option>Spread Mode</option>
-            <option>Weighted with Spread</option>
-          </select>
+          <input class="ctl" type="search" id="lib-search" placeholder="Search…" aria-label="Search library" autocomplete="off">
           </div>
           <div class="lib-sort">
             <select class="ctl" id="lib-sort" aria-label="Sort library">
@@ -1596,7 +1598,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             </select>
             <button class="btn" id="lib-dir" type="button" aria-label="Toggle sort direction">A–Z</button>
           </div>
-          <input class="ctl" type="search" id="lib-search" placeholder="Search…" aria-label="Search library" autocomplete="off">
         </div>
         <div id="lib-grid" class="lib-grid scroll-y themed-scrollbar"></div>
         <div id="bulk-bar" class="bulk-bar" hidden>
@@ -1766,6 +1767,76 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <button class="icon-btn" type="button" id="stats-exact-times" aria-label="Show exact times" title="Show exact times"><span class="material-symbol-icon">calendar_clock</span></button>
         </div>
         <div id="stats-body" class="stats-body scroll-y themed-scrollbar"></div>
+      </section>
+      <section id="tab-randomization" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-randomization" hidden>
+        <div class="panel-page-head"><h2>Randomization</h2></div>
+        <div id="rnd-body" class="settings-body scroll-y themed-scrollbar">
+          <div class="stats-section">
+            <details class="setting-more shortcuts-more" id="rnd-cycle">
+              <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span><h3>Shuffle cycle</h3></summary>
+              <div class="cycle-body" id="rnd-cycle-body"></div>
+            </details>
+          </div>
+          <div class="settings-section">
+            <h3>Shuffle</h3>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="rnd-shuffle"> Shuffle</label></div>
+              <p class="setting-hint">Nothing repeats until everything has played, or until Remember plays for has passed.</p>
+            </div>
+            <div class="setting">
+              <label class="setting-label" for="rnd-window">Remember plays for</label>
+              <select class="ctl" id="rnd-window">
+                <option value="1">1 day</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="all">Until everything has played</option>
+              </select>
+            </div>
+            <div class="setting">
+              <button class="btn" type="button" id="rnd-reset">Reset now</button>
+              <p class="setting-hint">Forgets this device's picks and starts a new cycle.</p>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Spread</h3>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="rnd-spread-folder"> Spread by folder</label></div>
+              <p class="setting-hint">Skips the folders of recent picks.</p>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="rnd-spread-tags"> Spread by tags</label></div>
+              <p class="setting-hint">Files that share tags with recent picks come up less, rarer tags more so.</p>
+              <fieldset class="setting-fields setting-sub" id="rnd-tag-fields">
+                <div class="choice-stack">
+                  <label><input type="radio" name="rnd-tag-spread" value="all"><span>All tags</span></label>
+                  <span class="vfield vfield-after"><label><input type="radio" name="rnd-tag-spread" value="category" id="rnd-by-category"><span>By category</span></label><span class="vfield-icon material-symbol-icon">error</span></span>
+                  <div class="setting-sub" id="rnd-categories">
+                    <div class="choice-row" id="rnd-category-list"></div>
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Favor</h3>
+            <div class="choice-stack">
+              <label><input type="checkbox" id="rnd-less-played"><span>Less played<small>Files played less, or not lately, come up more often.</small></span></label>
+              <label><input type="checkbox" id="rnd-newly-added"><span>Newly added<small>Recently added files get a share of the picks, newer ones more often.</small></span></label>
+              <label><input type="checkbox" id="rnd-newly-created"><span>Newly created<small>Recently created files get a share of the picks, newer ones more often.</small></span></label>
+              <label><input type="checkbox" id="rnd-higher-rated"><span>Higher rated<small>Higher-rated files come up more often. An unrated file counts as 2.5 stars.</small></span></label>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3 id="rnd-behavior-label">Random behavior</h3>
+            <div class="choice-stack" role="radiogroup" aria-labelledby="rnd-behavior-label">
+              <label><input type="radio" name="rnd-behavior" value="jump"><span>Jump<small>Adds the pick at the end of the history.</small></span></label>
+              <label><input type="radio" name="rnd-behavior" value="insert"><span>Insert<small>Puts the pick right after the current item, keeping the plays ahead after it.</small></span></label>
+            </div>
+            <p class="setting-hint">For the player's Random button and R.</p>
+          </div>
+          <p class="setting-hint">Options apply at once and are kept on this device.</p>
+        </div>
       </section>
       <section id="tab-settings" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
         <div class="panel-page-head"><h2>Settings</h2></div>
@@ -3315,6 +3386,10 @@ const state = {
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
+  // Where a pick from the Random button or R goes in the history: jump or insert.
+  randomBehavior: store.get("randomBehavior", "jump"),
+  // Whether the Randomization tab's Shuffle cycle card is open.
+  cycleOpen: store.get("cycleOpen", true),
   // Mockup option: the server's situation.
   situation: null,
   // How the Library tab's load goes: it loads, fails, or times out.
@@ -3879,17 +3954,21 @@ function pushHistory(item) {
   historyIndex = history.length - 1;
 }
 // A random pick goes at the end of the history, keeping every entry, so Random from the middle keeps the plays ahead.
-function appendHistory(item) {
-  history.push(item);
-  historyIndex = history.length - 1;
+// With Random behavior's Insert, a pick from the Random button or R goes right after the current item instead, and the
+// plays ahead follow it.
+function addRandomPick(item, insert) {
+  if (insert) history.splice(historyIndex + 1, 0, item);
+  else history.push(item);
+  historyIndex = insert ? historyIndex + 1 : history.length - 1;
 }
 
 // While the server fails the compatibility check or runs without a library, the page loads nothing, as the app does.
 const heldBack = () => state.situation === "incompatible" || state.situation === "nolibrary";
 const NO_LIBRARY_PLAY_NOTICE = "Cannot play: the server is running without a library.";
 
-// One random pick at a time, as today: a press while one waits does nothing.
-function pickRandom(tries = 0) {
+// One random pick at a time, as today: a press while one waits does nothing. `byRandom` is a pick from the Random button
+// or R, which Random behavior places.
+function pickRandom(tries = 0, byRandom = false) {
   // The user's own start ends Auto-Pause's hold, as Next, Previous, and a tile do; a pick that skips on doesn't.
   if (!tries) playback.autoHold = false;
   if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
@@ -3907,16 +3986,18 @@ function pickRandom(tries = 0) {
     if (state.situation === "noanswer") return void fail("No response from the server. Try again.");
     // A server that asks for pairing answers 401, which shows only the pairing prompt.
     if (state.pairing) return void setLoading("pick", false);
-    const pool = state.situation === "empty" ? [] : ITEMS.filter((item) => !item.removed && passesApplied(item));
+    const pool = eligibleItems();
     if (!pool.length) return void fail("No eligible media for current filters.");
-    const item = pool[Math.floor(Math.random() * pool.length)];
+    // A skipped pick stays in the shuffle memory, as the server has already counted it.
+    const item = choosePick(pool);
+    renderCycle();
     // The next pick keeps this one's hold, and the media's hold starts before the pick's ends, so the loading period
     // runs on unbroken.
     if (skips(item) && tries < SKIP_LIMIT) {
       skipNotice(item);
-      return pickRandom(tries + 1);
+      return pickRandom(tries + 1, byRandom);
     }
-    appendHistory(item);
+    addRandomPick(item, byRandom && state.randomBehavior === "insert");
     start(item);
     setLoading("pick", false);
   };
@@ -4150,11 +4231,13 @@ function showTab(tab) {
     button.setAttribute("aria-selected", String(selected));
     button.tabIndex = selected ? 0 : -1;
   });
-  ["library", "filter", "tags", "stats", "settings"].forEach((name) => {
+  ["library", "tags", "stats", "filter", "randomization", "settings"].forEach((name) => {
     $(`tab-${name}`).hidden = name !== tab;
   });
   applyLayout();
   if (tab === "library") layoutGrid();
+  // Opening the Randomization tab fetches the Shuffle cycle's numbers once.
+  if (tab === "randomization") renderCycle();
   notePresetsView();
 }
 
@@ -4709,8 +4792,9 @@ $("play-btn").addEventListener("click", () => {
 });
 $("next-btn").addEventListener("click", () => goNext());
 $("prev-btn").addEventListener("click", () => goPrevious());
-// Random picks a new item as Next does at the end of the history, from anywhere in it, and adds it at the end.
-$("random-btn").addEventListener("click", () => pickRandom());
+// Random picks a new item from anywhere in the history and places it as Random behavior says: at the end, or right after
+// the current item.
+$("random-btn").addEventListener("click", () => pickRandom(0, true));
 // While Timer mode repeats a stretch, a seek, by the bar, J or L, a double-tap, or a frame step, starts the stretch where it lands,
 // and its timer over from there. A seek that lands at the video's end starts it, and the video, Advance after seconds
 // before the end, or at 0 for a shorter video.
@@ -5278,8 +5362,6 @@ $("lib-preset").addEventListener("change", (event) => {
   renderLibPresets();
   reloadGrid();
 });
-$("lib-mode").value = store.get("libMode", "Smart Shuffle");
-$("lib-mode").addEventListener("change", (event) => store.set("libMode", event.target.value));
 
 // ---- Filter tab ----
 const filterBody = $("filter-body");
@@ -6234,6 +6316,8 @@ $("tags-save").addEventListener("click", () => {
   followPlayingItem();
   renderFilterTags();
   renderStats();
+  renderCategoryList();
+  renderRandomization();
   // Saving for the selection acknowledges itself as the other bulk actions do.
   acknowledge(several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied", "tags");
 });
@@ -6593,6 +6677,8 @@ function applySituation(situation) {
   renderTags();
   layoutGrid(true);
   renderStats();
+  renderCategoryList();
+  renderRandomization();
 }
 document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => {
   radio.addEventListener("change", () => applySituation(radio.value));
@@ -7249,15 +7335,19 @@ function truePeakText(item) {
   if (item.hasAudio === false) return "N/A";
   return item.peak != null ? `${item.peak.toFixed(1)} dBTP` : "Not measured";
 }
-// What the Stats tab says in place of its library stats, as the Library tab does in place of its tiles: nothing while
-// the server asks for pairing, the server's own message while it fails the compatibility check or runs without a
-// library, and a failed first load. The current file then shows only its name and path.
-function statsMessage() {
+// What a tab says in place of what it loads from the server, as the Library tab does in place of its tiles: nothing
+// while the server asks for pairing, and the server's own message while it fails the compatibility check or runs
+// without a library.
+function serverMessage() {
   if (state.pairing) return { text: "" };
   if (state.situation === "incompatible") return { text: "Unsupported server API version: 2.", error: true };
   if (state.situation === "nolibrary") return { text: NO_LIBRARY_MESSAGE, error: true };
-  if (state.statsLoad === "failed") return { text: "Stats load failed.", error: true };
   return null;
+}
+// The Stats tab's, in place of its library stats: the server's, or a failed first load. The current file then shows only
+// its name and path.
+function statsMessage() {
+  return serverMessage() || (state.statsLoad === "failed" ? { text: "Stats load failed.", error: true } : null);
 }
 function statsHint(text, error) {
   const hint = document.createElement("p");
@@ -7638,6 +7728,14 @@ function renderStats() {
     host.append(file, library);
     return;
   }
+  library.append(statCards(cards));
+  // The current file first, since the file name opens this tab.
+  host.append(file, library);
+  if (ratingFocused && ratingControl.el.isConnected) ratingControl.el.focus({ preventScroll: true });
+}
+
+// Cards of [label, value] in a grid, as the Stats tab's Library and the Shuffle cycle show them.
+function statCards(cards) {
   const grid = document.createElement("div");
   grid.className = "stats-grid";
   cards.forEach(([label, value]) => {
@@ -7648,11 +7746,167 @@ function renderStats() {
     card.lastChild.textContent = label;
     grid.append(card);
   });
-  library.append(grid);
-  // The current file first, since the file name opens this tab.
-  host.append(file, library);
-  if (ratingFocused && ratingControl.el.isConnected) ratingControl.el.focus({ preventScroll: true });
+  return grid;
 }
+
+// ---- Randomization tab ----
+// The options, kept on this device and sent with each pick, apply at once; the server decides the picks. The mockup's
+// picks stay uniform, since its 72 items are too few to show the other options' effect, so only Shuffle changes them.
+const RANDOM_DEFAULTS = {
+  shuffle: true,
+  // Remember plays for: days, or "all" for until everything has played.
+  window: "30",
+  spreadFolder: true,
+  spreadTags: false,
+  // All tags, or by category, with the chosen categories kept by id, so a renamed one stays chosen.
+  tagSpread: "all",
+  categories: [],
+  lessPlayed: false,
+  newlyAdded: false,
+  newlyCreated: false,
+  higherRated: false
+};
+const randomOptions = { ...RANDOM_DEFAULTS, ...store.get("randomOptions", {}) };
+const FAVOR_OPTIONS = [["lessPlayed", "less played"], ["newlyAdded", "newly added"], ["newlyCreated", "newly created"], ["higherRated", "higher rated"]];
+// The options that are checkboxes, by their checkbox's id.
+const RANDOM_CHECKBOXES = [["rnd-shuffle", "shuffle"], ["rnd-spread-folder", "spreadFolder"], ["rnd-spread-tags", "spreadTags"], ["rnd-less-played", "lessPlayed"],
+  ["rnd-newly-added", "newlyAdded"], ["rnd-newly-created", "newlyCreated"], ["rnd-higher-rated", "higherRated"]];
+// The server's memory of this device's random picks, which the mockup keeps for the page's life: the items picked this
+// cycle, and the last pick. Every random pick goes in, Shuffle on or off. Remember plays for is days long, so nothing
+// drops out of it here.
+const shuffleMemory = new Set();
+let lastPickId = null;
+// The items a pick may choose from: those the applied filter keeps.
+const eligibleItems = () => (state.situation === "empty" ? [] : ITEMS.filter((item) => !item.removed && passesApplied(item)));
+// Once every eligible item has been picked, a pick starts a new cycle, clearing their picks, and under Shuffle it leaves
+// out the last pick, unless that is the only one. Otherwise, under Shuffle, it picks from the items not yet picked.
+function choosePick(pool) {
+  let candidates = pool;
+  if (pool.every((item) => shuffleMemory.has(item.id))) {
+    pool.forEach((item) => shuffleMemory.delete(item.id));
+    if (randomOptions.shuffle && pool.length > 1) candidates = pool.filter((item) => item.id !== lastPickId);
+  } else if (randomOptions.shuffle) {
+    candidates = pool.filter((item) => !shuffleMemory.has(item.id));
+  }
+  const item = candidates[Math.floor(Math.random() * candidates.length)];
+  shuffleMemory.add(item.id);
+  lastPickId = item.id;
+  return item;
+}
+// The categories Spread by tags can use, in the saved tag catalog's order, as the Filter tab lists them, and those chosen.
+const spreadCategories = () => (state.situation === "empty" ? [] : savedTags.filter((category) => category.chips.length));
+const chosenCategories = () => spreadCategories().filter((category) => randomOptions.categories.includes(category.id));
+const listText = (names) => (names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
+// The Random line's summary, such as "Shuffle · Spread by folder". By category with none chosen spreads by no tags.
+function randomSummary() {
+  const o = randomOptions;
+  const parts = [];
+  if (o.shuffle) parts.push("Shuffle");
+  const spread = o.spreadFolder ? ["folder"] : [];
+  if (o.spreadTags) spread.push(...(o.tagSpread === "all" ? ["tags"] : chosenCategories().map((category) => category.name)));
+  if (spread.length) parts.push(`Spread by ${listText(spread)}`);
+  const favor = FAVOR_OPTIONS.filter(([key]) => o[key]).map(([, name]) => name);
+  if (favor.length) parts.push(`Favor ${listText(favor)}`);
+  return parts.length ? parts.join(" · ") : "Pure random";
+}
+// The Random line under the Filters line always shows, and opens the Randomization tab as that line opens the Filter tab.
+function renderRandomLine() {
+  const line = $("lib-random");
+  line.textContent = "";
+  const label = document.createElement("b");
+  label.textContent = "Random: ";
+  line.append(label, randomSummary());
+}
+$("lib-random").addEventListener("click", () => showTab("randomization"));
+// The Shuffle cycle card, in place of its numbers: the server's message, or a failed load while the server can't be
+// reached. Its numbers show while Shuffle is off too, since every pick is remembered.
+function cycleMessage() {
+  const message = serverMessage();
+  if (message) return message;
+  if (state.situation === "reconnecting" || state.situation === "noanswer") return { text: "Shuffle cycle load failed.", error: true };
+  return null;
+}
+function renderCycle() {
+  const host = $("rnd-cycle-body");
+  host.textContent = "";
+  const message = cycleMessage();
+  if (message) {
+    if (message.text) host.append(statsHint(message.text, message.error));
+    return;
+  }
+  const pool = eligibleItems();
+  const picked = pool.filter((item) => shuffleMemory.has(item.id)).length;
+  const hint = (text) => Object.assign(document.createElement("p"), { className: "setting-hint", textContent: text });
+  host.append(
+    statCards([["Picked this cycle", picked], ["Eligible now", pool.length], ["Remaining", pool.length - picked]]),
+    hint("On this device. A server restart starts a new cycle.")
+  );
+  if (!randomOptions.shuffle) host.append(hint("Shuffle is off, so files can repeat."));
+}
+$("rnd-cycle").open = state.cycleOpen;
+$("rnd-cycle").addEventListener("toggle", () => {
+  state.cycleOpen = $("rnd-cycle").open;
+  store.set("cycleOpen", state.cycleOpen);
+});
+// By category with no category chosen spreads by no tags, so it is flagged while Spread by tags is on.
+const categoryField = new ValidatedField($("rnd-by-category"), () =>
+  randomOptions.spreadTags && randomOptions.tagSpread === "category" && !chosenCategories().length ? { message: "Choose at least one category." } : null
+);
+function renderCategoryList() {
+  const host = $("rnd-category-list");
+  host.textContent = "";
+  const categories = spreadCategories();
+  if (!categories.length) {
+    host.append(Object.assign(document.createElement("p"), { className: "filter-hint", textContent: "No tags yet. Add them in the Tags tab." }));
+    return;
+  }
+  categories.forEach((category) => {
+    const label = document.createElement("label");
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", value: category.id });
+    box.addEventListener("change", () => {
+      const others = randomOptions.categories.filter((id) => id !== category.id);
+      setRandomOption("categories", box.checked ? [...others, category.id] : others);
+    });
+    label.append(box, ` ${category.name}`);
+    host.append(label);
+  });
+}
+// The tag spread's choices are disabled while Spread by tags is off, and the categories show only under By category.
+function renderRandomization() {
+  const o = randomOptions;
+  RANDOM_CHECKBOXES.forEach(([id, key]) => ($(id).checked = o[key]));
+  $("rnd-window").value = o.window;
+  $("rnd-tag-fields").disabled = !o.spreadTags;
+  document.querySelectorAll('input[name="rnd-tag-spread"]').forEach((radio) => (radio.checked = radio.value === o.tagSpread));
+  $("rnd-categories").hidden = o.tagSpread !== "category";
+  $("rnd-category-list").querySelectorAll("input").forEach((box) => (box.checked = o.categories.includes(box.value)));
+  categoryField.update();
+  renderRandomLine();
+  renderCycle();
+}
+function setRandomOption(key, value) {
+  randomOptions[key] = value;
+  store.set("randomOptions", randomOptions);
+  renderRandomization();
+}
+RANDOM_CHECKBOXES.forEach(([id, key]) => {
+  $(id).addEventListener("change", () => setRandomOption(key, $(id).checked));
+});
+$("rnd-window").addEventListener("change", () => setRandomOption("window", $("rnd-window").value));
+document.querySelectorAll('input[name="rnd-tag-spread"]').forEach((radio) => {
+  radio.addEventListener("change", () => setRandomOption("tagSpread", radio.value));
+});
+// Random behavior, kept on this device, places a pick from the Random button or R.
+bindChoice("rnd-behavior", "randomBehavior", (value) => value);
+// Reset now forgets this device's picks at once, with no confirmation, as the server clears its memory.
+$("rnd-reset").addEventListener("click", () => {
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Shuffle reset failed: Couldn't reach the server." });
+  if (state.pairing || heldBack()) return;
+  shuffleMemory.clear();
+  lastPickId = null;
+  renderCycle();
+  acknowledge("Shuffle memory cleared.", "shuffle");
+});
 
 // ---- Settings tab ----
 function bindChoice(name, key, toValue, after) {
@@ -7934,7 +8188,7 @@ const SHORTCUTS = [
   ["M", "Mute"],
   [", / .", "One frame back or forward, while a video is paused"],
   ["[ / ]", "Volume down or up by the volume step"],
-  ["1 – 5", "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"],
+  ["1 – 6", "Open Library, Tags, Stats, Filter, Randomization, or Settings; the open tab's key closes the panel"],
   ["T", "Tags"],
   ["S", "Settings"],
   ["P", "Show or hide the panel"],
@@ -7949,7 +8203,7 @@ function showShortcuts() {
   section.scrollIntoView?.({ block: "start" });
   section.querySelector("summary").focus({ preventScroll: true });
 }
-const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "settings", t: "tags", s: "settings" };
+const TAB_KEYS = { 1: "library", 2: "tags", 3: "stats", 4: "filter", 5: "randomization", 6: "settings", t: "tags", s: "settings" };
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
@@ -8043,7 +8297,7 @@ document.addEventListener("keydown", (event) => {
   if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
   if (key === "ArrowLeft") return handled() || goPrevious();
   if (key === "ArrowRight") return handled() || goNext();
-  if (key === "r") return handled() || pickRandom();
+  if (key === "r") return handled() || pickRandom(0, true);
   if (key === "f") return handled() || toggleFlag("favorite");
   if (key === "b") return handled() || toggleFlag("blacklisted");
   if (key === "-" || key === "=") return handled() || rateByKey((item?.rating || 0) + (key === "=" ? 0.5 : -0.5));
@@ -8107,6 +8361,7 @@ function applyMockOptions() {
   layoutGrid(true);
   renderVolume();
   renderStats();
+  renderCycle();
   placeAllTips();
 }
 // A change to whether the gain stage fails starts it over, so the next tap tries again.
@@ -8129,6 +8384,7 @@ function applyCollapse() {
   const button = $("lib-collapse");
   $("lib-controls").classList.toggle("is-collapsed", state.libCollapsed);
   $("lib-filters").classList.toggle("is-collapsed", state.libCollapsed);
+  $("lib-random").classList.toggle("is-collapsed", state.libCollapsed);
   button.setAttribute("aria-expanded", String(!state.libCollapsed));
   button.setAttribute("aria-label", state.libCollapsed ? "Show library controls and filters" : "Hide library controls and filters");
   button.title = state.libCollapsed ? "Show controls & filters" : "Hide controls & filters";

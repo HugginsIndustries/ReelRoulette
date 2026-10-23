@@ -20,12 +20,10 @@ Instructions:
 
 Commit Message:
 
-M12k5: Filter by date added and date created in the WebUI, and show both in the Stats tab
+M12k6: Add the Randomization tab, the Random line, and the reordered panel tabs to the mockup, and settle the random pick strengths
 
-- Filter tab: a Date Filter section with Added and Created, each Any time, Last 7, 30, or 90 days, This year, or a custom range from the device's date picker, from 1970 to 2099, flagged with the field validation pattern while a date is missing, outside those years, or out of order. A flagged range, and now a Min or Max whose text isn't valid, which counted as no limit before, keeps the working filter's value, so the preset the tab is named for stays as it was.
-- Presets and the Filters line: both ranges are sent, saved, and compared by the choice, read as the server reads them, locked to filter-date-ranges.json, which gains leap-day cases, with date cases in preset-filter-equality.json, and named on the Filters line.
-- Stats tab: Added and Created after Last played, all three worded as how long ago up to months and years, and Show exact times in the header, kept per device.
-- Contract: the OpenAPI schema for a custom range is FilterCustomDateRange, since Core and the WebUI call a preset or a custom range FilterDateRange.
-- Cleanup: one isBoolean device-setting check in deviceStore.ts replaces nine copies, the new timeText.ts holds the day and exact time formatters and one twoDigits and duration split, which the seek row's time and the filter's durations share, and the notifications list's timeAgo is messageTime, apart from the Stats tab's.
-- Mockup: the custom range's 1970 to 2099 limit and its message, and a working filter that keeps a duration whose text isn't valid, as the app's does.
-- Docs: CONTEXT.md, ISSUES.md, docs/api.md, docs/domain-inventory.md, CHANGELOG.md, the testing checklist's Release Specific manual check, and MILESTONES.md, which records the WebUI slice's evidence and moves the completed milestone to MILESTONES-COMPLETED.md.
+- Panel: the tabs are Library, Tags, Stats, Filter, Randomization, and Settings, and 1 to 6 open them in that order, with the shortcut list's row to match.
+- Randomization tab: the Shuffle cycle card, with Picked this cycle, Eligible now, and Remaining, which opens and closes and starts open; Shuffle with Remember plays for and Reset now; Spread by folder and Spread by tags, by All tags or By category, flagged while no category is chosen; the four Favor options; and Random behavior, where Insert puts a pick from the Random button or R right after the current item. The mockup's Shuffle picks nothing twice until every eligible item has played.
+- Library tab: the randomization dropdown is gone, Preset and Search share a row above Sort, and the Random line under the Filters line, such as "Random: Shuffle · Spread by folder", always shows and opens the Randomization tab.
+- Cleanup: the Stats tab's server messages and card grid are serverMessage and statCards, which the cycle card shares, and the index page says how R and the Random button place a pick.
+- MILESTONES.md: Random Pick Options' Mockup slice is complete. Its Decisions take the settled design and the strengths simulated on a copy of the developer's catalog: one 20% pool for files added or created in the last 14 days, held back by Spread by folder; today's Weighted random weight for Favor less played; (stars ÷ 2.5)² for Favor higher rated; and tag spread over 16 picks at strength 10, counting only each tag's appearances beyond its share. The tab is named Randomization throughout, with the new tab order, in the entry, the Planned Releases outline, and Profile Tag and Preset Visibility.

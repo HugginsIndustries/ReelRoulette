@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Random tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -140,8 +140,8 @@ Last milestone completed: M12k5
 
 ### M12k6 - Random Pick Options
 
-- **Status**: ⏳ Planned
-- **Goal**: Random picks combine options, set per device in a new Random tab, in place of the five randomization modes, with the server deciding the picks.
+- **Status**: 🚧 In Progress
+- **Goal**: Random picks combine options, set per device in a new Randomization tab, in place of the five randomization modes, with the server deciding the picks.
 - **Depends on**: Item Ratings, whose rating Favor higher rated reads, Date Added and Date Filters, whose date added Favor newly added reads, WebUI Player Controls, whose Random button gets Random behavior, and WebUI Keyboard Shortcuts, whose panel tab keys it renumbers.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -162,41 +162,60 @@ Last milestone completed: M12k5
 - Spread by folder skips the folders of the last 16 picks, or of half the eligible set's folder count when that is smaller, and every other file is equally likely.
 - A folder is the file's immediate parent.
 - When the skipped folders hold every file left to pick, the skip is ignored.
-- Spread by tags is All tags, where a file sharing tags with recent picks is less likely and rarer tags count for more, or By category, where only the chosen categories' tags count.
+- Spread by tags is All tags, where every tag counts, or By category, where only the chosen categories' tags count.
+- Spread by tags looks at the last 16 picks, and a tag counts only for its appearances there beyond what its share of the eligible set would bring: `max(0, c − 16 × n ÷ E)`, where `c` is how many of the last 16 picks had the tag, `n` the eligible files with it, and `E` the eligible files.
+- A tag's rarity is `ln(E ÷ n) ÷ ln(E)`, from 0 for a tag on every eligible file to 1 for a tag on one, so rarer tags count for more.
+- Spread by tags divides each file's weight by `1 + 10 × penalty`, where the penalty adds up, over the file's tags, each tag's rarity times its counted appearances.
+- Counting only the appearances beyond a tag's share keeps common tags at their usual share: counting every appearance, at the same strength and with Spread by folder off, cut the most common tag from 45.6% to 27.5% of picks and untagged files from 15.0% to 10.9%, while counting the excess kept them at 44.6% and 14.0% and cut a rare tag's return within 16 picks from 1.41% with Shuffle alone to 0.27% (measured).
 - "No tags" counts as a tag of its own, so untagged files are spread too, and under By category a file with none of the chosen categories' tags counts as having no tags.
 - The chosen categories are kept by id, so a renamed category stays chosen.
-- Favor newly added and Favor newly created each give recently added or created files a fixed share of the picks, newer ones more likely.
-- With both on, each takes its own share, and when no such file is left to pick, the pick is as usual.
-- Favor less played and Favor higher rated multiply each file's weight: less played by today's Weighted random weighting of play count and last played, and higher rated by the rating, with an unrated file weighted as 2.5 stars.
-- The shares, how long a file counts as recent, how strongly less played and the rating pull, and how strongly and over how many picks tag spread pulls are settled in the Mockup slice and recorded here.
-- The Random tab sits between the Filter and Tags tabs, with the dice icon (`casino`).
+- By category with no category chosen is flagged at By category with the field validation pattern, "Choose at least one category.", and nothing else is held, since options apply at once; it changes no pick, since every file then counts as having no tags, whose rarity is 0.
+- Favor newly added and Favor newly created share one pool of new files, which takes 20% of the picks.
+- A file is in the pool for 14 days after its date added under Favor newly added, or after its date created under Favor newly created, and with both on, after the later of the two.
+- In the pool, each file's weight is multiplied by its newness, `1 − 0.75 × age ÷ 14 days`, so a file new today is 4 times as likely as one 14 days old.
+- A pick takes 20% of its odds from the pool, by weight times newness, and 80% from every file left, by weight, in one weighted roll, and when no file in the pool is left to pick, the pick is as usual.
+- One pool keeps the two options from doubling the pull: with a share each, both on sent 40% of a pick to the same 166 files, since date added equals date created for every file in the developer's catalog (measured).
+- Spread by folder applies to the pool too, so new files that share a folder get less than the share, and turning Spread by folder off gives them all of it: the 166 files added in the last 14 days, 98 of them in one folder, got 10.3% of picks, against 14.2% when the pool skipped the folder rule, which put 8.6% of picks in a folder from the last 16 picks (measured).
+- Favor less played multiplies each file's weight by today's Weighted random weight, unchanged, `max(0.05, 0.6 ÷ (1 + plays) + 0.8 × recency)`, so a never-played file is 28 times as likely as the floor, and files played in the last 7 days got 0.12% of a pick against 0.6% at pure random (measured).
+- Favor higher rated multiplies each file's weight by `(stars ÷ 2.5)²`, with an unrated file as 2.5 stars: against an unrated file, 5 stars is 4 times as likely, 4 stars 2.56, 3 stars 1.44, 2 stars 0.64, 1 star 0.16, and ½ star 0.04.
+- The Mockup slice's Evidence has the simulations these strengths were chosen from.
+- The panel's tabs are, in order, Library, Tags, Stats, Filter, Randomization, and Settings, so Tags and Stats move ahead of Filter.
+- The Randomization tab has the dice icon (`casino`).
 - It holds the cycle card, every option, Spread's folder and tag choices with the category list, Remember plays for, Reset now, and Random behavior.
 - Options apply at once, with no Apply, and nothing goes in the Settings tab.
-- The cycle card, at the top of the Random tab and styled like the Stats tab's cards, shows this device's current Shuffle cycle: the files picked this cycle, those eligible now under the current filter, those remaining until the cycle restarts, and the memory window.
+- The cycle card, at the top of the Randomization tab and styled like the Stats tab's cards, shows this device's current Shuffle cycle as three cards: Picked this cycle, Eligible now under the current filter, and Remaining until the cycle restarts.
+- Under its cards it notes "On this device. A server restart starts a new cycle.", and while Shuffle is off, "Shuffle is off, so files can repeat."
+- While the server asks for pairing the cycle card shows nothing, while it fails the compatibility check or runs without a library it shows the Stats tab's message, and when its numbers can't be fetched it says "Shuffle cycle load failed."
 - Picked this cycle counts the eligible files picked within the window, so picked and remaining add up to eligible.
 - The cycle card opens and closes, is open by default, and keeps that state per device.
-- Each pick's response carries the cycle card's numbers, and opening the Random tab fetches them once.
+- Each pick's response carries the cycle card's numbers, and opening the Randomization tab fetches them once.
 - Random behavior decides where a Random pick goes in the history: Jump, the default, adds it at the end, and Insert puts it right after the current item, with the plays ahead kept after it. It applies to the player's Random button and to R, and is kept per device.
+- The Randomization tab's sections are Shuffle, with the Shuffle checkbox, the Remember plays for dropdown, and Reset now; Spread, with Spread by folder and Spread by tags, whose All tags and By category are disabled while it is off; Favor, with Less played, Newly added, Newly created, and Higher rated; and Random behavior. Each option has a one-line hint, and the tab ends "Options apply at once and are kept on this device."
+- Remember plays for and Reset now stay usable while Shuffle is off, since every pick is remembered either way.
+- The category list shows only while By category is chosen, and lists the categories that have tags, in the tag catalog's order, as the Filter tab does.
+- Reset now asks nothing first and says "Shuffle memory cleared." in a popup for the user's actions, and a reset that fails says what failed, as the Tags tab's Save does, such as "Shuffle reset failed: Couldn't reach the server."
 - The Library tab's randomization dropdown goes.
-- A Random line under the Filters line, in its style, such as "Random: Shuffle · Spread by folder", always shows, opens the Random tab as the Filters line opens the Filter tab, and hides with the Filters line when the controls collapse.
-- The panel tab keys are 1 to 6 in tab order: Library, Filter, Random, Tags, Stats, and Settings. T and S still open Tags and Settings.
+- Preset and Search share the row it leaves from a 414 px controls width, with Sort and its direction below, and narrower they stack as Preset, Search, and Sort. On a phone on its side, Preset and Search share the first row and Sort spans the second.
+- A Random line under the Filters line, in its style, such as "Random: Shuffle · Spread by folder", always shows, opens the Randomization tab as the Filters line opens the Filter tab, and hides with the Filters line when the controls collapse.
+- The Random line joins with " · " "Shuffle"; one Spread part, "Spread by folder", "Spread by tags", or "Spread by folder and tags", where By category names the chosen categories, such as "Spread by folder, People, and Places"; and one Favor part, such as "Favor less played and higher rated". With every option off it reads "Pure random", and it never names Remember plays for or Random behavior.
+- The panel tab keys are 1 to 6 in tab order: Library, Tags, Stats, Filter, Randomization, and Settings. T and S still open Tags and Settings.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The Random tab with the cycle card, every option, Remember plays for, Reset now, and Random behavior, the Random line, the Library tab without the randomization dropdown, the renumbered tab keys, and the settled strengths, approved on a desktop browser, the iPad, and an Android phone. |
+| Mockup | ✅ Complete | The Randomization tab with the cycle card, every option, Remember plays for, Reset now, and Random behavior, the Random line, the Library tab without the randomization dropdown, the reordered tabs and their keys, and the settled strengths, approved on a desktop browser, the iPad, and an Android phone. |
 | Engine | ⏳ Planned | The options, Shuffle's rolling memory and cycles, folder and tag spread, the Favor shares and weights, and the cycle numbers in Core, with tests whose randomness is seeded or scripted. |
 | Contract | ⏳ Planned | The options in place of `randomizationMode` on `POST /api/random`, the cycle numbers in its response, the cycle and reset routes, the candidate read with both dates, the rating, and item tags, state per device, the pick log line, OpenAPI, the generated WebUI types, and `docs/api.md`. |
-| WebUI | ⏳ Planned | The Random tab with its cycle card and Random behavior, the Random line, the options kept per device and sent with each pick, the randomization dropdown removed, and the tab keys renumbered. |
+| WebUI | ⏳ Planned | The Randomization tab with its cycle card and Random behavior, the Random line, the options kept per device and sent with each pick, the randomization dropdown removed, and the tabs reordered with their keys. |
 
 #### Mockup slice
 
 **Scope**
 
-- In `docs/mockups/reelroulette/`, the Random tab between Filter and Tags with the `casino` icon, holding the cycle card, Shuffle with Remember plays for and Reset now under it, Spread by folder, Spread by tags with All tags, By category, and the category list, the four Favor options, and Random behavior, as the Decisions describe.
+- In `docs/mockups/reelroulette/`, the panel's tabs in their new order, and the Randomization tab with the `casino` icon, holding the cycle card, Shuffle with Remember plays for and Reset now under it, Spread by folder, Spread by tags with All tags, By category, and the category list, the four Favor options, and Random behavior, as the Decisions describe.
 - The cycle card's look, and how it shows while Shuffle is off, are settled in the mockup.
-- The Random line under the Filters line, its wording for each combination of options, every option off included, and its opening the Random tab.
+- The Random line under the Filters line, its wording for each combination of options, every option off included, and its opening the Randomization tab.
 - The Library tab without the randomization dropdown, at every width and on a phone on its side.
 - The panel tab keys 1 to 6, and the shortcut reference's rows for them.
 - `casino` and any other new icon in the mockup's icon subset.
@@ -209,7 +228,7 @@ Last milestone completed: M12k5
 - The mockup's randomization dropdown is `#lib-mode` in `.lib-pair` (`layout.src.html`), and the page script restores and saves it, so removing only its markup makes the script throw.
 - On a phone on its side, the mockup's Library tab controls are a two-column grid, which the dropdown's removal leaves with three items.
 - `showTab` in `layout.src.html` names the five tab pages.
-- WebUI Keyboard Shortcuts' mockup binds 1 to 5 (`TAB_KEYS`), and its shortcut reference has 17 rows.
+- WebUI Keyboard Shortcuts' mockup binds 1 to 5 (`TAB_KEYS`), and its shortcut reference has 20 rows.
 - `renderFilterSummary` builds the mockup's Filters line (`#lib-filters`), which the controls' collapse hides.
 - The mockup's `pickRandom` picks uniformly from the filtered items, and its 72 items are `ITEMS` in `layout.src.html`.
 - WebUI Player Controls adds `casino` to the mockup's icon subset for its Random button.
@@ -219,8 +238,27 @@ Last milestone completed: M12k5
 
 **Acceptance**
 
-- The mockup shows the Random tab, the cycle card, the Random line, and the Library tab without the randomization dropdown as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+- The mockup shows the Randomization tab, the tabs' new order, the cycle card, the Random line, and the Library tab without the randomization dropdown as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 - The settled strengths, with the simulations they came from, are recorded in the Decisions, checked by reading them.
+
+**Evidence**
+
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 66 checks, unchanged.
+- The user approved the design in their review on their devices, after dropping a Remember plays for card from the cycle card, since the setting sits right below it.
+- The panel's tabs became Library, Tags, Stats, Filter, Randomization, and Settings, and the tab Random became Randomization, at the user's request while the slice was planned; the Decisions and every slice were updated to match.
+- The mockup keeps a memory of random picks for the page's life, so under Shuffle it picks nothing twice until every eligible item has been picked and the cycle card counts up; its picks are otherwise uniform, and a reload acts as a server restart.
+- In the mockup, six tabs and Close need 350 px, and the side panel at its 360 px minimum has 358 px inside its border (computed from its CSS).
+- The Stats tab's message and card grid became `serverMessage` and `statCards`, which the cycle card shares.
+- A scratch harness, deleted afterward, ran each candidate with fixed seeds on a copy of the developer's catalog taken on 2026-10-23, with 49,402 eligible files in 863 folders, at 47 picks a day, 20,000 picks per run or 20 seeds of shorter runs (measured):
+  - A pure-random control matched the library's natural shares in all 12 kinds of file, within 1.96 standard errors.
+  - The defaults, Shuffle with Spread by folder, gave folders of 600 or more files 12.5% of picks against their 22.5% of files, untagged files 8.4% against 15.0%, and the most common tag 53.0% against 45.5%.
+  - Favor newly added at a 10, 20, and 33% share over 14 days sent 10.3, 20.3, and 33.2% of the first pick to the 166 files added in the last 14 days, against 0.34% at pure random, and 28, 37, and 42% of them played before they aged out, or 31, 51, and 75% with Spread by folder off. A 7-day window let 22 to 30% of its 100 files play, and a 30-day one 24 to 43% of its 488.
+  - After a simulated 5,000-file import in random folders, the import took 18.8, 27.5, and 39.2% of the first week's picks at those shares over 14 days, against 11.0% at the defaults.
+  - Favor less played's weight to the power 0.5, 1, and 2 gave files played in the last 7 days 0.26, 0.12, and 0.03% of the first pick, against 0.6% at pure random, and never-played files 89.7, 91.2, and 93.5%, against 87.7%.
+  - Only 11 files in the catalog are rated, so Favor higher rated's powers 1, 2, and 3 were compared by their odds, 5 stars 2, 4, and 8 times an unrated file.
+  - Tag spread counting the excess over 16 picks at strength 2, 5, and 10, with Spread by folder off, brought a rare tag, one on under 1% of files, back within 16 picks 0.86, 0.39, and 0.27% of the time, against 1.41% with Shuffle alone, and kept the most common tag at 45.6, 45.4, and 44.6% and untagged files at 14.4, 14.4, and 14.0%. With Spread by folder on, the return fell to 0.18, 0.12, and 0.06%, against 0.35% for the defaults. Over 8 picks it stayed at 0.93 to 1.09%.
+  - Counting every appearance over 8 picks at strength 5 and 10 raised a rare tag's return to 1.72 and 1.87% with Spread by folder off, since pushing common tags down moved picks toward rare ones.
+  - By category on People, counting the excess over 8 picks at strength 5, repeated a People tag within 5 picks 1.46% of the time, against 0.80% for Spread by folder alone and 2.94% for Shuffle alone.
 
 #### Engine slice
 
@@ -228,9 +266,9 @@ Last milestone completed: M12k5
 
 - In `ReelRoulette.Core`'s randomization, an options type replaces `RandomizationModeValue`, and each pick follows the order the Decisions give.
 - Shuffle's memory per device holds each picked file's id and pick time, applies the window on each pick, drops picks past it, starts a new cycle for the eligible files once every one has been picked within the window, and leaves the most recent pick out of the new cycle's first pick.
-- Spread by folder with its skip of recent folders, and Spread by tags with All tags, By category, and "no tags" as a tag.
-- The Favor shares and weights, with the strengths the Mockup slice settles.
-- The cycle numbers: picked this cycle, eligible now, remaining, and the window.
+- Spread by folder with its skip of recent folders, and Spread by tags with All tags, By category, "no tags" as a tag, and only each tag's appearances beyond its share counted.
+- The Favor pool with its share, and the Favor weights, with the strengths the Decisions give.
+- The cycle numbers: picked this cycle, eligible now, and remaining.
 - Each file's folder, its tags, and each tag's rarity are kept per eligible set rather than worked out on every pick.
 - Tests set every draw with a seeded or scripted `Random` and test the weights as exact values.
 
@@ -259,9 +297,9 @@ Last milestone completed: M12k5
 - With every option off, every eligible file is equally likely, and each old mode's combination picks as the Decisions describe, in engine tests with a scripted `Random`.
 - Shuffle picks no file twice within the window, starts a new cycle once every eligible file has been picked within it without picking the most recent one first, drops a pick past the window, and keeps its memory through a change to the eligible set or the options, in engine tests of Shuffle.
 - Spread by folder never picks from a folder of the last 16 picks, or of half the folders when that is smaller, unless those folders hold every file left, in engine tests of folder spread.
-- Spread by tags lowers files sharing tags with recent picks, rarer tags more, counts "no tags" as a tag, and counts only the chosen categories under By category, in engine tests of the weights as exact values.
-- Favor newly added and Favor newly created take their shares, and Favor less played and Favor higher rated multiply the weights as settled, an unrated file as 2.5 stars, in engine tests of the shares and weights.
-- The cycle numbers count the picked, eligible, and remaining files and give the window, in engine tests of the cycle numbers.
+- Spread by tags lowers files sharing tags with recent picks beyond each tag's share, rarer tags more, counts "no tags" as a tag, and counts only the chosen categories under By category, in engine tests of the weights as exact values.
+- Favor newly added and Favor newly created give their one pool its share, by the later date with both on, and leave the pick as usual once the pool is empty, and Favor less played and Favor higher rated multiply the weights as settled, an unrated file as 2.5 stars, in engine tests of the share and weights.
+- The cycle numbers count the picked, eligible, and remaining files, in engine tests of the cycle numbers.
 - `dotnet test ReelRoulette.sln` passes.
 
 #### Contract slice
@@ -272,7 +310,7 @@ Last milestone completed: M12k5
 - A missing option reads as its default.
 - A category id the catalog doesn't have is ignored.
 - `POST /api/random`'s response carries the cycle card's numbers, in a response schema of its own, since `POST /api/play/{itemId}` answers with `RandomResponse`.
-- A cycle route answers with this device's cycle numbers for a filter and the options, for the Random tab to fetch when it opens.
+- A cycle route answers with this device's cycle numbers for a filter and the options, for the Randomization tab to fetch when it opens.
 - A reset route clears this device's shuffle memory.
 - `RandomizationModeValue` and `ParseRandomizationMode` go, and the tests that rely on Smart shuffle being the default, `FilterStateTests.PickIds` and the pick log test, follow the new defaults.
 - The candidate read adds the date added, the modified time, and the rating, and tag spread reads every `item_tags` row once and keeps the eligible files' tags in memory.
@@ -311,16 +349,16 @@ Last milestone completed: M12k5
 
 **Scope**
 
-- The Random tab between Filter and Tags with `casino`, as the approved mockup shows it, with the options applying at once.
+- The panel's tabs in their new order, and the Randomization tab with `casino`, as the approved mockup shows them, with the options applying at once.
 - The cycle card at its top, open by default with its open state kept per device, updated from each pick's response, and fetched from the cycle route once each time the tab opens and again after Reset now.
 - Reset now clears this device's memory through the reset route.
 - The category list comes from the shared tag catalog, which the tab loads when none has loaded, as the Stats tab does.
 - The options, Remember plays for included, are kept per device under one per-device store key and sent with each pick. `rr_randomizationMode` and `AppStoreOptions.storage` go, with no carry-over.
-- Random behavior, Jump or Insert, in the Random tab, kept per device, places the pick of the player's Random button and of R.
+- Random behavior, Jump or Insert, in the Randomization tab, kept per device, places the pick of the player's Random button and of R.
 - The Library tab's randomization dropdown goes, and its controls are laid out as the mockup shows, on a phone on its side too.
-- The Random line under the Filters line, always shown, opening the Random tab, and hidden with the Filters line when the controls collapse.
+- The Random line under the Filters line, always shown, opening the Randomization tab, and hidden with the Filters line when the controls collapse.
 - The panel tab keys are 1 to 6 in tab order, and the shortcut reference lists them.
-- `CONTEXT.md` and `docs/domain-inventory.md` describe the Random tab and the Library tab without the dropdown.
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the Randomization tab, the tabs' new order, and the Library tab without the dropdown.
 
 **Traps**
 
@@ -340,19 +378,19 @@ Last milestone completed: M12k5
 
 **Acceptance**
 
-- The Random tab sets each option, Remember plays for, and Random behavior, each applying at once and kept per device after a page refresh, and each pick sends the options, in Random screen tests and tests for a page refresh keeping them.
-- The cycle card updates from each pick's response, fetches once when the tab opens and after Reset now, and keeps its open state per device, open by default, in Random screen tests.
-- Reset now calls the reset route, in Random screen tests.
-- The category list shows the tag catalog's categories and keeps the chosen ones by id, in Random screen tests.
+- The Randomization tab sets each option, Remember plays for, and Random behavior, each applying at once and kept per device after a page refresh, and each pick sends the options, in Randomization screen tests and tests for a page refresh keeping them.
+- The cycle card updates from each pick's response, fetches once when the tab opens and after Reset now, and keeps its open state per device, open by default, in Randomization screen tests.
+- Reset now calls the reset route, in Randomization screen tests.
+- The category list shows the tag catalog's categories and keeps the chosen ones by id, in Randomization screen tests.
 - Random from the middle of the history adds the pick at the end with Jump, and right after the current item with the plays ahead kept after it with Insert, for the Random button and R, in Player screen tests and keyboard tests.
-- The Library tab has no randomization dropdown, and the Random line always shows, opens the Random tab, and hides with the Filters line, in Library screen tests.
-- 1 to 6 open Library, Filter, Random, Tags, Stats, and Settings, and the shortcut reference lists them, in keyboard tests per binding.
+- The Library tab has no randomization dropdown, and the Random line always shows, opens the Randomization tab, and hides with the Filters line, in Library screen tests.
+- 1 to 6 open Library, Tags, Stats, Filter, Randomization, and Settings, and the shortcut reference lists them, in keyboard tests per binding.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's phone.
 
 #### Release checks
 
-- Manual: On a desktop browser, the iPad, and an Android phone, the Random tab's options change the picks at once, the Random line names them and opens the tab, and they're kept after a page refresh.
+- Manual: On a desktop browser, the iPad, and an Android phone, the Randomization tab's options change the picks at once, the Random line names them and opens the tab, and they're kept after a page refresh.
 
 #### Not included
 
@@ -1256,7 +1294,7 @@ Last milestone completed: M12k5
   - in the Tags tab, an item's hidden tags included;
   - in the Library tab's preset dropdown, where a remembered preset the profile hides shows **None\*** with its filter kept, as a deleted one does, and in the Filters line's tag counts;
   - in Auto Tag and the Stats tab's tag chips;
-  - in the Random tab's category list.
+  - in the Randomization tab's category list.
 - Applying a filter or preset in a profile leaves out its conditions on hidden tags, as the shared fixture says.
 - The "modified" marker compares a preset with its conditions on hidden tags and sources left out.
 - A new tag, category, or preset name is checked against the whole catalog, hidden ones included, as the approved mockup words it.
