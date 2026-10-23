@@ -340,26 +340,20 @@ public static class ServerHostComposition
 
         app.MapPost("/api/presets/{presetId}/delete", DeletePreset);
 
-        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, OperatorTestingService testingService) =>
+        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
+            playback.TrySelectRandom(request, state.GetPresetCatalogSnapshot(), out var response, out var statusCode, out var error)
+                ? Results.Ok(response)
+                : Results.Json(new { error }, statusCode: statusCode));
+
+        app.MapPost("/api/random/cycle", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
+            playback.TryGetRandomCycle(request, state.GetPresetCatalogSnapshot(), out var response, out var statusCode, out var error)
+                ? Results.Ok(response)
+                : Results.Json(new { error }, statusCode: statusCode));
+
+        app.MapPost("/api/random/reset", (RandomResetRequest? request, LibraryPlaybackService playback) =>
         {
-            request.ClientId = NormalizeOptionalIdentity(request.ClientId);
-            request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-            if (!playback.TrySelectRandom(
-                    request,
-                    state.GetPresetCatalogSnapshot(),
-                    out var response,
-                    out var statusCode,
-                    out var error))
-            {
-                return Results.Json(new { error }, statusCode: statusCode);
-            }
-
-            if (response is null)
-            {
-                return Results.Json(new { });
-            }
-
-            return Results.Ok(response);
+            playback.ResetRandom(request?.ClientId);
+            return Results.NoContent();
         });
 
         app.MapPost("/api/play/{itemId}", PlayItem);

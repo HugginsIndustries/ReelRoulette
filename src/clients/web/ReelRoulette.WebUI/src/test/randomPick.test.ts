@@ -8,6 +8,7 @@ import {
   type RandomPickOutcome,
   type RandomPickSend
 } from "../playback/randomPick";
+import { randomAnswer } from "./randomAnswer";
 import { LIBRARY_EMPTY } from "./serverReasons";
 
 interface SentRequest {
@@ -66,12 +67,12 @@ describe("randomPick", () => {
     expect(sent).toHaveLength(1);
     expect(JSON.parse(sent[0].body)).toEqual({ press: 1 });
 
-    sent[0].resolve(jsonResponse(randomItem("a")));
+    sent[0].resolve(randomAnswer(randomItem("a")));
     await expect(first).resolves.toEqual({ kind: "picked", item: randomItem("a") });
 
     const next = picker.pick({ press: 4 });
     expect(sent).toHaveLength(2);
-    sent[1].resolve(jsonResponse(randomItem("b")));
+    sent[1].resolve(randomAnswer(randomItem("b")));
     await expect(next).resolves.toEqual({ kind: "picked", item: randomItem("b") });
   });
 
@@ -97,7 +98,7 @@ describe("randomPick", () => {
     const fresh = picker.pick({ press: 3 });
     expect(sent).toHaveLength(2);
     expect(sent[1].signal.aborted).toBe(false);
-    sent[1].resolve(jsonResponse(randomItem("b")));
+    sent[1].resolve(randomAnswer(randomItem("b")));
     await expect(fresh).resolves.toEqual({ kind: "picked", item: randomItem("b") });
   });
 
@@ -110,12 +111,12 @@ describe("randomPick", () => {
     await expect(stale).resolves.toEqual({ kind: "timedOut", timeoutMs: PLAYBACK_REQUEST_TIMEOUT_MS });
 
     const newer = picker.pick({ press: 2 });
-    sent[0].resolve(jsonResponse(randomItem("late")));
+    sent[0].resolve(randomAnswer(randomItem("late")));
     await vi.advanceTimersByTimeAsync(0);
     // The late answer neither completes the newer pick nor frees it for another press.
     await expect(picker.pick({ press: 3 })).resolves.toEqual({ kind: "busy" });
 
-    sent[1].resolve(jsonResponse(randomItem("b")));
+    sent[1].resolve(randomAnswer(randomItem("b")));
     await expect(newer).resolves.toEqual({ kind: "picked", item: randomItem("b") });
     expect(sent).toHaveLength(2);
   });
@@ -124,12 +125,12 @@ describe("randomPick", () => {
     const answers: Array<() => Promise<Response>> = [
       async () => new Response("", { status: 401 }),
       async () => jsonResponse({ error: LIBRARY_EMPTY }, 503),
-      async () => jsonResponse({}),
+      async () => randomAnswer(null),
       async () => {
         throw new TypeError("Failed to fetch");
       },
       async () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }),
-      async () => jsonResponse(randomItem("a"))
+      async () => randomAnswer(randomItem("a"))
     ];
     const picker = createRandomPicker(() => answers.shift()!());
 
@@ -149,8 +150,6 @@ describe("randomPickRequest", () => {
   const favorites = { id: " preset-favorites ", name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
   const inputs: RandomPickInputs = {
     clientId: "client-1",
-    sessionId: "session-1",
-    randomizationMode: "WeightedRandom",
     appliedFilter: { ...createDefaultFilterState(), favoritesMode: "only" },
     presets: [favorites],
     selectedPresetValue: " preset-favorites "
@@ -160,14 +159,12 @@ describe("randomPickRequest", () => {
     const body = randomPickRequest(inputs);
     expect(body).toMatchObject({
       clientId: "client-1",
-      sessionId: "session-1",
       includeVideos: true,
       includePhotos: true,
-      randomizationMode: "WeightedRandom",
       presetId: "preset-favorites"
     });
     expect(body.filterState?.favoritesMode).toBe("only");
-    expect(Object.keys(body)).toEqual(["clientId", "sessionId", "includeVideos", "includePhotos", "randomizationMode", "filterState", "presetId"]);
+    expect(Object.keys(body)).toEqual(["clientId", "includeVideos", "includePhotos", "filterState", "presetId"]);
   });
 
   it("leaves the preset out for None, the starred row, and a preset whose filter no longer matches", () => {

@@ -51,8 +51,8 @@ export const PRESET_MENU_LOAD_FAILED = "Error loading presets";
 export const PRESET_MENU_BLOCKED = "Server compatibility check failed";
 export const PRESET_MENU_NO_LIBRARY = "Running without a library";
 
-/** The playing item, as the random and play responses describe it. */
-export type PlayingItem = components["schemas"]["RandomResponse"];
+/** The playing item, as the play response and a random pick's item describe it. */
+export type PlayingItem = components["schemas"]["PlaybackItemResponse"];
 
 /**
  * How autoplay moves on: Normal advances a photo after Advance after and a video at its end; Timer advances every item

@@ -584,8 +584,56 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request a random media item */
+        /**
+         * Request a random media item
+         * @description Picks one of the eligible items with the request's options and remembers the pick for the device its
+         *     `clientId` names. `item` is null when nothing is eligible, and `cycle` holds the device's Shuffle cycle
+         *     numbers after the pick.
+         */
         post: operations["postRandom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/random/cycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the device's Shuffle cycle numbers
+         * @description The cycle numbers a pick with the same body would start from: the eligible items picked on the device
+         *     within the window, the eligible items, and those left. Takes the same body as `POST /api/random` and
+         *     changes nothing.
+         */
+        post: operations["postRandomCycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/random/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear the device's Shuffle memory
+         * @description Clears the picks Shuffle remembers for the device the `clientId` names, and its last pick, so every
+         *     eligible item can be picked again. The last picks Spread by folder skips stay.
+         */
+        post: operations["postRandomReset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1593,13 +1641,82 @@ export interface components {
              *     defaults, so blacklisted items are left out unless it says otherwise.
              */
             filterState?: components["schemas"]["FilterState"] | null;
+            /** @description The device whose random-pick memory the request uses. Requests without one share a memory of their own. */
             clientId?: string | null;
-            sessionId?: string | null;
             /** @default true */
             includeVideos: boolean;
             /** @default true */
             includePhotos: boolean;
-            randomizationMode?: string | null;
+            /** @description The options the pick combines. Omitted or null, every option takes its default. */
+            options?: components["schemas"]["RandomPickOptionsRequest"] | null;
+        };
+        /**
+         * @description The options a random pick combines. A missing option takes its default, a `rememberPlaysForDays` other than
+         *     the values listed or null reads as 30, and a `spreadByTags` the server doesn't know reads as `off`. With every
+         *     option off, picks are pure random.
+         */
+        RandomPickOptionsRequest: {
+            /**
+             * @description Leaves out the items picked on this device within the window, until every eligible item has been.
+             * @default true
+             */
+            shuffle: boolean;
+            /**
+             * Format: int32
+             * @description How long the device's picks are remembered, in days, or null for until every eligible item has been
+             *     picked. Any other value reads as 30.
+             * @default 30
+             * @enum {integer|null}
+             */
+            rememberPlaysForDays: 1 | 7 | 30 | 90 | null;
+            /**
+             * @description Leaves out the items in the folders of the device's recent picks.
+             * @default true
+             */
+            spreadByFolder: boolean;
+            /**
+             * @description Makes items whose tags came up in the device's recent picks beyond their share less likely, counting
+             *     every tag or only the tags of `spreadCategoryIds`. Read in any case; any other value reads as `off`.
+             * @default off
+             * @enum {string}
+             */
+            spreadByTags: "off" | "allTags" | "byCategory";
+            /** @description The categories whose tags count under `byCategory`. An id no category has is ignored. */
+            spreadCategoryIds?: string[];
+            /** @default false */
+            favorLessPlayed: boolean;
+            /** @default false */
+            favorNewlyAdded: boolean;
+            /** @default false */
+            favorNewlyCreated: boolean;
+            /** @default false */
+            favorHigherRated: boolean;
+        };
+        RandomPickResponse: {
+            /** @description The picked item, or null when nothing is eligible. */
+            item: components["schemas"]["PlaybackItemResponse"] | null;
+            cycle: components["schemas"]["RandomPickCycleResponse"];
+        };
+        RandomPickCycleResponse: {
+            /**
+             * Format: int32
+             * @description The eligible items picked on this device within the window, in the current cycle.
+             */
+            picked: number;
+            /**
+             * Format: int32
+             * @description The items the filter and the media types leave.
+             */
+            eligible: number;
+            /**
+             * Format: int32
+             * @description The eligible items not yet picked in the cycle; with `picked`, they add up to `eligible`.
+             */
+            remaining: number;
+        };
+        RandomResetRequest: {
+            /** @description The device whose Shuffle memory to clear. */
+            clientId?: string | null;
         };
         PlayItemRequest: {
             clientId?: string | null;
@@ -1610,7 +1727,7 @@ export interface components {
              */
             recordPlayback: boolean;
         };
-        RandomResponse: {
+        PlaybackItemResponse: {
             /** @description Full path of the file. */
             id: string;
             /** @description Catalog item id. */
@@ -3535,13 +3652,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Random media result */
+            /** @description The picked item, or null when nothing is eligible, and the cycle numbers */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RandomResponse"];
+                    "application/json": components["schemas"]["RandomPickResponse"];
                 };
             };
             /** @description Invalid request */
@@ -3582,6 +3699,98 @@ export interface operations {
             };
         };
     };
+    postRandomCycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RandomRequest"];
+            };
+        };
+        responses: {
+            /** @description The cycle numbers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RandomPickCycleResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `filterState` is omitted or null and no preset has the `presetId` id. `all-media` never returns 404. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The server is running without a library, with a `code` as the LibraryUnavailable response describes; or, without a `code`, the library has no items or the server couldn't read it. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postRandomReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RandomResetRequest"];
+            };
+        };
+        responses: {
+            /** @description The device's Shuffle memory is cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
     postPlayItem: {
         parameters: {
             query?: never;
@@ -3598,13 +3807,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Playable media descriptor (same shape as random playback) */
+            /** @description The item to play, as a random pick's `item` gives it */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RandomResponse"];
+                    "application/json": components["schemas"]["PlaybackItemResponse"];
                 };
             };
             /** @description Missing or blank item id */

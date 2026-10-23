@@ -21,6 +21,7 @@ import {
   pointerUp,
   pressKey,
   pressRatingKey,
+  randomAnswer,
   ratingRequests,
   resetPage,
   currentStyle,
@@ -119,7 +120,7 @@ async function mountFilter(
   const server = new FakeServer();
   server.on("GET", "/api/sources", () => json(SOURCES));
   server.on("POST", "/api/tag-editor/model", () => json(TAG_MODEL));
-  server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+  server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
   const presets = servePresets(server, presetList);
   setup(server);
   const page = mountPage({ server });

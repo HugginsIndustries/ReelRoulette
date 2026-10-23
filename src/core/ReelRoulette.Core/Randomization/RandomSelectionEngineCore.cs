@@ -60,6 +60,8 @@ public static class RandomSelectionEngineCore
 
         memory.Picks[item.Id] = nowUtc;
         memory.LastPickId = item.Id;
+        memory.LastPickUtc = nowUtc;
+        memory.LastPickWindowDays = options.RememberPlaysForDays;
         memory.AddRecentPick(item.Id, set.FolderKeys[set.FolderIndex[index]]);
         return new RandomPickResult(item, new RandomPickCycle(picked, eligibleItems.Count));
     }
@@ -75,7 +77,7 @@ public static class RandomSelectionEngineCore
         ArgumentNullException.ThrowIfNull(eligibleItems);
         ArgumentNullException.ThrowIfNull(options);
 
-        var cutoff = WindowStart(options, nowUtc);
+        var cutoff = WindowStart(options.RememberPlaysForDays, nowUtc);
         var picked = 0;
         foreach (var item in eligibleItems)
         {
@@ -88,7 +90,10 @@ public static class RandomSelectionEngineCore
         return new RandomPickCycle(picked, eligibleItems.Count);
     }
 
-    /// <summary>Clears Shuffle's memory and the last pick. The recent picks Spread looks at stay.</summary>
+    /// <summary>
+    /// Clears Shuffle's memory and the last pick. The recent picks Spread looks at stay, and so do the last pick's time
+    /// and window, which say when the memory is past its window.
+    /// </summary>
     public static void Reset(RandomPickMemory memory)
     {
         ArgumentNullException.ThrowIfNull(memory);
@@ -137,7 +142,7 @@ public static class RandomSelectionEngineCore
         DateTime nowUtc)
     {
         var count = items.Count;
-        var cutoff = WindowStart(options, nowUtc);
+        var cutoff = WindowStart(options.RememberPlaysForDays, nowUtc);
         var inMemory = new bool[count];
         var picked = 0;
         for (var i = 0; i < count; i++)
@@ -426,9 +431,9 @@ public static class RandomSelectionEngineCore
     }
 
     /// <summary>A pick at or before this time is past the window. Null when the window is until everything has played.</summary>
-    private static DateTime? WindowStart(RandomPickOptions options, DateTime nowUtc)
+    internal static DateTime? WindowStart(int? windowDays, DateTime nowUtc)
     {
-        return options.RememberPlaysForDays is int days ? nowUtc.AddDays(-days) : null;
+        return windowDays is int days ? nowUtc.AddDays(-days) : null;
     }
 
     private static bool IsPickedWithinWindow(RandomPickMemory memory, string id, DateTime? windowStart)
@@ -438,7 +443,7 @@ public static class RandomSelectionEngineCore
 
     private static void DropPicksPastWindow(RandomPickMemory memory, RandomPickOptions options, DateTime nowUtc)
     {
-        if (WindowStart(options, nowUtc) is not DateTime start)
+        if (WindowStart(options.RememberPlaysForDays, nowUtc) is not DateTime start)
         {
             return;
         }

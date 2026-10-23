@@ -200,7 +200,10 @@ internal static class OpenApiSpec
         return properties;
     }
 
-    /// <summary>Returns the values listed under <c>components.schemas.{name}.properties.{property}.enum</c>, in order.</summary>
+    /// <summary>
+    /// Returns the values listed under <c>components.schemas.{name}.properties.{property}.enum</c>, in order, without the
+    /// quotes a value such as <c>"off"</c> needs so older YAML readers don't take it for a boolean.
+    /// </summary>
     public static List<string> ReadSchemaPropertyEnum(string schemaName, string propertyName)
     {
         var values = new List<string>();
@@ -220,7 +223,7 @@ internal static class OpenApiSpec
             }
             else if (inEnum && line.TrimStart().StartsWith("- ", StringComparison.Ordinal))
             {
-                values.Add(line.TrimStart()[2..]);
+                values.Add(line.TrimStart()[2..].Trim('"'));
             }
         }
 

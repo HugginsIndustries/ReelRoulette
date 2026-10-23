@@ -16,6 +16,23 @@ public sealed class RandomPickMemory
 
     internal EligibleSetData? EligibleSet { get; set; }
 
+    /// <summary>When the last pick was made, which a reset keeps.</summary>
+    internal DateTime? LastPickUtc { get; set; }
+
+    /// <summary>The window of the last pick, in days, or null for until everything has played, which a reset keeps.</summary>
+    internal int? LastPickWindowDays { get; set; }
+
+    /// <summary>
+    /// Whether the last pick has passed the window it was made with, so every pick in the memory has dropped out of
+    /// that window. Never under until everything has played, nor before the first pick.
+    /// </summary>
+    public bool IsPastWindow(DateTime nowUtc)
+    {
+        return LastPickUtc is DateTime last
+            && RandomSelectionEngineCore.WindowStart(LastPickWindowDays, nowUtc) is DateTime start
+            && last <= start;
+    }
+
     internal void AddRecentPick(string id, string folderKey)
     {
         RecentPicks.Add(new RecentPick(id, folderKey));

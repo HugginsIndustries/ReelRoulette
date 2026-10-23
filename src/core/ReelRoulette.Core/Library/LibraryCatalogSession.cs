@@ -126,7 +126,8 @@ public sealed class LibraryCatalogSession
 
     /// <summary>The random candidates query.</summary>
     internal static string RandomCandidatesSql(string where) => $"""
-        SELECT items.id, items.full_path, items.play_count, items.last_played_utc
+        SELECT items.id, items.full_path, items.play_count, items.last_played_utc,
+               items.date_added_utc, items.last_write_time_utc, items.rating
         {LibraryCatalogListSql.FromClause}
         {where};
         """;
@@ -174,13 +175,19 @@ public sealed class LibraryCatalogSession
     /// <summary>
     /// The items random selection picks from: the list filter over enabled sources, plus the media type,
     /// with only the columns selection reads, in ordinal id order. The order is applied here rather than
-    /// with ORDER BY, which walks the id index and looks up every row.
+    /// with ORDER BY, which walks the id index and looks up every row. With <paramref name="includeTags"/>, each
+    /// item also gets its tags, each with its category from the tag catalog, or none for a tag the catalog doesn't
+    /// have. Everything comes from one read.
     /// </summary>
-    public List<RandomizationItem> QueryRandomCandidates(FilterStateModel filter, MediaTypeValue? requiredMediaType = null)
+    public List<RandomizationItem> QueryRandomCandidates(
+        FilterStateModel filter,
+        MediaTypeValue? requiredMediaType = null,
+        bool includeTags = false)
     {
         ArgumentNullException.ThrowIfNull(filter);
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         LibraryCatalogListSql.RegisterCollation(connection);
+        using var transaction = connection.BeginTransaction(deferred: true);
 
         var request = new LibraryListRequest { Filter = filter };
         var catalogTags = ReadCatalogTags(connection);
@@ -191,12 +198,12 @@ public sealed class LibraryCatalogSession
             where += " AND items.media_type = " + ((int)requiredMediaType.Value).ToString(CultureInfo.InvariantCulture);
         }
 
-        using var command = connection.CreateCommand();
-        command.CommandText = RandomCandidatesSql(where);
-        args.Bind(command);
         var items = new List<RandomizationItem>();
-        using (var reader = command.ExecuteReader())
+        using (var command = connection.CreateCommand())
         {
+            command.CommandText = RandomCandidatesSql(where);
+            args.Bind(command);
+            using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 items.Add(new RandomizationItem
@@ -204,13 +211,61 @@ public sealed class LibraryCatalogSession
                     Id = reader.GetString(0),
                     FullPath = reader.GetString(1),
                     PlayCount = reader.GetInt32(2),
-                    LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 3)
+                    LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 3),
+                    DateAddedUtc = LibraryCatalogStore.ReadUtc(reader, 4),
+                    DateCreatedUtc = LibraryCatalogStore.ReadUtc(reader, 5),
+                    RatingHalfStars = reader.IsDBNull(6) ? null : reader.GetInt32(6)
                 });
             }
         }
 
+        if (includeTags)
+        {
+            AttachRandomizationTags(connection, catalogTags, items);
+        }
+
+        transaction.Commit();
         items.Sort(static (left, right) => string.CompareOrdinal(left.Id, right.Id));
         return items;
+    }
+
+    /// <summary>
+    /// Reads every item's tags once and gives each candidate its own, in their order, with each tag's category from the
+    /// first catalog tag of its fold, as the filter matches them, or none when the catalog has no such tag.
+    /// </summary>
+    private static void AttachRandomizationTags(
+        SqliteConnection connection,
+        IReadOnlyList<LibraryCatalogTag> catalogTags,
+        List<RandomizationItem> items)
+    {
+        var categoryByFold = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var tag in catalogTags)
+        {
+            categoryByFold.TryAdd(tag.NameFold, tag.CategoryId);
+        }
+
+        Dictionary<string, List<string>> foldsByItem;
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT item_id, name_fold FROM item_tags ORDER BY item_id, position;";
+            foldsByItem = LibraryCatalogStore.ReadTagGroups(command);
+        }
+
+        foreach (var item in items)
+        {
+            if (!foldsByItem.TryGetValue(item.Id, out var folds))
+            {
+                continue;
+            }
+
+            var tags = new RandomizationTag[folds.Count];
+            for (var i = 0; i < folds.Count; i++)
+            {
+                tags[i] = new RandomizationTag(folds[i], categoryByFold.GetValueOrDefault(folds[i], string.Empty));
+            }
+
+            item.Tags = tags;
+        }
     }
 
     public LibraryCatalogItem? ReadListedItem(string identifier)
@@ -2388,26 +2443,7 @@ public sealed class LibraryCatalogSession
     {
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT item_id, name FROM item_tags ORDER BY item_id, position;";
-        return ReadTagGroups(command);
-    }
-
-    private static Dictionary<string, List<string>> ReadTagGroups(SqliteCommand command)
-    {
-        var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            var itemId = reader.GetString(0);
-            if (!tags.TryGetValue(itemId, out var names))
-            {
-                names = [];
-                tags[itemId] = names;
-            }
-
-            names.Add(reader.GetString(1));
-        }
-
-        return tags;
+        return LibraryCatalogStore.ReadTagGroups(command);
     }
 
     private static List<LibraryCatalogTag> ReadCatalogTags(SqliteConnection connection)
@@ -2483,22 +2519,7 @@ public sealed class LibraryCatalogSession
         using var command = connection.CreateCommand();
         command.CommandText = $"SELECT item_id, name FROM item_tags WHERE item_id IN ({string.Join(", ", names)}) ORDER BY item_id, position;";
         args.Bind(command);
-        var tagsByItem = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        using (var reader = command.ExecuteReader())
-        {
-            while (reader.Read())
-            {
-                var itemId = reader.GetString(0);
-                if (!tagsByItem.TryGetValue(itemId, out var namesForItem))
-                {
-                    namesForItem = [];
-                    tagsByItem[itemId] = namesForItem;
-                }
-
-                namesForItem.Add(reader.GetString(1));
-            }
-        }
-
+        var tagsByItem = LibraryCatalogStore.ReadTagGroups(command);
         foreach (var item in items)
         {
             if (tagsByItem.TryGetValue(item.Id, out var tags))

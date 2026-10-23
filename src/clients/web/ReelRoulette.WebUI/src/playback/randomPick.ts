@@ -10,13 +10,12 @@ import {
 import { PLAYBACK_REQUEST_TIMEOUT_MS, readJson, refusalError, UnauthorizedError, withTimeout } from "../api/serverRequest";
 import type { components } from "../types/openapi.generated";
 
-type RandomResponse = components["schemas"]["RandomResponse"];
+type PlaybackItemResponse = components["schemas"]["PlaybackItemResponse"];
+type RandomPickResponse = components["schemas"]["RandomPickResponse"];
 export type RandomPickRequest = components["schemas"]["RandomRequest"];
 
 export interface RandomPickInputs {
   clientId: string;
-  sessionId: string;
-  randomizationMode: string;
   appliedFilter: FilterState;
   presets: readonly { id: string; filterState?: ApiFilterState | null }[];
   /** The preset dropdown's value: a preset id, empty for None, or the starred row. */
@@ -41,10 +40,8 @@ export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
   const presetId = presetStillMatches ? String(selectedPreset?.id || "").trim() : "";
   const body: RandomPickRequest = {
     clientId: inputs.clientId,
-    sessionId: inputs.sessionId,
     includeVideos: true,
     includePhotos: true,
-    randomizationMode: inputs.randomizationMode,
     filterState: serializeFilterStateForApi(inputs.appliedFilter)
   };
   if (presetId) {
@@ -56,7 +53,7 @@ export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
 export type RandomPickOutcome =
   /** A pick is already waiting for the server, so nothing was sent. */
   | { kind: "busy" }
-  | { kind: "picked"; item: RandomResponse }
+  | { kind: "picked"; item: PlaybackItemResponse }
   /** The server found nothing eligible for the filter. */
   | { kind: "none" }
   | { kind: "unauthorized" }
@@ -117,11 +114,12 @@ async function request(send: RandomPickSend, body: string, signal: AbortSignal):
       return { kind: "failed", error: await refusalError(response) };
     }
 
-    const data = await readJson<Partial<RandomResponse> | null>(response);
-    if (!data?.mediaUrl) {
+    const data = await readJson<Partial<RandomPickResponse> | null>(response);
+    const item = data?.item;
+    if (!item?.mediaUrl) {
       return { kind: "none" };
     }
-    return { kind: "picked", item: data as RandomResponse };
+    return { kind: "picked", item };
   } catch (error) {
     // A send that answers 401 itself, as `api.request` does, asks for pairing and throws.
     if (error instanceof UnauthorizedError) {

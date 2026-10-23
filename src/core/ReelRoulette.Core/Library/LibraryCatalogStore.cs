@@ -1478,22 +1478,11 @@ public static class LibraryCatalogStore
 
     private static List<LibraryCatalogItem> ReadItemRows(SqliteConnection connection)
     {
-        var tagsByItem = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        Dictionary<string, List<string>> tagsByItem;
         using (var tagCommand = connection.CreateCommand())
         {
             tagCommand.CommandText = "SELECT item_id, name FROM item_tags ORDER BY item_id, position;";
-            using var tagReader = tagCommand.ExecuteReader();
-            while (tagReader.Read())
-            {
-                var itemId = tagReader.GetString(0);
-                if (!tagsByItem.TryGetValue(itemId, out var names))
-                {
-                    names = [];
-                    tagsByItem[itemId] = names;
-                }
-
-                names.Add(tagReader.GetString(1));
-            }
+            tagsByItem = ReadTagGroups(tagCommand);
         }
 
         using var command = connection.CreateCommand();
@@ -1547,6 +1536,29 @@ public static class LibraryCatalogStore
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Groups the rows of an <c>item_tags</c> read by item: the first column is the item id, and each item keeps the
+    /// second column's values in the order read.
+    /// </summary>
+    internal static Dictionary<string, List<string>> ReadTagGroups(SqliteCommand command)
+    {
+        var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var itemId = reader.GetString(0);
+            if (!tags.TryGetValue(itemId, out var values))
+            {
+                values = [];
+                tags[itemId] = values;
+            }
+
+            values.Add(reader.GetString(1));
+        }
+
+        return tags;
     }
 
     internal static string NormalizeCategoryId(string? categoryId)

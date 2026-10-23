@@ -8,7 +8,7 @@ public sealed class FilterDateRangeTests
     // 03:00 UTC on 22 October is 22:00 on 21 October five hours behind UTC, so "today" there is the 21st.
     private static readonly FilterClock LateEvening = new(
         new DateTimeOffset(2030, 10, 22, 3, 0, 0, TimeSpan.Zero),
-        FixedTimeProvider.FiveHoursBehindUtc);
+        TestClock.FiveHoursBehindUtc);
 
     [Theory]
     [InlineData(FilterDateRangePreset.Last7Days, "2030-10-15")]

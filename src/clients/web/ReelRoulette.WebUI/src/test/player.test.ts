@@ -11,6 +11,7 @@ import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { NO_LIBRARY_PLAY_NOTICE } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
+import { randomAnswer } from "./randomAnswer";
 import { FILE_NOT_IN_LIBRARY, LIBRARY_EMPTY } from "./serverReasons";
 
 const VIDEO: PlayingItem = {
@@ -178,7 +179,7 @@ function setup(
       return reply;
     }
     if (path === "/api/random") {
-      return json(randomAnswers.length > 0 ? randomAnswers.shift() : { mediaUrl: null });
+      return randomAnswer(randomAnswers.length > 0 ? randomAnswers.shift() : null);
     }
     // A history step's play: the server answers with the entry it plays, its media URL unchanged.
     if (path.startsWith("/api/play/")) {
@@ -401,10 +402,8 @@ describe("createPlayer", () => {
     await page.player.pickRandom();
     expect(page.requests("/api/random")[0]!.body).toMatchObject({
       clientId: "client-1",
-      sessionId: "session-1",
       includeVideos: true,
-      includePhotos: true,
-      randomizationMode: "SmartShuffle"
+      includePhotos: true
     });
     expect(page.notices).toEqual(["No eligible media for current filters."]);
     expect(page.statuses).toEqual([]);
@@ -726,7 +725,7 @@ describe("createPlayer", () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(page.store.loading.shown.value).toBe(true);
 
-    answer(json({ ...SECOND_VIDEO }));
+    answer(randomAnswer({ ...SECOND_VIDEO }));
     await vi.advanceTimersByTimeAsync(0);
     expect(video.src).toBe("http://server/api/media/item-other?token=t");
     expect(video.paused).toBe(true);
@@ -751,7 +750,7 @@ describe("createPlayer", () => {
     page.player.next();
     page.player.autoPause();
 
-    answer(json({ ...PHOTO }));
+    answer(randomAnswer({ ...PHOTO }));
     await vi.advanceTimersByTimeAsync(0);
     page.player.photoLoaded();
     expect(page.store.current.value?.itemId).toBe("item-photo");
@@ -1816,7 +1815,7 @@ describe("Loading… on the player's indicator", () => {
   function holdRandom(page: ReturnType<typeof setup>) {
     let answer: (response: Response) => void = () => {};
     page.replies.set("/api/random", () => new Promise<Response>((resolve) => (answer = resolve)) as unknown as Response);
-    return (item: unknown) => answer(json(item));
+    return (item: unknown) => answer(randomAnswer(item));
   }
 
   it("shows only after half a second, counted once across a pick and its media load, and never as a message", async () => {

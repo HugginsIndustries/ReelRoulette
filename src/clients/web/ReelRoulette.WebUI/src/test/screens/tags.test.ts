@@ -17,6 +17,7 @@ import {
   pointerMove,
   pointerUp,
   pressKey,
+  randomAnswer,
   resetPage,
   scrollOnFocus,
   selectedPresetLabel,
@@ -221,7 +222,7 @@ async function mountTags(
 ): Promise<TagPage> {
   const server = new FakeServer();
   const tags = serveTags(server);
-  server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+  server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
   server.on("GET", "/api/sources", () => json([]));
   options.setup?.(server, tags);
   mountedServer = server;
@@ -903,7 +904,7 @@ describe("following the playing item", () => {
 
   /** Plays `item` as the next random pick, with Next beside the open panel. */
   async function playNext(server: FakeServer, item: typeof VIDEO_ITEM): Promise<void> {
-    server.on("POST", "/api/random", () => json(item));
+    server.on("POST", "/api/random", () => randomAnswer(item));
     await click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect((document.getElementById("video") as HTMLVideoElement).src).toContain(item.mediaUrl.split("?")[0]));
     await settle();

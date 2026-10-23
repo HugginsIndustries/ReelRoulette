@@ -2,12 +2,12 @@ import type { RuntimeConfig } from "../types/runtimeConfig";
 import { HttpStatusError, readJson, refusalError, sendRequest } from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
-type RandomResponse = components["schemas"]["RandomResponse"];
+type PlaybackItemResponse = components["schemas"]["PlaybackItemResponse"];
 
 export type PlayItemSuccess = {
   ok: true;
   statusCode: number;
-  response: RandomResponse;
+  response: PlaybackItemResponse;
 };
 
 /** A play the server refused, with its status and, when it gave them, its reason and code. */
@@ -137,7 +137,7 @@ export async function requestPlayItem(
   });
 
   if (response.ok) {
-    const playResponse = await readJson<RandomResponse>(response);
+    const playResponse = await readJson<PlaybackItemResponse>(response);
     return {
       ok: true,
       statusCode: response.status,

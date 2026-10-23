@@ -14,6 +14,7 @@ import {
   mountPage,
   pageReady,
   popupsShown,
+  randomAnswer,
   resetPage,
   setViewport,
   settle,
@@ -286,7 +287,7 @@ describe("Loudness normalization", () => {
   function serverWith(item: unknown = QUIET_VIDEO): FakeServer {
     const server = new FakeServer();
     server.on("GET", "/api/library/stats", () => json({ global: { baselineLoudnessLufs: -27.8 }, sources: [] }));
-    server.on("POST", "/api/random", () => json(item));
+    server.on("POST", "/api/random", () => randomAnswer(item));
     return server;
   }
 
@@ -723,7 +724,7 @@ describe("Autoplay mode and Loop stops autoplay", () => {
   it("apply at once: Timer advances a playing video after Advance after, and with Loop stops autoplay off a photo with Loop on advances", async () => {
     fakeTimers();
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     mountPage({ server });
     await flush();
     fireEvent.click(playerButton("Autoplay"));
@@ -742,7 +743,7 @@ describe("Autoplay mode and Loop stops autoplay", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(server.requests("POST", "/api/random")).toHaveLength(2);
 
-    server.on("POST", "/api/random", () => json(PHOTO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(PHOTO_ITEM));
     fireEvent.click(radio("Normal"));
     await flush();
     fireEvent.click(playerButton("Next"));
@@ -949,7 +950,7 @@ describe("Advance after", () => {
   it("changes only the length of a photo showing beside the player, keeping the time it has shown", async () => {
     fakeTimers();
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(PHOTO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(PHOTO_ITEM));
     mountPage({ server });
     await flush();
 
@@ -983,7 +984,7 @@ describe("Advance after", () => {
     setViewport(PHONE_VIEWPORT);
     fakeTimers();
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(PHOTO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(PHOTO_ITEM));
     mountPage({ server });
     await flush();
 
@@ -1274,7 +1275,7 @@ describe("the panel's side", () => {
 describe("Auto-Pause", () => {
   it("offers Responsive, Always, and Never, starts at Responsive, and pauses as the chosen mode says", async () => {
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     await mount(server);
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await waitFor(() => expect(video().paused).toBe(false));
@@ -1548,7 +1549,7 @@ describe("Ambient mode", () => {
 
   it("applies at once: off hides the glow around a playing video, and on shows it again, and each is kept", async () => {
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     await mount(server);
     await click(screen.getByText(EMPTY_STATE_TEXT));
     await openSettings();
@@ -1567,7 +1568,7 @@ describe("Ambient mode", () => {
     fakeTimers();
     const canvases = stubCanvas();
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     mountPage({ server });
     await flush();
     stubElementProperty(video(), "readyState", 4);
@@ -1724,7 +1725,7 @@ describe("Notifications", () => {
 
   it("applies each popup setting at once and keeps it, as the next message shows", async () => {
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     server.on("POST", "/api/favorite", () => json({}));
     await mount(server);
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));

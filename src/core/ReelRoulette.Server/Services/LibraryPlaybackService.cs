@@ -9,23 +9,44 @@ namespace ReelRoulette.Server.Services;
 
 public sealed class LibraryPlaybackService
 {
+    /// <summary>The memory key of requests that name no device.</summary>
+    private const string SharedDeviceKey = "";
+
     private readonly LibraryCatalogHost _catalog;
     private readonly ServerMediaTokenStore _tokenStore;
     private readonly ILogger<LibraryPlaybackService> _logger;
     private readonly ServerLogService? _serverLog;
+    private readonly Random _random;
+    private readonly TimeProvider _time;
     private readonly object _randomizationLock = new();
-    private readonly Dictionary<string, RandomPickMemory> _clientRandomizationStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RandomPickMemory> _deviceRandomPickMemories = new(StringComparer.OrdinalIgnoreCase);
 
     public LibraryPlaybackService(
         ServerMediaTokenStore tokenStore,
         ILogger<LibraryPlaybackService> logger,
         LibraryCatalogHost catalog,
-        ServerLogService? serverLog = null)
+        ServerLogService? serverLog = null,
+        Random? random = null,
+        TimeProvider? time = null)
     {
         _tokenStore = tokenStore;
         _logger = logger;
         _catalog = catalog;
         _serverLog = serverLog;
+        _random = random ?? Random.Shared;
+        _time = time ?? TimeProvider.System;
+    }
+
+    /// <summary>How many devices have a random-pick memory.</summary>
+    internal int RandomPickDeviceCount
+    {
+        get
+        {
+            lock (_randomizationLock)
+            {
+                return _deviceRandomPickMemories.Count;
+            }
+        }
     }
 
     public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<StoredPreset> presets)
@@ -41,15 +62,205 @@ public sealed class LibraryPlaybackService
             .ToList();
     }
 
+    /// <summary>
+    /// Picks one of the eligible items with the request's options and remembers it for the request's device. On
+    /// success the response holds the item, or null when nothing is eligible, and the cycle numbers after the pick.
+    /// </summary>
     public bool TrySelectRandom(
         RandomRequest request,
         IReadOnlyList<StoredPreset> presets,
-        out RandomResponse? response,
+        out RandomPickResponse? response,
         out int statusCode,
         out string? error)
     {
         var stopwatch = Stopwatch.StartNew();
         response = null;
+        var options = ReadPickOptions(request.Options);
+        if (!TryQueryEligible(request, presets, options, out var eligible, out statusCode, out error))
+        {
+            return false;
+        }
+
+        if (eligible is null || eligible.Count == 0)
+        {
+            if (eligible is not null)
+            {
+                LogPick(options, 0, stopwatch);
+            }
+
+            response = new RandomPickResponse { Item = null, Cycle = ApiContractMapper.MapRandomPickCycle(default) };
+            return true;
+        }
+
+        var key = DeviceKey(request.ClientId);
+        RandomPickResult picked;
+        int dropped;
+        lock (_randomizationLock)
+        {
+            if (!_deviceRandomPickMemories.TryGetValue(key, out var memory))
+            {
+                memory = new RandomPickMemory();
+                _deviceRandomPickMemories[key] = memory;
+            }
+
+            var now = _time.GetUtcNow().UtcDateTime;
+
+            // The engine picks nothing only from an empty eligible set, which returned above.
+            picked = RandomSelectionEngineCore.SelectItem(memory, eligible, options, now, _random)!;
+            dropped = DropDevicesPastWindow(now);
+        }
+
+        if (dropped > 0)
+        {
+            _serverLog?.Append("info", $"Random pick memory dropped devices={dropped}.");
+        }
+
+        var selected = _catalog.Session.ReadPlaybackItemById(picked.Item.Id);
+        if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
+        {
+            error = "Selected item not found.";
+            statusCode = StatusCodes.Status500InternalServerError;
+            return false;
+        }
+
+        response = new RandomPickResponse
+        {
+            Item = PlaybackResponse(selected),
+            Cycle = ApiContractMapper.MapRandomPickCycle(picked.Cycle)
+        };
+        LogPick(options, eligible.Count, stopwatch);
+        return true;
+    }
+
+    /// <summary>
+    /// The cycle numbers a pick with the same request would start from, for the request's device. Changes nothing, and
+    /// a device without a memory has picked nothing.
+    /// </summary>
+    public bool TryGetRandomCycle(
+        RandomRequest request,
+        IReadOnlyList<StoredPreset> presets,
+        out RandomPickCycleResponse? response,
+        out int statusCode,
+        out string? error)
+    {
+        response = null;
+        var options = ReadPickOptions(request.Options);
+        if (!TryQueryEligible(request, presets, options, out var eligible, out statusCode, out error))
+        {
+            return false;
+        }
+
+        eligible ??= [];
+        RandomPickCycle cycle;
+        lock (_randomizationLock)
+        {
+            cycle = _deviceRandomPickMemories.TryGetValue(DeviceKey(request.ClientId), out var memory)
+                ? RandomSelectionEngineCore.GetCycle(memory, eligible, options, _time.GetUtcNow().UtcDateTime)
+                : new RandomPickCycle(0, eligible.Count);
+        }
+
+        response = ApiContractMapper.MapRandomPickCycle(cycle);
+        return true;
+    }
+
+    /// <summary>Clears the device's Shuffle memory and its last pick. A device without a memory has nothing to clear.</summary>
+    public void ResetRandom(string? clientId)
+    {
+        lock (_randomizationLock)
+        {
+            if (_deviceRandomPickMemories.TryGetValue(DeviceKey(clientId), out var memory))
+            {
+                RandomSelectionEngineCore.Reset(memory);
+            }
+        }
+
+        _serverLog?.Append("info", "Random pick memory reset.");
+    }
+
+    /// <summary>
+    /// The pick options a request's options stand for. A missing option, an unknown window, and an unknown tag spread
+    /// read as the default, and blank category ids are left out.
+    /// </summary>
+    internal static RandomPickOptions ReadPickOptions(RandomPickOptionsRequest? options)
+    {
+        if (options is null)
+        {
+            return RandomPickOptions.Default;
+        }
+
+        return new RandomPickOptions
+        {
+            Shuffle = options.Shuffle,
+            RememberPlaysForDays = options.RememberPlaysForDays switch
+            {
+                null => null,
+                1 or 7 or 30 or 90 => options.RememberPlaysForDays,
+                _ => RandomPickOptions.Default.RememberPlaysForDays
+            },
+            SpreadByFolder = options.SpreadByFolder,
+            SpreadByTags = ReadTagSpread(options.SpreadByTags),
+            SpreadCategoryIds = (options.SpreadCategoryIds ?? [])
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .ToList(),
+            FavorLessPlayed = options.FavorLessPlayed,
+            FavorNewlyAdded = options.FavorNewlyAdded,
+            FavorNewlyCreated = options.FavorNewlyCreated,
+            FavorHigherRated = options.FavorHigherRated
+        };
+    }
+
+    private static TagSpreadValue ReadTagSpread(string? value)
+    {
+        if (string.Equals(value, "allTags", StringComparison.OrdinalIgnoreCase))
+        {
+            return TagSpreadValue.AllTags;
+        }
+
+        return string.Equals(value, "byCategory", StringComparison.OrdinalIgnoreCase)
+            ? TagSpreadValue.ByCategory
+            : TagSpreadValue.Off;
+    }
+
+    /// <summary>A device's memory key: its trimmed client id, or the shared key for a request that names none.</summary>
+    private static string DeviceKey(string? clientId)
+    {
+        return string.IsNullOrWhiteSpace(clientId) ? SharedDeviceKey : clientId.Trim();
+    }
+
+    /// <summary>Drops the memory of every device whose last pick has passed its window. Runs under the lock.</summary>
+    private int DropDevicesPastWindow(DateTime nowUtc)
+    {
+        List<string>? past = null;
+        foreach (var (key, memory) in _deviceRandomPickMemories)
+        {
+            if (memory.IsPastWindow(nowUtc))
+            {
+                (past ??= []).Add(key);
+            }
+        }
+
+        foreach (var key in past ?? [])
+        {
+            _deviceRandomPickMemories.Remove(key);
+        }
+
+        return past?.Count ?? 0;
+    }
+
+    /// <summary>
+    /// The library's eligible items for a pick or a cycle read: the filter's, of the media types asked for, with their
+    /// tags only under tag spread. Null when the request asks for neither media type.
+    /// </summary>
+    private bool TryQueryEligible(
+        RandomRequest request,
+        IReadOnlyList<StoredPreset> presets,
+        RandomPickOptions options,
+        out List<RandomizationItem>? eligible,
+        out int statusCode,
+        out string? error)
+    {
+        eligible = null;
         error = null;
         statusCode = StatusCodes.Status200OK;
 
@@ -93,10 +304,12 @@ public sealed class LibraryPlaybackService
             requiredMediaType = MediaTypeValue.Video;
         }
 
-        List<RandomizationItem> eligible;
         try
         {
-            eligible = _catalog.Session.QueryRandomCandidates(filter, requiredMediaType);
+            eligible = _catalog.Session.QueryRandomCandidates(
+                filter,
+                requiredMediaType,
+                includeTags: options.SpreadByTags != TagSpreadValue.Off);
         }
         catch (Exception ex)
         {
@@ -106,51 +319,61 @@ public sealed class LibraryPlaybackService
             return false;
         }
 
-        var randomizationMode = ParseRandomizationMode(request.RandomizationMode);
-        if (eligible.Count == 0)
-        {
-            LogPick(randomizationMode, eligible.Count, stopwatch);
-            return true;
-        }
-
-        var scopeKey = BuildRandomizationScopeKey(request.ClientId, request.SessionId);
-
-        RandomPickResult picked;
-        lock (_randomizationLock)
-        {
-            if (!_clientRandomizationStates.TryGetValue(scopeKey, out var memory))
-            {
-                memory = new RandomPickMemory();
-                _clientRandomizationStates[scopeKey] = memory;
-            }
-
-            // The engine picks nothing only from an empty eligible set, which returned above.
-            picked = RandomSelectionEngineCore.SelectItem(
-                memory,
-                eligible,
-                PickOptionsFor(randomizationMode),
-                DateTime.UtcNow,
-                Random.Shared)!;
-        }
-
-        var selected = _catalog.Session.ReadPlaybackItemById(picked.Item.Id);
-        if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
-        {
-            error = "Selected item not found.";
-            statusCode = StatusCodes.Status500InternalServerError;
-            return false;
-        }
-
-        response = PlaybackResponse(selected);
-        LogPick(randomizationMode, eligible.Count, stopwatch);
         return true;
     }
 
-    private void LogPick(RandomizationModeValue mode, int eligibleCount, Stopwatch stopwatch)
+    private void LogPick(RandomPickOptions options, int eligibleCount, Stopwatch stopwatch)
     {
+        var remember = options.RememberPlaysForDays is int days ? $"{days}d" : "all";
         _serverLog?.Append(
             "info",
-            $"Random pick mode={mode} eligible={eligibleCount} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+            $"Random pick options={DescribeOptions(options)} remember={remember} eligible={eligibleCount} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+    }
+
+    /// <summary>The options that are on, such as <c>shuffle,spreadByFolder</c>, or <c>none</c>.</summary>
+    private static string DescribeOptions(RandomPickOptions options)
+    {
+        var on = new List<string>();
+        if (options.Shuffle)
+        {
+            on.Add("shuffle");
+        }
+
+        if (options.SpreadByFolder)
+        {
+            on.Add("spreadByFolder");
+        }
+
+        if (options.SpreadByTags == TagSpreadValue.AllTags)
+        {
+            on.Add("spreadByTags:allTags");
+        }
+        else if (options.SpreadByTags == TagSpreadValue.ByCategory)
+        {
+            on.Add("spreadByTags:byCategory");
+        }
+
+        if (options.FavorLessPlayed)
+        {
+            on.Add("favorLessPlayed");
+        }
+
+        if (options.FavorNewlyAdded)
+        {
+            on.Add("favorNewlyAdded");
+        }
+
+        if (options.FavorNewlyCreated)
+        {
+            on.Add("favorNewlyCreated");
+        }
+
+        if (options.FavorHigherRated)
+        {
+            on.Add("favorHigherRated");
+        }
+
+        return on.Count == 0 ? "none" : string.Join(',', on);
     }
 
     public const string PlayItemErrorInvalidId = "play_item_id_invalid";
@@ -163,7 +386,7 @@ public sealed class LibraryPlaybackService
     public bool TryPlayItem(
         string itemId,
         bool forceMediaMissing,
-        out RandomResponse? response,
+        out PlaybackItemResponse? response,
         out int statusCode,
         out string? error,
         out string? errorCode)
@@ -228,22 +451,6 @@ public sealed class LibraryPlaybackService
 
         response = PlaybackResponse(match);
         return true;
-    }
-
-    /// <summary>
-    /// Isolates the random pick memory per browser tab (session), keeping a client that
-    /// omits its session on one scope per client id, and anonymous clients that omit their session on a
-    /// single shared scope.
-    /// </summary>
-    internal static string BuildRandomizationScopeKey(string? clientId, string? sessionId)
-    {
-        var client = string.IsNullOrWhiteSpace(clientId) ? "web-anonymous" : clientId.Trim();
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return client;
-        }
-
-        return $"{client}\u001f{sessionId.Trim()}";
     }
 
     /// <summary>The file a token from the random or play route names. An item id or a full path is not a token.</summary>
@@ -314,10 +521,10 @@ public sealed class LibraryPlaybackService
     }
 
     /// <summary>A random pick's or a direct play's answer: the item, with a media token for its file.</summary>
-    private RandomResponse PlaybackResponse(CatalogPlaybackItem item)
+    private PlaybackItemResponse PlaybackResponse(CatalogPlaybackItem item)
     {
         var token = _tokenStore.CreateToken(item.FullPath);
-        return ApiContractMapper.MapRandomResult(
+        return ApiContractMapper.MapPlaybackItem(
             id: item.FullPath,
             itemId: item.Id,
             displayName: string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName,
@@ -339,39 +546,5 @@ public sealed class LibraryPlaybackService
     private static double? DurationSeconds(long? ticks)
     {
         return ticks is long value ? value / (double)TimeSpan.TicksPerSecond : null;
-    }
-
-    private enum RandomizationModeValue
-    {
-        PureRandom = 0,
-        WeightedRandom = 1,
-        SmartShuffle = 2,
-        SpreadMode = 3,
-        WeightedWithSpread = 4
-    }
-
-    /// <summary>The random pick options each randomization mode stands for, with the default window.</summary>
-    private static RandomPickOptions PickOptionsFor(RandomizationModeValue mode)
-    {
-        return mode switch
-        {
-            RandomizationModeValue.PureRandom => new RandomPickOptions { Shuffle = false, SpreadByFolder = false },
-            RandomizationModeValue.WeightedRandom => new RandomPickOptions { Shuffle = false, SpreadByFolder = false, FavorLessPlayed = true },
-            RandomizationModeValue.SpreadMode => new RandomPickOptions { Shuffle = false, SpreadByFolder = true },
-            RandomizationModeValue.WeightedWithSpread => new RandomPickOptions { Shuffle = false, SpreadByFolder = true, FavorLessPlayed = true },
-            _ => new RandomPickOptions { Shuffle = true, SpreadByFolder = false }
-        };
-    }
-
-    private static RandomizationModeValue ParseRandomizationMode(string? mode)
-    {
-        if (string.IsNullOrWhiteSpace(mode))
-        {
-            return RandomizationModeValue.SmartShuffle;
-        }
-
-        return Enum.TryParse<RandomizationModeValue>(mode.Trim(), ignoreCase: true, out var parsed)
-            ? parsed
-            : RandomizationModeValue.SmartShuffle;
     }
 }

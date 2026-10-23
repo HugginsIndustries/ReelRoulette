@@ -78,18 +78,70 @@ public sealed class UpdateSourceEnabledRequest
     public bool IsEnabled { get; set; }
 }
 
+/// <summary>A random pick's body, which the cycle route takes too.</summary>
 public sealed class RandomRequest
 {
     public string PresetId { get; set; } = string.Empty;
     public JsonElement? FilterState { get; set; }
+
+    /// <summary>The device whose random-pick memory the request uses. Requests without one share a memory.</summary>
     public string? ClientId { get; set; }
-    public string? SessionId { get; set; }
+
     public bool IncludeVideos { get; set; } = true;
     public bool IncludePhotos { get; set; } = true;
-    public string? RandomizationMode { get; set; }
+
+    /// <summary>The options the pick combines, or null for every option's default.</summary>
+    public RandomPickOptionsRequest? Options { get; set; }
 }
 
-public sealed class RandomResponse
+/// <summary>
+/// The options a random pick combines, each defaulting when missing. When the pick reads the options, a window other
+/// than 1, 7, 30, 90, or null reads as 30, and a null or unknown tag spread as off.
+/// </summary>
+public sealed class RandomPickOptionsRequest
+{
+    public bool Shuffle { get; set; } = true;
+
+    /// <summary>1, 7, 30, or 90 days, or null for until everything has played. Any other value reads as 30.</summary>
+    public int? RememberPlaysForDays { get; set; } = 30;
+
+    public bool SpreadByFolder { get; set; } = true;
+
+    /// <summary><c>off</c>, <c>allTags</c>, or <c>byCategory</c>, in any case. Any other value reads as off.</summary>
+    public string? SpreadByTags { get; set; } = "off";
+
+    /// <summary>The categories whose tags count under <c>byCategory</c>.</summary>
+    public List<string>? SpreadCategoryIds { get; set; } = [];
+
+    public bool FavorLessPlayed { get; set; }
+    public bool FavorNewlyAdded { get; set; }
+    public bool FavorNewlyCreated { get; set; }
+    public bool FavorHigherRated { get; set; }
+}
+
+/// <summary>A random pick's answer: the picked item, or null when nothing is eligible, and the cycle numbers after it.</summary>
+public sealed class RandomPickResponse
+{
+    public PlaybackItemResponse? Item { get; set; }
+    public RandomPickCycleResponse Cycle { get; set; } = new();
+}
+
+/// <summary>A device's Shuffle cycle: the eligible items picked within the window, the eligible items, and those left.</summary>
+public sealed class RandomPickCycleResponse
+{
+    public int Picked { get; set; }
+    public int Eligible { get; set; }
+    public int Remaining { get; set; }
+}
+
+public sealed class RandomResetRequest
+{
+    /// <summary>The device whose Shuffle memory to clear.</summary>
+    public string? ClientId { get; set; }
+}
+
+/// <summary>An item to play, as the play route and a random pick give it, with a media token for its file.</summary>
+public sealed class PlaybackItemResponse
 {
     /// <summary>Full path of the file, which the WebUI's Stats tab shows.</summary>
     public string Id { get; set; } = string.Empty;

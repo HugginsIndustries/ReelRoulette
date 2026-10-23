@@ -168,4 +168,39 @@ public sealed class RandomPickShuffleTests
         // Three folders skip the last pick's folder, b, and nothing else is left out.
         AssertOdds(Odds(memory, items, options), ("a1", 0.5), ("b1", 0), ("c1", 0.5));
     }
+
+    [Fact]
+    public void Memory_IsPastItsWindow_ExactlyWhenTheLastPickDropsOutOfTheWindowItWasMadeWith()
+    {
+        var memory = new RandomPickMemory();
+        Assert.False(memory.IsPastWindow(Now.AddYears(10)));
+
+        PickId(memory, Five, ShuffleFor(30), "a", Now.AddDays(-5));
+        PickId(memory, Five, ShuffleFor(1), "b");
+
+        Assert.False(memory.IsPastWindow(Now.AddDays(1).AddTicks(-1)));
+        Assert.True(memory.IsPastWindow(Now.AddDays(1)));
+    }
+
+    [Fact]
+    public void Memory_UntilEverythingHasPlayed_IsNeverPastItsWindow()
+    {
+        var memory = new RandomPickMemory();
+        PickId(memory, Five, ShuffleFor(1), "a", Now.AddDays(-5));
+        PickId(memory, Five, ShuffleFor(null), "b");
+
+        Assert.False(memory.IsPastWindow(Now.AddYears(10)));
+    }
+
+    [Fact]
+    public void Reset_KeepsWhenTheMemoryIsPastItsWindow()
+    {
+        var memory = new RandomPickMemory();
+        PickId(memory, Five, ShuffleFor(7), "a");
+
+        RandomSelectionEngineCore.Reset(memory);
+
+        Assert.False(memory.IsPastWindow(Now.AddDays(7).AddTicks(-1)));
+        Assert.True(memory.IsPastWindow(Now.AddDays(7)));
+    }
 }

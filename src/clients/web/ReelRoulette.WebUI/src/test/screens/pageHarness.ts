@@ -8,6 +8,7 @@ import { unauthorizedLogText } from "../../api/serverRequest";
 import { statusLogLine, type RelayLogCurrentItem } from "../../logging/relayLogLines";
 import { renderApp } from "../../shell";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
+export { randomAnswer } from "../randomAnswer";
 
 /**
  * Mounts the whole WebUI page in happy-dom against a fake server and a fake event stream, so screen tests

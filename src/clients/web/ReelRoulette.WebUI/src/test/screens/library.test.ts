@@ -19,6 +19,7 @@ import {
   pageReady,
   pickPreset,
   presetSelect,
+  randomAnswer,
   resetPage,
   selectedPresetLabel,
   setViewport,
@@ -1542,7 +1543,7 @@ describe("memory", () => {
   it("keeps the collapsed controls, the preset and its filter, randomization mode, and sort and direction after a page refresh, and not the search", async () => {
     const presets = (server: FakeServer) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
-      server.on("POST", "/api/random", () => json(playResponse(1)));
+      server.on("POST", "/api/random", () => randomAnswer(playResponse(1)));
     };
     const first = await mountLibrary(libraryItems(3), presets);
     await openLibrary();
@@ -1572,7 +1573,7 @@ describe("memory", () => {
 
     await click(screen.getByRole("button", { name: "Play/Pause" }));
     const pick = server.requests("POST", "/api/random")[0]!.body;
-    expect(pick).toMatchObject({ presetId: "preset-favorites", randomizationMode: "SpreadMode", filterState: { favoritesMode: "only" } });
+    expect(pick).toMatchObject({ presetId: "preset-favorites", filterState: { favoritesMode: "only" } });
   });
 
   it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {
@@ -1601,7 +1602,7 @@ describe("memory", () => {
     const shore = { ...BEACH_PRESET, filterState: { ...BEACH_PRESET.filterState, selectedTags: ["Shore"] } };
     const second = await refresh(page, libraryItems(3), (server) => {
       server.on("GET", "/api/presets", () => json([shore]));
-      server.on("POST", "/api/random", () => json(playResponse(1)));
+      server.on("POST", "/api/random", () => randomAnswer(playResponse(1)));
     });
     await waitFor(() => expect(second.library.queries().at(-1)!.filterState.selectedTags).toEqual(["Shore"]));
     expect(selectedPresetLabel()).toBe("Beach");

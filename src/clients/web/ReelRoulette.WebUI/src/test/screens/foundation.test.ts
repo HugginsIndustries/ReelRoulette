@@ -14,6 +14,7 @@ import {
   pageReady,
   pickPreset,
   presetSelect,
+  randomAnswer,
   resetPage,
   settle,
   status,
@@ -397,7 +398,7 @@ describe("preset dropdown", () => {
   it("lists None and the saved presets, and a pick sets the library query and the next random pick", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     mountPage({ server });
 
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites"]));
@@ -414,7 +415,6 @@ describe("preset dropdown", () => {
     const pick = server.requests("POST", "/api/random")[0]!.body;
     expect(pick.presetId).toBe("preset-favorites");
     expect(pick.filterState.favoritesMode).toBe("only");
-    expect(pick.randomizationMode).toBe("SmartShuffle");
 
     await pickPreset("");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(3));
@@ -484,10 +484,8 @@ describe("preset dropdown", () => {
 });
 
 describe("randomization mode", () => {
-  it("starts on Smart Shuffle, keeps a pick in localStorage, and sends it with random picks", async () => {
-    const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
-    mountPage({ server });
+  it("starts on Smart Shuffle and keeps a pick in localStorage", async () => {
+    mountPage();
     const select = await randomizationModeSelect();
     expect(selectedLabel(select)).toBe("Smart Shuffle");
     expect(optionLabels(select)).toEqual([
@@ -500,9 +498,6 @@ describe("randomization mode", () => {
 
     fireEvent.change(select, { target: { value: "WeightedRandom" } });
     expect(localStorage.getItem("rr_randomizationMode")).toBe("WeightedRandom");
-
-    await startRandomPick();
-    expect(server.requests("POST", "/api/random")[0]!.body.randomizationMode).toBe("WeightedRandom");
   });
 
   it("restores a saved mode and ignores an unknown one", async () => {
@@ -520,7 +515,7 @@ describe("randomization mode", () => {
 describe("now playing", () => {
   it("is hidden before anything plays, then shows the file name, its full name and Show stats as a tooltip, and the duration", async () => {
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     mountPage({ server });
     const name = document.getElementById("now-playing-name")!;
     expect((name.closest(".now-playing") as HTMLElement).style.display).toBe("none");
@@ -536,7 +531,7 @@ describe("now playing", () => {
   it("shortens a long name to 45 characters and keeps the full name in the tooltip", async () => {
     const longName = `${"a".repeat(60)}.mp4`;
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json({ ...VIDEO_ITEM, displayName: longName, id: `C:\\media\\${longName}` }));
+    server.on("POST", "/api/random", () => randomAnswer({ ...VIDEO_ITEM, displayName: longName, id: `C:\\media\\${longName}` }));
     mountPage({ server });
 
     await startRandomPick();
@@ -730,7 +725,7 @@ describe("page structure", () => {
   it("keeps the same video element while the header changes and the event stream opens", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     const page = mountPage({ server });
     const video = page.root.querySelector("video");
     const seek = screen.getByRole("slider", { name: "Seek", hidden: true }) as HTMLInputElement;

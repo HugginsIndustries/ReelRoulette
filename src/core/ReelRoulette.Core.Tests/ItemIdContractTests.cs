@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Library;
+using ReelRoulette.Core.Randomization;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -40,12 +41,64 @@ public sealed class ItemIdContractTests : IDisposable
             out _));
         Assert.True(playback.TryPlayItem("item-1", forceMediaMissing: false, out var played, out _, out _, out _));
 
-        foreach (var response in new[] { random!, played! })
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(random), "RandomPickResponse");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(random!.Cycle), "RandomPickCycleResponse");
+        foreach (var response in new[] { random.Item!, played! })
         {
             Assert.Equal("item-1", response.ItemId);
             Assert.Equal(mediaPath, response.Id);
-            OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "RandomResponse");
+            OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "PlaybackItemResponse");
         }
+    }
+
+    // An empty pick still names its item, as null, and its cycle; the cycle route answers the cycle alone.
+    [Fact]
+    public void EmptyRandomPickAndCycleResponses_MatchTheirSchemas()
+    {
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items: [new SeedItem("item-1", Path.Combine(_tempDir, "clip.mp4")) { SourceId = "s1", IsBlacklisted = true }]);
+        var playback = CreatePlayback(CatalogOpen.Host(_tempDir));
+        var request = new RandomRequest { PresetId = "all-media", ClientId = "device" };
+
+        Assert.True(playback.TrySelectRandom(request, [], out var empty, out _, out _));
+        Assert.True(playback.TryGetRandomCycle(request, [], out var cycle, out _, out _));
+
+        var json = OpenApiSpec.SerializeAsServer(empty);
+        OpenApiSpec.AssertMatchesSchema(json, "RandomPickResponse");
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, json.GetProperty("item").ValueKind);
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(empty!.Cycle), "RandomPickCycleResponse");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(cycle), "RandomPickCycleResponse");
+    }
+
+    [Fact]
+    public void RandomRequests_MatchTheirSchemas()
+    {
+        var request = new RandomRequest { PresetId = "all-media", ClientId = "device", Options = new RandomPickOptionsRequest() };
+
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(request), "RandomRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(request.Options), "RandomPickOptionsRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(new RandomResetRequest { ClientId = "device" }), "RandomResetRequest");
+    }
+
+    // Each value the spec lists is one the server knows, so none reads as the default instead.
+    [Fact]
+    public void RandomPickOptions_ReadEveryValueTheSpecLists()
+    {
+        var spreads = OpenApiSpec.ReadSchemaPropertyEnum("RandomPickOptionsRequest", "spreadByTags");
+        Assert.Equal(["off", "allTags", "byCategory"], spreads);
+        Assert.Equal(
+            [TagSpreadValue.Off, TagSpreadValue.AllTags, TagSpreadValue.ByCategory],
+            spreads.Select(value => LibraryPlaybackService.ReadPickOptions(new RandomPickOptionsRequest { SpreadByTags = value }).SpreadByTags));
+
+        var windows = OpenApiSpec.ReadSchemaPropertyEnum("RandomPickOptionsRequest", "rememberPlaysForDays")
+            .Select(value => int.Parse(value, System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+        Assert.Equal([1, 7, 30, 90], windows);
+        Assert.Equal(
+            windows.Select(days => (int?)days),
+            windows.Select(days => LibraryPlaybackService.ReadPickOptions(new RandomPickOptionsRequest { RememberPlaysForDays = days }).RememberPlaysForDays));
     }
 
     [Fact]
@@ -62,7 +115,7 @@ public sealed class ItemIdContractTests : IDisposable
 
         var result = ServerHostComposition.PlayItem("item-1", null, CreatePlayback(host), CreateOperations(host), state, new OperatorTestingService());
 
-        Assert.Equal("item-1", Assert.IsType<RandomResponse>(Value(result)).ItemId);
+        Assert.Equal("item-1", Assert.IsType<PlaybackItemResponse>(Value(result)).ItemId);
         var payload = Assert.IsType<PlaybackRecordedPayload>(SingleEvent(state, "playbackRecorded").Payload);
         Assert.Equal("item-1", payload.ItemId);
         Assert.Equal(1, payload.PlayCount);

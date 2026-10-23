@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using ReelRoulette.Core.Library;
+using ReelRoulette.Core.Randomization;
 using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Server.Contracts;
@@ -27,7 +28,7 @@ public static class ApiContractMapper
         };
     }
 
-    public static RandomResponse MapRandomResult(
+    public static PlaybackItemResponse MapPlaybackItem(
         string id,
         string itemId,
         string displayName,
@@ -40,7 +41,7 @@ public static class ApiContractMapper
         bool isBlacklisted,
         int? ratingHalfStars)
     {
-        return new RandomResponse
+        return new PlaybackItemResponse
         {
             Id = id,
             ItemId = itemId,
@@ -53,6 +54,16 @@ public static class ApiContractMapper
             IsFavorite = isFavorite,
             IsBlacklisted = isBlacklisted,
             Rating = ItemRating.ToStars(ratingHalfStars)
+        };
+    }
+
+    public static RandomPickCycleResponse MapRandomPickCycle(RandomPickCycle cycle)
+    {
+        return new RandomPickCycleResponse
+        {
+            Picked = cycle.Picked,
+            Eligible = cycle.Eligible,
+            Remaining = cycle.Remaining
         };
     }
 

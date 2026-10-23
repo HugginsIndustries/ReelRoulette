@@ -101,7 +101,7 @@ public sealed class FilterStateTests : IDisposable
         var host = SeedPlainFavoriteAndBlacklisted(
             [new SeedPreset("Night", """{"favoritesMode":"only"}"""), new SeedPreset("Bare"), new SeedPreset("Empty", "null")]);
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         var state = new ServerStateService(catalog: host);
 
         // The library query applies no filter predicates, so blacklisted items are listed. A present {} leaves them out.
@@ -133,7 +133,7 @@ public sealed class FilterStateTests : IDisposable
     {
         var host = SeedPlainFavoriteAndBlacklisted();
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         (string Filter, string[] Ids)[] cases =
         [
             ("""{"favoritesMode":"excluded"}""", ["plain"]),
@@ -155,7 +155,7 @@ public sealed class FilterStateTests : IDisposable
     {
         var host = SeedBrowserPlayableItems();
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
 
         Assert.Equal(["clip", "photo"], QueryIds(operations, """{"filterState":{"onlyBrowserPlayable":true}}"""));
         Assert.Equal(["clip", "photo"], PickIds(playback, [], """{"filterState":{"onlyBrowserPlayable":true}}"""));
@@ -168,7 +168,7 @@ public sealed class FilterStateTests : IDisposable
     public void StoredPresetWithoutBrowserPlayable_PicksWithTheOptionOff()
     {
         var host = SeedBrowserPlayableItems([new SeedPreset("Old", """{"favoritesMode":"off","blacklistedMode":"excluded","onlyNeverPlayed":false}""")]);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         var presets = new ServerStateService(catalog: host).GetPresetCatalogSnapshot();
         var preset = Assert.Single(presets);
         Assert.Equal(["clip", "film", "old", "photo"], PickIds(playback, presets, $$"""{"presetId":"{{preset.Id}}"}"""));
@@ -207,7 +207,7 @@ public sealed class FilterStateTests : IDisposable
     {
         var host = SeedRatedItems();
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         (string Filter, string[] Ids)[] cases =
         [
             ("""{"minRating":3}""", ["high"]),
@@ -225,7 +225,7 @@ public sealed class FilterStateTests : IDisposable
         const string both = """{"filterState":{"onlyUnrated":true,"minRating":0.5}}""";
         Assert.Empty(QueryIds(operations, both));
         Assert.True(playback.TrySelectRandom(Body<RandomRequest>(both), [], out var response, out var statusCode, out var error), $"{statusCode} {error}");
-        Assert.Null(response);
+        Assert.Null(response!.Item);
     }
 
     // A preset stored before the rating filter has no fields for it, and picks with no minimum and Only unrated off.
@@ -233,7 +233,7 @@ public sealed class FilterStateTests : IDisposable
     public void StoredPresetWithoutRatingFields_PicksWithNoMinimumAndOnlyUnratedOff()
     {
         var host = SeedRatedItems([new SeedPreset("Old", """{"favoritesMode":"off","blacklistedMode":"excluded","onlyBrowserPlayable":false}""")]);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         var presets = new ServerStateService(catalog: host).GetPresetCatalogSnapshot();
         var preset = Assert.Single(presets);
         Assert.Equal(["high", "low", "unrated"], PickIds(playback, presets, $$"""{"presetId":"{{preset.Id}}"}"""));
@@ -272,7 +272,7 @@ public sealed class FilterStateTests : IDisposable
     {
         var host = SeedDatedItems();
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         (string Filter, string[] Ids)[] cases =
         [
             ("""{}""", ["month", "old", "quarter", "undated", "week"]),
@@ -307,7 +307,7 @@ public sealed class FilterStateTests : IDisposable
             new SeedPreset("Old", """{"favoritesMode":"off","blacklistedMode":"excluded","onlyBrowserPlayable":false}""", "old-id"),
             new SeedPreset("Recent", """{"addedRange":"last7Days"}""", "recent-id")
         ]);
-        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var playback = Playback(host);
         var presets = new ServerStateService(catalog: host).GetPresetCatalogSnapshot();
 
         Assert.Equal(["month", "old", "quarter", "undated", "week"], PickIds(playback, presets, """{"presetId":"old-id"}"""));
@@ -440,7 +440,7 @@ public sealed class FilterStateTests : IDisposable
 
         CatalogSeed.Write(_tempDir, sources: [new SeedSource("s1", _tempDir)], items: items, presets: presets);
         var host = CatalogOpen.Host(_tempDir);
-        host.Session.Time = new FixedTimeProvider(new DateTimeOffset(2030, 10, 22, 3, 0, 0, TimeSpan.Zero), FixedTimeProvider.FiveHoursBehindUtc);
+        host.Session.Time = new TestClock(new DateTimeOffset(2030, 10, 22, 3, 0, 0, TimeSpan.Zero), TestClock.FiveHoursBehindUtc);
         return host;
     }
 
@@ -468,7 +468,8 @@ public sealed class FilterStateTests : IDisposable
         return ids;
     }
 
-    // Smart shuffle, the default mode, picks every eligible item once before any again, so six picks cover a set of three.
+    // Shuffle, on by default, picks every eligible item once before any again, so six picks cover each set these tests
+    // pick from, of up to five items.
     private static string[] PickIds(LibraryPlaybackService playback, IReadOnlyList<StoredPreset> presets, string body)
     {
         var request = Body<RandomRequest>(body);
@@ -477,10 +478,16 @@ public sealed class FilterStateTests : IDisposable
         for (var attempt = 0; attempt < 6; attempt++)
         {
             Assert.True(playback.TrySelectRandom(request, presets, out var response, out var statusCode, out var error), $"{body}: {statusCode} {error}");
-            picked.Add(response!.ItemId);
+            picked.Add(response!.Item!.ItemId);
         }
 
         return [.. picked];
+    }
+
+    // Seeded, so every run picks the same items.
+    private static LibraryPlaybackService Playback(LibraryCatalogHost host)
+    {
+        return new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host, random: new Random(1));
     }
 
     private static int PickStatus(LibraryPlaybackService playback, IReadOnlyList<StoredPreset> presets, string body)

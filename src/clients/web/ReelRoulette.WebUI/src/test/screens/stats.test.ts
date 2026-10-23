@@ -16,6 +16,7 @@ import {
   popupsShown,
   pressRatingKey,
   pressStars,
+  randomAnswer,
   ratingAnswer,
   ratingRequests,
   releasePointer,
@@ -143,7 +144,7 @@ async function mountStats(
   const server = new FakeServer();
   const items = new Map((options.items ?? [itemRow(VIDEO)]).map((row) => [String(row.id), row]));
   const picks = [...(options.picks ?? [VIDEO])];
-  server.on("POST", "/api/random", () => json(picks.length > 1 ? picks.shift()! : picks[0]!));
+  server.on("POST", "/api/random", () => randomAnswer(picks.length > 1 ? picks.shift()! : picks[0]!));
   server.on("GET", "/api/library/stats", () => json(STATS));
   server.on("POST", "/api/library/item", (call) => {
     const row = items.get(String(call.body?.id));

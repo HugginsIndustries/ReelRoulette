@@ -6,6 +6,7 @@ import {
   json,
   mountPage,
   popupsShown,
+  randomAnswer,
   ratingAnswer,
   ratingRequests,
   resetPage,
@@ -61,7 +62,7 @@ const PHOTO_ITEM = {
 function serverPicking(...items: unknown[]): FakeServer {
   const server = new FakeServer().playsItems(...items);
   let next = 0;
-  server.on("POST", "/api/random", () => json(items[Math.min(next++, items.length - 1)]));
+  server.on("POST", "/api/random", () => randomAnswer(items[Math.min(next++, items.length - 1)]));
   server.on("POST", "/api/favorite", () => json({}));
   server.on("POST", "/api/blacklist", () => json({}));
   server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));

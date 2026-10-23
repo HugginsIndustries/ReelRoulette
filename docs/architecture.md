@@ -53,7 +53,7 @@ flowchart LR
 `src/core/ReelRoulette.Server` is a thin composition boundary.
 
 - Handles endpoint routing, auth middleware wiring, SSE/media transport, and DTO shaping.
-- Exposes `POST /api/play/{itemId}` for explicit item playback: same response shape as random selection, with server-side stats update and `playbackRecorded` SSE (orchestration mirrors `record-playback` semantics), unless its body's `recordPlayback` is false, which only issues a fresh media URL.
+- Exposes `POST /api/play/{itemId}` for explicit item playback: it answers with the same item a random pick carries, with server-side stats update and `playbackRecorded` SSE (orchestration mirrors `record-playback` semantics), unless its body's `recordPlayback` is false, which only issues a fresh media URL.
 - Maps transport contracts to domain services.
 - Must not become the owner of business rules that belong in core services.
 
@@ -62,7 +62,7 @@ flowchart LR
 `src/core/ReelRoulette.Core` and server-side domain services are authoritative for behavior and state semantics.
 
 - Own domain mutation rules, projection inputs, and persistence semantics.
-- Execute library operations, refresh pipeline behavior, and randomization/filter logic. Random eligibility is the library list filter. Direct play reads one item and its source.
+- Execute library operations, refresh pipeline behavior, and randomization/filter logic. Random eligibility is the library list filter, and the server keeps each device's random pick memory by its client id. Direct play reads one item and its source.
 - Expose deterministic APIs for every client flow.
 
 ### Client Layers

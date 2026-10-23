@@ -207,7 +207,7 @@ Last milestone completed: M12k5
 | --- | --- | --- |
 | Mockup | ✅ Complete | The Randomization tab with the cycle card, every option, Remember plays for, Reset now, and Random behavior, the Random line, the Library tab without the randomization dropdown, the reordered tabs and their keys, and the settled strengths, approved on a desktop browser, the iPad, and an Android phone. |
 | Engine | ✅ Complete | The options, Shuffle's rolling memory and cycles, folder and tag spread, the Favor shares and weights, and the cycle numbers in Core, with tests whose randomness is seeded or scripted. |
-| Contract | ⏳ Planned | The options in place of `randomizationMode` on `POST /api/random`, the cycle numbers in its response, the cycle and reset routes, the candidate read with both dates, the rating, and item tags, state per device, the pick log line, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| Contract | ✅ Complete | The options in place of `randomizationMode` on `POST /api/random`, the cycle numbers in its response, the cycle and reset routes, the candidate read with both dates, the rating, and item tags, state per device, the pick log line, OpenAPI, the generated WebUI types, and `docs/api.md`. |
 | WebUI | ⏳ Planned | The Randomization tab with its cycle card and Random behavior, the Random line, the options kept per device and sent with each pick, the randomization dropdown removed, and the tabs reordered with their keys. |
 
 #### Mockup slice
@@ -370,6 +370,21 @@ Last milestone completed: M12k5
 - `npm run verify:contracts` passes, and `docs/api.md` describes the options, the cycle numbers, and both routes, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passed with no warnings, `dotnet test ReelRoulette.sln` passed 696 Core tests and 19 ServerApp tests, against 637 and 19 before, SystemChecks passed, and `npm run verify` passed 2,108 WebUI tests, as many as before.
+- `POST /api/random` answers `RandomPickResponse`, the picked item and the cycle numbers, with the item null and the numbers 0 when nothing is eligible, in place of an empty object.
+- `RandomResponse` is `PlaybackItemResponse`, since the play route answers with it and a pick only carries it, and `sessionId` left the random request, whose only use for it was the per-tab state.
+- A window other than 1, 7, 30, 90, or none reads as 30, and a Spread by tags value other than all tags or by category, in any case, as off, as filter fields read unknown values.
+- `POST /api/random/cycle` takes the pick's body, and `POST /api/random/reset` takes `{ clientId }`, answers 204, and writes `Random pick memory reset.` for every request, so a reset after a server restart still shows in `last.log`.
+- A device's state is dropped by a pick of another device once its last pick is past the window that pick was made with; a pick never drops its own device, and one that finds nothing drops none. `Random pick memory dropped devices=N.` records each drop.
+- At the user's choice while the slice was planned, the WebUI sends no options until the WebUI slice, so every pick takes the defaults, Shuffle and Spread by folder, and the Library tab's randomization dropdown changes nothing meanwhile.
+- Tags are read only under tag spread, in one read of every `item_tags` row inside the candidates' read transaction, and the query plan tests pass unchanged. The three groupings of `item_tags` rows are one `LibraryCatalogStore.ReadTagGroups`.
+- The candidate read's cost at 49,000 items wasn't timed again; the Traps' figures were measured while the milestone was planned.
+- The server tests set every roll with a seeded or scripted `Random` and move a `TestClock`, which replaces `FixedTimeProvider`: one test of each option, the defaults, the reading of unknown values, one state per `clientId` across session ids, the drop, the cycle numbers, the cycle route, and reset, with `ItemIdContractTests` checking the pick, its item, its cycle, the cycle route, and the play answer against their schemas.
+- Breaking each rule once, from a copy under `artifacts/scratch/` restored byte for byte, failed its tests: the per-device key (4 tests), the drop (1), every sent option ignored (28, each option's own test among them), the tag attach (5), the tag categories (3), the unknown window (6), and `IsPastWindow`'s boundary (3). In the WebUI, reading the whole answer as the item again failed 310 tests in 12 files.
+- `docs/api.md`, `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the options, the routes, and the state per device, and `ISSUES.md` no longer lists "Shuffle states pile up for every client session".
+
 #### WebUI slice
 
 **Scope**
@@ -400,6 +415,11 @@ Last milestone completed: M12k5
 - The shared tag catalog (`src/tags/tagCatalog.ts`) feeds the Stats tab, which loads it only when none has loaded.
 - The cycle card follows the Stats tab's cards (`src/ui/StatsTab.tsx`).
 - WebUI Keyboard Shortcuts binds 1 to 5 to the tabs and T and S to Tags and Settings, and its reference lists every binding.
+- A pick sends no options, so the server applies its defaults, and nothing reads the randomization dropdown's `rr_randomizationMode` for a pick, though `foundation.test.ts` and `library.test.ts` still check the dropdown.
+- `randomPick.ts`'s `picked` outcome carries only the answer's `item`; nothing reads its `cycle` yet.
+- The generated `RandomPickOptionsRequest` types every option but `spreadCategoryIds` as required, as it does every field with a default.
+- `randomAnswer(item)` in `src/test/randomAnswer.ts` gives tests a pick's answer with fixed cycle numbers, and `src/test/screens/pageHarness.ts` passes it on to screen tests.
+- `POST /api/random/cycle` takes the pick's body, `POST /api/random/reset` takes `{ clientId }` and answers 204, and a device with no picks gets 0 picked from the cycle route.
 
 **Acceptance**
 

@@ -24,6 +24,7 @@ import {
   pageReady,
   pressRatingKey,
   pressStars,
+  randomAnswer,
   ratingAnswer,
   ratingRequests,
   releasePointer,
@@ -94,7 +95,7 @@ const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or f
 /** Answers random picks with these items in order, then keeps answering with the last one. */
 function answerRandom(server: FakeServer, ...items: unknown[]): void {
   let next = 0;
-  server.on("POST", "/api/random", () => json(items[Math.min(next++, items.length - 1)]));
+  server.on("POST", "/api/random", () => randomAnswer(items[Math.min(next++, items.length - 1)]));
 }
 
 function serverPicking(...items: unknown[]): FakeServer {
@@ -418,10 +419,8 @@ describe("random pick", () => {
     const pick = server.requests("POST", "/api/random")[0]!.body;
     expect(pick).toMatchObject({
       clientId: page.clientId(),
-      sessionId: page.sessionId(),
       includeVideos: true,
-      includePhotos: true,
-      randomizationMode: "SmartShuffle"
+      includePhotos: true
     });
     expect(pick.presetId).toBeUndefined();
     expect(pick.filterState.favoritesMode).toBe("off");
@@ -552,10 +551,10 @@ describe("random pick", () => {
   });
 
   it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice alone", async () => {
-    const server = serverPicking({ mediaUrl: null });
+    const server = serverPicking(null);
     await mount(server);
     const failures: Array<[() => Response, string, string?]> = [
-      [() => json({ mediaUrl: null }), "No eligible media for current filters."],
+      [() => randomAnswer(null), "No eligible media for current filters."],
       [() => status(500), "Random selection failed.", "Random selection failed (HTTP 500)."],
       [() => json({ error: LIBRARY_EMPTY }, 503), `Random selection failed: ${LIBRARY_EMPTY}`, "Random selection failed (HTTP 503)."],
       [

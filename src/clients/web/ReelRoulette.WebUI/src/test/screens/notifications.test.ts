@@ -17,6 +17,7 @@ import {
   mountPage,
   pageReady,
   pressKey,
+  randomAnswer,
   resetPage,
   setViewport,
   settle,
@@ -561,7 +562,7 @@ describe("the bell", () => {
   it("toggles the list, orange while it is open, and starts no random pick with nothing playing", async () => {
     useStylesheet();
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     await mountWithServices(server);
 
     await click(bell());
@@ -601,7 +602,7 @@ describe("the bell", () => {
     // On click/tap, so a click on the player hides them.
     localStorage.setItem(`rr_device.${HIDE_CONTROLS_KEY}`, JSON.stringify("click"));
     const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
     server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
     const services = await mountWithServices(server);
     await click(document.getElementById("empty-state")!);

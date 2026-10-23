@@ -9,7 +9,7 @@ const CONFIG: RuntimeConfig = {
 };
 
 describe("requestPlayItem", () => {
-  it("returns success with RandomResponse for playable item", async () => {
+  it("returns success with PlaybackItemResponse for playable item", async () => {
     const payload = {
       id: "/media/a.mp4",
       displayName: "a.mp4",

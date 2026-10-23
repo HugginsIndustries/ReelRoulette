@@ -11,6 +11,7 @@ import {
   json,
   mountPage,
   openNotices,
+  randomAnswer,
   resetPage,
   setViewport,
   settle,
@@ -59,7 +60,7 @@ const TAG_MODEL = {
 function panelServer(): FakeServer {
   const server = new FakeServer();
   server.on("POST", "/api/library/query", () => json({ items: [LIBRARY_ITEM], totalCount: 1, searchBaselineCount: 1 }));
-  server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+  server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
   server.on("POST", "/api/play/item-1", () => json(VIDEO_ITEM));
   server.on("GET", "/api/sources", () => json([]));
   server.on("POST", "/api/tag-editor/model", () => json(TAG_MODEL));

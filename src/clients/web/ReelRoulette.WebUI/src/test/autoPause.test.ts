@@ -9,6 +9,7 @@ import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
+import { randomAnswer } from "./randomAnswer";
 
 const VIDEO: PlayingItem = {
   id: "/media/clip.mp4",
@@ -93,7 +94,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   const fetchImpl = (async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
     requests.push(path);
-    return replies.get(path)?.() ?? json({ mediaUrl: null });
+    return replies.get(path)?.() ?? (path === "/api/random" ? randomAnswer(null) : json({ mediaUrl: null }));
   }) as typeof fetch;
   const device = createDeviceStore(null);
   const store = createAppStore({
@@ -310,7 +311,7 @@ describe("Auto-Pause with the panel and the player", () => {
     page.player.next();
     await page.panel.showTab("library");
 
-    answer(json({ ...VIDEO, id: "/media/other.mp4", itemId: "item-other", mediaUrl: "/api/media/item-other?token=t" }));
+    answer(randomAnswer({ ...VIDEO, id: "/media/other.mp4", itemId: "item-other", mediaUrl: "/api/media/item-other?token=t" }));
     await vi.waitFor(() => expect(page.video.src).toBe("http://server/api/media/item-other?token=t"));
     expect(page.playing()).toBe(false);
 

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { ScreenBoundary } from "../../ui/ScreenBoundary";
-import { FakeServer, json, mountPage, pageReady, pickPreset, resetPage, status } from "./pageHarness";
+import { FakeServer, json, mountPage, pageReady, pickPreset, randomAnswer, resetPage, status } from "./pageHarness";
 
 const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false, tags: false, panel: false }));
 
@@ -193,7 +193,7 @@ describe("ScreenBoundary", () => {
     failing.header = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
-      json({
+      randomAnswer({
         id: "C:\\media\\holiday clip.mp4",
         itemId: "item-video",
         displayName: "holiday clip.mp4",
@@ -244,7 +244,7 @@ describe("ScreenBoundary", () => {
     failing.panel = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
-      json({
+      randomAnswer({
         id: "C:\\media\\holiday clip.mp4",
         itemId: "item-video",
         displayName: "holiday clip.mp4",
@@ -277,7 +277,7 @@ describe("ScreenBoundary", () => {
     const server = new FakeServer();
     server.on("POST", "/api/library/query", () => status(500));
     server.on("POST", "/api/random", () =>
-      json({
+      randomAnswer({
         id: "C:\\media\\holiday clip.mp4",
         itemId: "item-video",
         displayName: "holiday clip.mp4",
@@ -319,7 +319,7 @@ describe("ScreenBoundary", () => {
     failing.filter = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
-      json({
+      randomAnswer({
         id: "C:\\media\\holiday clip.mp4",
         itemId: "item-video",
         displayName: "holiday clip.mp4",
@@ -360,7 +360,7 @@ describe("ScreenBoundary", () => {
     failing.tags = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
-      json({
+      randomAnswer({
         id: "C:\\media\\holiday clip.mp4",
         itemId: "item-video",
         displayName: "holiday clip.mp4",

@@ -196,14 +196,6 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **Since**: v0.9.0.
 - **Where**: `FileFingerprintService.ComputeFingerprint` in `src/core/ReelRoulette.Core/Fingerprints/FileFingerprintService.cs`, called from the fingerprint stage in `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`.
 
-### Shuffle states pile up for every client session
-
-- **What goes wrong**: The server keeps one random-pick shuffle state per client and session id, taken from requests, and never removes any, so its memory grows until it restarts.
-- **How to make it happen**: Open the WebUI in new tabs or app launches over time, each of which brings a new session id, and pick at random in each.
-- **How much it matters**: Moderate for a server that runs for weeks. Each state holds the folder of every file in its last eligible set and up to 30 days of picks, up to about 400 KB at 49,000 eligible files (inferred).
-- **Since**: v0.9.0.
-- **Where**: `LibraryPlaybackService._clientRandomizationStates` in `src/core/ReelRoulette.Server/Services/LibraryPlaybackService.cs`.
-
 ### A restarted server can replay events without a resync
 
 - **What goes wrong**: The server's event revisions start at zero on every start. A client that reconnects after the restarted server has published past that client's last event ID, but no further than its replay history, gets a partial replay from the new server and no `resyncRequired`, so it misses changes.

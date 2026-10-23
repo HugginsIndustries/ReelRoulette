@@ -1163,8 +1163,6 @@ export function createPlayer(options: PlayerOptions): Player {
 
     const body = randomPickRequest({
       clientId: store.identity.clientId,
-      sessionId: store.identity.sessionId,
-      randomizationMode: store.randomizationMode.peek(),
       appliedFilter: store.appliedFilter.peek(),
       presets: store.presets.peek(),
       selectedPresetValue: store.selectedPresetValue()

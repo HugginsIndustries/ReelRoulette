@@ -1012,6 +1012,10 @@ paths:
   /api/random:
     post:
       summary: Request a random media item
+      description: |
+        Picks one of the eligible items with the request's options and remembers the pick for the device its
+        `clientId` names. `item` is null when nothing is eligible, and `cycle` holds the device's Shuffle cycle
+        numbers after the pick.
       operationId: postRandom
       requestBody:
         required: true
@@ -1021,11 +1025,11 @@ paths:
               $ref: "#/components/schemas/RandomRequest"
       responses:
         "200":
-          description: Random media result
+          description: The picked item, or null when nothing is eligible, and the cycle numbers
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RandomResponse"
+                $ref: "#/components/schemas/RandomPickResponse"
         "400":
           description: Invalid request
           content:
@@ -1061,6 +1065,80 @@ paths:
                   value:
                     error: The server couldn't read the library.
 
+  /api/random/cycle:
+    post:
+      summary: Read the device's Shuffle cycle numbers
+      description: |
+        The cycle numbers a pick with the same body would start from: the eligible items picked on the device
+        within the window, the eligible items, and those left. Takes the same body as `POST /api/random` and
+        changes nothing.
+      operationId: postRandomCycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RandomRequest"
+      responses:
+        "200":
+          description: The cycle numbers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RandomPickCycleResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            `filterState` is omitted or null and no preset has the `presetId` id. `all-media` never returns 404.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: >
+            The server is running without a library, with a `code` as the LibraryUnavailable response describes; or,
+            without a `code`, the library has no items or the server couldn't read it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/random/reset:
+    post:
+      summary: Clear the device's Shuffle memory
+      description: |
+        Clears the picks Shuffle remembers for the device the `clientId` names, and its last pick, so every
+        eligible item can be picked again. The last picks Spread by folder skips stay.
+      operationId: postRandomReset
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RandomResetRequest"
+      responses:
+        "204":
+          description: The device's Shuffle memory is cleared.
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/play/{itemId}:
     post:
       summary: Request playback for a specific library item
@@ -1088,11 +1166,11 @@ paths:
               $ref: "#/components/schemas/PlayItemRequest"
       responses:
         "200":
-          description: Playable media descriptor (same shape as random playback)
+          description: The item to play, as a random pick's `item` gives it
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RandomResponse"
+                $ref: "#/components/schemas/PlaybackItemResponse"
         "400":
           description: Missing or blank item id
           content:
@@ -2246,7 +2324,7 @@ components:
         adminAuthMode:
           type: string
           enum:
-            - Off
+            - "Off"
             - TokenRequired
           description: >
             Read-only. GET always returns TokenRequired, and a posted value is ignored:
@@ -2998,18 +3076,117 @@ components:
         clientId:
           type: string
           nullable: true
-        sessionId:
-          type: string
-          nullable: true
+          description: |
+            The device whose random-pick memory the request uses. Requests without one share a memory of their own.
         includeVideos:
           type: boolean
           default: true
         includePhotos:
           type: boolean
           default: true
-        randomizationMode:
+        options:
+          anyOf:
+            - $ref: "#/components/schemas/RandomPickOptionsRequest"
+            - type: "null"
+          description: The options the pick combines. Omitted or null, every option takes its default.
+
+    RandomPickOptionsRequest:
+      type: object
+      description: |
+        The options a random pick combines. A missing option takes its default, a `rememberPlaysForDays` other than
+        the values listed or null reads as 30, and a `spreadByTags` the server doesn't know reads as `off`. With every
+        option off, picks are pure random.
+      properties:
+        shuffle:
+          type: boolean
+          default: true
+          description: Leaves out the items picked on this device within the window, until every eligible item has been.
+        rememberPlaysForDays:
+          type: integer
+          format: int32
+          nullable: true
+          enum:
+            - 1
+            - 7
+            - 30
+            - 90
+          default: 30
+          description: |
+            How long the device's picks are remembered, in days, or null for until every eligible item has been
+            picked. Any other value reads as 30.
+        spreadByFolder:
+          type: boolean
+          default: true
+          description: Leaves out the items in the folders of the device's recent picks.
+        spreadByTags:
+          type: string
+          enum:
+            - "off"
+            - allTags
+            - byCategory
+          default: "off"
+          description: |
+            Makes items whose tags came up in the device's recent picks beyond their share less likely, counting
+            every tag or only the tags of `spreadCategoryIds`. Read in any case; any other value reads as `off`.
+        spreadCategoryIds:
+          type: array
+          items:
+            type: string
+          description: The categories whose tags count under `byCategory`. An id no category has is ignored.
+        favorLessPlayed:
+          type: boolean
+          default: false
+        favorNewlyAdded:
+          type: boolean
+          default: false
+        favorNewlyCreated:
+          type: boolean
+          default: false
+        favorHigherRated:
+          type: boolean
+          default: false
+
+    RandomPickResponse:
+      type: object
+      required:
+        - item
+        - cycle
+      properties:
+        item:
+          anyOf:
+            - $ref: "#/components/schemas/PlaybackItemResponse"
+            - type: "null"
+          description: The picked item, or null when nothing is eligible.
+        cycle:
+          $ref: "#/components/schemas/RandomPickCycleResponse"
+
+    RandomPickCycleResponse:
+      type: object
+      required:
+        - picked
+        - eligible
+        - remaining
+      properties:
+        picked:
+          type: integer
+          format: int32
+          description: The eligible items picked on this device within the window, in the current cycle.
+        eligible:
+          type: integer
+          format: int32
+          description: The items the filter and the media types leave.
+        remaining:
+          type: integer
+          format: int32
+          description: The eligible items not yet picked in the cycle; with `picked`, they add up to `eligible`.
+
+    RandomResetRequest:
+      type: object
+      properties:
+        clientId:
           type: string
           nullable: true
+          description: The device whose Shuffle memory to clear.
 
     PlayItemRequest:
       type: object
@@ -3025,7 +3202,7 @@ components:
           default: true
           description: Defaults to true; the WebUI sends false only to get a fresh media URL for an item already playing.
 
-    RandomResponse:
+    PlaybackItemResponse:
       type: object
       required:
         - id

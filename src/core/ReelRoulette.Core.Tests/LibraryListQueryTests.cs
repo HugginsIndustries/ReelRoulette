@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Library;
+using ReelRoulette.Core.Randomization;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -293,6 +294,59 @@ public sealed class LibraryListQueryTests
 
         var eligiblePhotos = session.QueryRandomCandidates(filter, MediaTypeValue.Photo);
         Assert.Equal("photo", Assert.Single(eligiblePhotos).Id);
+    }
+
+    [Fact]
+    public void QueryRandomCandidates_ReadsBothDatesAndTheRating_AndTheTagsWithTheirCategories_OnlyWhenAsked()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        Assert.True(session.UpsertCategory("people", "People", 1));
+        Assert.True(session.UpsertTag("Ann", "people"));
+        Assert.True(session.UpsertTag("Beach", null));
+        var added = new DateTime(2026, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+        var written = new DateTime(2025, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+        // Inserting an item writes its tags as they are, so Orphan is on the item but not in the tag catalog.
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "full",
+            SourceId = "on",
+            FullPath = "/media/full.mp4",
+            RelativePath = "full.mp4",
+            FileName = "full.mp4",
+            DateAddedUtc = added,
+            LastWriteTimeUtc = written,
+            RatingHalfStars = 7,
+            Tags = ["Orphan", "Ann", "Beach"]
+        }));
+        Add(session, "bare", "on", "bare.mp4", "bare.mp4");
+
+        var withoutTags = session.QueryRandomCandidates(new FilterStateModel());
+        Assert.Equal(["bare", "full"], withoutTags.Select(item => item.Id).ToArray());
+        Assert.All(withoutTags, item => Assert.Empty(item.Tags));
+        var full = withoutTags[1];
+        Assert.Equal(added, full.DateAddedUtc);
+        Assert.Equal(written, full.DateCreatedUtc);
+        Assert.Equal(7, full.RatingHalfStars);
+        var bare = withoutTags[0];
+        Assert.Null(bare.DateAddedUtc);
+        Assert.Null(bare.DateCreatedUtc);
+        Assert.Null(bare.RatingHalfStars);
+
+        var withTags = session.QueryRandomCandidates(new FilterStateModel(), includeTags: true);
+        Assert.Equal(["bare", "full"], withTags.Select(item => item.Id).ToArray());
+        Assert.Empty(withTags[0].Tags);
+        Assert.Equal(
+            [
+                new RandomizationTag("orphan", string.Empty),
+                new RandomizationTag("ann", "people"),
+                new RandomizationTag("beach", LibraryCatalogStore.UncategorizedCategoryId)
+            ],
+            withTags[1].Tags);
+        Assert.Equal(added, withTags[1].DateAddedUtc);
+        Assert.Equal(7, withTags[1].RatingHalfStars);
     }
 
     [Fact]

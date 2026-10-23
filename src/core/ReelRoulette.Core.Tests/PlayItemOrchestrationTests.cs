@@ -87,7 +87,7 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         var result = ServerHostComposition.PlayItem("orch-item", request, playback, operations, state, new OperatorTestingService());
 
         Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
-        Assert.False(string.IsNullOrEmpty(Assert.IsType<RandomResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value).MediaUrl));
+        Assert.False(string.IsNullOrEmpty(Assert.IsType<PlaybackItemResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value).MediaUrl));
         Assert.Equal(1, host.Session.ReadItemState("orch-item")!.PlayCount);
         Assert.Single(state.GetReplayAfter(0).Events, envelope => envelope.EventType == "playbackRecorded");
     }
@@ -103,10 +103,10 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         var result = ServerHostComposition.PlayItem("orch-item", request, playback, operations, state, new OperatorTestingService());
 
         Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
-        var response = Assert.IsType<RandomResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+        var response = Assert.IsType<PlaybackItemResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
         Assert.Equal("orch-item", response.ItemId);
         Assert.False(string.IsNullOrEmpty(response.MediaUrl));
-        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "RandomResponse");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "PlaybackItemResponse");
         Assert.Equal(0, host.Session.ReadItemState("orch-item")!.PlayCount);
         Assert.Empty(state.GetReplayAfter(0).Events);
     }
