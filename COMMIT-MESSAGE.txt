@@ -20,7 +20,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Move WebUI Grid Scrollbar Seek out of v0.15.0 to the backlog
+M12l: Show the library grid's smooth zoom in the mockup and record Sharper Thumbnails
 
-- MILESTONES.md: WebUI Grid Scrollbar Seek leaves v0.15.0 and becomes backlog item P57, low priority, since filters, sorts, and search already find files without scrolling far down the grid. Its slices, traps, and acceptance are unchanged.
-- MILESTONES.md: WebUI Grid Row Reuse and Zoom moves from M12l1 to M12l, since it is the only M12l milestone left.
+- MILESTONES.md: WebUI Grid Row Reuse and Zoom zooms smoothly instead of in steps. During Ctrl+scroll or a pinch the grid scales around the pointer or the pinch's center, and when the gesture settles the rows reflow once at the new row height, with the tiles animating to their new places and the tile under the pointer keeping its vertical place. Tiles are spaced evenly, 1 px apart across a row and between rows, at every row height. Its Decisions, slices, release checks, and Not included follow, and the Row reuse slice keeps tiles through a reflow. The Mockup slice is complete, approved in the user's review, with its evidence.
+- MILESTONES.md: New backlog item P58, Sharper Thumbnails, groups larger thumbnails, with the measured sharpness on an iPad, storage, and generation figures, a sharper photo resize, not enlarging small videos, and the one-time rebuild marker they would share. Thumbnails stay at 480 px for now.
+- Mockup: Ctrl+scroll, a trackpad pinch, and a touch pinch zoom the library grid's row height from 100 to 300 px, scaling the grid while the gesture lasts and reflowing it once when it settles, and each device remembers the row height. Tiles sit 1 px apart across a row and between rows instead of 2 px across. Ctrl+scroll never zooms the page, and the index's Library notes and design table describe the zoom.
+- Mockup: The library grid follows a filter applied from the Filter tab instead of keeping its old tiles until the page reloads.
