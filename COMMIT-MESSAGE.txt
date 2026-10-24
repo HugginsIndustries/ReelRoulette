@@ -20,13 +20,7 @@ Instructions:
 
 Commit Message:
 
-M12k7: Remove the WebUI's keyboard navigation, focus moves, and focus rings
+Docs: Move WebUI Ratings on Tiles out of v0.15.0 to the backlog
 
-- Focus: no focus ring shows; one global outline: none replaces the 15 focus-ring rules and their token, the browser's own ring included, and the file name's and the stars' rounding, which only shaped their rings, goes too, the stars' from the mockup as well.
-- Keyboard navigation: the tiles, the file name, the stars, the panel handle, and the bell list's title lose their tab stops, and the keys inside the stars, the panel handle, the drag handles, the tiles, the file name, and the rating popover are gone.
-- Focus moves: closing the panel or the bell's list no longer gives focus to the panel button or the bell, closing the rating popover or a dialog no longer moves focus, and neither do Add Preset, Add tag, a drag, Copy Path, Notification settings, and H; dialogs keep only their opening focus.
-- Focus tracking: the player controls no longer stay shown for keyboard focus, and popups pause only for a mouse or pen.
-- Dead code: ratingForKey, arrowKeyTarget, attachButton, the panel handle's steps, the ratings' send-on-blur chain and their send of a change waiting on another file, which could never run, the dialogs' fallback helpers, and the results only the focus moves read are gone.
-- Tests: tests of removed behavior are gone; reorder tests drag, the Stats tab's rating tests use the - and = shortcuts, the Min Rating tests tap, and the snapshots drop tabindex.
-- Docs: CONTEXT.md, docs/domain-inventory.md, and the changelog drop the removed behavior, and the changelog says focus rings and Enter or Space on tiles are gone.
-- MILESTONES.md: the Keyboard navigation slice of WebUI Keyboard Navigation and Screen Reader Code Removal is complete with its evidence, and the Shortcut keys slice also blurs focus however the bell's list closes.
+- MILESTONES.md: WebUI Ratings on Tiles leaves v0.15.0 and becomes backlog item P56, low priority, since the rating filters and sorts already find files by their rating and rating badges would clutter the tiles. Its scope, traps, and acceptance are unchanged.
+- MILESTONES.md: WebUI Grid Scrollbar Seek moves from M12l3 to M12l2, so the v0.15.0 outline keeps its order with no gap.

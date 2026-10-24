@@ -9,12 +9,12 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l1, M12l2, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
 - **v0.18.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
-- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54, P55.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54, P55, P56.
 
 ## Document Purpose
 
@@ -479,33 +479,7 @@ Last milestone completed: M12k6
 - Zooming into the playing photo or video, which is Player Zoom and Pan.
 - Thumbnails larger than 480 px for tall rows, since the 480 px thumbnails are only slightly scaled up at 300 px rows.
 
-### M12l2 - WebUI Ratings on Tiles
-
-- **Status**: ⏳ Planned
-- **Goal**: Library tiles show each item's rating.
-- **Depends on**: Item Ratings, WebUI Grid Row Reuse and Zoom, which updates a tile in place, and Rating Filter and Sort, whose rating change kind in the tile effect rule decides whether a rating change patches a tile or reloads the window.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Each tile shows its item's rating, and an unrated item's tile shows none.
-- Before the app is built, how a tile shows its rating is settled in the mockup and approved on a desktop browser, the iPad, and an Android phone, such as a badge beside the favorite and blacklist badges or the rating in the file-name bar.
-- A rating change updates the tile in place when the tile effect rule says patch.
-
-#### Traps
-
-- Tiles show favorite and blacklist as filled icon badges with a soft drop shadow (`.library-grid-tile .material-symbol-icon.is-filled` in `src/styles.css`).
-- The file-name bar shows only while the Settings tab's Show file names on tiles is on, through a class on the Library tab, without rendering the tiles again.
-- Query pages carry each item's `rating` from Item Ratings.
-
-#### Acceptance
-
-- Tiles show their item's rating as the approved mockup shows, and an unrated item's tile shows none, in Library screen tests.
-- A rating change updates only that tile when the rule says patch, in WebUI tests for tile patching.
-- The mockup shows the tile rating as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check on the user's phone.
-
-### M12l3 - WebUI Grid Scrollbar Seek
+### M12l2 - WebUI Grid Scrollbar Seek
 
 - **Status**: ⏳ Planned
 - **Goal**: Dragging the library grid's scrollbar reaches any part of the results without loading every page before it.
@@ -3517,3 +3491,29 @@ Last milestone completed: M12k6
 #### Release checks
 
 - Manual: In a desktop browser with Ctrl+scroll and on the iPad with a pinch, zooming into a playing video and panning it works, and a swipe outside a zoomed view still plays the next item.
+
+### P56 - WebUI Ratings on Tiles
+
+- **Status**: ⏳ Planned
+- **Goal**: Library tiles show each item's rating. Low priority, since the rating filters and sorts already find files by their rating, and rating badges would clutter the tiles.
+- **Depends on**: Item Ratings, WebUI Grid Row Reuse and Zoom, which updates a tile in place, and Rating Filter and Sort, whose rating change kind in the tile effect rule decides whether a rating change patches a tile or reloads the window.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Each tile shows its item's rating, and an unrated item's tile shows none.
+- Before the app is built, how a tile shows its rating is settled in the mockup and approved on a desktop browser, the iPad, and an Android phone, such as a badge beside the favorite and blacklist badges or the rating in the file-name bar.
+- A rating change updates the tile in place when the tile effect rule says patch.
+
+#### Traps
+
+- Tiles show favorite and blacklist as filled icon badges with a soft drop shadow (`.library-grid-tile .material-symbol-icon.is-filled` in `src/styles.css`).
+- The file-name bar shows only while the Settings tab's Show file names on tiles is on, through a class on the Library tab, without rendering the tiles again.
+- Query pages carry each item's `rating` from Item Ratings.
+
+#### Acceptance
+
+- Tiles show their item's rating as the approved mockup shows, and an unrated item's tile shows none, in Library screen tests.
+- A rating change updates only that tile when the rule says patch, in WebUI tests for tile patching.
+- The mockup shows the tile rating as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
