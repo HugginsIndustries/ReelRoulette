@@ -291,7 +291,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
           </div>
           <div id="import-upload" hidden>
             <p class="hint" id="import-state" style="margin:10px 0 0"></p>
-            <div class="progress" id="import-progress" role="progressbar" aria-labelledby="import-state" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+            <div class="progress" id="import-progress"><span></span></div>
           </div>
         </section>
 
@@ -368,8 +368,8 @@ body.short-screen .admin-nav { padding: 4px 8px; }
         <section class="card" id="logs">
           <h3><span class="material-symbol-icon">article</span>Log Viewer</h3>
           <div class="log-toolbar">
-            <button class="btn" type="button" id="log-filters-toggle" aria-expanded="false" aria-controls="log-filters"><span class="material-symbol-icon">tune</span>Filters</button>
-            <div class="chips" id="log-chips" aria-label="Active filters"></div>
+            <button class="btn" type="button" id="log-filters-toggle"><span class="material-symbol-icon">tune</span>Filters</button>
+            <div class="chips" id="log-chips"></div>
             <span class="grow"></span>
             <span class="live" id="log-live">Live</span>
             <button class="btn" type="button" id="log-resume" hidden>Resume</button>
@@ -381,7 +381,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
             <div><label class="field-label" for="log-text" style="display:block;font-size:.85rem;margin-bottom:2px">Message</label><input class="ctl" type="search" id="log-text" placeholder="Contains…"></div>
             <div><label class="field-label" for="log-time" style="display:block;font-size:.85rem;margin-bottom:2px">Time</label><select class="ctl" id="log-time"><option>Last hour</option><option selected>Last 24 hours</option><option>Last 7 days</option><option>All</option></select></div>
           </div>
-          <div class="log-rows mono themed-scrollbar" id="log-rows" role="list" aria-label="Log lines, newest first"></div>
+          <div class="log-rows mono themed-scrollbar" id="log-rows"></div>
           <p class="mock-note mock-inline" style="margin:8px 0 0">Admin Log Viewer later moves this view to structured entries: it adds category and component filters, and rows expand to their raw JSON. The route keeps its name, <code>/control/logs/server</code>, until then.</p>
         </section>
 
@@ -410,7 +410,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
     </div>
   </div>
 
-  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <div id="toasts" class="toasts"></div>
 </div>
 
 <script>
@@ -596,7 +596,6 @@ function uploadLibrary(fileName, isLibrary) {
   box.hidden = false;
   const step = () => {
     $("import-state").textContent = `Uploading ${fileName}: ${percent}%`;
-    bar.setAttribute("aria-valuenow", String(percent));
     bar.firstElementChild.style.width = `${percent}%`;
     if (percent >= 100) {
       box.hidden = true;
@@ -998,11 +997,9 @@ function renderLog() {
   const matching = LOG.filter((e) => logFilter.levels.has(e.lvl) && logFilter.svcs.has(e.svc) && e.msg.toLowerCase().includes(text));
   matching.slice(0, logShown).forEach((entry) => {
     const row = document.createElement("div");
-    row.setAttribute("role", "listitem");
     const line = document.createElement("button");
     line.type = "button";
     line.className = "log-line";
-    line.setAttribute("aria-expanded", "false");
     line.innerHTML = '<span class="ts"></span><span class="lvl"></span><span class="meta"></span><span class="msg"></span>';
     line.querySelector(".ts").textContent = entry.ts.slice(11);
     line.querySelector(".lvl").textContent = entry.lvl;
@@ -1015,7 +1012,6 @@ function renderLog() {
     raw.hidden = true;
     line.addEventListener("click", () => {
       raw.hidden = !raw.hidden;
-      line.setAttribute("aria-expanded", String(!raw.hidden));
     });
     row.append(line, raw);
     rows.append(row);
@@ -1037,7 +1033,6 @@ $("log-time").addEventListener("change", resetLogPaging);
 $("log-filters-toggle").addEventListener("click", () => {
   const open = $("log-filters").hidden;
   $("log-filters").hidden = !open;
-  $("log-filters-toggle").setAttribute("aria-expanded", String(open));
 });
 // The live indicator pauses while scrolled away from the newest lines, with a control to resume.
 $("log-rows").addEventListener("scroll", () => {

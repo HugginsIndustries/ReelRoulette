@@ -30,8 +30,6 @@
   --control-border: #555555;
   --control-fg: #ffffff;
   --icon: #ffffff;
-  /* Keyboard focus: the brand orange, a little translucent. */
-  --focus-ring: rgba(239, 127, 34, 0.8);
   /* New for the validation pattern. */
   --error: #ff5a52;
   --success: #22ef7f;
@@ -59,7 +57,6 @@ html.theme-light {
   --control-border: #c5cad3;
   --control-fg: #1a1d21;
   --icon: #333333;
-  --focus-ring: rgba(239, 127, 34, 0.95);
   --error: #c4291f;
   --success: #1a7f43;
   --tip-bg: #1f2329;
@@ -136,7 +133,6 @@ body {
 .icon-btn:hover:not(:disabled) { opacity: var(--icon-hover-opacity); }
 .icon-btn:active:not(:disabled) { opacity: var(--icon-pressed-opacity); }
 .icon-btn:disabled { opacity: var(--icon-disabled-opacity); cursor: default; }
-.icon-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 /* Text buttons, selects, and text fields, as the overlays draw them. */
 .btn, .ctl {
@@ -160,7 +156,6 @@ body {
 }
 .btn:hover:not(:disabled) { background: var(--control-bg-hover); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn:focus-visible, .ctl:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .btn.has-pending { color: var(--huggins-orange); }
 .ctl { padding: 0 10px; min-width: 0; }
 input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
@@ -171,10 +166,10 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
    badge is the outlined icon the fields use; on a button it sits on a disc that hides the border under it. The Filter
    tab's Apply turns its unsaved-changes dot red instead, and Add Preset and Choose Preset's Update show a red dot in
    its place. */
-.btn[aria-disabled="true"],
-.icon-btn[aria-disabled="true"] { cursor: not-allowed; }
-.btn[aria-disabled="true"] .btn-label,
-.icon-btn[aria-disabled="true"] .btn-label { opacity: 0.5; }
+.btn.shows-problem,
+.icon-btn.shows-problem { cursor: not-allowed; }
+.btn.shows-problem .btn-label,
+.icon-btn.shows-problem .btn-label { opacity: 0.5; }
 .btn-problem,
 .filter-tab .tab-problem {
   position: absolute;
@@ -311,7 +306,6 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   justify-content: center;
 }
 .tab:hover { background: rgba(127, 127, 127, 0.16); }
-.tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .tab[aria-selected="true"] { color: var(--huggins-orange); }
 .tab[aria-selected="true"]::after {
   content: "";
@@ -411,7 +405,6 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tag-category-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .tag-category.is-collapsed .tag-category-header { margin-bottom: 0; }
 .tag-category.is-collapsed { margin-bottom: 8px; }
 .tag-grid { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -450,7 +443,6 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 }
 .drag-handle .material-symbol-icon { font-size: 26px; }
 .drag-handle:hover { color: var(--icon); }
-.drag-handle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; color: var(--icon); }
 .drag-handle-spacer { width: 32px; flex: 0 0 32px; }
 .is-dragging { position: relative; z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 .is-dragging .drag-handle { cursor: grabbing; color: var(--huggins-orange); }
@@ -479,23 +471,8 @@ body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -
 .dialog-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .dialog-spacer { flex: 1; }
 
-/* Visually hidden, still read by screen readers. */
-.vh {
-  position: absolute !important;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Keyboard focus shows as one orange ring in place of the browser's own; a mouse click shows none. Controls with their
-   own focus style below keep the same color. */
+/* No focus ring shows anywhere, the browser's own included, as in the app. */
 :focus { outline: none; }
-:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* The logo in the header: the lockup with light text in the dark theme and dark text in the light theme, and the icon
    alone on a phone. Its images carry the name "ReelRoulette", so the heading keeps it. */
@@ -540,7 +517,6 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
    it. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
    moves, so it never scrolls the tab. */
 .rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
 .rating-star .material-symbol-icon { font-size: 30px; }
 /* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
@@ -554,7 +530,7 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }
 /* The bell is orange while its list is open, and while it has unread messages, as its badge is. */
-.notify-btn[aria-expanded="true"], .notify-btn.has-unread { color: var(--huggins-orange); }
+.notify-btn.is-open, .notify-btn.has-unread { color: var(--huggins-orange); }
 /* The bell's badge, which the player's rating star shares. It overlays its button, so it never moves an icon. Its ring
    ends 2 px inside the button's right edge, since Chrome on Android clips a ring that reaches the edge. */
 .notify-badge, .rating-badge {

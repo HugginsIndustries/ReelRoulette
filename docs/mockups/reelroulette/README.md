@@ -12,7 +12,7 @@ An interactive mockup of the app's whole visible UI, approved before the v0.15.0
   - random picks and the play history, how each server situation looks, and each lasting state and kind of notification, set from the magenta Mockup tab.
 - `admin.html` shows the full-page admin view, its sections, its notifications bell and popups, duplicate review, and the control token gate.
 - `recovery.html` shows the server's plain recovery page, for when the WebUI's files are missing or broken.
-- `validation.html` shows each state of the field validation pattern, with what a screen reader is given.
+- `validation.html` shows each state of the field validation pattern.
 
 Magenta dashed boxes and the mockup controls are not part of the design. Every screen is approved, and each decision is recorded in the milestone in `MILESTONES.md` that builds it. Where the shipped app differs from the approved design, that milestone's evidence says so.
 

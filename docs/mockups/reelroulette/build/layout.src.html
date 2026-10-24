@@ -43,9 +43,8 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
   text-overflow: ellipsis;
 }
 .now-playing .muted { color: var(--muted-fg); margin-left: 8px; }
-.now-playing .is-link { cursor: pointer; border-radius: 4px; }
+.now-playing .is-link { cursor: pointer; }
 .now-playing .is-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.now-playing .is-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .top-bar-end { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; margin-left: auto; }
 @media (max-width: 600px) {
   .now-playing { order: 3; flex-basis: 100%; }
@@ -247,7 +246,6 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   display: flex;
   align-items: center;
   justify-content: center;
-  outline: none;
 }
 .handle-grip {
   width: 4px;
@@ -257,7 +255,6 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   transition: background 0.15s, height 0.15s;
 }
 .panel-handle:hover .handle-grip,
-.panel-handle:focus-visible .handle-grip,
 .panel-handle.is-dragging .handle-grip { background: var(--huggins-orange); height: 88px; }
 @media (pointer: coarse) {
   .panel-handle { flex-basis: 20px; }
@@ -340,11 +337,6 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 html.theme-light .lib-grid { background: #fff; }
 .lib-row { display: flex; gap: 2px; margin-bottom: 1px; }
 .lib-tile { position: relative; flex-shrink: 0; overflow: hidden; cursor: pointer; }
-/* A focused tile gets an orange border. It is a layer of its own after the thumbnail's frame, since the frame fills the
-   tile and covers anything the tile itself draws, its outline included. */
-.lib-tile:focus-visible { outline: none; }
-.tile-focus { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: none; pointer-events: none; box-shadow: inset 0 0 0 3px var(--focus-ring); }
-.lib-tile:focus-visible > .tile-focus { display: block; }
 /* The thumbnail and what sits on it. A selected tile's thumbnail shrinks inside the tile, so the selection icon, which
    stays put, sits on its top-left corner. */
 .lib-tile-frame { position: absolute; inset: 0; overflow: hidden; transition: transform 0.15s ease, border-radius 0.15s ease; }
@@ -499,12 +491,6 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
   .select-mark:hover { opacity: 1; }
 }
 .lib-grid.selecting .select-mark { display: flex; }
-/* Keyboard focus on a tile shows its check icon, as hovering does, so Tab can reach it. The focused check icon turns
-   bright white inside a thick orange ring, which the tile crops. */
-.lib-tile:focus-visible .select-mark { display: flex; }
-/* The ring starts at the icon's visible edge, which sits about 2 px inside its 26 px box, and reaches about 22 px from
-   its center. */
-.select-mark:focus-visible { display: flex; opacity: 1; outline: 11px solid var(--focus-ring); outline-offset: -2px; }
 .lib-tile.is-selected { background: color-mix(in srgb, var(--huggins-orange) 22%, var(--surface)); }
 .lib-tile.is-selected .lib-tile-frame { transform: scale(0.86); border-radius: 4px; }
 .lib-tile.is-selected .select-mark { display: flex; opacity: 1; color: var(--huggins-orange); background: radial-gradient(circle, #fff 0 42%, transparent 44%); }
@@ -536,7 +522,7 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
   text-align: left;
   cursor: pointer;
 }
-.menu button:hover, .menu button:focus-visible { background: rgba(127, 127, 127, 0.16); outline: none; }
+.menu button:hover { background: rgba(127, 127, 127, 0.16); }
 .menu .menu-danger { color: var(--error); }
 .menu-rule { border: 0; border-top: 1px solid var(--surface-border); margin: 4px 0; }
 
@@ -668,8 +654,7 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
    than 600 px, by the class the layout sets on the player column, it sits below the corner buttons. A library
    refresh's progress shows only while the player's controls do. At the top, centered, it stays clear of the corner
    buttons on both sides, which take the last 212 px at the right, or 160 px while the panel is on the left, and a long
-   state ends in an ellipsis instead. The live region around it stays in the page, so a state that starts showing is
-   announced. */
+   state ends in an ellipsis instead. */
 .player-indicator {
   position: absolute;
   top: 14px;
@@ -842,7 +827,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
 <div id="app">
   <header class="top-bar">
     <h1 class="brand"><img class="brand-on-dark" src="@LOGO_LOCKUP@" alt="ReelRoulette"><img class="brand-on-light" src="@LOGO_LOCKUP_DARK@" alt="ReelRoulette"><img class="brand-icon" src="@LOGO_ICON@" alt="ReelRoulette"></h1>
-    <div class="now-playing"><span id="np-name" class="is-link" role="button" tabindex="0" title="Show stats"></span><span id="np-duration" class="muted"></span></div>
+    <div class="now-playing"><span id="np-name" class="is-link" title="Show stats"></span><span id="np-duration" class="muted"></span></div>
     <form class="pair" id="pair" novalidate hidden>
       <label class="pair-label" for="pair-token">Pairing token</label>
       <span class="vfield"><input class="ctl" type="text" id="pair-token" placeholder="Enter token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
@@ -856,19 +841,19 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
   <div id="stage" class="stage" data-side="right" data-dialog-host>
     <main class="player-col">
       <div id="media" class="media-container controls-visible">
-        <div id="ambient" class="ambient" aria-hidden="true" hidden><canvas width="32" height="18"></canvas></div>
+        <div id="ambient" class="ambient" hidden><canvas width="32" height="18"></canvas></div>
         <div id="video" class="fake-video"><div class="subject"></div></div>
         <div id="empty-state" class="empty-state" hidden>Tap to play, or open the panel to choose a preset or filter.</div>
-        <div class="player-indicator-region" role="status"><div id="player-indicator" class="player-indicator" hidden></div></div>
-        <div id="volume-indicator" class="volume-indicator" aria-hidden="true"><span class="material-symbol-icon">volume_up</span><span id="volume-indicator-text"></span></div>
-        <div id="seek-indicator-back" class="seek-indicator is-back" aria-hidden="true"><span class="material-symbol-icon">chevron_left</span><span class="seek-indicator-text"></span></div>
-        <div id="seek-indicator-forward" class="seek-indicator is-forward" aria-hidden="true"><span class="seek-indicator-text"></span><span class="material-symbol-icon">chevron_right</span></div>
+        <div id="player-indicator" class="player-indicator" hidden></div>
+        <div id="volume-indicator" class="volume-indicator"><span class="material-symbol-icon">volume_up</span><span id="volume-indicator-text"></span></div>
+        <div id="seek-indicator-back" class="seek-indicator is-back"><span class="material-symbol-icon">chevron_left</span><span class="seek-indicator-text"></span></div>
+        <div id="seek-indicator-forward" class="seek-indicator is-forward"><span class="seek-indicator-text"></span><span class="material-symbol-icon">chevron_right</span></div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
           <button id="notify-btn" class="overlay-btn overlay-corner-btn notify-btn" type="button" aria-label="Notifications" title="Notifications"><span class="material-symbol-icon">notifications</span><span class="notify-badge" hidden></span></button>
-          <button id="panel-btn" class="overlay-btn overlay-corner-btn" aria-expanded="false" aria-controls="panel"><span class="material-symbol-icon">right_panel_open</span><span class="unsaved-dot" hidden></span></button>
-          <button id="rating-btn" class="overlay-btn overlay-corner-btn" type="button" aria-label="Rating" title="Rating" aria-expanded="false" aria-controls="rating-popover"><span class="material-symbol-icon">star</span><span id="rating-badge" class="rating-badge" aria-hidden="true" hidden></span></button>
+          <button id="panel-btn" class="overlay-btn overlay-corner-btn"><span class="material-symbol-icon">right_panel_open</span><span class="unsaved-dot" hidden></span></button>
+          <button id="rating-btn" class="overlay-btn overlay-corner-btn" type="button" aria-label="Rating" title="Rating"><span class="material-symbol-icon">star</span><span id="rating-badge" class="rating-badge" hidden></span></button>
           <div id="rating-popover" class="rating-popover" hidden></div>
           <button id="favorite-btn" class="overlay-btn overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
           <button id="blacklist-btn" class="overlay-btn overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
@@ -889,10 +874,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           </div>
         </div>
       </div>
-      <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+      <div id="toasts" class="toasts"></div>
     </main>
 
-    <div id="handle" class="panel-handle" role="separator" aria-orientation="vertical" aria-label="Resize panel" tabindex="0" hidden>
+    <div id="handle" class="panel-handle" hidden>
       <span class="handle-grip"></span>
       <span id="handle-readout" class="handle-readout mock-note" hidden></span>
     </div>
@@ -900,12 +885,12 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
     <aside id="panel" class="panel" aria-label="Panel" hidden>
       <div class="panel-tabs">
         <div class="panel-tablist" role="tablist" aria-label="Panel tabs">
-          <button class="tab panel-tab" role="tab" id="tab-btn-library" data-tab="library" aria-controls="tab-library" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
-          <button class="tab panel-tab" role="tab" id="tab-btn-tags" data-tab="tags" aria-controls="tab-tags" aria-label="Tags" title="Tags"><span class="material-symbol-icon">tag</span><span class="unsaved-dot" hidden></span></button>
-          <button class="tab panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-controls="tab-stats" aria-label="Stats" title="Stats"><span class="material-symbol-icon">bar_chart</span></button>
-          <button class="tab panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-controls="tab-filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
-          <button class="tab panel-tab" role="tab" id="tab-btn-randomization" data-tab="randomization" aria-controls="tab-randomization" aria-label="Randomization" title="Randomization"><span class="material-symbol-icon">casino</span></button>
-          <button class="tab panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-controls="tab-settings" aria-label="Settings" title="Settings"><span class="material-symbol-icon">settings</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-library" data-tab="library" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-tags" data-tab="tags" aria-label="Tags" title="Tags"><span class="material-symbol-icon">tag</span><span class="unsaved-dot" hidden></span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-label="Stats" title="Stats"><span class="material-symbol-icon">bar_chart</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-randomization" data-tab="randomization" aria-label="Randomization" title="Randomization"><span class="material-symbol-icon">casino</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-label="Settings" title="Settings"><span class="material-symbol-icon">settings</span></button>
         </div>
         <span class="panel-tabs-spacer"></span>
         <button class="icon-btn" id="panel-close" aria-label="Close panel" title="Close"><span class="material-symbol-icon">close</span></button>
@@ -914,8 +899,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       <section id="tab-library" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-library">
         <div class="panel-page-head">
           <h2>Library</h2>
-          <p id="lib-summary" class="lib-summary grow" aria-live="polite"></p>
-          <button class="icon-btn" type="button" id="lib-collapse" aria-expanded="true" aria-controls="lib-controls lib-filters lib-random" aria-label="Hide library controls and filters" title="Hide controls &amp; filters"><span class="material-symbol-icon">unfold_less</span></button>
+          <p id="lib-summary" class="lib-summary grow"></p>
+          <button class="icon-btn" type="button" id="lib-collapse" aria-label="Hide library controls and filters" title="Hide controls &amp; filters"><span class="material-symbol-icon">unfold_less</span></button>
         </div>
         <button type="button" id="lib-filters" class="lib-filters" title="Open the Filter tab" hidden></button>
         <button type="button" id="lib-random" class="lib-filters" title="Open the Randomization tab"></button>
@@ -945,19 +930,19 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div id="lib-grid" class="lib-grid scroll-y themed-scrollbar"></div>
         <div id="bulk-bar" class="bulk-bar" hidden>
           <button class="icon-btn" type="button" id="bulk-exit" aria-label="Stop selecting" title="Stop selecting"><span class="material-symbol-icon">deselect</span></button>
-          <span id="bulk-count" class="grow" aria-live="polite">0 selected</span>
+          <span id="bulk-count" class="grow">0 selected</span>
           <button class="icon-btn" type="button" id="bulk-all" aria-label="Select all" title="Select all"><span class="material-symbol-icon">select_all</span></button>
-          <button class="btn" type="button" id="bulk-actions" aria-haspopup="menu" aria-expanded="false" aria-controls="bulk-menu" disabled><span class="btn-label">Actions</span><span class="material-symbol-icon" style="font-size:22px">expand_more</span></button>
-          <div id="bulk-menu" class="menu" role="menu" hidden>
-            <button type="button" role="menuitem" data-bulk="fav-add">Add to favorites</button>
-            <button type="button" role="menuitem" data-bulk="fav-remove">Remove from favorites</button>
-            <button type="button" role="menuitem" data-bulk="bl-add">Add to blacklist</button>
-            <button type="button" role="menuitem" data-bulk="bl-remove">Remove from blacklist</button>
+          <button class="btn" type="button" id="bulk-actions" disabled><span class="btn-label">Actions</span><span class="material-symbol-icon" style="font-size:22px">expand_more</span></button>
+          <div id="bulk-menu" class="menu" hidden>
+            <button type="button" data-bulk="fav-add">Add to favorites</button>
+            <button type="button" data-bulk="fav-remove">Remove from favorites</button>
+            <button type="button" data-bulk="bl-add">Add to blacklist</button>
+            <button type="button" data-bulk="bl-remove">Remove from blacklist</button>
             <hr class="menu-rule">
-            <button type="button" role="menuitem" data-bulk="tags">Edit tags…</button>
-            <button type="button" role="menuitem" data-bulk="clear">Clear playback stats…</button>
+            <button type="button" data-bulk="tags">Edit tags…</button>
+            <button type="button" data-bulk="clear">Clear playback stats…</button>
             <hr class="menu-rule">
-            <button type="button" role="menuitem" data-bulk="remove" class="menu-danger">Remove from library…</button>
+            <button type="button" data-bulk="remove" class="menu-danger">Remove from library…</button>
           </div>
         </div>
       </section>
@@ -983,7 +968,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 <label><input type="checkbox"> Only videos with known loudness</label>
                 <label><input type="checkbox" id="filter-playable"> Only files this browser can play</label>
                 <span class="vfield vfield-after"><label><input type="checkbox" id="filter-unrated"> Only unrated</label><span class="vfield-icon material-symbol-icon">error</span></span>
-                <div class="mode-row min-rating-row" id="filter-min-rating-row"><span id="filter-min-rating-label">Min Rating</span><input type="hidden" id="filter-min-rating" value=""></div>
+                <div class="mode-row min-rating-row" id="filter-min-rating-row"><span>Min Rating</span><input type="hidden" id="filter-min-rating" value=""></div>
               </div>
             </div>
             <div class="filter-section">
@@ -1088,7 +1073,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <h2 class="grow">Tag Editor</h2>
           <button class="icon-btn" type="button" id="open-autotag" aria-label="Auto Tag" title="Auto Tag"><span class="material-symbol-icon">auto_awesome</span></button>
         </div>
-        <p id="tags-target" class="tags-target" aria-live="polite" hidden></p>
+        <p id="tags-target" class="tags-target" hidden></p>
         <div id="tags-body" class="tags-body scroll-y themed-scrollbar"></div>
         <div class="tags-footer">
           <div class="tags-footer-row">
@@ -1199,8 +1184,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-advance" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>seconds</span></div>
             </div>
             <div class="setting">
-              <div class="choice-row"><label><input type="checkbox" id="set-loop-stops" aria-describedby="set-loop-stops-hint"> Loop stops autoplay</label></div>
-              <p class="setting-hint" id="set-loop-stops-hint">With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances.</p>
+              <div class="choice-row"><label><input type="checkbox" id="set-loop-stops"> Loop stops autoplay</label></div>
+              <p class="setting-hint">With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances.</p>
             </div>
             <div class="setting">
               <span class="setting-label" id="set-seek-label">Seek step</span>
@@ -1423,11 +1408,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <p class="setting-hint">Settings apply at once and are kept on this device.</p>
         </div>
       </section>
-      <p id="sort-help" class="vh">Drag to reorder, or press the up and down arrow keys.</p>
-      <div id="sort-live" class="vh" aria-live="polite"></div>
     </aside>
 
-    <div id="autotag" class="autotag-overlay" role="dialog" aria-modal="true" aria-labelledby="autotag-title" hidden>
+    <div id="autotag" class="autotag-overlay" role="dialog" aria-labelledby="autotag-title" hidden>
       <div class="autotag-head">
         <h2 id="autotag-title">Auto Tag</h2>
         <button class="icon-btn" type="button" id="autotag-close" aria-label="Close" title="Close"><span class="material-symbol-icon">close</span></button>
@@ -1442,8 +1425,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <button class="btn" type="button" id="autotag-deselect-all">Deselect all</button>
         <button class="btn" type="button" id="autotag-scan" style="margin-left:auto">Scan Files</button>
       </div>
-      <div class="autotag-progress" id="autotag-progress" role="progressbar" aria-label="Scan in progress" hidden></div>
-      <div class="autotag-status" id="autotag-status" aria-live="polite"></div>
+      <div class="autotag-progress" id="autotag-progress" hidden></div>
+      <div class="autotag-status" id="autotag-status"></div>
       <div class="autotag-results themed-scrollbar" id="autotag-results"></div>
       <div class="autotag-footer">
         <p class="mock-note" style="margin:0;padding:6px 10px;flex:1">Opens over the whole page, as its tab does today, and pauses playback under Responsive Auto-Pause. Its own Apply applies the checked changes. Cancel clears the scan and closes; the X closes and keeps the last scan. Both are disabled while a scan runs.</p>
@@ -1465,7 +1448,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       </main>
     </div>
 
-    <button id="mock-toggle" class="mock-toggle" type="button" aria-expanded="false" aria-controls="mock-sheet">Mockup</button>
+    <button id="mock-toggle" class="mock-toggle" type="button">Mockup</button>
     <div id="mock-sheet" class="mock-sheet mock-note mock-keep" hidden>
       <div class="mock-label mock-keep">Mockup options, not part of the WebUI</div>
       <label><input type="checkbox" id="mock-hide-notes"> Hide mockup notes, to see screens as they will ship</label>
@@ -1872,7 +1855,6 @@ const notes = initNotifications({
     openPanel("settings");
     $("set-popups-more").open = true;
     $("set-notify-section").scrollIntoView?.({ block: "start" });
-    $("set-popups").focus({ preventScroll: true });
   },
   // The player's controls stay while the list is open, so their countdown starts again when it closes, however it closes.
   onClose: () => controlsActivity(),
@@ -2415,7 +2397,6 @@ function renderPanelButton() {
   const label = (state.open ? "Close panel" : "Open panel") + (held ? ", unsaved changes" : "");
   setIcon(button.querySelector(".material-symbol-icon"), `${state.side}_panel_${state.open ? "close" : "open"}`);
   button.classList.toggle("active", state.open);
-  button.setAttribute("aria-expanded", String(state.open));
   button.setAttribute("aria-label", label);
   button.title = label;
 }
@@ -2433,10 +2414,6 @@ function applyLayout() {
   // Measured once the panel's new state is in place, so it is the player's width after the change.
   const playerCol = media.parentElement;
   playerCol.classList.toggle("is-narrow", playerCol.clientWidth > 0 && playerCol.clientWidth < 600);
-  handle.setAttribute("aria-valuemin", String(PANEL_MIN));
-  handle.setAttribute("aria-valuemax", String(maxWidth()));
-  handle.setAttribute("aria-valuenow", String(width));
-  handle.setAttribute("aria-valuetext", `${width} pixels`);
   renderPanelButton();
   notes.renderIndicator();
   syncAutoPause();
@@ -2449,9 +2426,7 @@ function showTab(tab) {
   state.tab = tab;
   store.set("tab", tab);
   document.querySelectorAll(".panel-tab").forEach((button) => {
-    const selected = button.dataset.tab === tab;
-    button.setAttribute("aria-selected", String(selected));
-    button.tabIndex = selected ? 0 : -1;
+    button.setAttribute("aria-selected", String(button.dataset.tab === tab));
   });
   ["library", "tags", "stats", "filter", "randomization", "settings"].forEach((name) => {
     $(`tab-${name}`).hidden = name !== tab;
@@ -2463,61 +2438,41 @@ function showTab(tab) {
   notePresetsView();
 }
 
-let opener = null;
-function openPanel(tab, from) {
-  opener = from || null;
-  notes.closeList(false);
+function openPanel(tab) {
+  notes.closeList();
   ratingPopover.close();
   state.open = true;
   store.set("open", true);
   $("mock-hint").hidden = true;
   showTab(tab);
 }
-// Focus goes back to what opened the panel, or the panel button, only when it was in the panel or on its handle.
-// A key that closes the panel, Esc or a shortcut, leaves focus on the page rather than on the panel button, so Space
-// plays or pauses afterwards.
-function closePanel({ byKey = false } = {}) {
+// Focus inside the panel is dropped rather than given back to the panel button, so the keys reach the shortcuts
+// afterwards.
+function closePanel() {
   leaveSettingFields();
   const focused = document.activeElement;
-  const hadFocus = $("panel").contains(focused) || $("handle").contains(focused);
+  const hadFocus = $("panel").contains(focused);
   state.open = false;
   store.set("open", false);
   notePresetsView();
   applyLayout();
-  if (!hadFocus) return;
-  if (byKey) focused.blur();
-  else (opener || $("panel-btn")).focus({ preventScroll: true });
+  if (hadFocus) focused.blur();
 }
 
 $("panel-btn").addEventListener("click", (event) => {
   event.stopPropagation();
   if (state.open) closePanel();
-  else openPanel(state.tab, event.currentTarget);
+  else openPanel(state.tab);
 });
 document.querySelectorAll(".panel-tab").forEach((button) => {
   button.addEventListener("click", () => showTab(button.dataset.tab));
 });
 $("panel-close").addEventListener("click", closePanel);
 
-// Arrow keys move between tabs, as a tab list does.
-document.querySelector(".panel-tablist").addEventListener("keydown", (event) => {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-  const tabs = [...document.querySelectorAll(".panel-tab")].filter((tab) => !tab.hidden);
-  let index = tabs.findIndex((tab) => tab.dataset.tab === state.tab);
-  if (event.key === "ArrowLeft") index = (index - 1 + tabs.length) % tabs.length;
-  if (event.key === "ArrowRight") index = (index + 1) % tabs.length;
-  if (event.key === "Home") index = 0;
-  if (event.key === "End") index = tabs.length - 1;
-  event.preventDefault();
-  showTab(tabs[index].dataset.tab);
-  tabs[index].focus();
-});
-
 // ---- Resizing ----
 let dragging = false;
-function setWidth(width, remember) {
+function setWidth(width) {
   state.width = Math.round(Math.min(Math.max(width, PANEL_MIN), maxWidth()));
-  if (remember) store.set("width", state.width);
   applyLayout();
   const readout = $("handle-readout");
   readout.hidden = false;
@@ -2540,7 +2495,7 @@ handle.addEventListener("pointermove", (event) => {
   if (!dragging) return;
   const box = stage.getBoundingClientRect();
   const half = handleWidth() / 2;
-  setWidth(state.side === "right" ? box.right - event.clientX - half : event.clientX - box.left - half, false);
+  setWidth(state.side === "right" ? box.right - event.clientX - half : event.clientX - box.left - half);
 });
 function endDrag() {
   if (!dragging) return;
@@ -2551,20 +2506,6 @@ function endDrag() {
 }
 handle.addEventListener("pointerup", endDrag);
 handle.addEventListener("pointercancel", endDrag);
-handle.addEventListener("keydown", (event) => {
-  const grow = state.side === "right" ? "ArrowLeft" : "ArrowRight";
-  const shrink = state.side === "right" ? "ArrowRight" : "ArrowLeft";
-  const step = event.shiftKey ? 64 : 16;
-  let next = null;
-  if (event.key === grow) next = effectiveWidth() + step;
-  if (event.key === shrink) next = effectiveWidth() - step;
-  if (event.key === "Home") next = PANEL_MIN;
-  if (event.key === "End") next = maxWidth();
-  if (next === null) return;
-  event.preventDefault();
-  setWidth(next, true);
-  hideReadoutSoon();
-});
 
 window.addEventListener("resize", applyLayout);
 coarse.addEventListener("change", applyLayout);
@@ -2668,22 +2609,17 @@ function hideSeekIndicator() {
 // Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, a press on the
 // controls, or a key shows them and restarts the countdown. A tap acts through its click, and a touch moving over the
 // player isn't activity, so the controls come back only once the click has landed on the player, and a tap where a
-// hidden button sits only shows them. They stay while a mouse or pen pointer is over them, while keyboard focus is on
-// one, while the scrub bar or volume is dragged, and, with Keep visible while paused, while playback waits for the
-// user, as Play shows: not on a photo whose timer the bar doesn't show, as once it ends and autoplay moves on. A touch
-// doesn't count as over them, and focus that a tap or click leaves on a control doesn't hold them: after a tap on Play
-// they still hide. On click/tap: a click or tap on the player shows or hides them, as today. Never: they stay.
+// hidden button sits only shows them. They stay while a mouse or pen pointer is over them, while the scrub bar or
+// volume is dragged, and, with Keep visible while paused, while playback waits for the user, as Play shows: not on a
+// photo whose timer the bar doesn't show, as once it ends and autoplay moves on. A touch doesn't count as over them,
+// and focus on a control doesn't hold them: after a tap on Play they still hide. On click/tap: a click or tap on the
+// player shows or hides them, as today. Never: they stay.
 const overlayControls = $("overlay-controls");
 const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
 let hideTimer = 0;
 let pointerOnControls = false;
 let draggingControl = false;
 const setControlsShown = (shown) => media.classList.toggle("controls-visible", shown);
-// Keyboard focus is focus that :focus-visible matches in the WebUI. The mockup tracks the last input itself, since
-// happy-dom matches :focus-visible for any focus.
-let keyboardFocus = false;
-document.addEventListener("keydown", () => (keyboardFocus = true), true);
-document.addEventListener("pointerdown", () => (keyboardFocus = false), true);
 // Playback waits for the user while nothing plays and Play is enabled, as in the app: a photo whose timer the bar
 // doesn't show, as once its timer ends and autoplay moves on, doesn't.
 function waitsForUser() {
@@ -2691,8 +2627,7 @@ function waitsForUser() {
   return !playback.playing && !(photo && !photoBarFills());
 }
 function controlsHeld() {
-  const focusHolds = keyboardFocus && overlayControls.contains(document.activeElement);
-  return pointerOnControls || draggingControl || focusHolds || (state.keepWhilePaused && waitsForUser()) || notes.listShown() || ratingPopover.isOpen();
+  return pointerOnControls || draggingControl || (state.keepWhilePaused && waitsForUser()) || notes.listShown() || ratingPopover.isOpen();
 }
 function restartHideCountdown() {
   clearTimeout(hideTimer);
@@ -2736,8 +2671,6 @@ const endControlDrag = () => {
 };
 document.addEventListener("pointerup", endControlDrag);
 document.addEventListener("pointercancel", endControlDrag);
-overlayControls.addEventListener("focusin", () => state.hideControls === "timeout" && setControlsShown(true));
-overlayControls.addEventListener("focusout", () => setTimeout(controlsActivity));
 document.addEventListener("keydown", (event) => {
   if (!isTextField(event.target)) controlsActivity();
 });
@@ -3136,7 +3069,7 @@ document.addEventListener("keydown", (event) => {
   } else if (!$("mock-sheet").hidden) {
     toggleSheet(false);
   } else if (state.open) {
-    closePanel({ byKey: true });
+    closePanel();
   } else if (stage.classList.contains("fullscreen-pseudo")) {
     setPseudo(false);
   }
@@ -3145,53 +3078,27 @@ document.addEventListener("keydown", (event) => {
 // ---- Reordering by drag handle ----
 // How far the pointer moves on a handle before a drag starts, in pixels.
 const DRAG_START_DISTANCE = 5;
-function announce(text) {
-  $("sort-live").textContent = text;
-}
 function dragHandle(label) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "drag-handle";
   button.title = "Drag to reorder";
   button.setAttribute("aria-label", `Reorder ${label}`);
-  button.setAttribute("aria-describedby", "sort-help");
   button.append(iconSpan("drag_indicator"));
   return button;
 }
 
 /**
- * Rows of `list` that carry a handle reorder by dragging the handle, or with the up and down arrow keys while it has
- * focus. `commit(keys)` receives the new order of those rows and redraws the list.
+ * Rows of `list` that carry a handle reorder by dragging the handle. `commit(keys)` receives the new order of those rows
+ * and redraws the list.
  */
-function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
+function makeSortable({ list, rowSelector, keyOf, commit }) {
   // A row whose handle is disabled, such as Uncategorized, stays where it is.
   const movable = () => [...list.children].filter((row) => row.matches(rowSelector) && row.querySelector(".drag-handle:not(:disabled)"));
   const midpoint = (row) => {
     const box = row.getBoundingClientRect();
     return box.top + box.height / 2;
   };
-  // An arrow key's move brings the handle into view when its row has left it; a drop leaves the list where it is.
-  const focusHandle = (key, preventScroll = false) => {
-    const row = movable().find((r) => keyOf(r) === key);
-    if (row) row.querySelector(".drag-handle").focus({ preventScroll });
-  };
-
-  list.addEventListener("keydown", (event) => {
-    const handleEl = event.target.closest(".drag-handle");
-    if (!handleEl || handleEl.disabled || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
-    event.preventDefault();
-    const rows = movable();
-    const row = handleEl.closest(rowSelector);
-    const from = rows.indexOf(row);
-    const to = from + (event.key === "ArrowUp" ? -1 : 1);
-    if (to < 0 || to >= rows.length) return;
-    const keys = rows.map(keyOf);
-    keys.splice(to, 0, keys.splice(from, 1)[0]);
-    const key = keyOf(row);
-    commit(keys);
-    focusHandle(key);
-    announce(`${labelOf(key)} moved to position ${to + 1} of ${rows.length}.`);
-  });
 
   list.addEventListener("pointerdown", (start) => {
     const handleEl = start.target.closest(".drag-handle");
@@ -3256,13 +3163,8 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
       document.body.classList.remove("sorting");
       row.style.transform = "";
       const keys = movable().map(keyOf);
-      const key = keyOf(row);
-      if (keys.join("\n") !== before.join("\n")) {
-        commit(keys);
-        announce(`${labelOf(key)} moved to position ${keys.indexOf(key) + 1} of ${keys.length}.`);
-      }
+      if (keys.join("\n") !== before.join("\n")) commit(keys);
       if (scroller) scroller.scrollTop = scrollTop;
-      focusHandle(key, true);
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", end);
@@ -3331,13 +3233,9 @@ const SORT_VALUES = {
 };
 const compareSortValues = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-// The count line reads "{matching} / {total}"; screen readers hear it in words.
+// The count line reads "{matching} / {total}".
 function showSummary(matching, total) {
-  const summary = $("lib-summary");
-  const shown = Object.assign(document.createElement("span"), { textContent: `${matching.toLocaleString()} / ${total.toLocaleString()}` });
-  shown.setAttribute("aria-hidden", "true");
-  const spoken = Object.assign(document.createElement("span"), { className: "vh", textContent: `${matching.toLocaleString()} of ${total.toLocaleString()} items` });
-  summary.replaceChildren(shown, spoken);
+  $("lib-summary").textContent = `${matching.toLocaleString()} / ${total.toLocaleString()}`;
 }
 
 // The WebUI's justified rows (buildRows), at the smaller tile size chosen with these mockups.
@@ -3371,7 +3269,6 @@ let lastGridWidth = 0;
 function gridMessage(grid, text, error) {
   const empty = document.createElement("p");
   empty.className = error ? "lib-empty is-error" : "lib-empty";
-  if (error) empty.setAttribute("role", "alert");
   empty.textContent = text;
   grid.append(empty);
 }
@@ -3401,17 +3298,7 @@ function layoutGrid(force) {
       tileEl.className = "lib-tile" + (item.id === playback.item?.id ? " is-current" : "") +
         (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "");
       tileEl.dataset.id = String(item.id);
-      // The grid is one tab stop: the last tile focused, or the first. Its check icon is the next stop.
-      const tabStop = item.id === (items.some((x) => x.id === gridFocusId) ? gridFocusId : items[0].id);
-      tileEl.tabIndex = tabStop ? 0 : -1;
-      if (selecting) {
-        tileEl.setAttribute("role", "checkbox");
-        tileEl.setAttribute("aria-checked", String(selected.has(item.id)));
-        tileEl.setAttribute("aria-label", item.name);
-      } else {
-        tileEl.setAttribute("role", "button");
-        tileEl.setAttribute("aria-label", `Play ${item.name}`);
-      }
+      tileEl.setAttribute("aria-label", selecting ? item.name : `Play ${item.name}`);
       // With a mouse, hovering a tile shows its name, whether or not names show on tiles.
       tileEl.title = item.name;
       tileEl.style.width = `${tile.width}px`;
@@ -3439,15 +3326,10 @@ function layoutGrid(force) {
       frame.append(playing, name);
       const mark = document.createElement("span");
       mark.className = "select-mark";
-      mark.tabIndex = tabStop ? 0 : -1;
-      mark.setAttribute("role", "checkbox");
       mark.setAttribute("aria-label", `Select ${item.name}`);
-      mark.setAttribute("aria-checked", String(selected.has(item.id)));
       mark.title = selected.has(item.id) ? "Deselect" : "Select";
       mark.append(iconSpan("check_circle", "is-filled tile-icon"));
-      const focusLayer = document.createElement("span");
-      focusLayer.className = "tile-focus";
-      tileEl.append(frame, focusLayer, mark);
+      tileEl.append(frame, mark);
       rowEl.append(tileEl);
     }
     grid.append(rowEl);
@@ -3475,51 +3357,6 @@ function chooseTile(event) {
   if (state.mode === "overlay" && !document.querySelector("dialog[open]")) closePanel();
 }
 $("lib-grid").addEventListener("click", chooseTile);
-// Arrow keys move between tiles: left and right in order, up and down to the nearest tile in the next row. Enter or
-// Space on a tile chooses it, and on its check icon selects it, as a click does.
-let gridFocusId = null;
-function moveTabStop(tile) {
-  gridFocusId = Number(tile.dataset.id);
-  $("lib-grid").querySelectorAll(".lib-tile, .select-mark").forEach((el) => (el.tabIndex = -1));
-  tile.tabIndex = 0;
-  tile.querySelector(".select-mark").tabIndex = 0;
-}
-$("lib-grid").addEventListener("focusin", (event) => {
-  const tile = event.target.closest(".lib-tile");
-  if (tile) moveTabStop(tile);
-});
-function neighborTile(tile, key) {
-  const tiles = [...$("lib-grid").querySelectorAll(".lib-tile")];
-  const index = tiles.indexOf(tile);
-  if (key === "ArrowLeft") return tiles[index - 1] || null;
-  if (key === "ArrowRight") return tiles[index + 1] || null;
-  if (key !== "ArrowUp" && key !== "ArrowDown") return undefined;
-  const row = key === "ArrowUp" ? tile.parentElement.previousElementSibling : tile.parentElement.nextElementSibling;
-  if (!row) return null;
-  const center = (el) => {
-    const box = el.getBoundingClientRect();
-    return box.left + box.width / 2;
-  };
-  const x = center(tile);
-  return [...row.children].reduce((best, other) => (!best || Math.abs(center(other) - x) < Math.abs(center(best) - x) ? other : best), null);
-}
-$("lib-grid").addEventListener("keydown", (event) => {
-  const tile = event.target.closest(".lib-tile");
-  if (!tile) return;
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    chooseTile(event);
-    return;
-  }
-  const next = neighborTile(tile, event.key);
-  if (next === undefined) return;
-  // Handled here, so the arrow keys don't also play the previous or next item.
-  event.preventDefault();
-  if (next) {
-    next.focus();
-    moveTabStop(next);
-  }
-});
 $("lib-search").addEventListener("input", (event) => {
   lib.search = event.target.value;
   reloadGrid();
@@ -3775,14 +3612,14 @@ function resetUnusedFields() {
 // filter until Apply, and never send a rating.
 const minRatingInput = $("filter-min-rating");
 const minRating = () => Number(minRatingInput.value) || null;
-const minRatingStars = ratingStars({ "aria-labelledby": "filter-min-rating-label" }, (_, value) => {
+const minRatingStars = ratingStars((_, value) => {
   minRatingInput.value = value ? String(value) : "";
   unratedField.update();
-}, { noneText: "No minimum" });
+});
 minRatingStars.el.id = "filter-min-rating-stars";
 $("filter-min-rating-row").append(minRatingStars.el);
 minRatingStars.show({ get rating() { return minRating(); } });
-const unratedField = ratingPairField($("filter-unrated"), minRating, minRatingStars.el);
+const unratedField = ratingPairField($("filter-unrated"), minRating);
 // The stars show the minimum the pair was last checked with, however it changed.
 unratedField.onChange(minRatingStars.draw);
 // The General section's checked fields, in their order on screen, which Apply, Add Preset, and Update use.
@@ -4145,7 +3982,6 @@ makeSortable({
   list: $("filter-preset-list"),
   rowSelector: ".filter-preset-row",
   keyOf: (row) => row.dataset.key,
-  labelOf: (key) => presetNames.get(key),
   commit: (keys) => {
     presets.splice(0, presets.length, ...keys);
     presetsChanged();
@@ -4171,8 +4007,7 @@ function openEditPreset(index) {
     }
   });
 }
-// Add Preset adds the preset last, with an id of its own, and moves to its drag handle: a button, so no on-screen
-// keyboard opens.
+// Add Preset adds the preset last, with an id of its own.
 $("filter-add-preset").addEventListener("click", () => {
   const id = `preset-${nextPresetId++}`;
   presets.push(id);
@@ -4180,7 +4015,6 @@ $("filter-add-preset").addEventListener("click", () => {
   presetFilters.set(id, filterValue());
   nameField.reset("");
   presetsChanged();
-  $("filter-preset-list").lastElementChild?.querySelector(".drag-handle")?.focus();
 });
 
 // A freshly loaded preset list, by id, as the preset event brings it, becomes the saved presets, and the tab takes it by
@@ -4276,18 +4110,15 @@ function setCategoryExpanded(view, id, open) {
   store.set(view === "tags" ? "tagsExpanded" : "filterTagsExpanded", [...set]);
 }
 function categoryEl(view, id, name, { handle: handleEl, controls, inUse = 0, inUseTitle = "", unsaved = false } = {}) {
-  const key = view === "tags" ? id : `filter-${id}`;
   const section = document.createElement("section");
   section.className = "tag-category";
   const header = document.createElement("div");
   header.className = "tag-category-header";
   const grid = document.createElement("div");
   grid.className = "tag-grid";
-  grid.id = `tag-grid-${key}`;
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "tag-category-toggle";
-  toggle.setAttribute("aria-controls", grid.id);
   const label = Object.assign(document.createElement("span"), { className: "tag-category-name", textContent: name });
   const count = Object.assign(document.createElement("span"), { className: "category-count", textContent: String(inUse), title: inUseTitle });
   const dot = Object.assign(document.createElement("span"), { className: "unsaved-dot category-dot", title: "Unsaved changes" });
@@ -4299,7 +4130,6 @@ function categoryEl(view, id, name, { handle: handleEl, controls, inUse = 0, inU
     const isCollapsed = !expandedCategories[view].has(id);
     grid.hidden = isCollapsed;
     section.classList.toggle("is-collapsed", isCollapsed);
-    toggle.setAttribute("aria-expanded", String(!isCollapsed));
     toggle.title = isCollapsed ? "Expand category" : "Collapse category";
   };
   toggle.addEventListener("click", () => {
@@ -4513,7 +4343,6 @@ makeSortable({
   list: $("tags-body"),
   rowSelector: ".tag-category",
   keyOf: (row) => row.dataset.key,
-  labelOf: (key) => TAGS.find((category) => category.id === key).name,
   commit: (keys) => {
     const byId = new Map(TAGS.map((category) => [category.id, category]));
     const ordered = keys.map((key) => byId.get(key));
@@ -4559,9 +4388,7 @@ const newTagField = new ValidatedField($("tags-new-name"), (value) => {
     : null;
 });
 holdAction($("tags-add-tag"), () => [newTagField], { beside: () => [newTagField] });
-// Add tag adds the tag to the chosen category, until Save, without putting it on the item being edited. Focus moves
-// to its chip's Add, so one more press puts it on the item, or to its Edit while no item is being edited: a button, so
-// no on-screen keyboard opens.
+// Add tag adds the tag to the chosen category, until Save, without putting it on the item being edited.
 function addTag() {
   if (newTagField.holds) return;
   const name = $("tags-new-name").value.trim();
@@ -4572,11 +4399,6 @@ function addTag() {
   setCategoryExpanded("tags", category.id, true);
   newTagField.reset("");
   tagsChanged();
-  const added = [...$("tags-body").querySelectorAll(`.tag-category[data-key="${category.id}"] .tag-chip`)].find(
-    (element) => element.querySelector(".tag-chip-label").textContent === name
-  );
-  const add = added?.querySelector('[title="Add tag"]');
-  (add && !add.disabled ? add : added?.querySelector('[title="Edit tag"]'))?.focus();
 }
 $("tags-add-tag").addEventListener("click", addTag);
 $("tags-new-name").addEventListener("keydown", (event) => {
@@ -4791,14 +4613,12 @@ function openAutoTag() {
   $("autotag").hidden = false;
   syncAutoPause();
   renderAutoTag();
-  $("autotag-close").focus();
 }
 function closeAutoTag() {
   if (autoTag.scanning) return;
   state.autoTag = false;
   $("autotag").hidden = true;
   syncAutoPause();
-  $("open-autotag").focus();
 }
 $("open-autotag").addEventListener("click", openAutoTag);
 $("autotag-close").addEventListener("click", closeAutoTag);
@@ -4843,20 +4663,13 @@ $("autotag-apply").addEventListener("click", () => {
 
 // ---- Header ----
 function openStats() {
-  openPanel("stats", $("np-name"));
+  openPanel("stats");
 }
 $("np-name").addEventListener("click", openStats);
-$("np-name").addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    openStats();
-  }
-});
 
 // ---- Mockup options ----
 function toggleSheet(show) {
   $("mock-sheet").hidden = !show;
-  $("mock-toggle").setAttribute("aria-expanded", String(show));
   if (show) renderReadout();
 }
 $("mock-toggle").addEventListener("click", () => toggleSheet($("mock-sheet").hidden));
@@ -5332,7 +5145,7 @@ function setSelecting(on) {
   renderBulk();
   renderSelection();
 }
-// Selection updates the tiles in place, as the grid patches a tile, so focus stays on the tile or check icon in use.
+// Selection updates the tiles in place, as the grid patches a tile, rather than redrawing the grid.
 function renderSelection() {
   const grid = $("lib-grid");
   grid.classList.toggle("selecting", selecting);
@@ -5341,13 +5154,8 @@ function renderSelection() {
     const name = ITEMS[id].name;
     const on = selected.has(id);
     tile.classList.toggle("is-selected", on);
-    tile.setAttribute("role", selecting ? "checkbox" : "button");
     tile.setAttribute("aria-label", selecting ? name : `Play ${name}`);
-    if (selecting) tile.setAttribute("aria-checked", String(on));
-    else tile.removeAttribute("aria-checked");
-    const mark = tile.querySelector(".select-mark");
-    mark.setAttribute("aria-checked", String(on));
-    mark.title = on ? "Deselect" : "Select";
+    tile.querySelector(".select-mark").title = on ? "Deselect" : "Select";
   });
 }
 function selectTile(id, range) {
@@ -5404,25 +5212,13 @@ $("lib-grid").addEventListener("contextmenu", (event) => {
 
 function closeBulkMenu() {
   $("bulk-menu").hidden = true;
-  $("bulk-actions").setAttribute("aria-expanded", "false");
 }
 $("bulk-actions").addEventListener("click", (event) => {
   event.stopPropagation();
-  const open = $("bulk-menu").hidden;
-  $("bulk-menu").hidden = !open;
-  $("bulk-actions").setAttribute("aria-expanded", String(open));
-  if (open) $("bulk-menu").querySelector("button").focus();
+  $("bulk-menu").hidden = !$("bulk-menu").hidden;
 });
 document.addEventListener("click", (event) => {
   if (!$("bulk-menu").hidden && !event.target.closest("#bulk-menu")) closeBulkMenu();
-});
-$("bulk-menu").addEventListener("keydown", (event) => {
-  const items = [...$("bulk-menu").querySelectorAll("button")];
-  const index = items.indexOf(document.activeElement);
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-    items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
-  }
 });
 $("bulk-menu").addEventListener("click", (event) => {
   const item = event.target.closest("[data-bulk]");
@@ -5574,7 +5370,6 @@ function statsMessage() {
 function statsHint(text, error) {
   const hint = document.createElement("p");
   hint.className = error ? "filter-hint is-error" : "filter-hint";
-  if (error) hint.setAttribute("role", "alert");
   hint.textContent = text;
   return hint;
 }
@@ -5584,7 +5379,7 @@ const RATING_KEY_PAUSE_MS = 500;
 const RATING_CLEAR_EDGE_PX = 8;
 // The rating's one change waiting to be sent, which the Stats tab's stars, the player's, and the rating keys share, so
 // a change made in one shows at once in the others: the item it was made on and its rating before. A click, tap, or drag
-// sends it as it is set; keys send it once they pause, when focus leaves the stars, or when another item plays.
+// sends it as it is set; the rating keys send it once they pause, or when another item plays.
 const ratings = (() => {
   let pending = null;
   let pauseTimer = 0;
@@ -5623,17 +5418,10 @@ const ratings = (() => {
   }
   return { set, flush };
 })();
-// The five stars, a slider from 0 to 5 to screen readers, for one item at a time. `onSet` gets the item, the value, and
-// whether a key set it. Screen readers hear `noneText` while there are no stars, "Not rated" unless the caller says
-// otherwise, and `onLeave` runs when focus leaves them.
-function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLeave } = {}) {
+// The five stars, for one item at a time. `onSet` gets the item and the value.
+function ratingStars(onSet) {
   const el = document.createElement("div");
   el.className = "rating";
-  el.tabIndex = 0;
-  el.setAttribute("role", "slider");
-  Object.entries(labelAttributes).forEach(([name, value]) => el.setAttribute(name, value));
-  el.setAttribute("aria-valuemin", "0");
-  el.setAttribute("aria-valuemax", "5");
   const stars = Array.from({ length: 5 }, () => {
     const star = document.createElement("span");
     star.className = "rating-star";
@@ -5655,9 +5443,6 @@ function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLe
       star.classList.toggle("is-full", full);
       star.classList.toggle("is-half", !full && value >= i + 0.5);
     });
-    // The slider's value stays the set rating through a preview or a press.
-    el.setAttribute("aria-valuenow", String(rating));
-    el.setAttribute("aria-valuetext", rating ? ratingText(rating) : noneText);
   }
   // The value under the pointer: the first star's left edge clears the rating, a star's left half is half a star less
   // than its right half, and past the stars' ends, which only a press that started on them reaches, is none or 5.
@@ -5676,8 +5461,8 @@ function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLe
     return true;
   }
 
-  // A browser moves focus on mousedown, which a tap sends too, so the stars set a rating without taking focus, and
-  // after a click or a tap the arrow keys still play the previous or next item. Tab still reaches them.
+  // A browser moves focus on mousedown, which a tap sends too, so the stars cancel it: a press on them doesn't take
+  // focus off another control.
   el.addEventListener("mousedown", (event) => event.preventDefault());
   el.addEventListener("pointerdown", (event) => {
     if (!item || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -5695,7 +5480,7 @@ function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLe
   });
   // A release sets the value under it. A mouse still over the control previews it again on its next move.
   el.addEventListener("pointerup", (event) => {
-    if (endPress(event)) onSet(item, valueAt(event.clientX), false);
+    if (endPress(event)) onSet(item, valueAt(event.clientX));
   });
   // A press the browser or a redraw cuts short sets nothing.
   const cancelPress = (event) => endPress(event) && draw();
@@ -5706,17 +5491,6 @@ function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLe
     shown = null;
     draw();
   });
-  // The keys stay the control's, so the left and right arrows don't play the previous or next item.
-  el.addEventListener("keydown", (event) => {
-    if (!item || event.altKey || event.ctrlKey || event.metaKey) return;
-    const rating = item.rating || 0;
-    const steps = { ArrowLeft: rating - 0.5, ArrowDown: rating - 0.5, ArrowRight: rating + 0.5, ArrowUp: rating + 0.5, Home: 0, End: 5, Delete: 0, Backspace: 0 };
-    if (!(event.key in steps)) return;
-    event.preventDefault();
-    onSet(item, Math.min(5, Math.max(0, steps[event.key])), true);
-  });
-  // A redraw that gives focus straight back hasn't left them.
-  el.addEventListener("blur", () => queueMicrotask(() => document.activeElement !== el && onLeave?.()));
 
   return {
     el,
@@ -5733,22 +5507,17 @@ function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLe
   };
 }
 // The Current file section's rating: the label and the stars. It is one element kept across the tab's redraws, which
-// move it into the new rows, so a redraw keeps focus on it.
+// move it into the new rows.
 const ratingControl = (() => {
   const line = document.createElement("div");
   line.className = "stats-rating";
   const label = document.createElement("span");
   label.className = "stats-rating-label";
-  label.id = "stats-rating-label";
   label.textContent = "Rating";
-  // Leaving the stars sends a key change at once.
-  const control = ratingStars({ "aria-labelledby": label.id }, (item, value, byKey) => ratings.set(item, value, byKey), {
-    onLeave: () => ratings.flush()
-  });
+  const control = ratingStars((item, value) => ratings.set(item, value));
   control.el.id = "stats-rating";
   line.append(label, control.el);
   return {
-    el: control.el,
     draw: control.draw,
     // The line for the playing item.
     line(item) {
@@ -5758,30 +5527,26 @@ const ratingControl = (() => {
   };
 })();
 // The player's rating: the star at the top right, orange with the rating in its badge while the playing item is rated,
-// and its popover, the same stars at the player's center. A click, tap, or drag that sets a rating closes the popover;
-// the keys don't, and Enter, Escape, Tab, or a press elsewhere does. So does another item playing, a volume change, or
-// the panel opening. The player's controls stay while it is open, and their countdown starts again when it closes.
+// and its popover, the same stars at the player's center. A click, tap, or drag that sets a rating closes the popover,
+// and so do Escape and a press elsewhere. So does another item playing, a volume change, or the panel opening. The
+// player's controls stay while it is open, and their countdown starts again when it closes.
 const ratingPopover = (() => {
   const button = $("rating-btn");
   const popover = $("rating-popover");
-  const control = ratingStars({ "aria-label": "Rating" }, (item, value, byKey) => {
-    ratings.set(item, value, byKey);
-    if (!byKey) close();
-  }, { onLeave: () => ratings.flush() });
+  const control = ratingStars((item, value) => {
+    ratings.set(item, value);
+    close();
+  });
   popover.append(control.el);
   let open = false;
 
-  // However it closes, focus on the stars goes back to the star. Focus that Tab moves out has already left them.
   function close() {
     if (!open) return;
     open = false;
-    if (popover.contains(document.activeElement)) button.focus({ preventScroll: true });
     popover.hidden = true;
-    button.setAttribute("aria-expanded", "false");
     controlsActivity();
   }
-  // Nothing opens with nothing playing or while the server asks for pairing, as Favorite does nothing then. Opened from
-  // the keyboard, focus moves to the stars; a click or a tap leaves it where it is, as on the Stats tab's stars.
+  // Nothing opens with nothing playing or while the server asks for pairing, as Favorite does nothing then.
   button.addEventListener("click", () => {
     if (open) return close();
     if (!playback.item || state.pairing) return;
@@ -5789,29 +5554,15 @@ const ratingPopover = (() => {
     control.show(playback.item);
     $("volume-indicator").classList.remove("is-shown");
     popover.hidden = false;
-    button.setAttribute("aria-expanded", "true");
-    if (keyboardFocus) control.el.focus({ preventScroll: true });
-  });
-  popover.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    close();
-  });
-  // Focus leaving the stars, as Tab takes it, closes it. Focus a press on the star moves is left to the star, whose click
-  // closes it, so the press doesn't open it again.
-  let pressedStar = false;
-  popover.addEventListener("focusout", (event) => {
-    if (popover.contains(event.relatedTarget) || (!keyboardFocus && pressedStar)) return;
-    close();
   });
   // A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch could land on the
   // video under it, which would act on the player. A touch on the stars sends no click.
   popover.addEventListener("touchend", (event) => event.preventDefault());
   // A press elsewhere closes it and still does what it does, as a press outside the notifications list does, and Escape
-  // closes it before anything else it would close.
+  // closes it before anything else it would close. A press on the star is left to its click, which closes it, so the
+  // press doesn't open it again.
   document.addEventListener("pointerdown", (event) => {
-    pressedStar = button.contains(event.target);
-    if (open && !popover.contains(event.target) && !pressedStar) close();
+    if (open && !popover.contains(event.target) && !button.contains(event.target)) close();
   }, true);
   document.addEventListener("keydown", (event) => {
     if (!open || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
@@ -5916,7 +5667,6 @@ function renderStats() {
   const host = $("stats-body");
   if (!host) return;
   const item = playback.item;
-  const ratingFocused = document.activeElement === ratingControl.el;
   host.textContent = "";
 
   const file = document.createElement("section");
@@ -5953,7 +5703,6 @@ function renderStats() {
   library.append(statCards(cards));
   // The current file first, since the file name opens this tab.
   host.append(file, library);
-  if (ratingFocused && ratingControl.el.isConnected) ratingControl.el.focus({ preventScroll: true });
 }
 
 // Cards of [label, value] in a grid, as the Stats tab's Library and the Shuffle cycle show them.
@@ -6309,7 +6058,7 @@ function initSettings() {
     });
   });
   // Ambient mode settings: each control shows its value, applies as it moves, and is kept on this device. A slider is
-  // named by its label alone, and the value shown is its value text.
+  // named by its label alone, without the value shown beside it.
   const ambientControls = [
     ["rate", (value) => `${value} per second`],
     ["fade", (value) => `${value} s`],
@@ -6321,7 +6070,6 @@ function initSettings() {
   const renderAmbientSettings = () => {
     ambientControls.forEach(([key, format]) => {
       $(`set-ambient-${key}`).value = String(tuning[key]);
-      $(`set-ambient-${key}`).setAttribute("aria-valuetext", format(tuning[key]));
       $(`set-ambient-${key}-out`).textContent = format(tuning[key]);
     });
     renderAmbient();
@@ -6435,20 +6183,19 @@ function showShortcuts() {
   const section = $("set-shortcuts");
   section.open = true;
   section.scrollIntoView?.({ block: "start" });
-  section.querySelector("summary").focus({ preventScroll: true });
 }
 const TAB_KEYS = { 1: "library", 2: "tags", 3: "stats", 4: "filter", 5: "randomization", 6: "settings", t: "tags", s: "settings" };
+// A text field, a dropdown, or editable text keeps every key pressed in it. Every other control, a checkbox, a radio
+// button, a button, or a slider, leaves the keys to the shortcuts, so they work at once after a click on Next or a drag
+// of the scrub bar.
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
-    (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
-// A field nothing is typed into, as a slider is, keeps only its own keys: the shortcuts work there otherwise, so they
-// work at once after a mouse drag of the scrub bar or the volume.
-const takesEveryKey = (el) => isTextField(el) && el.type !== "range";
+    (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit", "reset", "range"].includes(el.type)));
 // Only seeks, frame steps, volume steps, and rating steps repeat while a key is held down; every other key acts once per
 // press, and its repeats stay the page's, so holding Space doesn't scroll.
 const REPEATING_KEYS = ["j", "l", ",", ".", "[", "]", "-", "="];
-// The rating keys rate the playing item as its stars' keys do, sending once the keys pause, and do nothing while nothing
-// plays or while the server asks for pairing.
+// The rating keys rate the playing item, sending once the keys pause, and do nothing while nothing plays or while the
+// server asks for pairing.
 function rateByKey(value) {
   if (!playback.item || state.pairing) return;
   ratings.set(playback.item, Math.min(5, Math.max(0, value)), true);
@@ -6506,13 +6253,15 @@ function stepVolumeWithIndicator(steps) {
 }
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-  if (takesEveryKey(event.target) || document.querySelector("dialog[open]") || state.autoTag) return;
+  if (isTextField(event.target) || document.querySelector("dialog[open]") || state.autoTag) return;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   const held = event.repeat && !REPEATING_KEYS.includes(key);
   const item = playback.item;
   const video = seekableVideo();
-  // A shortcut's key is the page's, held or not; true for a held key that doesn't repeat, which doesn't act again.
-  const handled = () => (event.preventDefault(), held);
+  // A shortcut's key is the page's, held or not; true for a held key that doesn't repeat, which doesn't act again. The
+  // focused control loses focus before the shortcut runs, so Space's release can't press a button and focus doesn't
+  // stay on it for the next key.
+  const handled = () => (event.preventDefault(), document.activeElement?.blur?.(), held);
   if (event.shiftKey && key === "f") return handled() || $("fullscreen-btn").click();
   // Shift and a digit set the rating, 0 clearing it. They are matched by the key's position, since Shift changes the
   // character a digit key gives, such as "!" for 1 on a US layout.
@@ -6521,14 +6270,8 @@ document.addEventListener("keydown", (event) => {
   // H opens Settings with the shortcuts shown, from anywhere outside a text field. Not ?, which Firefox takes for its
   // quick find.
   if (key === "h") return handled() || showShortcuts();
-  // Space plays or pauses as K does, unless focus is on something Space already activates, such as a button or a tile.
-  // A slider isn't among them, nor what takes focus without a tab stop, such as the bell's list's title.
-  if (key === " " && event.target !== document.body &&
-    event.target.closest('button, a, input:not([type=range]), select, textarea, summary, [tabindex]:not([tabindex="-1"])')) return;
   if (key === "k" || key === " ") return handled() || $("play-btn").click();
   if ((key === "j" || key === "l") && video) return handled() || seekByStep(key === "l" ? 1 : -1);
-  // Arrow keys keep their own job on radio buttons, checkboxes, and sliders.
-  if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
   if (key === "ArrowLeft") return handled() || goPrevious();
   if (key === "ArrowRight") return handled() || goNext();
   if (key === "r") return handled() || pickRandom(0, true);
@@ -6551,13 +6294,15 @@ document.addEventListener("keydown", (event) => {
     return renderPlayback();
   }
   if ((key === "[" || key === "]") && volumeAdjustable()) return handled() || stepVolumeWithIndicator(key === "]" ? 1 : -1);
-  if (key === "p") return handled() || (state.open ? closePanel({ byKey: true }) : $("panel-btn").click());
+  if (key === "p") return handled() || (state.open ? closePanel() : $("panel-btn").click());
   if (TAB_KEYS[key]) {
     if (handled()) return;
-    if (state.open && state.tab === TAB_KEYS[key]) closePanel({ byKey: true });
+    if (state.open && state.tab === TAB_KEYS[key]) closePanel();
     else openPanel(TAB_KEYS[key]);
   }
 });
+// A dropdown gives up focus after a pick, so → after picking a preset plays the next item.
+blurDropdownsAfterPick();
 
 // ---- Volume and pairing ----
 $("volume").value = String(shownVolume());
@@ -6619,7 +6364,6 @@ function applyCollapse() {
   $("lib-controls").classList.toggle("is-collapsed", state.libCollapsed);
   $("lib-filters").classList.toggle("is-collapsed", state.libCollapsed);
   $("lib-random").classList.toggle("is-collapsed", state.libCollapsed);
-  button.setAttribute("aria-expanded", String(!state.libCollapsed));
   button.setAttribute("aria-label", state.libCollapsed ? "Show library controls and filters" : "Hide library controls and filters");
   button.title = state.libCollapsed ? "Show controls & filters" : "Hide controls & filters";
   setIcon(button.querySelector(".material-symbol-icon"), state.libCollapsed ? "unfold_more" : "unfold_less");

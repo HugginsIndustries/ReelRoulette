@@ -126,11 +126,10 @@ function checkDuration(value) {
  * always hold a value for the app to work, such as Advance after, returns `{ message }` when it is emptied, so it is
  * flagged and the user sees it. Any other problem is flagged as it is typed, and `holdAction` decides
  * whether it disables or holds the action.
- * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
- * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
+ * `partners` are other controls checked with this one, such as the other dropdown of a pair, and focusing one shows the
+ * tooltip too. The icon and tooltip stay with `input`.
  */
 const allFields = new Set();
-let tipCounter = 0;
 
 class ValidatedField {
   constructor(input, check, options) {
@@ -145,8 +144,6 @@ class ValidatedField {
     this.listeners = [];
     this.tip = document.createElement("div");
     this.tip.className = "vfield-tip";
-    this.tip.id = "field-tip-" + ++tipCounter;
-    this.tip.setAttribute("role", "tooltip");
     // Inside the field, so it shows in fullscreen and above a dialog; fixed, so scrolling bodies don't clip it.
     this.wrap.appendChild(this.tip);
 
@@ -215,15 +212,6 @@ class ValidatedField {
     this.wrap.classList.toggle("is-invalid", flagged);
     fadeShown(this.icon, flagged);
     if (flagged) this.tip.textContent = problem.message;
-    [this.input, ...this.partners].forEach((control) => {
-      if (flagged) {
-        control.setAttribute("aria-invalid", "true");
-        control.setAttribute("aria-describedby", this.tip.id);
-      } else {
-        control.removeAttribute("aria-invalid");
-        control.removeAttribute("aria-describedby");
-      }
-    });
     this.place();
     this.listeners.forEach((listener) => listener());
   }
@@ -286,14 +274,14 @@ function flagPairField(favBox, favMode, blBox, blMode, options) {
 
 /**
  * The Filter tab's Only unrated and Min Rating, checked as a pair: Only unrated with a minimum rating matches nothing,
- * since a minimum leaves unrated files out. The icon sits after the Only unrated label, which a held action moves to,
- * and the stars, when given, are marked with it. `minimum()` gives the stars' value, 0 or null for none; the checkbox
- * updates the field, and call `update()` after the stars change.
+ * since a minimum leaves unrated files out. The icon sits after the Only unrated label, which a held action moves to.
+ * `minimum()` gives the stars' value, 0 or null for none; the checkbox updates the field, and call `update()` after the
+ * stars change.
  */
 const RATING_PAIR_PROBLEM = "Nothing unrated has a minimum rating. Clear one of them.";
-function ratingPairField(unratedBox, minimum, stars, options) {
+function ratingPairField(unratedBox, minimum, options) {
   const check = () => (unratedBox.checked && minimum() > 0 ? { message: RATING_PAIR_PROBLEM } : null);
-  const field = new ValidatedField(unratedBox, check, { ...options, partners: stars ? [stars] : [] });
+  const field = new ValidatedField(unratedBox, check, options);
   unratedBox.addEventListener("change", () => field.update());
   return field;
 }
@@ -336,10 +324,9 @@ function dateRangeFields(fromInput, toInput, options) {
  * value typed is saved only on Enter or when the field loses focus, so a value passed through on the way, such as the
  * "1" of "120", is never saved. While the field has focus, a value that is not valid stays flagged; once it loses focus,
  * or hides with its tab or the panel, it shows the value saved again, unflagged. A save that changes the value shows a
- * green check where the field's red icon sits for SETTING_SAVED_MS, then fades it out, and a polite live region says
- * "Saved". Nothing
- * shows when the value stays as it was, or when a value that is not valid goes back to the one saved. A hidden field
- * may get no blur, so call `leaveSettingFields()` when the Settings tab hides or the panel closes.
+ * green check where the field's red icon sits for SETTING_SAVED_MS, then fades it out. Nothing shows when the value
+ * stays as it was, or when a value that is not valid goes back to the one saved. A hidden field may get no blur, so
+ * call `leaveSettingFields()` when the Settings tab hides or the panel closes.
  * `saved()` gives the value in use as the field shows it, and `save(text)` keeps a valid one. `show()` shows the value
  * saved again, as after a reset.
  */
@@ -350,22 +337,17 @@ function settingField(field, saved, save) {
   let edited = false;
   let savedTimer = null;
   const check = iconSpan("check_circle", "vfield-saved");
-  const live = document.createElement("span");
-  live.className = "vh";
-  live.setAttribute("aria-live", "polite");
-  field.wrap.append(check, live);
+  field.wrap.append(check);
   const hideSaved = () => {
     clearTimeout(savedTimer);
     savedTimer = null;
     field.wrap.classList.remove("is-saved");
     fadeShown(check, false);
-    live.textContent = "";
   };
   const showSaved = () => {
     hideSaved();
     field.wrap.classList.add("is-saved");
     fadeShown(check, true);
-    live.textContent = "Saved";
     savedTimer = setTimeout(hideSaved, SETTING_SAVED_MS);
   };
   const saveEdit = () => {
@@ -424,13 +406,12 @@ window.addEventListener("resize", placeAllTips);
  *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. So does `idle()` returning true,
  *   for an action with nothing to do, such as Apply with no changes. So does `unavailable()` returning a reason, for
  *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
- *   its tooltip and accessible description. Disabling wins over holding.
+ *   its tooltip. Disabling wins over holding.
  * - While it isn't idle, `blocked()` returning a reason blocks it, for an action whose reason has to be seen on a phone
- *   or tablet, which shows no tooltip, such as Apply while presets would take each other's names: its label dims, it
- *   reads as unavailable, a dot it has turns red, as a held one's does, the reason is its tooltip and accessible
- *   description, and pressing it calls `onBlocked(reason)` in place of the action. Blocking wins over everything but
- *   `idle()`.
- * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
+ *   or tablet, which shows no tooltip, such as Apply while presets would take each other's names: its label dims, a dot
+ *   it has turns red, as a held one's does, the reason is its tooltip, and pressing it calls `onBlocked(reason)` in
+ *   place of the action. Blocking wins over everything but `idle()`.
+ * - Otherwise a flagged field elsewhere holds it: the button's label dims, its tooltip says why, and the red badge
  *   shows on its top-right corner, or a red dot for an icon button that has one in its place, such as Add Preset.
  *   Pressing it does nothing but take the user to the first field that holds it.
  * Call the returned `refresh()` when what `idle()`, `blocked()`, or `unavailable()` reads changes.
@@ -438,10 +419,6 @@ window.addEventListener("resize", placeAllTips);
 function holdAction(button, fields, options) {
   const opts = options || {};
   const ownTitle = button.getAttribute("title");
-  const describe = document.createElement("span");
-  describe.className = "vh";
-  describe.id = (button.id || "action") + "-held";
-  button.after(describe);
 
   const unavailable = () => (opts.unavailable ? opts.unavailable() : null);
   const idle = () => !!(opts.idle && opts.idle());
@@ -466,27 +443,10 @@ function holdAction(button, fields, options) {
     const why = unavailable();
     button.classList.toggle("shows-problem", held || !!blocked);
     fadeShown(button.querySelector(".btn-problem, .held-dot"), held);
-    if (blocked) {
-      button.setAttribute("aria-disabled", "true");
-      describe.textContent = blocked;
-      button.setAttribute("aria-describedby", describe.id);
-      button.title = blocked;
-    } else if (held) {
-      button.setAttribute("aria-disabled", "true");
-      describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
-      button.setAttribute("aria-describedby", describe.id);
-      button.title = describe.textContent;
-    } else if (why) {
-      button.removeAttribute("aria-disabled");
-      describe.textContent = why;
-      button.setAttribute("aria-describedby", describe.id);
-      button.title = why;
-    } else {
-      button.removeAttribute("aria-disabled");
-      button.removeAttribute("aria-describedby");
-      if (ownTitle === null) button.removeAttribute("title");
-      else button.title = ownTitle;
-    }
+    const reason = blocked || (held ? (opts.reason ? opts.reason(field) : "Correct the field first.") : why);
+    if (reason) button.title = reason;
+    else if (ownTitle === null) button.removeAttribute("title");
+    else button.title = ownTitle;
   }
 
   button.addEventListener(
@@ -514,9 +474,9 @@ function holdAction(button, fields, options) {
 
 /**
  * The WebUI's dialog: a themed modal that stacks above any dialog already open, so a confirmation opens
- * over the dialog that asked for it. Escape or a click outside closes only the top one, and focus returns to where
- * it was. It opens inside the first showing element marked `data-dialog-host` (on the main page, the fullscreen stage)
- * so it shows in fullscreen.
+ * over the dialog that asked for it. Escape or a click outside closes only the top one, and focus goes back nowhere
+ * when it closes. It opens inside the first showing element marked `data-dialog-host` (on the main page, the fullscreen
+ * stage) so it shows in fullscreen.
  */
 let dialogCounter = 0;
 function openDialog({ content, labelledBy, role, onClose }) {
@@ -529,14 +489,12 @@ function openDialog({ content, labelledBy, role, onClose }) {
   // page inert with nothing to answer.
   const host = [...document.querySelectorAll("[data-dialog-host]")].find((el) => !el.closest("[hidden]"));
   (host || document.body).append(dialog);
-  const returnTo = document.activeElement;
   let closed = false;
   const close = (result) => {
     if (closed) return;
     closed = true;
     if (dialog.open && dialog.close) dialog.close();
     dialog.remove();
-    if (returnTo && returnTo.isConnected && returnTo.focus) returnTo.focus({ preventScroll: true });
     if (onClose) onClose(result);
     placeAllTips();
   };
@@ -712,6 +670,16 @@ function initHideMock() {
 }
 
 /**
+ * A dropdown gives up focus right after a pick, as the app's do, so the next key isn't the dropdown's. The listener
+ * runs as the change bubbles to the page, after each dropdown's own change handlers.
+ */
+function blurDropdownsAfterPick() {
+  document.addEventListener("change", (event) => {
+    if (event.target.tagName === "SELECT") event.target.blur();
+  });
+}
+
+/**
  * Notifications, which replace the status line:
  * - Lasting states, such as Reconnecting…, show as one indicator on the player: the first active one in
  *   `NOTIFY_LASTING_ORDER`. The list shows every active one, with its full text, under Now, on the main page and in
@@ -772,10 +740,8 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   list.className = "notify-list";
   list.id = "notify-list";
   list.hidden = true;
-  list.setAttribute("role", "dialog");
-  list.setAttribute("aria-labelledby", "notify-title");
   list.innerHTML =
-    '<div class="notify-head"><h2 id="notify-title" tabindex="-1">Notifications</h2>' +
+    '<div class="notify-head"><h2>Notifications</h2>' +
     '<button class="btn" type="button" data-act="clear">Clear</button>' +
     '<button class="icon-btn" type="button" data-act="close" aria-label="Close" title="Close"><span class="material-symbol-icon">close</span></button></div>' +
     '<div class="notify-scroll themed-scrollbar">' +
@@ -785,8 +751,6 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     '<div class="notify-foot"><button class="btn" type="button" data-act="settings"><span class="material-symbol-icon">settings</span>Notification settings</button></div>';
   hydrateIcons(list);
   listHost.append(list);
-  button.setAttribute("aria-controls", list.id);
-  button.setAttribute("aria-expanded", "false");
   const part = (name) => list.querySelector(`[data-part="${name}"]`);
   const act = (name) => list.querySelector(`[data-act="${name}"]`);
   if (!onSettings) act("settings").parentElement.hidden = true;
@@ -851,7 +815,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   function openList() {
     listOpen = true;
     list.hidden = false;
-    button.setAttribute("aria-expanded", "true");
+    button.classList.add("is-open");
     entries.forEach((entry) => {
       entry.highlight = entry.unread;
       entry.unread = false;
@@ -860,19 +824,19 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     renderBadge();
     renderList();
     placeList();
-    list.querySelector("#notify-title").focus({ preventScroll: true });
     clearInterval(timeTimer);
     timeTimer = setInterval(renderList, 30000);
   }
 
-  function closeList(returnFocus = true) {
+  // Closing the list, however it closes, leaves focus on the page rather than on a control it hides.
+  function closeList() {
     if (!listOpen) return;
     listOpen = false;
+    if (list.contains(document.activeElement)) document.activeElement.blur();
     list.hidden = true;
-    button.setAttribute("aria-expanded", "false");
+    button.classList.remove("is-open");
     entries.forEach((entry) => (entry.highlight = false));
     clearInterval(timeTimer);
-    if (returnFocus) button.focus({ preventScroll: true });
     onClose?.();
   }
 
@@ -881,24 +845,22 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   act("clear").addEventListener("click", () => {
     entries.length = 0;
     renderList();
-    list.querySelector("#notify-title").focus({ preventScroll: true });
   });
   act("settings").addEventListener("click", () => {
-    closeList(false);
+    closeList();
     onSettings?.();
   });
   // A press outside closes the list, and Escape closes it before anything else it would close.
   document.addEventListener("pointerdown", (event) => {
-    if (listOpen && !list.contains(event.target) && !button.contains(event.target)) closeList(false);
+    if (listOpen && !list.contains(event.target) && !button.contains(event.target)) closeList();
   }, true);
   document.addEventListener("keydown", (event) => {
     if (!listOpen || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     event.preventDefault();
     event.stopPropagation();
-    // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
-    const focused = document.activeElement;
-    closeList(false);
-    if (list.contains(focused) || button.contains(focused)) focused.blur();
+    closeList();
+    // Escape takes focus off the bell too, leaving it on the page.
+    if (button.contains(document.activeElement)) document.activeElement.blur();
   }, true);
   window.addEventListener("resize", () => listOpen && placeList());
 
@@ -911,14 +873,13 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     setTimeout(() => toast.remove(), instant || now ? 0 : 160);
   }
   function resume(toast) {
-    if (!toast.remaining || toast.hover || toast.focused) return;
+    if (!toast.remaining || toast.hover) return;
     toast.started = Date.now();
     toast.running = true;
     clearTimeout(toast.timer);
     toast.timer = setTimeout(() => dismiss(toast), toast.remaining);
   }
-  // Takes off only the time since the countdown last ran, so a second pause, such as keyboard focus while the mouse
-  // points at it, takes nothing more off.
+  // Takes off only the time since the countdown last ran.
   function pause(toast) {
     if (!toast.remaining || !toast.running) return;
     toast.running = false;
@@ -937,14 +898,6 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     toast.addEventListener("pointerleave", () => {
       if (!toast.hover) return;
       toast.hover = false;
-      resume(toast);
-    });
-    toast.addEventListener("focusin", () => {
-      toast.focused = true;
-      pause(toast);
-    });
-    toast.addEventListener("focusout", () => {
-      toast.focused = false;
       resume(toast);
     });
     // A swipe to either side on a touch screen dismisses it.
@@ -1071,13 +1024,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     label.className = "player-indicator-text";
     label.textContent = top.title;
     const parts = [icon, label];
-    // The percentage changes often, so it is left out of what a screen reader announces.
-    if (top.progress) {
-      const progress = document.createElement("span");
-      progress.setAttribute("aria-hidden", "true");
-      progress.textContent = top.progress;
-      parts.push(" ", progress);
-    }
+    if (top.progress) parts.push(" ", top.progress);
     indicator.replaceChildren(...parts);
   }
 

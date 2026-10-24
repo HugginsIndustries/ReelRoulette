@@ -20,13 +20,11 @@ Instructions:
 
 Commit Message:
 
-M12k6: Set random pick options in the WebUI's Randomization tab, with the Shuffle cycle card, Random behavior, and the Random line
+M12k7: Remove keyboard navigation and screen-reader-only code from the mockup, and route Space and the arrow keys to the shortcuts
 
-- WebUI: a Randomization tab, between Filter and Settings, sets Shuffle with Remember plays for and Reset now, Spread by folder and by tags, all tags or chosen categories, the four Favor options, and Random behavior, each applying at once and kept per device; every pick sends the options.
-- WebUI: the Shuffle cycle card shows this device's picked, eligible, and remaining files from each pick's answer and the cycle route, which it reads again when the server becomes ready or asks for a resync, and Reset now clears the device's memory through the reset route, disabled with a reason while the server holds back or asks for pairing.
-- WebUI: Random behavior's Insert puts a Random or R pick right after the playing item, keeping the plays ahead, and a skipped file there picks again with Insert.
-- WebUI: the Library tab's randomization dropdown is gone, with its bare storage key; preset and search share a row above sort, and a Random line under the Filters line names the options and opens the tab.
-- WebUI: the panel's tabs are Library, Tags, Stats, Filter, Randomization, and Settings, and 1 to 6 open them in that order.
-- Refactor: the Settings tab's controls, the Stats tab's cards, the held-back message, the category order, and the record check are shared rather than copied.
-- Mockup: Reset now's disabled state and the cycle card's failure reason match the app.
-- Docs: CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md follow, M12k6 moves to MILESTONES-COMPLETED.md with the WebUI slice's evidence and two corrected Traps, and its release check joins the testing checklist, whose Library tab check drops the randomization dropdown and whose Random check names Jump; the keyboard navigation and profile visibility milestones name the new shared files and the Random line.
+- Focus: no focus ring shows anywhere; the orange ring and its token are gone, and the global outline: none hides the browser's own, as the app will.
+- Keyboard navigation: the Library grid's tab stop, arrow keys, and focus border, the keys inside the panel tab row, resize handle, drag handles, stars, rating popover, file name, and Actions menu, and the focus moves after actions are gone; dialogs keep their opening focus and give focus back nowhere, and closing the panel or the bell's list leaves focus on the page.
+- Shortcuts: only text fields, dropdowns, and editable text keep the keys pressed in them, a shortcut takes focus off the focused control first, a dropdown gives up focus after a pick, and a key on a slider counts as activity for hiding the controls.
+- Screen reader: live regions, descriptions, state and value attributes, the roles that only looked focusable or announced, and text only screen readers heard are gone on every page; held buttons, the open bell, and the validation page's theme switch are styled by class.
+- Validation page: the screen-reader readouts are gone, leaving "In use" and each action's state, and the index page and README follow.
+- MILESTONES.md: WebUI Keyboard Navigation and Screen Reader Code Removal is in progress, with its Mockup slice complete and approved on the user's devices; its Decisions turn focus rings off with one global rule and accept that a pick flagging the Favorites and Blacklisted pair shows only the red icon, its Mockup slice's Scope and Traps take what the mockup held beyond them, and its Keyboard navigation slice also drops the app's file name radius.

@@ -140,7 +140,7 @@ Last milestone completed: M12k6
 
 ### M12k7 - WebUI Keyboard Navigation and Screen Reader Code Removal
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The keyboard serves only the app's shortcuts: the WebUI and its mockup lose their keyboard navigation and screen-reader-only code, and Space, ←, and → reach the shortcuts from every control but text fields and dropdowns.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -148,18 +148,20 @@ Last milestone completed: M12k6
 
 - Only text fields, dropdowns, and editable text keep the keys pressed in them, where a text field is any `input` but a checkbox, radio button, button, or slider, or a `textarea`. Every other control leaves Space, ←, and → to the shortcuts.
 - A dropdown gives up focus right after a pick, so → after picking a preset with the mouse plays the next item instead of changing the preset.
+- Every pick gives up focus, one that flags its field included, so after a pick that flags the Favorites and Blacklisted pair only the red icon shows, and the tooltip shows while the pointer is over the icon, after a tap on it, or once a held action moves to the field.
 - When a shortcut runs, the focused control loses focus first, so Space's release can't press a button and focus doesn't stay for the next key.
 - Of the markup screen readers use, only what names a control or says what kind it is stays: `aria-label`, `aria-labelledby` where it names, `title`, `<label>`, and `alt`; the roles `tab`, `tablist`, and `tabpanel` with `aria-selected`, `radiogroup`, `group`, and the in-app dialogs' roles; and `aria-hidden` on icons inside controls.
 - The rest of that markup goes: what announces, describes, or reports state, the roles on things that only looked focusable or that announce, and the text only screen readers hear.
 - In-app dialogs keep the control they focus on opening, Cancel, OK, or the name field with its text selected, and focus goes back nowhere when they close.
 - The field validation pattern keeps showing a field's tooltip while it has focus and moving a held action to its flagged field, since a pointer or a touch starts both.
-- The browser's own focus ring and Tab order stay, and nothing hides or changes them.
+- No focus ring shows: one global `:focus { outline: none }` rule turns them off, the browser's own included.
+- Tab order stays, and nothing changes it.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | Keyboard navigation, screen-reader-only markup and text, and the grid's and menus' focus designs removed from the mockup, and its keys routed as the Decisions say, approved on a desktop browser, the iPad, and an Android phone. |
+| Mockup | ✅ Complete | Keyboard navigation, screen-reader-only markup and text, and the grid's and menus' focus designs removed from the mockup, and its keys routed as the Decisions say, approved on a desktop browser, the iPad, and an Android phone. |
 | Keyboard navigation | ⏳ Planned | The WebUI's own tab stops, keys inside controls, focus moves, focus tracking, and focus rings removed, with the tests that used them as setup moved to the pointer and the shortcuts. |
 | Shortcut keys | ⏳ Planned | Space, ←, and → reaching the shortcuts from every control but text fields and dropdowns, the focused control blurred when a shortcut runs, and dropdowns giving up focus after a pick. |
 | Screen reader | ⏳ Planned | Announcements, descriptions, state attributes, the roles that only looked focusable or that announce, and screen-reader-only text removed, with tests finding things by what they show. |
@@ -168,25 +170,33 @@ Last milestone completed: M12k6
 
 **Scope**
 
-- In `docs/mockups/reelroulette/`, the focus ring goes: `--focus-ring` in both themes, every `:focus-visible` rule, and the global `:focus { outline: none }` with them, so the browser's own ring shows, as in the app.
+- In `docs/mockups/reelroulette/`, the focus ring goes: `--focus-ring` in both themes, every `:focus-visible` rule, and the `outline: none` rules the global one makes redundant, on the resize handle, the tiles, and the Actions menu's items, whose hover keeps its background. The global `:focus { outline: none }` stays, so no focus ring shows, as in the app.
 - The grid's focus design goes: the focused tile's `.tile-focus` border, the check icon's focus ring and its showing on focus, the grid's single tab stop, its arrow keys, and Enter and Space on a tile.
 - Keys inside other controls go: the panel tab row's arrow keys, Home, and End and its moving tab stop, the resize handle's tab stop and keys, the drag handles' up and down arrows, the stars' tab stop and keys, the rating popover's Enter and its closing as focus leaves, the file name's tab stop and its Enter and Space, and the Actions menu's arrow keys.
-- Focus moves go: the rating popover's to its stars and back to the star, the Actions menu's to its first item, and those after Add Preset, Add tag, a drop, Notification settings, H, Auto Tag opening and closing, and a click closing the panel or the bell's list.
+- Focus moves go: the rating popover's to its stars and back to the star, the Actions menu's to its first item, the Stats tab's back to its stars after a redraw, and those after Add Preset, Add tag, a drop, Notification settings, H, Auto Tag opening and closing, and a click closing the panel or the bell's list.
 - The dialogs keep the control they focus on opening and no longer give focus back when they close.
 - Tab stops on the bell list's title, the recovery page's log, and the validation page's stars go, as do the player controls' and the popups' holds for keyboard focus.
 - Escape keeps leaving focus on the page as it closes the panel or the bell's list.
-- The screen-reader-only markup goes, as the Decisions say: live regions, `role=status` and `role=alert`, the drag handles' help and announcements (`#sort-live` and `announce()`), `aria-describedby`, `aria-invalid`, `aria-disabled`, `aria-expanded`, `aria-controls`, `aria-haspopup`, `aria-pressed`, `aria-modal`, `aria-orientation`, `aria-valuetext` and the value attributes, and the roles `menu`, `menuitem`, `slider`, `separator`, `checkbox`, `progressbar`, `tooltip`, `list`, and `listitem` and the bell list's `dialog`, with the `aria-labelledby` and container `aria-label`s that named only them.
+- The screen-reader-only markup goes, as the Decisions say: live regions, `role=status` and `role=alert`, the drag handles' help and announcements (`#sort-live` and `announce()`), `aria-describedby`, `aria-invalid`, `aria-disabled`, `aria-expanded`, `aria-controls`, `aria-haspopup`, `aria-pressed`, `aria-modal`, `aria-orientation`, `aria-valuetext` and the value attributes, and the roles `menu`, `menuitem`, `slider`, `separator`, `checkbox`, `button` on tiles and the file name, `progressbar`, `tooltip`, `list`, and `listitem` and the bell list's `dialog`, with the `aria-labelledby` and container `aria-label`s that named only them, the stars' names included.
+- The admin page's goes the same way: the import's progress bar role and values, the log list's roles, the log lines' and the filter toggle's expanded state, the popups' live region, and the "Active filters" label, which names nothing. So does the recovery page's `role=status` and its log's name, which named only its tab stop.
+- `aria-hidden` goes from what isn't an icon: the ambient layer, the volume and seek indicators, the rating badge, and Auto Tag's progress text. `setIcon` keeps setting it on every icon, since limiting it to icons inside controls would need each icon's place when it is set.
+- Auto Tag keeps its `role=dialog`, an in-app dialog's role, and loses `aria-modal`.
 - Text only screen readers hear goes: the count line's spoken text, "Saved", a held action's hidden reason, the drag handles' help, the `.vh` class, and comments about what screen readers hear.
-- The validation page drops its 19 "aria-invalid / accessible description" readouts and its screen-reader wording, keeping its "In use" readout.
+- The validation page drops its 20 "aria-invalid / accessible description" readouts and its screen-reader wording, keeping its "In use" readout and, for the nine specimens with an action, a line saying whether it is available, disabled, or held, where the five icon buttons' press check shows.
+- The stars stop being a partner of the Only unrated field (`ratingPairField` in `common.js`), since they no longer take focus or carry its markup.
 - The index page's descriptions of keyboard focus and of keys inside controls, and the README's line about what a screen reader is given, are rewritten.
 - Three stylesheet rules that read ARIA attributes use classes: held buttons `.shows-problem` in place of `aria-disabled`, the bell a class of its own while its list is open in place of `aria-expanded`, and the validation page's theme switch a class in place of `aria-pressed`. `.tab[aria-selected]` stays with the tab role.
-- The shortcut handler leaves keys only to text fields, dropdowns, and editable text, and blurs the focused control when a shortcut runs, and a dropdown gives up focus after a pick.
+- The shortcut handler leaves keys only to text fields, dropdowns, and editable text, and blurs the focused control when a shortcut runs, and a key on a slider counts as activity for hiding the player controls.
+- A dropdown gives up focus after a pick on the main page and the validation page, through one helper in `common.js`.
 - Before the app is built, the user approves the mockup on a desktop browser, the iPad, and an Android phone.
 
 **Traps**
 
 - `check.mjs` finds controls by id, `data-sub`, `dialog.app-dialog`, a button's text, and a tile's title, never by a role, an ARIA attribute, or focus, and it passed before this milestone (measured).
-- `common.css` sets `:focus { outline: none }` on everything, so removing only the `:focus-visible` rules would leave keyboard focus showing nothing, where the WebUI has no such rule (measured).
+- `common.css` already sets `:focus { outline: none }` on everything, which hides the browser's ring too, and the WebUI has no such rule (measured).
+- `holdAction` in `common.js` sets a held button's `title` from its hidden reason's text.
+- The validation page's readout script reads `aria-disabled` to say whether an action is held, and its icon-button specimens show their press check in the readout (measured).
+- A flagged field's tooltip shows only while the field or a partner has focus, the pointer is over its icon, or it is pinned, so a dropdown that gives up focus after a pick hides it.
 - The shortcut handler in `layout.src.html` leaves Space to `button, a, input:not([type=range]), select, textarea, summary, [tabindex]` and ← and → to any `input`, and the grid's, tab row's, handles', stars', and Actions menu's own key handlers win through `defaultPrevented`.
 - The stars' keys share `ratings.set(…, byKey)` and `RATING_KEY_PAUSE_MS` with the - and = and Shift+digit shortcuts, which keep them.
 - `holdAction` in `common.js` already sets `.shows-problem` whenever it sets `aria-disabled`.
@@ -198,8 +208,20 @@ Last milestone completed: M12k6
 
 **Acceptance**
 
-- The mockup shows no focus ring of its own and has none of the removed keyboard navigation, screen-reader-only markup, or text, as the user approved in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+- The mockup shows no focus ring and has none of the removed keyboard navigation, screen-reader-only markup, or text, as the user approved in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 - In the mockup, after a click on Next, Space plays or pauses, after a click on the seek bar, → plays the next item, and after a preset is picked, → plays the next item, as the user approved in their review on their devices.
+
+**Evidence**
+
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 66 checks, unchanged.
+- The user approved the mockup in their review on their devices.
+- A search of the mockup's sources found no `tabindex`, `:focus-visible` rule, `--focus-ring`, removed ARIA attribute or role, or `.vh`, `aria-hidden` only in `setIcon`, and `.focus(` only in the dialogs' opening focus and the field validation pattern (measured).
+- A scratch script, deleted afterward, drove the built main page in happy-dom and passed 11 checks: Space on a focused Next plays or pauses, → on the focused seek bar and ← on a focused checkbox play the next and previous item, a text field keeps →, a preset pick gives up focus and → then plays the next item, a pick that flags the Favorites and Blacklisted pair leaves focus on neither dropdown, closing the panel by a click or by Escape and closing the bell's list by a click leave focus on the page, and no element has a `tabindex` (measured).
+- On the build before this slice, 9 of those checks failed; the two that passed, a text field keeping → and Escape leaving focus on the page, are behavior that stays (measured).
+- happy-dom does no layout, so a flagged field's tooltip never shows there; the script checked the focus it waits on instead.
+- Closing the bell's list also drops focus inside it however it closes, as closing the panel does.
+- The file name's `border-radius`, which only shaped its focus ring, went, and the Keyboard navigation slice removes the app's too.
+- The player indicator's wrapper, which only carried `role=status`, and the tag grids' ids, which only `aria-controls` read, went.
 
 #### Keyboard navigation slice
 
@@ -211,7 +233,7 @@ Last milestone completed: M12k6
 - Notification settings and H keep opening and scrolling to their sections without focusing Show popups or the Keyboard shortcuts heading (`src/ui/SettingsTab.tsx`).
 - In-app dialogs keep `initialFocus` and `selectInitial` and lose `returnTo` and `fallbackFocus`, with the fallback helpers in `FilterDialog.tsx` and `TagEditor.tsx` (`src/ui/Dialog.tsx`).
 - Focus tracking goes: the player controls' `keyboardFocus` hold (`src/playback/playerControls.ts`, `Player.tsx`) and the popups' pause while focus is in one (`src/notifications/notifications.ts`, `Notifications.tsx`).
-- The stylesheet's 15 `:focus-visible` rules, `--focus-ring` in both themes, and the `outline: none` on the bell list's title and the panel handle go (`src/styles.css`).
+- The stylesheet's 15 `:focus-visible` rules, `--focus-ring` in both themes, the `outline: none` on the bell list's title and the panel handle, and the file name's `border-radius`, which only shaped its ring, go, and one global `:focus { outline: none }` rule turns focus rings off, the browser's own included (`src/styles.css`).
 - Dead code goes with them, such as `ratingForKey`, `arrowKeyTarget`, Reorder's handle refs and focus key, `HANDLE_STEP`, `attachButton`, the stars' `onFocus` and `onBlur`, and the ratings' `send` chain that only the stars' blur used.
 - The comment in `src/state/appServices.ts` that says the panel puts focus somewhere when it opens is corrected.
 - Tests of the removed behavior go, and tests that used it as setup move to the pointer: reordering by drag, and ratings set by the - and = shortcuts.
@@ -234,7 +256,7 @@ Last milestone completed: M12k6
 
 **Acceptance**
 
-- No `tabindex` or `:focus-visible` rule remains, and the only key handlers left are the shortcuts', Escape's, and Enter in text fields, by a search of the WebUI's `src`.
+- No `tabindex` or `:focus-visible` rule remains, the only `outline: none` is the global `:focus` rule, and the only key handlers left are the shortcuts', Escape's, and Enter in text fields, by a search of the WebUI's `src`.
 - The only `.focus(` calls left are the in-app dialogs' opening focus, the field validation pattern's, and Copy Path's text field, by a search of the WebUI's `src`.
 - Reordering by drag, ratings set by the - and = shortcuts with their send pause, the in-app dialogs' opening focus, and the field validation pattern's focus work as before, in the Filter, Tags, Stats, keyboard, dialog, and field validation tests.
 - `npm run verify` passes.
@@ -260,6 +282,7 @@ Last milestone completed: M12k6
 - iOS and Android show a dropdown's choices in a picker of their own, and when it reports the pick relative to its closing is unknown, so the blur after a pick must not cut a pick short (inferred).
 - `isTextField` counts a slider as taking keys and repeats `focusTakesKey`'s text field test.
 - Escape on the bell's list already blurs (`src/ui/Notifications.tsx`).
+- The Favorites and Blacklisted pair's tooltip shows while either dropdown has focus, which `src/test/screens/filter.test.ts` checks after a focus, so a pick that gives up focus hides it, as the Decisions accept.
 - Tests that flip: in `src/test/keyboardShortcuts.test.ts`, a slider keeping its keys and `focusTakesKey`'s cases for sliders, checkboxes, radio buttons, and Space on a button, link, `summary`, or tile; and in `src/test/screens/keyboard.test.ts`, "leaves Space on a focused button to the button", a focused slider keeping its arrow keys, and held Space on a focused Favorite (measured).
 
 **Acceptance**
