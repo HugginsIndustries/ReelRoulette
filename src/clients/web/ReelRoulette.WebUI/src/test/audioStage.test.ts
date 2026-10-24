@@ -642,7 +642,7 @@ describe("the muted-volume rules", () => {
     expect(sound(page)).toBe("muted 0");
     expect(unmute(page)).toBe(15);
 
-    // Each wheel notch or key press, and each key step on the focused slider, is a change of its own.
+    // Each wheel notch and [ or ] press is a change of its own.
     page.audio.setVolume(8);
     page.audio.stepVolume(-1);
     page.audio.stepVolume(-1);

@@ -20,7 +20,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Move WebUI Ratings on Tiles out of v0.15.0 to the backlog
+M12k7: Leave every plain key to the WebUI's shortcuts outside text fields and dropdowns
 
-- MILESTONES.md: WebUI Ratings on Tiles leaves v0.15.0 and becomes backlog item P56, low priority, since the rating filters and sorts already find files by their rating and rating badges would clutter the tiles. Its scope, traps, and acceptance are unchanged.
-- MILESTONES.md: WebUI Grid Scrollbar Seek moves from M12l3 to M12l2, so the v0.15.0 outline keeps its order with no gap.
+- WebUI: Space, ←, and → run their shortcuts on a focused button, slider, checkbox, radio button, or section heading, and the focused control loses focus first, so Space's release can't press it.
+- WebUI: Outside text fields, dropdowns, and editable text, a key no shortcut binds does nothing, such as Tab, Enter, ↑ and ↓ on a slider, and the page keys. Keys with Ctrl, Alt, or Meta, F1 to F12, Escape, and every key in an in-app dialog work as before.
+- WebUI: A dropdown gives up focus after a pick, closing the panel or the bell's list any way leaves focus on the page, and a key on a slider counts as activity for the player controls.
+- Mockup: The shortcut handler ignores unbound keys by the same rule, and the index page says so.
+- Tests: Keyboard shortcut unit and screen tests and the Panel, Notifications, Filter, and Player screen tests cover the key routing, the blur before a shortcut, and focus after a pick or a close.
+- Docs: MILESTONES.md records the key rule in M12k7's Decisions, lands its Shortcut keys slice with desktop checks in Firefox only, and adds to Customizable Keyboard Shortcuts that a combination with Ctrl, Alt, or Meta runs its shortcut once bound, while one bound to nothing stays the browser's. CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md describe the final key behavior.

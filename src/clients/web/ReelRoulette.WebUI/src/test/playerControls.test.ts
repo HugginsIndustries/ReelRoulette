@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { signal } from "@preact/signals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPlayerControls, HIDE_AFTER_KEY, HIDE_CONTROLS_KEY, isTextField, KEEP_WHILE_PAUSED_KEY } from "../playback/playerControls";
+import { createPlayerControls, HIDE_AFTER_KEY, HIDE_CONTROLS_KEY, KEEP_WHILE_PAUSED_KEY } from "../playback/playerControls";
 import { createDeviceStore } from "../state/deviceStore";
 
 /** Controls whose device store starts with `saved`, as the page's `localStorage` would hold it, while playing. */
@@ -211,23 +211,5 @@ describe("On click/tap and Never", () => {
 
     const unusable = setup({ [HIDE_CONTROLS_KEY]: "sometimes", [HIDE_AFTER_KEY]: 31, [KEEP_WHILE_PAUSED_KEY]: "no" });
     expect([unusable.controls.mode.value, unusable.controls.hideAfterSeconds.value, unusable.controls.keepWhilePaused.value]).toEqual(["timeout", 3, true]);
-  });
-});
-
-describe("isTextField", () => {
-  it("is true for text fields, sliders, text areas, dropdowns, and editable text, and false for buttons, checkboxes, and radio buttons", () => {
-    const input = (type: string) => Object.assign(document.createElement("input"), { type });
-    const editable = document.createElement("div");
-    editable.contentEditable = "true";
-    Object.defineProperty(editable, "isContentEditable", { value: true });
-    expect([input("text"), input("search"), input("range"), document.createElement("textarea"), document.createElement("select"), editable].map(isTextField)).toEqual([
-      true,
-      true,
-      true,
-      true,
-      true,
-      true
-    ]);
-    expect([input("checkbox"), input("radio"), document.createElement("button"), document.body, null].map(isTextField)).toEqual([false, false, false, false, false]);
   });
 });

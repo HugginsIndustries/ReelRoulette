@@ -173,31 +173,16 @@ function bindingsBy(by: "key" | "code"): ReadonlyMap<string, ShortcutAction> {
 const BY_KEY = bindingsBy("key");
 const BY_CODE = bindingsBy("code");
 
-/** The keys a slider moves itself by. */
-const SLIDER_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
-
-/** The inputs nothing is typed into. A slider is among them, and keeps only its own keys. */
-const UNTYPED_INPUTS: readonly string[] = ["checkbox", "radio", "button", "submit", "reset", "range"];
-
-/** What Space activates, so Space there is left to it. A slider isn't among them. */
-const SPACE_ACTIVATES = "button, a, input:not([type=range]), select, textarea, summary";
-
 /**
- * The focused element takes `key` itself, so the key isn't a shortcut there: every key in a text field, a dropdown, or
- * editable text; a slider's own keys on a slider; the left and right arrows on a checkbox or radio button; and Space on
- * what it activates, such as a button.
+ * The element takes every key pressed in it, as a text field, a dropdown, or editable text does, where a text field is
+ * any `input` but a checkbox, radio button, button, or slider, or a text area. No key there is a shortcut, or activity
+ * for the player's controls. Every other control leaves the keys to the page.
  */
-export function focusTakesKey(target: EventTarget | null, key: string): boolean {
+export function takesKeys(target: EventTarget | null): boolean {
   const element = target as HTMLElement | null;
   if (!element?.tagName) return false;
   if (element.isContentEditable || element.tagName === "TEXTAREA" || element.tagName === "SELECT") return true;
-  if (element.tagName === "INPUT") {
-    const type = (element as HTMLInputElement).type;
-    if (!UNTYPED_INPUTS.includes(type)) return true;
-    if (type === "range") return SLIDER_KEYS.has(key);
-    if (key === "ArrowLeft" || key === "ArrowRight") return true;
-  }
-  return key === " " && element !== element.ownerDocument?.body && !!element.closest?.(SPACE_ACTIVATES);
+  return element.tagName === "INPUT" && !["checkbox", "radio", "button", "submit", "reset", "range"].includes((element as HTMLInputElement).type);
 }
 
 /** A key press, as a `keydown` event gives it. */
@@ -213,15 +198,24 @@ export interface KeyPress {
   readonly target: EventTarget | null;
 }
 
+/** F1 to F12, which stay the browser's. */
+const FUNCTION_KEY = /^F([1-9]|1[0-2])$/;
+
 /**
- * The action a key press is bound to, by its position or else by the character it gives, where the shortcuts take it:
- * none while Ctrl, Alt, or Meta is held, or for a key the focused element already handled or takes itself.
+ * The page takes the key press, so the key does what a shortcut binds it to, or nothing, which keeps every plain key
+ * free for shortcuts: any key pressed outside a text field, a dropdown, or editable text, but one the focused element
+ * already handled, one pressed with Ctrl, Alt, or Meta, or F1 to F12, which stay the browser's, and Escape, which closes
+ * what is open.
  */
-function boundAction(press: KeyPress): ShortcutAction | null {
-  if (press.defaultPrevented || press.ctrlKey || press.altKey || press.metaKey) return null;
+export function pageTakesKey(press: KeyPress): boolean {
+  if (press.defaultPrevented || press.ctrlKey || press.altKey || press.metaKey) return false;
+  return press.key !== "Escape" && !FUNCTION_KEY.test(press.key) && !takesKeys(press.target);
+}
+
+/** The action a key press is bound to, by the key's position or else by the character it gives. */
+function bindingOf(press: KeyPress): ShortcutAction | null {
   const key = press.key.length === 1 ? press.key.toLowerCase() : press.key;
-  const action = BY_CODE.get(bindingName(press.code, press.shiftKey)) ?? BY_KEY.get(bindingName(key, press.shiftKey));
-  return action && !focusTakesKey(press.target, key) ? action : null;
+  return BY_CODE.get(bindingName(press.code, press.shiftKey)) ?? BY_KEY.get(bindingName(key, press.shiftKey)) ?? null;
 }
 
 /** A key held down acts again only for the actions that repeat. */
@@ -230,11 +224,11 @@ function actsOn(press: KeyPress, action: ShortcutAction): boolean {
 }
 
 /**
- * The shortcut a key press is, or null: none while Ctrl, Alt, or Meta is held, for a key the focused element already
- * handled or takes itself, or for a key held down that doesn't repeat.
+ * The shortcut a key press is, or null: none for a key the page doesn't take, as `pageTakesKey` says, or for a key held
+ * down that doesn't repeat.
  */
 export function shortcutFor(press: KeyPress): ShortcutAction | null {
-  const action = boundAction(press);
+  const action = pageTakesKey(press) ? bindingOf(press) : null;
   return action && actsOn(press, action) ? action : null;
 }
 
@@ -260,10 +254,7 @@ async function showShortcuts({ panel, settings }: ShortcutServices): Promise<voi
   }
 }
 
-/**
- * Does what `action` says, as the player's controls, its rating stars, the panel button, and the panel's tabs do, except
- * that a key that closes the panel leaves focus on the page, so Space plays or pauses afterwards.
- */
+/** Does what `action` says, as the player's controls, its rating stars, the panel button, and the panel's tabs do. */
 export function runShortcut(action: ShortcutAction, services: ShortcutServices): void {
   const { player, audio, panel, fullscreen, settings, rating } = services;
   switch (action) {
@@ -303,7 +294,7 @@ export function runShortcut(action: ShortcutAction, services: ShortcutServices):
       if (audio.volumeShown.peek()) audio.stepVolume(action === "volumeUp" ? 1 : -1);
       return;
     case "panel":
-      return void panel.toggle({ byKey: true });
+      return void panel.toggle();
     case "fullscreen":
       return fullscreen.toggle();
     case "shortcuts":
@@ -314,23 +305,41 @@ export function runShortcut(action: ShortcutAction, services: ShortcutServices):
     return rating.set(stars, { byKey: true });
   }
   if (isPanelTab(action)) {
-    void (panel.isOpen.peek() && panel.tab.peek() === action ? panel.close({ byKey: true }) : panel.showTab(action));
+    void (panel.isOpen.peek() && panel.tab.peek() === action ? panel.close() : panel.showTab(action));
   }
 }
 
 /**
- * Runs the shortcuts from `page`'s key presses, after the focused element's own handlers. An open dialog, Auto Tag
- * included, takes every key. A shortcut's key held down stays the page's even where it doesn't repeat, so holding Space
- * doesn't scroll. Returns what stops them.
+ * Runs the shortcuts from `page`'s key presses, after the focused element's own handlers, and keeps every key the page
+ * takes from the browser, so a key does what a shortcut binds it to or nothing: Tab moves no focus, Enter presses no
+ * button, the arrows move no slider, and no key scrolls, and a held key that doesn't repeat acts once. The focused
+ * control loses focus before a shortcut runs, so Space's release can't press a button and focus doesn't stay for the
+ * next key. An open dialog, Auto Tag included, takes every key. Returns what stops them.
  */
 export function listenForShortcuts(page: Document, services: ShortcutServices): () => void {
   const onKeyDown = (event: KeyboardEvent) => {
-    if (page.querySelector("dialog[open]")) return;
-    const action = boundAction(event);
-    if (!action) return;
+    if (page.querySelector("dialog[open]") || !pageTakesKey(event)) return;
+    // Read before the key is kept from the browser, which marks it as handled.
+    const action = shortcutFor(event);
     event.preventDefault();
-    if (actsOn(event, action)) runShortcut(action, services);
+    if (!action) return;
+    (page.activeElement as HTMLElement | null)?.blur?.();
+    runShortcut(action, services);
   };
   page.addEventListener("keydown", onKeyDown);
   return () => page.removeEventListener("keydown", onKeyDown);
+}
+
+/**
+ * Has a dropdown give up focus right after a pick, so the next key is a shortcut, as → after a preset pick plays the next
+ * item. It runs as the change reaches the page, after the dropdown's own handlers, and leaves alone a control the pick
+ * moved focus to, such as a dialog's. Returns what stops it.
+ */
+export function blurDropdownsAfterPick(page: Document): () => void {
+  const onChange = (event: Event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.tagName === "SELECT") target.blur();
+  };
+  page.addEventListener("change", onChange);
+  return () => page.removeEventListener("change", onChange);
 }

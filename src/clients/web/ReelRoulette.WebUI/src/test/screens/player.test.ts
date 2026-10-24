@@ -2344,7 +2344,11 @@ describe("Hide player controls", () => {
     await flush();
     expect(controlsShown()).toBe(true);
     await untilHidden();
-    // A key typed in a field isn't activity.
+    // A key on a slider is, since a slider leaves the keys to the page, but a key typed in a field isn't.
+    fireEvent.keyDown(volumeSlider(), { key: "ArrowUp" });
+    await flush();
+    expect(controlsShown()).toBe(true);
+    await untilHidden();
     fireEvent.keyDown(document.getElementById("settings-advance-after")!, { key: "4" });
     await flush();
     expect(controlsShown()).toBe(false);

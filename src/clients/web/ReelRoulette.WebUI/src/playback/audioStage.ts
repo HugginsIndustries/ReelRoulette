@@ -153,8 +153,8 @@ export interface AudioStageOptions {
  * which unmuting restores. Raising the volume while muted unmutes and starts from 0, so the remembered volume isn't
  * restored, and lowering it while muted changes nothing. Lowering it to 0 while not muted mutes, and unmuting then
  * restores the volume from before the change that reached 0: a slider drag or a two-finger drag is one change, from
- * `beginVolumeChange` to `endVolumeChange`, and each wheel notch and key step on the focused slider is a change of its
- * own. A drag that starts muted and comes back to 0 so leaves the remembered volume as it was.
+ * `beginVolumeChange` to `endVolumeChange`, and each wheel notch and [ or ] press is a change of its own. A drag that
+ * starts muted and comes back to 0 so leaves the remembered volume as it was.
  */
 export interface AudioStage {
   /** Enhanced audio, on by default. */

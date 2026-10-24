@@ -30,17 +30,6 @@ function isHideAfter(value: unknown): value is number {
 }
 
 /**
- * A field that takes the keys pressed in it, as a text field, a slider, a dropdown, or editable text does, so a key
- * there isn't activity. Checkboxes, radio buttons, and buttons don't.
- */
-export function isTextField(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
-  if (!element?.tagName) return false;
-  if (element.isContentEditable || element.tagName === "TEXTAREA" || element.tagName === "SELECT") return true;
-  return element.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes((element as HTMLInputElement).type);
-}
-
-/**
  * What keeps the controls shown under Timeout, besides a pause, the bell's list, and the rating's stars: a mouse or pen
  * pointer over a control and a drag of the scrub bar or the volume.
  */

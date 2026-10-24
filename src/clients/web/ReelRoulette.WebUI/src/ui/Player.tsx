@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "preact/hooks";
+import { takesKeys } from "../keyboard/shortcuts";
 import { createMediaGestures } from "../playback/mediaGestures";
-import { isTextField } from "../playback/playerControls";
 import { ratingText } from "../rating/rating";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
@@ -134,8 +134,7 @@ export function Player() {
     area.addEventListener("touchcancel", onTouchCancel, { passive: true });
     area.addEventListener("wheel", onWheel, { passive: false });
     area.addEventListener("gesturestart", onGestureStart);
-    // The slider's drag ends where it's let go, which may be off the slider. A key step on the focused slider, without a
-    // press, is a change of its own.
+    // The slider's drag ends where it's let go, which may be off the slider.
     document.addEventListener("pointerup", releaseSlider);
     document.addEventListener("pointercancel", releaseSlider);
 
@@ -144,7 +143,7 @@ export function Player() {
     // which then lands on the player. A touch never counts as over a control.
     const controlsLayer = overlay.current!;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isTextField(event.target)) controls.activity();
+      if (!takesKeys(event.target)) controls.activity();
     };
     const onPointerDown = (event: PointerEvent) => {
       if (controlsLayer.contains(event.target as Node | null)) controls.activity();

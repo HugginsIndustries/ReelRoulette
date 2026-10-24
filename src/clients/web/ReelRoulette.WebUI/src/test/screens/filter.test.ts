@@ -1399,11 +1399,15 @@ describe("Favorites only with Blacklisted only", () => {
 
     expect(flagRow("Favorites")).toMatchObject({ checked: true, choice: "only" });
     expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
+    flagSelect("Blacklisted").focus();
     await chooseFlag("Blacklisted", "only");
     for (const name of ["Favorites", "Blacklisted"] as const) {
       expect(flagSelect(name).getAttribute("aria-invalid"), name).toBe("true");
       expect(tooltipOf(flagSelect(name))?.textContent, name).toBe("Nothing is both a favorite and blacklisted. Use excluded for one of them.");
     }
+    // The pick gave up focus, so only the red icon shows, and the tooltip waits for the pointer or a held action.
+    expect(document.activeElement).toBe(document.body);
+    expect([tooltipShown(flagSelect("Favorites")), tooltipShown(flagSelect("Blacklisted"))]).toEqual([false, false]);
     expect(flagSelect("Blacklisted").nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);

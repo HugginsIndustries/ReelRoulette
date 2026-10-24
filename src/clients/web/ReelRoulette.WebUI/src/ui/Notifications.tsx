@@ -194,22 +194,21 @@ export function NotificationList() {
     element.style.maxHeight = `${Math.max(220, Math.round(window.innerHeight - anchor.bottom - 18))}px`;
   }
 
+  // Closing the list, however it closes, leaves focus on the page rather than on a control it hides.
   useLayoutEffect(() => {
     if (open) {
       place();
+      return;
     }
+    const focused = document.activeElement as HTMLElement | null;
+    if (focused && list.current?.contains(focused)) focused.blur();
   }, [open]);
 
   useLightDismiss({
     open: notifications.listOpen,
     keepsOpen: (target) => !!target && (!!list.current?.contains(target) || !!bell()?.contains(target)),
     onPressOutside: notifications.closeList,
-    // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
-    onEscape() {
-      const focused = document.activeElement as HTMLElement | null;
-      notifications.closeList();
-      if (focused && (list.current?.contains(focused) || bell()?.contains(focused))) focused.blur();
-    }
+    onEscape: notifications.closeList
   });
 
   useLayoutEffect(() => {

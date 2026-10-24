@@ -6186,8 +6186,8 @@ function showShortcuts() {
 }
 const TAB_KEYS = { 1: "library", 2: "tags", 3: "stats", 4: "filter", 5: "randomization", 6: "settings", t: "tags", s: "settings" };
 // A text field, a dropdown, or editable text keeps every key pressed in it. Every other control, a checkbox, a radio
-// button, a button, or a slider, leaves the keys to the shortcuts, so they work at once after a click on Next or a drag
-// of the scrub bar.
+// button, a button, or a slider, leaves the keys to the page, where a key does only what a shortcut binds it to, so the
+// shortcuts work at once after a click on Next or a drag of the scrub bar.
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit", "reset", "range"].includes(el.type)));
@@ -6204,7 +6204,7 @@ function rateByKey(value) {
 // or 0 while muted. Raising it while muted unmutes and starts from 0, so the remembered volume isn't restored, and
 // lowering it while muted changes nothing. Lowering it to 0 while not muted mutes, and unmuting then restores the volume
 // from before the change that reached 0: a slider drag or a two-finger drag is one change, from its press or its second
-// finger to its release, and each wheel notch, [ or ] press, and key step on the focused slider is a change of its own.
+// finger to its release, and each wheel notch and [ or ] press is a change of its own.
 // A drag that starts muted and comes back to 0 so leaves the remembered volume as it was.
 function shownVolume() {
   return playback.muted ? 0 : state.volume;
@@ -6251,17 +6251,24 @@ function stepVolumeWithIndicator(steps) {
   moveVolume(shownVolume() + steps * state.volumeStep);
   showVolumeIndicator();
 }
+// F1 to F12, which stay the browser's.
+const FUNCTION_KEY = /^F([1-9]|1[0-2])$/;
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  // Escape closes what is open, through its own listeners.
+  if (event.key === "Escape" || FUNCTION_KEY.test(event.key)) return;
   if (isTextField(event.target) || document.querySelector("dialog[open]") || state.autoTag) return;
+  // Every other key is the page's, held or not, and does only what a shortcut binds it to, or nothing, which keeps every
+  // plain key free for shortcuts: Tab moves no focus, Enter presses no button, the arrows move no slider, and no key
+  // scrolls.
+  event.preventDefault();
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   const held = event.repeat && !REPEATING_KEYS.includes(key);
   const item = playback.item;
   const video = seekableVideo();
-  // A shortcut's key is the page's, held or not; true for a held key that doesn't repeat, which doesn't act again. The
-  // focused control loses focus before the shortcut runs, so Space's release can't press a button and focus doesn't
-  // stay on it for the next key.
-  const handled = () => (event.preventDefault(), document.activeElement?.blur?.(), held);
+  // True for a held key that doesn't repeat, which doesn't act again. The focused control loses focus before the
+  // shortcut runs, so Space's release can't press a button and focus doesn't stay on it for the next key.
+  const handled = () => (document.activeElement?.blur?.(), held);
   if (event.shiftKey && key === "f") return handled() || $("fullscreen-btn").click();
   // Shift and a digit set the rating, 0 clearing it. They are matched by the key's position, since Shift changes the
   // character a digit key gives, such as "!" for 1 on a US layout.

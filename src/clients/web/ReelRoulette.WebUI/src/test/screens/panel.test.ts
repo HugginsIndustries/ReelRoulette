@@ -298,17 +298,26 @@ describe("tabs", () => {
     expect(isOpen()).toBe(false);
   });
 
-  it("Escape with focus in the panel leaves focus on the page, as every key that closes the panel does", async () => {
+  it("leaves focus on the page however it closes, by its button, its Close, or Escape, so keys don't go to a text field it hides", async () => {
     await mount();
-    await click(panelButton());
-    const close = within(panel()).getByRole("button", { name: "Close panel" });
-    close.focus();
-
-    fireEvent.keyDown(close, { key: "Escape" });
-    await settle();
-
-    expect(isOpen()).toBe(false);
-    expect(document.activeElement).toBe(document.body);
+    const closes: [string, () => Promise<void>][] = [
+      ["panel button", () => click(panelButton())],
+      ["Close", () => click(within(panel()).getByRole("button", { name: "Close panel" }))],
+      [
+        "Escape",
+        async () => {
+          fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+          await settle();
+        }
+      ]
+    ];
+    for (const [name, close] of closes) {
+      await click(panelButton());
+      // A tap on a button, as on an iPad, leaves focus where it was.
+      within(panel()).getByRole("searchbox", { name: "Search library", hidden: true }).focus();
+      await close();
+      expect([isOpen(), document.activeElement], name).toEqual([false, document.body]);
+    }
   });
 
   it("close with Escape, and Escape then leaves pseudo-fullscreen", async () => {
@@ -511,15 +520,16 @@ describe("choosing a tile", () => {
     expect(shownPages()).toEqual(["Library"]);
   });
 
-  it("plays it and closes the overlay", async () => {
+  it("plays it and closes the overlay, leaving focus on the page", async () => {
     setViewport({ width: 600, height: 800 });
     const page = await openLibraryWithTile();
+    within(panel()).getByRole("searchbox", { name: "Search library", hidden: true }).focus();
 
     await click(document.querySelector(".library-grid-tile[data-item-id='item-1']")!);
 
     expect(page.server.requests("POST", "/api/play/item-1")).toHaveLength(1);
     await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
-    expect(isOpen()).toBe(false);
+    expect([isOpen(), document.activeElement]).toEqual([false, document.body]);
   });
 });
 

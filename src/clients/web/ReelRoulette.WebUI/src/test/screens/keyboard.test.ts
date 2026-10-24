@@ -6,6 +6,7 @@ import {
   json,
   mountPage,
   popupsShown,
+  presetSelect,
   randomAnswer,
   ratingAnswer,
   ratingRequests,
@@ -80,6 +81,26 @@ async function mount(server: FakeServer): Promise<MountedPage> {
 async function press(key: string, init: KeyboardEventInit = {}, target: Element = document.body): Promise<boolean> {
   const allowed = fireEvent.keyDown(target, { key, ...init });
   fireEvent.keyUp(target, { key, ...init });
+  await settle();
+  return allowed;
+}
+
+/** What a browser presses when it has focus: a button, a checkbox, a radio button, or a section heading. */
+const PRESSED_BY_KEY = "button, input[type=checkbox], input[type=radio], summary";
+
+/**
+ * Presses `key` where focus is, as a browser sends it: the key goes down on the focused element and comes back up on what
+ * has focus then. Enter going down on a button, a checkbox, a radio button, or a section heading presses it unless the
+ * page prevents it, and Space coming back up on one presses it, as a browser may even when the page prevented the key
+ * going down. Says whether the page left the key going down to the browser.
+ */
+async function pressFocused(key: string, init: KeyboardEventInit = {}): Promise<boolean> {
+  const pressed = document.activeElement ?? document.body;
+  const allowed = fireEvent.keyDown(pressed, { key, ...init });
+  if (allowed && key === "Enter" && pressed.matches(PRESSED_BY_KEY)) fireEvent.click(pressed);
+  const released = document.activeElement ?? document.body;
+  fireEvent.keyUp(released, { key, ...init });
+  if (key === " " && released.matches(PRESSED_BY_KEY)) fireEvent.click(released);
   await settle();
   return allowed;
 }
@@ -219,14 +240,104 @@ describe("keyboard shortcuts", () => {
     expect(playIcon()).toBe("pause");
   });
 
-  it("leaves Space on a focused button to the button", async () => {
-    await mount(serverPicking(VIDEO_ITEM));
+  it("Space, ←, and → run their shortcuts on a focused button, slider, checkbox, radio button, or section heading, which they leave unpressed, leaving focus on the page", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    await mount(server);
     await press("k");
     await loadVideo(65);
-    const favorite = button("Favorite");
-    favorite.focus();
-    expect(await press(" ", {}, favorite)).toBe(true);
-    expect(playIcon()).toBe("pause");
+    await press("6");
+    const loopStops = within(panel()).getByRole("checkbox", { name: "Loop stops autoplay", hidden: true }) as HTMLInputElement;
+    const steps = within(panel()).getByRole("radiogroup", { name: "Seek step", hidden: true });
+    const seekStep = within(steps).getByRole("radio", { name: "10 seconds", hidden: true }) as HTMLInputElement;
+    const heading = shortcutsSection().querySelector("summary")!;
+    const controls: HTMLElement[] = [button("Favorite"), seekSlider(), volumeSlider(), loopStops, seekStep, heading];
+    const states = () => [server.requests("POST", "/api/favorite").length, loopStops.checked, seekStep.checked, shortcutsSection().open];
+    const before = states();
+
+    for (const control of controls) {
+      control.focus();
+      const icon = playIcon();
+      expect(await pressFocused(" "), control.outerHTML).toBe(false);
+      expect([playIcon() !== icon, document.activeElement], control.outerHTML).toEqual([true, document.body]);
+
+      control.focus();
+      expect(await pressFocused("ArrowRight"), control.outerHTML).toBe(false);
+      expect([video().src.includes("item-video-2"), document.activeElement], control.outerHTML).toEqual([true, document.body]);
+      control.focus();
+      expect(await pressFocused("ArrowLeft"), control.outerHTML).toBe(false);
+      expect([video().src.includes("item-video?"), document.activeElement], control.outerHTML).toEqual([true, document.body]);
+    }
+    expect(states()).toEqual(before);
+    expect(randomPicks(server)).toBe(2);
+  });
+
+  it("after a click on Next, Space pauses instead of pressing Next again, and after a click on the seek bar, → plays the next item", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, THIRD_VIDEO);
+    await mount(server);
+    await press("k");
+    await loadVideo(65);
+    // A click on a button or a press on the seek bar focuses it, as Chrome and Firefox on Linux do.
+    const next = button("Next");
+    next.focus();
+    await click(next);
+    await loadVideo(65);
+    expect([video().src.includes("item-video-2"), playIcon()]).toEqual([true, "pause"]);
+
+    expect(await pressFocused(" ")).toBe(false);
+    expect([playIcon(), video().src.includes("item-video-2"), randomPicks(server), document.activeElement]).toEqual(["play_arrow", true, 2, document.body]);
+
+    seekSlider().focus();
+    expect(await pressFocused("ArrowRight")).toBe(false);
+    expect([video().src.includes("item-video-3"), document.activeElement]).toEqual([true, document.body]);
+  });
+
+  it("after a pick from a dropdown, focus has left it, so → after a preset pick plays the next item", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("GET", "/api/presets", () => json([{ id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only", selectedTags: [], excludedTags: [], includedSourceIds: [] } }]));
+    await mount(server);
+    await press("k");
+    await loadVideo(65);
+    await press("1");
+    await waitFor(() => expect(Array.from(presetSelect().options, (option) => option.value)).toContain("preset-favorites"));
+
+    presetSelect().focus();
+    fireEvent.change(presetSelect(), { target: { value: "preset-favorites" } });
+    await settle();
+    expect([presetSelect().value, document.activeElement]).toEqual(["preset-favorites", document.body]);
+    expect(await pressFocused("ArrowRight")).toBe(false);
+    expect(video().src).toContain("item-video-2");
+
+    const sort = document.getElementById("library-sort-select") as HTMLSelectElement;
+    const other = Array.from(sort.options).find((option) => option.value !== sort.value)!.value;
+    sort.focus();
+    fireEvent.change(sort, { target: { value: other } });
+    await settle();
+    expect([sort.value, document.activeElement]).toEqual([other, document.body]);
+  });
+
+  it("do nothing with a plain key no shortcut binds, on a control or the page, and leave F1 to F12, Escape, and keys pressed with Ctrl, Alt, or Meta to the browser", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mount(server);
+    await press("k");
+    await loadVideo(65);
+    const volume = volumeSlider().value;
+    volumeSlider().focus();
+    for (const key of ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", "Tab", "Enter"]) {
+      expect(await pressFocused(key), key).toBe(false);
+    }
+    expect([volumeSlider().value, document.activeElement]).toEqual([volume, volumeSlider()]);
+
+    button("Favorite").focus();
+    expect([await pressFocused("Enter"), await pressFocused("Tab", { shiftKey: true })]).toEqual([false, false]);
+    expect([server.requests("POST", "/api/favorite").length, document.activeElement]).toEqual([0, button("Favorite")]);
+
+    button("Favorite").blur();
+    for (const key of ["Tab", "PageDown", "PageUp", "ArrowDown", "ArrowUp", "Home", "End", "Backspace", "x", "/"]) {
+      expect(await press(key), key).toBe(false);
+    }
+    const left = [press("F5"), press("F12"), press("ArrowDown", { ctrlKey: true }), press("ArrowLeft", { altKey: true }), press("x", { metaKey: true }), press("Escape")];
+    expect(await Promise.all(left)).toEqual([true, true, true, true, true, true]);
+    expect([playIcon(), randomPicks(server)]).toEqual(["pause", 1]);
   });
 
   it("J and L seek by the seek step, 5 seconds until Settings changes it, and keep a paused video paused", async () => {
@@ -498,20 +609,10 @@ describe("keyboard shortcuts", () => {
     await press("m");
     await press("3");
     expect([isLit("Mute"), shownTab()]).toEqual([false, "library"]);
-  });
-
-  it("leave a focused slider its arrow keys and take every other key", async () => {
-    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
-    await mount(server);
-    await press("k");
-    await loadVideo(65);
-    seekSlider().focus();
-    expect(await press("ArrowRight", {}, seekSlider())).toBe(true);
-    expect(randomPicks(server)).toBe(1);
-    await press("k", {}, seekSlider());
-    expect(playIcon()).toBe("play_arrow");
-    await press(" ", {}, seekSlider());
-    expect(playIcon()).toBe("pause");
+    // The dialog takes every key, so Enter presses its focused OK, which closes it.
+    expect(document.activeElement?.textContent).toBe("OK");
+    expect(await pressFocused("Enter")).toBe(true);
+    expect(document.querySelector("dialog[open]")).toBeNull();
   });
 
   it("repeat only J, L, comma, period, [, ], -, and = while a key is held down", async () => {
@@ -523,11 +624,10 @@ describe("keyboard shortcuts", () => {
     await press("m", { repeat: true });
     await press("2", { repeat: true });
     expect([server.requests("POST", "/api/favorite").length, isLit("Mute"), shownTab()]).toEqual([0, false, null]);
-    // A held key that acts once still keeps its repeats from the browser, so holding Space or an arrow doesn't scroll,
-    // while a held Space on a focused button stays the button's.
-    expect([await press(" ", { repeat: true }), await press("ArrowRight", { repeat: true })]).toEqual([false, false]);
+    // A held key that acts once still keeps its repeats from the browser, so holding Space or an arrow doesn't scroll or
+    // press a focused button.
+    expect([await press(" ", { repeat: true }), await press("ArrowRight", { repeat: true }), await press(" ", { repeat: true }, button("Favorite"))]).toEqual([false, false, false]);
     expect([playIcon(), randomPicks(server)]).toEqual(["pause", 1]);
-    expect(await press(" ", { repeat: true }, button("Favorite"))).toBe(true);
 
     video().currentTime = 20;
     await press("l", { repeat: true });

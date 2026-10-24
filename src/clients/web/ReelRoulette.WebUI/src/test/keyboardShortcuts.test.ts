@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { signal } from "@preact/signals";
 import { describe, expect, it, vi } from "vitest";
-import { focusTakesKey, runShortcut, SHORTCUT_LINES, shortcutFor, type KeyPress, type ShortcutAction, type ShortcutServices } from "../keyboard/shortcuts";
+import { listenForShortcuts, pageTakesKey, runShortcut, SHORTCUT_LINES, shortcutFor, takesKeys, type KeyPress, type ShortcutAction, type ShortcutServices } from "../keyboard/shortcuts";
 import { PANEL_TABS, type PanelTab } from "../panel/panelHost";
 
 /** The symbols' keys on a US keyboard, with Shift and without, as `KeyboardEvent.code` names them. */
@@ -185,37 +185,49 @@ describe("shortcutFor", () => {
     }
   });
 
-  it("leaves a slider its own keys and takes every other", () => {
-    const slider = input("range");
-    expect(shortcutFor(press("ArrowLeft", { target: slider }))).toBeNull();
-    expect(shortcutFor(press("ArrowRight", { target: slider }))).toBeNull();
-    expect([" ", "k", "j", "m", "["].map((key) => shortcutFor(press(key, { target: slider })))).toEqual(["playOrPause", "playOrPause", "seekBack", "mute", "volumeDown"]);
+  it("takes every bound key on a slider, a checkbox, a radio button, a button, a link, or a summary", () => {
+    const controls = [input("range"), input("checkbox"), input("radio"), input("button"), document.createElement("button"), document.createElement("a"), document.createElement("summary")];
+    for (const target of controls) {
+      expect(BOUND.map(([keyPress]) => shortcutFor({ ...keyPress, target })), target.outerHTML).toEqual(BOUND.map(([, action]) => action));
+    }
   });
 });
 
-describe("focusTakesKey", () => {
-  it("gives a slider its arrow keys, Home, End, Page Up, and Page Down, and nothing else", () => {
-    const slider = input("range");
-    expect(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].every((key) => focusTakesKey(slider, key))).toBe(true);
-    expect([" ", "k", "Enter"].some((key) => focusTakesKey(slider, key))).toBe(false);
+describe("takesKeys", () => {
+  it("is true for a text field of any kind, a text area, a dropdown, and editable text", () => {
+    const fields = [input("text"), input("search"), input("number"), input("date"), document.createElement("textarea"), document.createElement("select"), editable()];
+    expect(fields.map(takesKeys)).toEqual(fields.map(() => true));
   });
 
-  it("gives a checkbox and a radio button the left and right arrows and Space", () => {
-    for (const target of [input("checkbox"), input("radio")]) {
-      expect(["ArrowLeft", "ArrowRight", " "].map((key) => focusTakesKey(target, key))).toEqual([true, true, true]);
-      expect(focusTakesKey(target, "k")).toBe(false);
+  it("is false for a checkbox, a radio button, a button, a slider, a link, a summary, the page itself, and no target", () => {
+    const others = [input("checkbox"), input("radio"), input("button"), input("submit"), input("reset"), input("range"), document.createElement("button"), document.createElement("a"), document.createElement("summary"), document.body, null];
+    expect(others.map(takesKeys)).toEqual(others.map(() => false));
+  });
+});
+
+describe("pageTakesKey", () => {
+  it("takes every key outside a text field, a dropdown, or editable text, the unbound ones such as Tab, Enter, the arrows, and the page keys included", () => {
+    const keys = ["Tab", "Enter", " ", "ArrowUp", "ArrowDown", "ArrowLeft", "Home", "End", "PageUp", "PageDown", "Backspace", "x", "/", "'", "F13"];
+    for (const target of [document.body, input("range"), input("checkbox"), document.createElement("button")]) {
+      expect(keys.map((key) => pageTakesKey(press(key, { target })))).toEqual(keys.map(() => true));
     }
+    expect([pageTakesKey(press("Tab", { shiftKey: true })), pageTakesKey(press("?", { shiftKey: true }))]).toEqual([true, true]);
   });
 
-  it("gives Space to what it activates: a button, a link, or a summary", () => {
-    for (const target of [document.createElement("button"), document.createElement("a"), document.createElement("summary")]) {
-      expect([focusTakesKey(target, " "), focusTakesKey(target, "k"), focusTakesKey(target, "ArrowLeft")]).toEqual([true, false, false]);
-    }
-  });
-
-  it("gives nothing to the page itself, or to no target", () => {
-    expect([" ", "k", "ArrowLeft"].map((key) => focusTakesKey(document.body, key))).toEqual([false, false, false]);
-    expect(focusTakesKey(null, " ")).toBe(false);
+  it("leaves a key pressed with Ctrl, Alt, or Meta, F1 to F12, Escape, a key already handled, and every key in a text field to the browser", () => {
+    const left = [
+      press("ArrowDown", { ctrlKey: true }),
+      press("ArrowLeft", { altKey: true }),
+      press("Tab", { ctrlKey: true }),
+      press("c", { metaKey: true }),
+      ...Array.from({ length: 12 }, (_, index) => press(`F${index + 1}`)),
+      press("F5", { shiftKey: true }),
+      press("Escape"),
+      press("Tab", { defaultPrevented: true }),
+      press("Tab", { target: input("text") }),
+      press("ArrowUp", { target: document.createElement("select") })
+    ];
+    expect(left.map(pageTakesKey)).toEqual(left.map(() => false));
   });
 });
 
@@ -298,7 +310,7 @@ describe("runShortcut", () => {
       "stepFrame(1)",
       "stepVolume(-1)",
       "stepVolume(1)",
-      'toggle({"byKey":true})',
+      "toggle",
       "fullscreen"
     ]);
   });
@@ -319,7 +331,7 @@ describe("runShortcut", () => {
     runShortcut("tags", open.services);
     expect(open.calls).toEqual(["showTab(tags)"]);
     runShortcut("tags", open.services);
-    expect(open.calls).toEqual(["showTab(tags)", 'close({"byKey":true})']);
+    expect(open.calls).toEqual(["showTab(tags)", "close"]);
   });
 
   it("opens Settings, then asks it to show the shortcuts, but not when the tab it left kept the panel where it was", async () => {
@@ -333,5 +345,67 @@ describe("runShortcut", () => {
     runShortcut("shortcuts", kept.services);
     await settle();
     expect(kept.calls).toEqual(["showTab(settings)"]);
+  });
+});
+
+describe("listenForShortcuts", () => {
+  /** Presses `key` on `target` as the browser sends it, and says whether the page left the key's default to it. */
+  function keyDown(target: Element, key: string, init: KeyboardEventInit = {}): boolean {
+    return target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+  }
+
+  function listening() {
+    const noted = services();
+    const focusedWhenRun: (Element | null)[] = [];
+    noted.services.player.playOrPause = () => {
+      focusedWhenRun.push(document.activeElement);
+      noted.calls.push("playOrPause");
+    };
+    const stop = listenForShortcuts(document, noted.services);
+    return { ...noted, focusedWhenRun, stop };
+  }
+
+  function focused<T extends HTMLElement>(element: T): T {
+    document.body.append(element);
+    element.focus();
+    return element;
+  }
+
+  it("takes focus off the focused control before it runs a shortcut", () => {
+    const { calls, focusedWhenRun, stop } = listening();
+    const next = focused(document.createElement("button"));
+    expect(keyDown(next, " ")).toBe(false);
+    expect([calls, focusedWhenRun, document.activeElement]).toEqual([["playOrPause"], [document.body], document.body]);
+    stop();
+    next.remove();
+  });
+
+  it("keeps an unbound key from the browser without running anything or moving focus", () => {
+    const { calls, stop } = listening();
+    const slider = focused(input("range"));
+    expect(["ArrowUp", "Tab", "Enter", "PageDown", "x"].map((key) => keyDown(slider, key))).toEqual([false, false, false, false, false]);
+    expect([calls, document.activeElement]).toEqual([[], slider]);
+    expect([keyDown(slider, "F5"), keyDown(slider, "Escape"), keyDown(slider, "ArrowDown", { ctrlKey: true })]).toEqual([true, true, true]);
+    stop();
+    slider.remove();
+  });
+
+  it("leaves every key to a text field, and to an open dialog", () => {
+    const { calls, stop } = listening();
+    const field = focused(input("text"));
+    expect(["k", " ", "Tab", "ArrowRight"].map((key) => keyDown(field, key))).toEqual([true, true, true, true]);
+    expect(document.activeElement).toBe(field);
+    field.remove();
+
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    const ok = document.createElement("button");
+    dialog.append(ok);
+    focused(dialog);
+    ok.focus();
+    expect([keyDown(ok, "Enter"), keyDown(ok, " "), keyDown(ok, "Tab")]).toEqual([true, true, true]);
+    expect([calls, document.activeElement]).toEqual([[], ok]);
+    stop();
+    dialog.remove();
   });
 });

@@ -118,25 +118,19 @@ export interface PanelHost {
    */
   attachPlayer(column: MeasuredElement | null): void;
   /** The panel button: opens the panel on its last tab, or closes it as `close` does. */
-  toggle(options?: PanelCloseOptions): Promise<void>;
+  toggle(): Promise<void>;
   /** Opens the panel on `tab`, or shows `tab` in the open panel, once the tab it leaves agrees. */
   showTab(tab: PanelTab): Promise<void>;
-  /** Closes the panel once its tab agrees. */
-  close(options?: PanelCloseOptions): Promise<void>;
+  /**
+   * Closes the panel once its tab agrees. Focus inside it goes to the page, so keys don't go to a text field it hides.
+   */
+  close(): Promise<void>;
   /** Closes the panel as the overlay, which covers the player. Beside the player it stays open. */
   closeIfOverlay(): Promise<void>;
   /** Sets the width beside the player, within its limits, and remembers it when `remember`. */
   setWidth(width: number, remember: boolean): void;
   /** Moves the panel to `side` and remembers it. An open panel beside the player moves at once. */
   setSide(side: PanelSide): void;
-}
-
-/** How the panel closes. */
-export interface PanelCloseOptions {
-  /**
-   * A key closes it, Esc or a shortcut: focus inside the panel goes to the page, so Space plays or pauses afterwards.
-   */
-  byKey?: boolean;
 }
 
 export interface PanelHostOptions {
@@ -278,7 +272,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     enter();
   }
 
-  async function close(options: PanelCloseOptions = {}): Promise<void> {
+  async function close(): Promise<void> {
     if (!isOpen.peek() || leaving || !(await leaveShown())) {
       return;
     }
@@ -288,7 +282,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     isOpen.value = false;
     device.write(OPEN_KEY, false);
     render();
-    if (hadFocus && options.byKey) {
+    if (hadFocus) {
       (focused as HTMLElement).blur?.();
     }
   }
@@ -359,8 +353,8 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
       measurePlayer();
     },
 
-    toggle(options) {
-      return isOpen.peek() ? close(options) : showTab(tab.peek());
+    toggle() {
+      return isOpen.peek() ? close() : showTab(tab.peek());
     },
 
     showTab,

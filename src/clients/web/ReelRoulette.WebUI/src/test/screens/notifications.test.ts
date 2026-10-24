@@ -715,7 +715,7 @@ describe("the list", () => {
     expect(list().hidden).toBe(false);
   });
 
-  it("closes on its Close, the bell, and Escape, which leaves focus on the page as a key that closes the panel does", async () => {
+  it("closes on its Close, the bell, and Escape, which it keeps from the browser, leaving focus on the page", async () => {
     await mountWithServices();
     expect(list().getAttribute("role")).toBe("dialog");
     expect(list().getAttribute("aria-labelledby")).toBe("notify-title");
@@ -754,6 +754,33 @@ describe("the list", () => {
     fireEvent.keyDown(document.body, { key: "Escape" });
     await flush();
     expect(list().hidden).toBe(false);
+  });
+
+  it("leaves focus on the page however it closes, rather than on a control it hides", async () => {
+    const services = await mountWithServices();
+    const settingsButton = () => list().querySelector<HTMLElement>('[data-act="settings"]')!;
+    const closes: [string, () => Promise<unknown>][] = [
+      ["Close", () => click(listButton("Close"))],
+      ["the bell", () => click(bell())],
+      ["Escape", () => pressKey(listButton("Close"), "Escape")],
+      [
+        "a press outside",
+        async () => {
+          fireEvent.pointerDown(mediaArea());
+          await flush();
+        }
+      ],
+      ["the panel opening", () => click(document.getElementById("panel-btn")!)],
+      ["Notification settings", () => click(settingsButton())]
+    ];
+    for (const [name, close] of closes) {
+      await services.panel.close();
+      await click(bell());
+      // A tap on a button, as on an iPad, leaves focus where it was.
+      listButton("Close").focus();
+      await close();
+      expect([list().hidden, document.activeElement], name).toEqual([true, document.body]);
+    }
   });
 
   it("closes on a press outside it and when the panel opens, leaving focus where it was", async () => {

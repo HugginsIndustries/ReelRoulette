@@ -141,12 +141,15 @@ Last milestone completed: M12k6
 ### M12k7 - WebUI Keyboard Navigation and Screen Reader Code Removal
 
 - **Status**: 🚧 In Progress
-- **Goal**: The keyboard serves only the app's shortcuts: the WebUI and its mockup lose their keyboard navigation and screen-reader-only code, and Space, ←, and → reach the shortcuts from every control but text fields and dropdowns.
+- **Goal**: The keyboard serves only the app's shortcuts: the WebUI and its mockup lose their keyboard navigation and screen-reader-only code, and outside text fields and dropdowns a plain key does only what a shortcut binds it to.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
 
-- Only text fields, dropdowns, and editable text keep the keys pressed in them, where a text field is any `input` but a checkbox, radio button, button, or slider, or a `textarea`. Every other control leaves Space, ←, and → to the shortcuts.
+- Only text fields, dropdowns, and editable text keep the keys pressed in them, where a text field is any `input` but a checkbox, radio button, button, or slider, or a `textarea`.
+- Everywhere else, on every other control and on the page, a key pressed without Ctrl, Alt, or Meta does only what a shortcut binds it to, and otherwise nothing, so every plain key stays free for custom shortcuts later. Unbound keys are ignored, such as ↑ and ↓ on a slider, Enter on a button, Tab, and the page's scrolling keys.
+- Keys pressed with Ctrl, Alt, or Meta and F1 to F12 stay the browser's, and Escape stays the key that closes the top dialog, the bell's list, the rating's stars, or the panel, or leaves fullscreen.
+- An open in-app dialog, Auto Tag included, takes every key, so Enter and Space press its focused button and Tab moves inside it, since no shortcut runs while one is open.
 - A dropdown gives up focus right after a pick, so → after picking a preset with the mouse plays the next item instead of changing the preset.
 - Every pick gives up focus, one that flags its field included, so after a pick that flags the Favorites and Blacklisted pair only the red icon shows, and the tooltip shows while the pointer is over the icon, after a tap on it, or once a held action moves to the field.
 - When a shortcut runs, the focused control loses focus first, so Space's release can't press a button and focus doesn't stay for the next key.
@@ -155,7 +158,7 @@ Last milestone completed: M12k6
 - In-app dialogs keep the control they focus on opening, Cancel, OK, or the name field with its text selected, and focus goes back nowhere when they close.
 - The field validation pattern keeps showing a field's tooltip while it has focus and moving a held action to its flagged field, since a pointer or a touch starts both.
 - No focus ring shows: one global `:focus { outline: none }` rule turns them off, the browser's own included.
-- Tab order stays, and nothing changes it.
+- Tab moves focus only from a text field, a dropdown, or editable text, or inside an open in-app dialog, and nothing changes the tab order.
 
 #### Slices
 
@@ -163,7 +166,7 @@ Last milestone completed: M12k6
 | --- | --- | --- |
 | Mockup | ✅ Complete | Keyboard navigation, screen-reader-only markup and text, and the grid's and menus' focus designs removed from the mockup, and its keys routed as the Decisions say, approved on a desktop browser, the iPad, and an Android phone. |
 | Keyboard navigation | ✅ Complete | The WebUI's own tab stops, keys inside controls, focus moves, focus tracking, and focus rings removed, with the tests that used them as setup moved to the pointer and the shortcuts. |
-| Shortcut keys | ⏳ Planned | Space, ←, and → reaching the shortcuts from every control but text fields and dropdowns, the focused control blurred when a shortcut runs, and dropdowns giving up focus after a pick. |
+| Shortcut keys | ✅ Complete | Space, ←, and → reaching the shortcuts from every control but text fields and dropdowns, other plain keys doing nothing there, the focused control blurred when a shortcut runs, and dropdowns giving up focus after a pick, in the app and the mockup. |
 | Screen reader | ⏳ Planned | Announcements, descriptions, state attributes, the roles that only looked focusable or that announce, and screen-reader-only text removed, with tests finding things by what they show. |
 
 #### Mockup slice
@@ -290,13 +293,15 @@ Last milestone completed: M12k6
 
 **Scope**
 
-- `focusTakesKey` (`src/keyboard/shortcuts.ts`) leaves keys only to text fields, dropdowns, and editable text, and `SLIDER_KEYS`, `SPACE_ACTIVATES`, and `UNTYPED_INPUTS` go.
+- `focusTakesKey` (`src/keyboard/shortcuts.ts`) becomes `takesKeys`, which leaves keys only to text fields, dropdowns, and editable text, and `SLIDER_KEYS`, `SPACE_ACTIVATES`, and `UNTYPED_INPUTS` go.
 - `listenForShortcuts` blurs the focused control before it runs a shortcut.
+- `listenForShortcuts` prevents the default of every other key pressed without Ctrl, Alt, or Meta outside text fields, dropdowns, and editable text, except F1 to F12 and Escape, while no in-app dialog is open.
 - A dropdown gives up focus right after a pick, through one listener for the page's dropdowns beside `listenForShortcuts`.
 - `isTextField` in `src/playback/playerControls.ts` merges into the same text field check, so a key on a slider counts as activity.
 - Every way of closing the panel blurs focus inside it, and `PanelCloseOptions.byKey` goes (`src/panel/panelHost.ts`, `src/ui/Stage.tsx`, `shortcuts.ts`).
 - Every way of closing the bell's list blurs focus inside it, as Escape already does (`src/ui/Notifications.tsx`).
-- `CONTEXT.md` and `docs/domain-inventory.md` describe which keys reach the shortcuts.
+- The mockup's shortcut handler (`docs/mockups/reelroulette/build/layout.src.html`) ignores unbound keys by the same rule, and the index page's line on keys says so.
+- `CONTEXT.md` and `docs/domain-inventory.md` describe which keys reach the shortcuts and that the others do nothing.
 
 **Traps**
 
@@ -304,6 +309,9 @@ Last milestone completed: M12k6
 - `listenForShortcuts` runs on the document after the focused element's own handlers, does nothing while a `dialog[open]` exists, skips a key already default-prevented, and prevents the default of a key it takes.
 - A button activates on Space as the key comes back up and on Enter as it goes down, and whether preventing the key press stops Space's activation differs by browser (inferred). Blurring first lands the release on the page in every browser (inferred).
 - Preventing the key press stops a slider's or radio button's arrow step, since that step is the key press's default action (inferred).
+- Preventing the key press also keeps Tab from moving focus, Enter from pressing a focused button, and the page keys from scrolling, and likely keeps Firefox's quick find from opening on / and ' (inferred).
+- Escape has no binding in the shortcut table: the dialogs, the bell's list, the rating's popover, and the stage handle it, so the rule leaves it alone.
+- The mockup's shortcut handler returns early for a Shift key it doesn't bind and passes over J, L, comma, and period with no video, so the rule prevents the key's default before its branches.
 - Chrome and Firefox on Linux focus a button when it is clicked, and the arrow keys change a closed, focused dropdown there (inferred). The tests run in happy-dom, which shows none of this, so the spot check is the browsers' answer.
 - iOS and Android show a dropdown's choices in a picker of their own, and when it reports the pick relative to its closing is unknown, so the blur after a pick must not cut a pick short (inferred).
 - `isTextField` counts a slider as taking keys and repeats `focusTakesKey`'s text field test.
@@ -316,8 +324,26 @@ Last milestone completed: M12k6
 - Space, ←, and → run their shortcuts on a focused button, slider, checkbox, radio button, or section heading, and not in a text field, a dropdown, or editable text, in keyboard shortcut unit tests and keyboard screen tests.
 - After a click on Next, Space pauses instead of pressing Next again, and after a click on the seek bar, → plays the next item, in keyboard screen tests.
 - After a pick from a dropdown, focus has left it, and → after picking a preset plays the next item, in keyboard screen tests.
+- Outside text fields, dropdowns, and editable text, unbound plain keys do nothing, such as ↑ on the focused volume slider, Enter on a focused button, and Tab and Page Down on the page, while F1 to F12, keys pressed with Ctrl, Alt, or Meta, Escape, and every key in an open in-app dialog are left alone, in keyboard shortcut unit tests and keyboard screen tests.
 - Closing the panel or the bell's list any way leaves no focus inside it, in Panel and Notifications screen tests.
-- `npm run verify` passes, and a quick spot check in Firefox and Chrome on the Linux desktop: a click on Next then Space, a click on the seek bar then →, and a preset pick then →.
+- `npm run verify` passes, and a quick spot check in Firefox on the Linux desktop: a click on Next then Space, a click on the seek bar then →, a preset pick then →, and Tab and Page Down doing nothing.
+- The mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes, and in the mockup on the desktop browser, after a click on the volume slider, ↑ and Tab do nothing, as the user approves in their review.
+
+**Evidence**
+
+- `npm run verify` passed, with 2,128 tests in 89 files, from 2,123 before this slice (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 66 checks (measured).
+- The user's spot check passed in Firefox on the Linux desktop: a click on Next then Space, a click on the seek bar then →, a preset pick then →, and Tab and Page Down doing nothing.
+- The user's review of the mockup passed on the desktop browser: after a click on the volume slider, ↑ and Tab do nothing.
+- The spot check and the Release checks name Firefox only for the desktop, as the standard environment does, in place of Chrome and Firefox.
+- A search of the WebUI's `src` found no `focusTakesKey`, `isTextField`, `SLIDER_KEYS`, `SPACE_ACTIVATES`, `UNTYPED_INPUTS`, or `PanelCloseOptions` (measured).
+- Breaking each part failed its tests: the blur before a shortcut, a slider counted as a text field, unbound keys left to the browser, F1 to F12 and Escape taken, dialogs no longer taking every key, the dropdown blur, and the blur as the panel or the bell's list closes (measured).
+- happy-dom presses no button from the keyboard, so the keyboard screen tests press a focused button, checkbox, radio button, or section heading on Enter or on Space's release, as a browser can, and the test of Space after a click on Next failed without the blur (measured).
+- `pageTakesKey` in `src/keyboard/shortcuts.ts` decides which keys the page takes, and `blurDropdownsAfterPick` beside `listenForShortcuts`, registered in `src/ui/Stage.tsx`, has a dropdown give up focus after a pick.
+- `listenForShortcuts` takes its shortcut from `shortcutFor`, so the keyboard shortcut unit tests check what the listener runs.
+- Escape no longer also takes focus off the bell in the app, since focus there has no effect once every plain key runs a shortcut or does nothing. The mockup keeps it, since its admin page shares that code without the key rule.
+- Comments about a key step on the focused slider went from `src/playback/audioStage.ts`, `src/ui/Player.tsx`, `src/test/audioStage.test.ts`, and the mockup, since no key moves a slider.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and the `[Unreleased]` keyboard shortcuts and keyboard navigation bullets in `CHANGELOG.md` describe the final key behavior.
 
 #### Screen reader slice
 
@@ -355,7 +381,7 @@ Last milestone completed: M12k6
 
 #### Release checks
 
-- Manual: In Chrome and Firefox on the Linux desktop, after a click on Next, Space pauses instead of pressing Next again, after a click on the seek bar, → plays the next item, and after a preset is picked, → plays the next item.
+- Manual: In Firefox on the Linux desktop, after a click on Next, Space pauses instead of pressing Next again, after a click on the seek bar, → plays the next item, after a preset is picked, → plays the next item, and Tab and Page Down do nothing.
 - Manual: On the iPad and an Android phone, picking from a dropdown, such as the preset, still picks, now that a dropdown gives up focus after a pick.
 
 #### Not included
@@ -2164,6 +2190,7 @@ Last milestone completed: M12k6
 - Bindings are stored per device with the other WebUI preferences.
 - Keys resolve through a binding map instead of fixed checks.
 - Keys the browser keeps for itself cannot be bound.
+- A combination with Ctrl, Alt, or Meta runs its shortcut once bound, and one bound to nothing stays the browser's.
 
 #### Acceptance
 
