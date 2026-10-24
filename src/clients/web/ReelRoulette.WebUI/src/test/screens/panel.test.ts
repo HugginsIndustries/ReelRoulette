@@ -93,12 +93,6 @@ async function emitTabEvents(page: MountedPage): Promise<void> {
   await settle();
 }
 
-async function press(element: HTMLElement, key: string, init: KeyboardEventInit = {}): Promise<void> {
-  element.focus();
-  fireEvent.keyDown(element, { key, ...init });
-  await settle();
-}
-
 function panelButton(): HTMLButtonElement {
   return document.getElementById("panel-btn") as HTMLButtonElement;
 }
@@ -295,24 +289,22 @@ describe("tabs", () => {
     expect(document.querySelectorAll("aside.panel")).toHaveLength(1);
   });
 
-  it("close the panel with the Close at the end of the row, which gives focus back to the panel button", async () => {
+  it("close the panel with the Close at the end of the row", async () => {
+    await mount();
+    await click(panelButton());
+
+    await click(within(panel()).getByRole("button", { name: "Close panel" }));
+
+    expect(isOpen()).toBe(false);
+  });
+
+  it("Escape with focus in the panel leaves focus on the page, as every key that closes the panel does", async () => {
     await mount();
     await click(panelButton());
     const close = within(panel()).getByRole("button", { name: "Close panel" });
     close.focus();
 
-    await click(close);
-
-    expect(isOpen()).toBe(false);
-    expect(document.activeElement).toBe(panelButton());
-  });
-
-  it("Escape with focus on the handle leaves focus on the page, as every key that closes the panel does", async () => {
-    await mount();
-    await click(panelButton());
-    handle().focus();
-
-    fireEvent.keyDown(handle(), { key: "Escape" });
+    fireEvent.keyDown(close, { key: "Escape" });
     await settle();
 
     expect(isOpen()).toBe(false);
@@ -409,33 +401,35 @@ describe("breakpoints", () => {
   });
 });
 
+/**
+ * Mounts the page on a 1200 px stage, so the panel can be 360 to 788 px wide: the stage less the 12 px handle and the
+ * 400 px player.
+ */
+async function mountWideStage(): Promise<MountedPage> {
+  stubLayoutSize(1200, 700);
+  const page = await mount();
+  const stageBox = new DOMRect(0, 0, 1200, 700);
+  Object.defineProperty(stage(), "getBoundingClientRect", { configurable: true, value: () => stageBox });
+  return page;
+}
+
+function shownWidth(): number {
+  return Number(handle().getAttribute("aria-valuenow"));
+}
+
+/** Presses the handle at `fromX` and drags it to `toX`, without letting go. */
+async function drag(fromX: number, toX: number): Promise<void> {
+  fireEvent.pointerDown(handle(), { pointerId: 1, button: 0, clientX: fromX, clientY: 300 });
+  fireEvent.pointerMove(document, { pointerId: 1, clientX: toX, clientY: 300 });
+  await settle();
+}
+
+async function release(): Promise<void> {
+  fireEvent.pointerUp(document, { pointerId: 1, button: 0 });
+  await settle();
+}
+
 describe("width", () => {
-  /**
-   * Mounts the page on a 1200 px stage, so the panel can be 360 to 788 px wide: the stage less the 12 px handle and
-   * the 400 px player.
-   */
-  async function mountWideStage(): Promise<void> {
-    stubLayoutSize(1200, 700);
-    await mount();
-    const stageBox = new DOMRect(0, 0, 1200, 700);
-    Object.defineProperty(stage(), "getBoundingClientRect", { configurable: true, value: () => stageBox });
-  }
-
-  function shownWidth(): number {
-    return Number(handle().getAttribute("aria-valuenow"));
-  }
-
-  async function drag(fromX: number, toX: number): Promise<void> {
-    fireEvent.pointerDown(handle(), { pointerId: 1, button: 0, clientX: fromX, clientY: 300 });
-    fireEvent.pointerMove(document, { pointerId: 1, clientX: toX, clientY: 300 });
-    await settle();
-  }
-
-  async function release(): Promise<void> {
-    fireEvent.pointerUp(document, { pointerId: 1, button: 0 });
-    await settle();
-  }
-
   it("starts at 420 px and follows a drag of the handle within 360 px and the width that leaves the player 400 px", async () => {
     await mountWideStage();
     await click(panelButton());
@@ -456,24 +450,6 @@ describe("width", () => {
     expect(localStorage.getItem("rr_device.panel.width")).toBe("360");
   });
 
-  it("takes the arrow keys, Home, and End on the handle, growing toward the player", async () => {
-    await mountWideStage();
-    await click(panelButton());
-
-    await press(handle(), "ArrowLeft");
-    expect(shownWidth()).toBe(436);
-    await press(handle(), "ArrowLeft", { shiftKey: true });
-    expect(shownWidth()).toBe(500);
-    await press(handle(), "ArrowRight");
-    expect(shownWidth()).toBe(484);
-    expect(localStorage.getItem("rr_device.panel.width")).toBe("484");
-    await press(handle(), "End");
-    expect(shownWidth()).toBe(788);
-    await press(handle(), "Home");
-    expect(shownWidth()).toBe(360);
-    expect(handle().getAttribute("aria-valuetext")).toBe("360 pixels");
-  });
-
   it("keeps a wider remembered width after a click on the handle that doesn't drag", async () => {
     localStorage.setItem("rr_device.panel.width", "700");
     stubLayoutSize(1000, 700);
@@ -485,33 +461,25 @@ describe("width", () => {
     await release();
     expect(localStorage.getItem("rr_device.panel.width")).toBe("700");
   });
-
-  it("grows with the right arrow when the panel sits on the left", async () => {
-    localStorage.setItem("rr_device.panel.side", '"left"');
-    await mountWideStage();
-    await click(panelButton());
-
-    await press(handle(), "ArrowRight");
-    expect(shownWidth()).toBe(436);
-  });
 });
 
 describe("memory", () => {
   it("keeps whether the panel is open, its side, width, and last tab across a page refresh", async () => {
     localStorage.setItem("rr_device.panel.side", '"left"');
-    stubLayoutSize(1200, 700);
-    const first = await mount();
+    const first = await mountWideStage();
     await click(panelButton());
     await click(tab("Tags"));
-    await press(handle(), "ArrowRight");
-    expect(handle().getAttribute("aria-valuenow")).toBe("436");
+    // On the left, the panel grows as its handle moves right.
+    await drag(420, 436);
+    await release();
+    expect(shownWidth()).toBe(436);
     first.unmount();
 
     const again = await mount();
     expect(isOpen()).toBe(true);
     expect(shownPages()).toEqual(["Tags"]);
     expect(stage().dataset.side).toBe("left");
-    expect(handle().getAttribute("aria-valuenow")).toBe("436");
+    expect(shownWidth()).toBe(436);
     expect(again.server.requests("POST", "/api/tag-editor/model")).toHaveLength(1);
     const calls = again.server.calls.map((call) => `${call.method} ${call.path}`);
     expect(calls.indexOf("POST /api/tag-editor/model")).toBeGreaterThan(calls.indexOf("GET /api/version"));

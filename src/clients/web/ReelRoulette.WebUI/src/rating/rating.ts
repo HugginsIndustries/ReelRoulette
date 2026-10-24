@@ -55,29 +55,6 @@ export function stepRating(rating: number | null, direction: -1 | 1): number | n
   return clampRating((rating ?? 0) + direction * 0.5);
 }
 
-/**
- * The rating a key sets from `rating`: the left and down arrows step down half a star, the right and up arrows step up
- * half a star, Home and Delete or Backspace clear it, and End is 5 stars. Null for any other key.
- */
-export function ratingForKey(rating: number | null, key: string): { rating: number | null } | null {
-  switch (key) {
-    case "ArrowLeft":
-    case "ArrowDown":
-      return { rating: stepRating(rating, -1) };
-    case "ArrowRight":
-    case "ArrowUp":
-      return { rating: stepRating(rating, 1) };
-    case "End":
-      return { rating: RATING_MAX };
-    case "Home":
-    case "Delete":
-    case "Backspace":
-      return { rating: null };
-    default:
-      return null;
-  }
-}
-
 /** How the star at `index`, from 0, shows `rating`: full, half, or empty. */
 export function starFill(rating: number | null, index: number): "full" | "half" | "empty" {
   const stars = rating ?? 0;

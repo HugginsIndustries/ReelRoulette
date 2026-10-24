@@ -634,7 +634,7 @@ function AmbientMode() {
  * Show popups and its Popup settings: which kinds pop up, where, whether in fullscreen, and for how long, which the
  * notifications service keeps and applies at once. Popup settings starts closed, and its controls are disabled while
  * Show popups is off, each one too, besides their fieldset. Changing where or how long shows a sample popup. The bell's
- * list's Notification settings opens Popup settings and moves to Show popups.
+ * list's Notification settings opens Popup settings and scrolls to their section.
  */
 function NotificationSettings() {
   const { notifications, settings } = useApp();
@@ -651,7 +651,6 @@ function NotificationSettings() {
     handled.current = request;
     more.current!.open = true;
     showPopups.current!.closest("section")?.scrollIntoView?.({ block: "start" });
-    showPopups.current!.focus({ preventScroll: true });
   }, [request]);
 
   const off = !current.popups;
@@ -734,13 +733,12 @@ function PanelSettings() {
 }
 
 /**
- * The keyboard shortcuts, a section that opens from its heading and starts closed. H opens it, moves to it, and puts
- * focus on its heading, as the bell's Notification settings does for Popup settings.
+ * The keyboard shortcuts, a section that opens from its heading and starts closed. H opens it and scrolls to it, as the
+ * bell's Notification settings does for Popup settings.
  */
 function KeyboardShortcuts() {
   const { settings } = useApp();
   const more = useRef<HTMLDetailsElement>(null);
-  const summary = useRef<HTMLElement>(null);
   // A request made before this rendered was for an earlier page.
   const request = settings.shortcutsRequest.value;
   const handled = useRef(request);
@@ -751,13 +749,12 @@ function KeyboardShortcuts() {
     handled.current = request;
     more.current!.open = true;
     more.current!.closest("section")?.scrollIntoView?.({ block: "start" });
-    summary.current!.focus({ preventScroll: true });
   }, [request]);
 
   return (
     <section class="settings-section" aria-labelledby="settings-shortcuts-heading">
       <details class="setting-more shortcuts-more" id="settings-shortcuts" ref={more}>
-        <summary ref={summary}>
+        <summary>
           <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
           <h3 id="settings-shortcuts-heading">Keyboard shortcuts</h3>
         </summary>

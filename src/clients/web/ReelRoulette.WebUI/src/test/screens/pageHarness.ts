@@ -641,7 +641,10 @@ export const PAST_LEFT_X = STARS_LEFT - 30;
 
 export type StarPointer = "mouse" | "touch";
 
-/** Sends `mousedown` on the stars, which moves focus to them unless it is cancelled, as a browser does. */
+/**
+ * Sends `mousedown` on the stars. Unless it is cancelled, a browser takes focus off the focused control, which this
+ * shows as focus on the stars, since happy-dom lets any element take focus.
+ */
 function mouseDownOnStars(stars: HTMLElement, x: number): void {
   if (fireEvent.mouseDown(stars, { button: 0, clientX: x })) {
     stars.focus();
@@ -686,13 +689,6 @@ export async function tapStars(stars: HTMLElement, x: number, pointer: StarPoint
   await settle();
 }
 
-/** Presses `key` on the stars. */
-export async function pressRatingKey(stars: HTMLElement, key: string): Promise<void> {
-  fireEvent.keyDown(stars, { key });
-  fireEvent.keyUp(stars, { key });
-  await settle();
-}
-
 /** The popups showing, each as its text and second line, leaving out any that are fading out. */
 export function popupsShown(): string[] {
   return [...document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")].map((toast) =>
@@ -721,31 +717,6 @@ export function stubScroller(element: HTMLElement, top: number, height: number, 
   stubProperty(element, "clientHeight", { get: () => height });
   stubProperty(element, "scrollHeight", { get: () => content });
   stubProperty(element, "getBoundingClientRect", { value: () => new DOMRect(0, top, 300, height) });
-}
-
-/** A focus call the page made, and whether it asked not to scroll. */
-export interface FocusCall {
-  element: HTMLElement;
-  preventScroll: boolean;
-}
-
-/**
- * Records each focus call from here on, and scrolls `scroller` to its top for one that doesn't ask not to scroll, as a
- * browser may when it brings the focused element into view, which happy-dom doesn't do.
- */
-export function scrollOnFocus(scroller: HTMLElement): FocusCall[] {
-  const calls: FocusCall[] = [];
-  const original = HTMLElement.prototype.focus;
-  stubProperty(HTMLElement.prototype, "focus", {
-    value(this: HTMLElement, options?: FocusOptions) {
-      calls.push({ element: this, preventScroll: options?.preventScroll === true });
-      if (!options?.preventScroll) {
-        scroller.scrollTop = 0;
-      }
-      original.call(this, options);
-    }
-  });
-  return calls;
 }
 
 /** happy-dom's window size, which each test starts from. */

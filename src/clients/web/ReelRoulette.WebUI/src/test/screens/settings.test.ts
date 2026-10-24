@@ -939,11 +939,12 @@ describe("Advance after", () => {
     expect([advanceAfter().value, problemOf(advanceAfter())]).toEqual(["10", null]);
     expect(kept()).toBeNull();
 
-    // A valid value typed is saved as the panel closes, as when the field loses focus.
+    // A valid value typed is saved as the panel closes, as when the field loses focus: the field hides with focus still
+    // in it, and saves as its hiding takes effect, after the next frame.
     advanceAfter().focus();
     type(advanceAfter(), "33");
     closePanel();
-    await flush();
+    await vi.advanceTimersByTimeAsync(100);
     expect(kept()).toBe("33");
   });
 
@@ -1794,30 +1795,35 @@ describe("Notifications", () => {
     expect(within(document.getElementById("notify-list")!).queryByText(SAMPLE)).toBeNull();
   });
 
-  it("opens from the bell's list at Show popups, with Popup settings open, closing the list", async () => {
+  it("opens from the bell's list scrolled to Show popups, with Popup settings open, closing the list", async () => {
     await mount();
     await click(tab("Library"));
     await click(bell());
     const list = document.getElementById("notify-list")!;
     expect(list.hidden).toBe(false);
+    const scrolls = vi.spyOn(Element.prototype, "scrollIntoView");
+    const scrolled = () => scrolls.mock.contexts.filter((element) => element === checkbox("Show popups").closest("section")).length;
+    try {
+      await click(within(list).getByRole("button", { name: "Notification settings" }));
+      expect(list.hidden).toBe(true);
+      expect(settingsPage().hidden).toBe(false);
+      expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
+      expect(popupSettings().open).toBe(true);
+      expect(scrolled()).toBe(1);
 
-    await click(within(list).getByRole("button", { name: "Notification settings" }));
-    expect(list.hidden).toBe(true);
-    expect(settingsPage().hidden).toBe(false);
-    expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
-    expect(popupSettings().open).toBe(true);
-    expect(document.activeElement).toBe(checkbox("Show popups"));
-
-    // Again, after Popup settings was closed, from a closed panel.
-    await click(popupSettings().querySelector("summary")!);
-    expect(popupSettings().open).toBe(false);
-    closePanel();
-    await settle();
-    await click(bell());
-    await click(within(list).getByRole("button", { name: "Notification settings" }));
-    expect(settingsPage().hidden).toBe(false);
-    expect(popupSettings().open).toBe(true);
-    expect(document.activeElement).toBe(checkbox("Show popups"));
+      // Again, after Popup settings was closed, from a closed panel.
+      await click(popupSettings().querySelector("summary")!);
+      expect(popupSettings().open).toBe(false);
+      closePanel();
+      await settle();
+      await click(bell());
+      await click(within(list).getByRole("button", { name: "Notification settings" }));
+      expect(settingsPage().hidden).toBe(false);
+      expect(popupSettings().open).toBe(true);
+      expect(scrolled()).toBe(2);
+    } finally {
+      scrolls.mockRestore();
+    }
   });
 });
 

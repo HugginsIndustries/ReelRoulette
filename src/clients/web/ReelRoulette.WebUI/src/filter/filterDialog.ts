@@ -230,10 +230,10 @@ export interface FilterDialog {
   updatePreset(): void;
   typeNewPresetName(text: string): void;
   /**
-   * Adds the working filter as the last preset, with the typed name, until Apply saves the list, and says whether it
-   * did. Disabled while the name is empty or taken, and held like Apply.
+   * Adds the working filter as the last preset, with the typed name, until Apply saves the list. Disabled while the
+   * name is empty or taken, and held like Apply.
    */
-  addPreset(): boolean;
+  addPreset(): void;
   /** Moves the preset at `from` to `to`, until Apply saves the list. */
   movePreset(from: number, to: number): void;
   /** Opens Edit Preset on the preset with this id, with its name. */
@@ -931,7 +931,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     addPreset() {
       const current = view.peek();
       if (!current || blocked("addPreset")) {
-        return false;
+        return;
       }
       const name = current.newPresetName.trim();
       const working = readGeneral(current);
@@ -942,7 +942,6 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         newPresetName: ""
       });
       tab.value = "presets";
-      return true;
     },
 
     movePreset(from, to) {

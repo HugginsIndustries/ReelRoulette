@@ -7,8 +7,8 @@ import { HeldButton, ValidatedField } from "./FieldValidation";
 
 // The WebUI's dialog: a themed modal in the browser's top layer, so each one opens above any dialog already open, and
 // above the overlays and fullscreen. It is rendered inside the fullscreen stage, so it shows in iOS pseudo-fullscreen
-// too. Escape or a click outside closes only the top one, and focus returns to where it was. Auto Tag, which covers the
-// whole page, is one too, with its own class, no outside to click, and a scan to wait for.
+// too. Escape or a click outside closes only the top one. Auto Tag, which covers the whole page, is one too, with its
+// own class, no outside to click, and a scan to wait for.
 
 export interface DialogProps {
   /** The id of what names it: its heading, or a confirmation's or notice's message. */
@@ -21,11 +21,6 @@ export interface DialogProps {
   initialFocus: RefObject<HTMLElement | null>;
   /** Selects the text of the field that takes focus. */
   selectInitial?: boolean;
-  /**
-   * Takes focus when it closes if what had focus before it opened is gone, as when a rename replaces or a delete
-   * removes the row whose button opened it.
-   */
-  fallbackFocus?: () => HTMLElement | null;
   id?: string;
   /** In place of the in-app dialog's own `app-dialog`. */
   class?: string;
@@ -38,12 +33,10 @@ export interface DialogProps {
 
 /** A modal that opens when it renders and closes when it stops rendering. */
 export function Dialog(props: DialogProps) {
-  const { labelledBy, role, onCancel, initialFocus, selectInitial, fallbackFocus, id, backdropCancels = true, stayOpen, children } = props;
+  const { labelledBy, role, onCancel, initialFocus, selectInitial, id, backdropCancels = true, stayOpen, children } = props;
   const ref = useRef<HTMLDialogElement>(null);
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
-  const fallback = useRef(fallbackFocus);
-  fallback.current = fallbackFocus;
   const keepOpen = useRef(stayOpen);
   keepOpen.current = stayOpen;
   /** Whether the last press on the dialog started on its backdrop, or null before any press. */
@@ -51,7 +44,6 @@ export function Dialog(props: DialogProps) {
 
   useLayoutEffect(() => {
     const dialog = ref.current!;
-    const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     let closing = false;
     // The browser asks to close it on Escape or a back gesture; this page decides what closing means.
     const onBrowserCancel = (event: Event) => {
@@ -91,11 +83,6 @@ export function Dialog(props: DialogProps) {
       if (dialog.open && typeof dialog.close === "function") {
         dialog.close();
       }
-      // After the render that closed it, which may replace the row whose button opened it.
-      queueMicrotask(() => {
-        const target = returnTo?.isConnected ? returnTo : fallback.current?.();
-        target?.focus({ preventScroll: true });
-      });
     };
   }, []);
 
@@ -149,8 +136,6 @@ export interface NameDialogProps {
   onCancel: () => void;
   /** Shows a red Delete, which should ask first in a dialog stacked above. */
   onDelete?: () => void;
-  /** Takes focus when it closes if the button that opened it is gone, after a rename or a delete. */
-  fallbackFocus?: () => HTMLElement | null;
   /** Fields after the name, such as Edit Tag's category. */
   children?: ComponentChildren;
 }
@@ -160,13 +145,13 @@ export interface NameDialogProps {
  * and Cancel and Save. It opens with the name focused and selected.
  */
 export function NameDialog(props: NameDialogProps) {
-  const { title, label, fieldId, saveId, value, problem, flagged, onInput, onSave, onCancel, onDelete, fallbackFocus, children } = props;
+  const { title, label, fieldId, saveId, value, problem, flagged, onInput, onSave, onCancel, onDelete, children } = props;
   const titleId = useId();
   const name = useRef<HTMLInputElement>(null);
   // The name is a field of the dialog Save is in, so any problem in it disables Save.
   const saveDisabled = actionBlock(["name"], { name: problem }, ["name"]).disabled;
   return (
-    <Dialog labelledBy={titleId} onCancel={onCancel} initialFocus={name} selectInitial fallbackFocus={fallbackFocus}>
+    <Dialog labelledBy={titleId} onCancel={onCancel} initialFocus={name} selectInitial>
       <div class="dialog-body">
         <h3 id={titleId}>{title}</h3>
         <label for={fieldId}>{label}</label>

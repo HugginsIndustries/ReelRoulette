@@ -18,10 +18,6 @@ const TABS: Record<PanelTab, { label: string; icon: string }> = {
   settings: { label: "Settings", icon: "settings" }
 };
 
-/** How far the handle's arrow keys move it, and with Shift. */
-const HANDLE_STEP = 16;
-const HANDLE_STEP_LARGE = 64;
-
 /**
  * The side panel and the handle that resizes it. The panel host shows and hides the panel, the handle, and the tab
  * pages by their `hidden`, so it is rendered once here and never changed; the tab row and the handle render apart
@@ -129,9 +125,9 @@ function PanelTabs() {
 }
 
 /**
- * The handle between the player and the panel. Dragging it, or its arrow keys, Home, and End, set the panel's width
- * within its limits; the width is remembered once the drag ends or the key is pressed. A click that doesn't drag
- * leaves the remembered width, which can be wider than the window allows.
+ * The handle between the player and the panel. Dragging it sets the panel's width within its limits; the width is
+ * remembered once the drag ends. A click that doesn't drag leaves the remembered width, which can be wider than the
+ * window allows.
  */
 function PanelHandle({ element }: { element: { current: HTMLDivElement | null } }) {
   const { panel } = useApp();
@@ -170,24 +166,6 @@ function PanelHandle({ element }: { element: { current: HTMLDivElement | null } 
     setDragging(true);
   }
 
-  function onKeyDown(event: KeyboardEvent): void {
-    const grow = panel.side.peek() === "right" ? "ArrowLeft" : "ArrowRight";
-    const shrink = panel.side.peek() === "right" ? "ArrowRight" : "ArrowLeft";
-    const step = event.shiftKey ? HANDLE_STEP_LARGE : HANDLE_STEP;
-    const width = panel.width.peek();
-    const next =
-      event.key === grow ? width + step
-      : event.key === shrink ? width - step
-      : event.key === "Home" ? PANEL_MIN_WIDTH
-      : event.key === "End" ? panel.maxWidth.peek()
-      : null;
-    if (next === null) {
-      return;
-    }
-    event.preventDefault();
-    panel.setWidth(next, true);
-  }
-
   const width = panel.width.value;
   return (
     <div
@@ -201,11 +179,9 @@ function PanelHandle({ element }: { element: { current: HTMLDivElement | null } 
       aria-valuemax={panel.maxWidth.value}
       aria-valuenow={width}
       aria-valuetext={`${width} pixels`}
-      tabIndex={0}
       hidden
       ref={element}
       onPointerDown={onPointerDown}
-      onKeyDown={onKeyDown}
     >
       <span class="handle-grip"></span>
     </div>

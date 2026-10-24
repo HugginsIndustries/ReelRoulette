@@ -742,7 +742,7 @@ describe("Presets tab", () => {
     expect(view().actions.addPreset).toEqual(DISABLED);
 
     dialog.showTab("presets");
-    expect(dialog.addPreset()).toBe(false);
+    dialog.addPreset();
     expect(dialog.tab.value).toBe("presets");
     expect(moves).toEqual([]);
     expect(view().presets).toHaveLength(1);
@@ -758,14 +758,15 @@ describe("Presets tab", () => {
       addPreset: DISABLED,
       updatePreset: { ...DISABLED, reason: NO_CHOSEN_PRESET_REASON }
     });
-    expect(dialog.addPreset()).toBe(false);
+    dialog.addPreset();
     expect(dialog.tab.value).toBe("presets");
     expect(moves).toEqual([]);
+    expect(view().presets).toHaveLength(1);
     dialog.typeDuration("min", "");
 
     dialog.typeNewPresetName("Mine");
     expect(view().actions.addPreset).toEqual(FREE);
-    expect(dialog.addPreset()).toBe(true);
+    dialog.addPreset();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Mine"]);
     expect(view().newPresetName).toBe("");
     expect(view().flagged.newPresetName).toBe(false);
@@ -1663,7 +1664,7 @@ describe("presets need a filter of their own", () => {
     const noDefault = unavailable(DEFAULT_FILTER_PRESET_REASON);
     // On None, Update says first that it has nothing to write into.
     expect(view().actions).toMatchObject({ addPreset: noDefault, updatePreset: unavailable(NO_CHOSEN_PRESET_REASON) });
-    expect(dialog.addPreset()).toBe(false);
+    dialog.addPreset();
     dialog.updatePreset();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(notices).toEqual([]);
@@ -1685,7 +1686,7 @@ describe("presets need a filter of their own", () => {
     dialog.loadPreset();
     const favoritesHasIt = unavailable('Preset "Favorites" already has this filter.');
     expect(view().actions).toMatchObject({ addPreset: favoritesHasIt, updatePreset: favoritesHasIt });
-    expect(dialog.addPreset()).toBe(false);
+    dialog.addPreset();
     dialog.updatePreset();
     expect(view().presetsChanged).toBe(false);
     expect(notices).toEqual([]);

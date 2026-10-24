@@ -84,10 +84,9 @@ describe("libraryGridTileModel", () => {
     expect(html).toContain('<div class="library-grid-tile-filename">clip.mp4</div>');
   });
 
-  it("includes data-item-id and keyboard activation attributes", () => {
+  it("includes data-item-id and the button role", () => {
     const html = renderGridTileHtml(baseTile, buildThumbnailUrl("http://localhost:51301", "item-1"));
     expect(html).toContain('data-item-id="item-1"');
-    expect(html).toContain('tabindex="0"');
     expect(html).toContain('role="button"');
   });
 

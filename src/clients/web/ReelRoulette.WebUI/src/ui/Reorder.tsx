@@ -1,7 +1,6 @@
 import type { RefObject } from "preact";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
-  arrowKeyTarget,
   autoScrollStep,
   draggedRowTop,
   dragStarts,
@@ -14,7 +13,7 @@ import {
 // Reordering by drag handle. A row moves only by its handle, so a drag anywhere else on the row still scrolls on a
 // touch screen. The rows stay where they are in the page while one is dragged: the dragged row follows the pointer,
 // the rows it passes slide out of its way, and the new order is set when it is dropped. Moving the rows in the page
-// mid-drag would fight Preact, which draws them, and would drop the handle's focus.
+// mid-drag would fight Preact, which draws them.
 
 export interface ReorderOptions {
   /** The keys of the rows that can move, in order. */
@@ -29,9 +28,7 @@ export interface ReorderOptions {
 export interface DragHandleControl {
   name: string;
   helpId: string;
-  ref: (element: HTMLButtonElement | null) => void;
   onPointerDown: (event: PointerEvent) => void;
-  onKeyDown: (event: KeyboardEvent) => void;
 }
 
 export interface Reorder {
@@ -106,17 +103,14 @@ function createReorder(
   setAnnouncement: (text: string) => void
 ) {
   const rows = new Map<string, HTMLElement>();
-  const handles = new Map<string, HTMLButtonElement>();
   let drag: Drag | null = null;
-  // The handle that takes focus once a move has rendered.
-  let focusKey: string | null = null;
-  // After a drop, where its list was scrolled to, which it keeps once the rows render in their new order.
+  // After a drop, where its list was scrolled to, which it keeps once the rows render in their new order, however the
+  // browser scrolled it as the rows moved.
   let dropScroll: { scroller: HTMLElement | null; top: number } | null = null;
 
   function move(key: string, from: number, to: number, count: number): void {
     latest.current.onMove(from, to);
     setAnnouncement(movedAnnouncement(latest.current.nameOf(key), to, count));
-    focusKey = key;
   }
 
   function measure(current: Drag): boolean {
@@ -237,18 +231,13 @@ function createReorder(
       move(current.key, current.from, current.to, current.keys.length);
     }
     if (!current.started) {
-      handles.get(current.key)?.focus({ preventScroll: true });
       return;
     }
-    // The handle takes focus once the rows render where they were dropped, not at its old place, and without scrolling.
-    // The list keeps where it was scrolled to, however the browser scrolled it as the rows moved.
-    focusKey = current.key;
     dropScroll = { scroller: current.scroller, top: scrollTop };
   }
 
   return {
     rowRef: refsByKey(rows),
-    handleRef: refsByKey(handles),
 
     pointerDown(key: string, event: PointerEvent): void {
       const row = rows.get(key);
@@ -256,7 +245,7 @@ function createReorder(
       if (drag || event.button !== 0 || !row || from < 0) {
         return;
       }
-      // Keeps the browser from selecting text or focusing the handle; it takes focus when the pointer comes up.
+      // Keeps the browser from selecting text or focusing the handle.
       event.preventDefault();
       drag = {
         key,
@@ -278,20 +267,6 @@ function createReorder(
       document.addEventListener("pointercancel", onPointerEnd);
     },
 
-    keyDown(key: string, event: KeyboardEvent): void {
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
-        return;
-      }
-      // The arrow keys move the row, never scroll the list, even at either end.
-      event.preventDefault();
-      const keys = latest.current.keys;
-      const from = keys.indexOf(key);
-      const to = drag || from < 0 ? null : arrowKeyTarget(event.key, from, keys.length);
-      if (to !== null) {
-        move(key, from, to, keys.length);
-      }
-    },
-
     afterRender(dragging: string | null): void {
       const current = drag;
       if (current && !sameKeys(current.keys, latest.current.keys)) {
@@ -307,19 +282,11 @@ function createReorder(
           finish(false);
         }
       }
-      if (focusKey !== null) {
-        const key = focusKey;
+      if (dropScroll !== null) {
         const dropped = dropScroll;
-        focusKey = null;
         dropScroll = null;
-        if (dropped) {
-          if (dropped.scroller) {
-            dropped.scroller.scrollTop = dropped.top;
-          }
-          handles.get(key)?.focus({ preventScroll: true });
-        } else {
-          // An arrow key's move brings the handle into view when its row has left it.
-          handles.get(key)?.focus();
+        if (dropped.scroller) {
+          dropped.scroller.scrollTop = dropped.top;
         }
       }
     },
@@ -331,8 +298,8 @@ function createReorder(
 }
 
 /**
- * Reorders a list's rows by their drag handles, or with the up and down arrow keys while a handle has focus. Each
- * move goes to `onMove`, then focus is on the moved row's handle and screen readers hear its new position.
+ * Reorders a list's rows by their drag handles. Each move goes to `onMove`, then screen readers hear the moved row's
+ * new position.
  */
 export function useReorder(options: ReorderOptions): Reorder {
   const latest = useRef(options);
@@ -351,9 +318,7 @@ export function useReorder(options: ReorderOptions): Reorder {
     handle: (key) => ({
       name: options.nameOf(key),
       helpId,
-      ref: controller.handleRef(key),
-      onPointerDown: (event) => controller.pointerDown(key, event),
-      onKeyDown: (event) => controller.keyDown(key, event)
+      onPointerDown: (event) => controller.pointerDown(key, event)
     }),
     helpId,
     announcement
@@ -372,9 +337,16 @@ export function DragHandle(props: { control: DragHandleControl } | { fixed: stri
       </button>
     );
   }
-  const { name, helpId, ...handlers } = props.control;
+  const { name, helpId, onPointerDown } = props.control;
   return (
-    <button type="button" class={HANDLE} title="Drag to reorder" aria-label={`Reorder ${name}`} aria-describedby={helpId} {...handlers}>
+    <button
+      type="button"
+      class={HANDLE}
+      title="Drag to reorder"
+      aria-label={`Reorder ${name}`}
+      aria-describedby={helpId}
+      onPointerDown={onPointerDown}
+    >
       {icon}
     </button>
   );
@@ -384,7 +356,7 @@ export function DragHandle(props: { control: DragHandleControl } | { fixed: stri
 export function ReorderStatus({ reorder }: { reorder: Reorder }) {
   return (
     <>
-      <p id={reorder.helpId} class="visually-hidden">Drag to reorder, or press the up and down arrow keys.</p>
+      <p id={reorder.helpId} class="visually-hidden">Drag to reorder.</p>
       <div class="visually-hidden" aria-live="polite">{reorder.announcement}</div>
     </>
   );

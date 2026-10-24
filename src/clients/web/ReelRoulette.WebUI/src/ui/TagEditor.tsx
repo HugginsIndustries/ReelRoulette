@@ -1,6 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { TagEditorView } from "../tags/tagEditor";
-import { normalizeTagKey, type TagCategory as CatalogCategory, type TagCategoryRow, type TagChipRow } from "../tags/tagEditorModel";
+import type { TagCategory as CatalogCategory, TagCategoryRow, TagChipRow } from "../tags/tagEditorModel";
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import { ValidatedField } from "./FieldValidation";
@@ -25,15 +24,6 @@ export function TagEditor() {
     keys: movable.map((category) => category.id),
     nameOf: (id) => movable.find((category) => category.id === id)?.name ?? "",
     onMove: (from, to) => tagEditor.moveCategory(movable[from]!.id, to)
-  });
-  // The tag Add tag created, until its chip renders and takes focus.
-  const addedTag = useRef<string | null>(null);
-  useLayoutEffect(() => {
-    const name = addedTag.current;
-    if (name !== null) {
-      addedTag.current = null;
-      addedChipFocus(name)?.focus();
-    }
   });
   const saveClass = view?.savePending ? "icon-btn has-pending" : "icon-btn";
   return (
@@ -75,14 +65,14 @@ export function TagEditor() {
                     if (event.key === "Enter") {
                       event.preventDefault();
                       if (view && !view.addTagDisabled) {
-                        addedTag.current = tagEditor.addTag();
+                        tagEditor.addTag();
                       }
                     }
                   }}
                 />
               )}
             </ValidatedField>
-            <button id="tag-editor-add-tag-btn" class="icon-btn" type="button" title="Add tag" aria-label="Add tag" disabled={!view || view.addTagDisabled} onClick={() => (addedTag.current = tagEditor.addTag())}><Icon name="add" /></button>
+            <button id="tag-editor-add-tag-btn" class="icon-btn" type="button" title="Add tag" aria-label="Add tag" disabled={!view || view.addTagDisabled} onClick={() => tagEditor.addTag()}><Icon name="add" /></button>
             <button id="tag-editor-discard-btn" class="icon-btn" type="button" title="Discard changes" aria-label="Discard changes" disabled={!view?.savePending} onClick={() => tagEditor.discardChanges()}><Icon name="undo" /></button>
             <button id="tag-editor-apply-btn" class={saveClass} type="button" title="Save" aria-label="Save" disabled={view ? !view.savePending : undefined} onClick={() => tagEditor.save()}><Icon name="save" /><span class="unsaved-dot" hidden={!view?.savePending}></span></button>
           </div>
@@ -147,62 +137,9 @@ function Chip({ chip }: { chip: TagChipRow }) {
   );
 }
 
-/** The chip of the tag with this name, ignoring case and spaces, as tag names are compared. */
-function findChip(name: string): Element | undefined {
-  const key = normalizeTagKey(name);
-  return Array.from(document.querySelectorAll("#tag-editor-body .tag-chip")).find(
-    (candidate) => normalizeTagKey(candidate.querySelector(".tag-chip-label")?.textContent) === key
-  );
-}
-
-/** The Edit tag button of the chip with this name. */
-function chipEditButton(name: string): HTMLElement | null {
-  return findChip(name)?.querySelector<HTMLElement>('[title="Edit tag"]') ?? null;
-}
-
-/**
- * Where focus goes after Add tag creates a tag: its chip's add, so one more press puts it on the playing item, or its
- * Edit while nothing plays and add is disabled. A button, so no on-screen keyboard opens.
- */
-function addedChipFocus(name: string): HTMLElement | null {
-  const add = findChip(name)?.querySelector<HTMLButtonElement>('[title="Add tag"]');
-  return add && !add.disabled ? add : chipEditButton(name);
-}
-
-/** Where a chip was: its category, and its place among that category's chips. */
-interface ChipPlace {
-  categoryId: string;
-  index: number;
-}
-
-function chipPlace(view: TagEditorView, name: string): ChipPlace | null {
-  for (const category of view.categories ?? []) {
-    const index = category.chips.findIndex((chip) => chip.name === name);
-    if (index >= 0) {
-      return { categoryId: category.id, index };
-    }
-  }
-  return null;
-}
-
-/**
- * Where focus goes when Edit Tag closes after its chip was replaced or removed: after a rename, the renamed chip's Edit,
- * in whichever category it is now; after a delete, the next chip's in the same category, or the previous one's when
- * the last was deleted.
- */
-function editTagFallback(view: TagEditorView | null, oldName: string, typedName: string, place: ChipPlace | null): HTMLElement | null {
-  if (!view?.pending.deleteTags.has(normalizeTagKey(oldName))) {
-    return chipEditButton(typedName.trim());
-  }
-  const chips = view.categories?.find((category) => category.id === place?.categoryId)?.chips ?? [];
-  const next = chips[Math.min(place?.index ?? 0, chips.length - 1)];
-  return next ? chipEditButton(next.name) : null;
-}
-
 function EditTagDialog({ view }: { view: TagEditorView }) {
   const { tagEditor } = useApp();
   const edit = view.edit!;
-  const [place] = useState(() => chipPlace(view, edit.oldName));
   return (
     <NameDialog
       title="Edit Tag"
@@ -216,7 +153,6 @@ function EditTagDialog({ view }: { view: TagEditorView }) {
       onSave={() => tagEditor.saveEdit()}
       onCancel={() => tagEditor.cancelEdit()}
       onDelete={() => void tagEditor.deleteEditedTag()}
-      fallbackFocus={() => editTagFallback(tagEditor.view.peek(), edit.oldName, edit.name, place)}
     >
       <label for="tag-edit-category">Category</label>
       <select id="tag-edit-category" value={edit.categoryId} onChange={(event) => tagEditor.chooseEditCategory(event.currentTarget.value)}>
@@ -226,19 +162,8 @@ function EditTagDialog({ view }: { view: TagEditorView }) {
   );
 }
 
-/**
- * The Edit button of the category at `index`, or of the one before it: after a delete, the next category's, or the
- * previous one's when the deleted one was the last with an Edit button.
- */
-function categoryEditButton(index: number): HTMLElement | null {
-  const categories = document.querySelectorAll("#tag-editor-body .tag-category");
-  const at = (position: number) => categories[position]?.querySelector<HTMLElement>('[title="Edit category"]') ?? null;
-  return at(index) ?? at(index - 1);
-}
-
 function EditCategoryDialog({ view }: { view: TagEditorView }) {
   const { tagEditor } = useApp();
-  const [index] = useState(() => view.categories?.findIndex((category) => category.id === view.categoryEdit?.categoryId) ?? 0);
   return (
     <NameDialog
       title="Edit Category"
@@ -252,7 +177,6 @@ function EditCategoryDialog({ view }: { view: TagEditorView }) {
       onSave={() => tagEditor.saveCategoryEdit()}
       onCancel={() => tagEditor.cancelCategoryEdit()}
       onDelete={() => void tagEditor.deleteEditedCategory()}
-      fallbackFocus={() => categoryEditButton(index)}
     />
   );
 }

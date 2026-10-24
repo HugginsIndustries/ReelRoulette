@@ -136,7 +136,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   const ratings = createItemRatings({ store, api, connection, dialogs, notifications });
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, audio, api, connection, dialogs, notifications, ratings });
   const playerRating = createPlayerRating({ store, ratings, audio });
-  // The panel opening closes the list behind the bell and the rating's popover, leaving focus where the panel put it.
+  // The panel opening closes the list behind the bell and the rating's popover.
   panel.isOpen.subscribe((open) => {
     if (open) {
       notifications.closeList();

@@ -14,7 +14,6 @@ import {
   PAST_LEFT_X,
   PAST_RIGHT_X,
   popupsShown,
-  pressRatingKey,
   pressStars,
   randomAnswer,
   ratingAnswer,
@@ -59,8 +58,8 @@ const PHOTO = {
   mediaUrl: "/api/media/item-photo?token=t"
 };
 
-/** A random pick, which carries the video's loudness and peak when the scan measured them. */
-type PickedItem = typeof VIDEO & { integratedLoudness?: number; peakDb?: number };
+/** A random pick, which carries the video's loudness and peak when the scan measured them, and its rating. */
+type PickedItem = typeof VIDEO & { integratedLoudness?: number; peakDb?: number; rating?: number };
 
 const OTHER_VIDEO = {
   ...VIDEO,
@@ -226,23 +225,6 @@ describe("Stats tab", () => {
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
     expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(page.server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-video" }]);
-  });
-
-  it("opens from the file name with Enter or Space, as a button", async () => {
-    await mountStats();
-    const name = document.getElementById("now-playing-name")!;
-    expect([name.getAttribute("role"), name.tabIndex]).toEqual(["button", 0]);
-
-    fireEvent.keyDown(name, { key: " " });
-    await settle();
-    expect(document.getElementById("panel-tab-stats")!.getAttribute("aria-selected")).toBe("true");
-    fireEvent.click(document.getElementById("panel-btn")!);
-    await settle();
-    expect(document.getElementById("panel")!.hidden).toBe(true);
-
-    fireEvent.keyDown(name, { key: "Enter" });
-    await settle();
-    expect(document.getElementById("panel")!.hidden).toBe(false);
   });
 
   it("is the Stats tab, with its icon, between Tags and Filter", async () => {
@@ -850,16 +832,13 @@ describe("Stats tab's Show in File Manager and Copy Path", () => {
     removeClipboard();
     const execCopy = stubExecCommand(true);
     const { server } = await openOnFile({ fileManager: false });
-    const button = pathButton("Copy Path")!;
-    button.focus();
 
-    fireEvent.click(button);
+    fireEvent.click(pathButton("Copy Path")!);
     await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
     expect(execCopy.commands).toEqual(["copy"]);
     const path = "C:\\media\\holiday clip.mp4";
     expect(execCopy.fields).toEqual([{ value: path, selected: path, inStatsTab: true, focused: true }]);
     expect(document.querySelector("textarea")).toBeNull();
-    expect(document.activeElement).toBe(button);
     expect(openNotices()).toEqual([]);
     expect(relayedFile(server)).toBe(false);
   });
@@ -886,17 +865,18 @@ function ratingStars(): HTMLElement | null {
 }
 
 /**
- * Plays the video, whose read gives it `rating`, with its stars laid out, and opens the Stats tab on it, with the server
- * taking ratings as `reply` answers them.
+ * Plays the video, whose pick and read give it `rating`, with its stars laid out, and opens the Stats tab on it, with
+ * the server taking ratings as `reply` answers them. The first pick is the one played, and carries `rating` too.
  */
 async function openRated(
   rating: number | null,
   options: { items?: Record<string, unknown>[]; picks?: PickedItem[]; reply?: (call: FetchCall) => Response | Promise<Response> } = {}
 ): Promise<StatsPage> {
   stubStarLayout();
+  const [first, ...rest] = options.picks ?? [VIDEO];
   const stats = await mountStats({
     items: options.items ?? [itemRow(VIDEO, rating === null ? {} : { rating })],
-    picks: options.picks,
+    picks: [rating === null ? first! : { ...first!, rating }, ...rest],
     setup: (server) => server.on("POST", "/api/rating", options.reply ?? ratingAnswer)
   });
   fireEvent.click(document.getElementById("now-playing-name")!);
@@ -905,6 +885,13 @@ async function openRated(
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Presses `key` on the page, as a shortcut: - and = step the playing file's rating half a star down or up. */
+async function pressShortcut(key: string): Promise<void> {
+  fireEvent.keyDown(document.body, { key });
+  fireEvent.keyUp(document.body, { key });
+  await settle();
+}
 
 describe("Stats tab's rating", () => {
   beforeEach(() => {
@@ -916,7 +903,7 @@ describe("Stats tab's rating", () => {
 
     const stars = screen.getByRole("slider", { name: "Rating" });
     expect(stars).toBe(ratingStars());
-    expect([stars.getAttribute("aria-valuemin"), stars.getAttribute("aria-valuemax"), stars.tabIndex]).toEqual(["0", "5", 0]);
+    expect([stars.getAttribute("aria-valuemin"), stars.getAttribute("aria-valuemax")]).toEqual(["0", "5"]);
     expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
     expect(starsShown(ratingStars()!)).toBe(3.5);
     const line = stars.closest(".stats-rating")!;
@@ -1039,56 +1026,33 @@ describe("Stats tab's rating", () => {
     expect(ratingRequests(server)).toEqual([]);
   });
 
-  it("steps by half a star on the arrow keys, clears on Home, Delete, and Backspace, and sets 5 stars on End, showing each at once", async () => {
-    await openRated(2);
-    ratingStars()!.focus();
-
-    const steps: Array<[string, string]> = [
-      ["ArrowRight", "2.5 stars"],
-      ["ArrowUp", "3 stars"],
-      ["ArrowLeft", "2.5 stars"],
-      ["ArrowDown", "2 stars"],
-      ["End", "5 stars"],
-      ["ArrowRight", "5 stars"],
-      ["Home", "Not rated"],
-      ["ArrowLeft", "Not rated"],
-      ["ArrowUp", "0.5 stars"],
-      ["Delete", "Not rated"],
-      ["End", "5 stars"],
-      ["Backspace", "Not rated"]
-    ];
-    for (const [key, text] of steps) {
-      await pressRatingKey(ratingStars()!, key);
-      expect(sliderValue(ratingStars()!)[1]).toBe(text);
-    }
-  });
-
-  it("sends the keys' rating once, when they pause or focus leaves the stars", async () => {
+  it("shows the rating the - and = shortcuts set on its stars at once, and sends it once, when the keys pause, and the next change from there", async () => {
     const { page, server } = await openRated(1);
-    ratingStars()!.focus();
 
     for (let i = 0; i < 6; i++) {
-      await pressRatingKey(ratingStars()!, "ArrowRight");
+      await pressShortcut("=");
     }
-    expect(sliderValue(ratingStars()!)).toEqual(["4", "4 stars"]);
+    await pressShortcut("-");
+    expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
     expect(ratingRequests(server)).toEqual([]);
     await wait(600);
-    expect(ratingRequests(server)).toEqual([{ itemId: "item-video", rating: 4, clientId: page.clientId() }]);
-    await waitFor(() => expect(popupsShown()).toEqual(["Rated 4 stars | holiday clip.mp4"]));
-
-    await pressRatingKey(ratingStars()!, "End");
-    await pressRatingKey(ratingStars()!, "ArrowLeft");
-    ratingStars()!.blur();
-    await settle();
-    expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([4, 4.5]);
+    expect(ratingRequests(server)).toEqual([{ itemId: "item-video", rating: 3.5, clientId: page.clientId() }]);
+    await waitFor(() => expect(popupsShown()).toEqual(["Rated 3.5 stars | holiday clip.mp4"]));
     await wait(600);
-    expect(ratingRequests(server)).toHaveLength(2);
+    expect(ratingRequests(server)).toHaveLength(1);
+
+    // The next change steps from the rating sent.
+    await pressShortcut("=");
+    await pressShortcut("=");
+    expect(sliderValue(ratingStars()!)).toEqual(["4.5", "4.5 stars"]);
+    await wait(600);
+    expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([3.5, 4.5]);
   });
 
   it("sends nothing once the page closes, not even a rating the keys were waiting to send", async () => {
     const { page, server } = await openRated(2);
-    ratingStars()!.focus();
-    await pressRatingKey(ratingStars()!, "ArrowRight");
+    await pressShortcut("=");
+    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
 
     page.unmount();
     await wait(600);
@@ -1101,9 +1065,9 @@ describe("Stats tab's rating", () => {
 
     await tapStars(ratingStars()!, xFor(3), "mouse");
     await tapStars(ratingStars()!, xFor(3), "touch");
-    ratingStars()!.focus();
-    await pressRatingKey(ratingStars()!, "ArrowRight");
-    await pressRatingKey(ratingStars()!, "ArrowLeft");
+    await pressShortcut("=");
+    expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
+    await pressShortcut("-");
     await wait(600);
 
     expect(ratingRequests(server)).toEqual([]);
@@ -1113,8 +1077,8 @@ describe("Stats tab's rating", () => {
 
   it("sends a rating to the file it was set on as soon as another file plays", async () => {
     const { page, server } = await openRated(2, { items: [itemRow(VIDEO, { rating: 2 }), itemRow(OTHER_VIDEO)], picks: [VIDEO, OTHER_VIDEO] });
-    ratingStars()!.focus();
-    await pressRatingKey(ratingStars()!, "ArrowRight");
+    await pressShortcut("=");
+    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
 
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
@@ -1168,8 +1132,7 @@ describe("Stats tab's rating", () => {
 
   it("keeps a rating the keys set until it is sent, through another device's change", async () => {
     const { page, server } = await openRated(2);
-    ratingStars()!.focus();
-    await pressRatingKey(ratingStars()!, "ArrowRight");
+    await pressShortcut("=");
 
     emit(page, "itemRatingChanged", { itemId: "item-video", path: VIDEO.id, rating: 4, previousRating: 2, clientId: "another-client" });
     await settle();
@@ -1178,18 +1141,6 @@ describe("Stats tab's rating", () => {
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     await settle();
     expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
-  });
-
-  it("keeps focus on the stars while the tab loads again", async () => {
-    const { page, server } = await openRated(2);
-    ratingStars()!.focus();
-    const loads = server.requests("GET", "/api/library/stats").length;
-
-    emit(page, "itemStateChanged", { itemId: "item-video", path: VIDEO.id, isFavorite: true, isBlacklisted: false });
-    await waitFor(() => expect(server.requests("GET", "/api/library/stats")).toHaveLength(loads + 1));
-    await settle();
-
-    expect(document.activeElement).toBe(ratingStars());
   });
 
   it("draws empty stars in the panel's text color, white in the Dark theme and dark in the Light theme", async () => {
@@ -1215,8 +1166,7 @@ describe("Stats tab's rating", () => {
 
     await tapStars(ratingStars()!, xFor(3), "mouse");
     expect(star.getAttribute("aria-label")).toBe("Rating, 3 stars");
-    ratingStars()!.focus();
-    await pressRatingKey(ratingStars()!, "ArrowRight");
+    await pressShortcut("=");
     expect(star.getAttribute("aria-label")).toBe("Rating, 3.5 stars");
     expect(ratingRequests(server)).toHaveLength(1);
 

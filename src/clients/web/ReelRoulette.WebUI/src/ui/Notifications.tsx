@@ -15,15 +15,11 @@ function bell(): HTMLElement | null {
   return document.getElementById("notify-btn");
 }
 
-function listTitle(): HTMLElement | null {
-  return document.getElementById("notify-title");
-}
-
 /**
  * The player's bell, at its top left with its other controls, so it shows and hides with them. Its badge counts the
  * one-off messages that didn't pop up since the list was last open, and the bell is orange while there are any, as it
- * is while its list is open. A press opens the list under it, or closes the list and keeps focus on the bell; the
- * controls stop the press from reaching the player, so it starts no random pick.
+ * is while its list is open. A press opens the list under it, or closes the list; the controls stop the press from
+ * reaching the player, so it starts no random pick.
  */
 export function NotifyButton() {
   const { notifications } = useApp();
@@ -35,7 +31,6 @@ export function NotifyButton() {
     event.stopPropagation();
     if (notifications.listOpen.peek()) {
       notifications.closeList();
-      (event.currentTarget as HTMLElement).focus({ preventScroll: true });
     } else {
       notifications.openList();
     }
@@ -68,7 +63,7 @@ export function Popups() {
 
 /**
  * One popup: its kind's icon or its own, the message, an optional second line, and Dismiss. Pointing at it with a mouse
- * or pen, or keyboard focus in it, pauses its time; a swipe to either side on a touch screen closes it.
+ * or pen pauses its time; a swipe to either side on a touch screen closes it.
  */
 function Toast({ popup }: { popup: Popup }) {
   const { notifications } = useApp();
@@ -83,18 +78,12 @@ function Toast({ popup }: { popup: Popup }) {
     const onPointerEnter = (event: PointerEvent) => {
       if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
       hovering = true;
-      notifications.hold(id, "pointer", true);
+      notifications.hold(id, true);
     };
     const onPointerLeave = () => {
       if (!hovering) return;
       hovering = false;
-      notifications.hold(id, "pointer", false);
-    };
-    // Focus moving between the popup's own parts doesn't count as leaving it.
-    const onFocusIn = () => notifications.hold(id, "focus", true);
-    const onFocusOut = (event: FocusEvent) => {
-      if (event.relatedTarget instanceof Node && toast.contains(event.relatedTarget)) return;
-      notifications.hold(id, "focus", false);
+      notifications.hold(id, false);
     };
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse" || (event.target as Element | null)?.closest?.("button")) return;
@@ -131,15 +120,11 @@ function Toast({ popup }: { popup: Popup }) {
 
     toast.addEventListener("pointerenter", onPointerEnter);
     toast.addEventListener("pointerleave", onPointerLeave);
-    toast.addEventListener("focusin", onFocusIn);
-    toast.addEventListener("focusout", onFocusOut);
     toast.addEventListener("pointerdown", onPointerDown);
     return () => {
       endSwipe?.();
       toast.removeEventListener("pointerenter", onPointerEnter);
       toast.removeEventListener("pointerleave", onPointerLeave);
-      toast.removeEventListener("focusin", onFocusIn);
-      toast.removeEventListener("focusout", onFocusOut);
       toast.removeEventListener("pointerdown", onPointerDown);
     };
   }, [id]);
@@ -212,7 +197,6 @@ export function NotificationList() {
   useLayoutEffect(() => {
     if (open) {
       place();
-      listTitle()?.focus({ preventScroll: true });
     }
   }, [open]);
 
@@ -236,17 +220,6 @@ export function NotificationList() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  function close(): void {
-    notifications.closeList();
-    bell()?.focus({ preventScroll: true });
-  }
-
-  function clear(): void {
-    notifications.clear();
-    listTitle()?.focus({ preventScroll: true });
-  }
-
-  // Focus goes to Show popups, not back to the bell.
   async function openSettings(): Promise<void> {
     notifications.closeList();
     await panel.showTab("settings");
@@ -279,9 +252,9 @@ export function NotificationList() {
   return (
     <section id="notify-list" class="notify-list" role="dialog" aria-labelledby="notify-title" hidden={!open} ref={list}>
       <div class="notify-head">
-        <h2 id="notify-title" tabindex={-1}>Notifications</h2>
-        <button type="button" class="btn" data-act="clear" disabled={entries.length === 0} onClick={clear}>Clear</button>
-        <button type="button" class="icon-btn" data-act="close" aria-label="Close" title="Close" onClick={close}>
+        <h2 id="notify-title">Notifications</h2>
+        <button type="button" class="btn" data-act="clear" disabled={entries.length === 0} onClick={() => notifications.clear()}>Clear</button>
+        <button type="button" class="icon-btn" data-act="close" aria-label="Close" title="Close" onClick={() => notifications.closeList()}>
           <span class="material-symbol-icon">close</span>
         </button>
       </div>

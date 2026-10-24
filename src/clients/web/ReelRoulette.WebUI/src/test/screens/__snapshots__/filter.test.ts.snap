@@ -56,7 +56,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           <div class="mode-row min-rating-row">
             <span id="filter-min-rating-label">
               "Min Rating"
-            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider" tabindex="0">
+            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider">
               <span class="rating-star">
                 <span aria-hidden="true" class="material-symbol-icon rating-outline">
                   "star"
@@ -355,7 +355,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
         <p class="visually-hidden" id="P0-19">
-          "Drag to reorder, or press the up and down arrow keys."
+          "Drag to reorder."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
@@ -428,7 +428,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           <div class="mode-row min-rating-row">
             <span id="filter-min-rating-label">
               "Min Rating"
-            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider" tabindex="0">
+            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider">
               <span class="rating-star">
                 <span aria-hidden="true" class="material-symbol-icon rating-outline">
                   "star"
@@ -727,7 +727,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
         <p class="visually-hidden" id="P0-19">
-          "Drag to reorder, or press the up and down arrow keys."
+          "Drag to reorder."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
@@ -800,7 +800,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           <div class="mode-row min-rating-row">
             <span id="filter-min-rating-label">
               "Min Rating"
-            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider" tabindex="0">
+            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider">
               <span class="rating-star">
                 <span aria-hidden="true" class="material-symbol-icon rating-outline">
                   "star"
@@ -1099,7 +1099,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
         <p class="visually-hidden" id="P0-19">
-          "Drag to reorder, or press the up and down arrow keys."
+          "Drag to reorder."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">

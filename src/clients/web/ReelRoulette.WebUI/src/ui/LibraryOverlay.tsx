@@ -157,17 +157,10 @@ function LibraryGrid() {
     if (!itemId) {
       return;
     }
-    event.preventDefault();
     void library.play(itemId);
   }
 
-  function onKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Enter" || event.key === " ") {
-      playTile(event);
-    }
-  }
-
-  return <div id="library-overlay-body" class="library-overlay-body" ref={host} onClick={playTile} onKeyDown={onKeyDown}></div>;
+  return <div id="library-overlay-body" class="library-overlay-body" ref={host} onClick={playTile}></div>;
 }
 
 function LibraryMessage({ message }: { message: LibraryOverlayMessage }) {

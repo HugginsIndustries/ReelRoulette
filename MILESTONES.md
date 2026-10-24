@@ -162,7 +162,7 @@ Last milestone completed: M12k6
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | Keyboard navigation, screen-reader-only markup and text, and the grid's and menus' focus designs removed from the mockup, and its keys routed as the Decisions say, approved on a desktop browser, the iPad, and an Android phone. |
-| Keyboard navigation | ⏳ Planned | The WebUI's own tab stops, keys inside controls, focus moves, focus tracking, and focus rings removed, with the tests that used them as setup moved to the pointer and the shortcuts. |
+| Keyboard navigation | ✅ Complete | The WebUI's own tab stops, keys inside controls, focus moves, focus tracking, and focus rings removed, with the tests that used them as setup moved to the pointer and the shortcuts. |
 | Shortcut keys | ⏳ Planned | Space, ←, and → reaching the shortcuts from every control but text fields and dropdowns, the focused control blurred when a shortcut runs, and dropdowns giving up focus after a pick. |
 | Screen reader | ⏳ Planned | Announcements, descriptions, state attributes, the roles that only looked focusable or that announce, and screen-reader-only text removed, with tests finding things by what they show. |
 
@@ -261,6 +261,31 @@ Last milestone completed: M12k6
 - Reordering by drag, ratings set by the - and = shortcuts with their send pause, the in-app dialogs' opening focus, and the field validation pattern's focus work as before, in the Filter, Tags, Stats, keyboard, dialog, and field validation tests.
 - `npm run verify` passes.
 
+**Evidence**
+
+- `npm run verify` passed, with 2,123 tests in 89 files, from 2,153 before this slice; the 30 that went tested only removed behavior (measured).
+- A search of the WebUI's `src` found no `tabindex`, `:focus-visible` rule, or `--focus-ring`, and the global `:focus` rule as the only `outline: none` (measured).
+- The same search found `.focus(` only in the in-app dialogs' opening focus, the field validation pattern's two, and Copy Path's text field (measured).
+- The key listeners left are the shortcuts', Escape's in the dialogs, the stage, and the bell's list and rating popover, Enter's in the name dialog, New tag name, and the setting fields, the player's page listener that counts a key as activity, and the audio stage's that starts audio on a first key, which react to any key rather than handle one, so they fall outside the Acceptance's list (measured).
+- The tests that used removed behavior as setup moved: 11 reorder tests drag their rows, the Stats tab's rating tests press - and = and Shift+digit, the Filter's Min Rating tests tap the stars, and the panel width test drags a left-side panel.
+- Breaking the drop's scroll restore failed the Filter and Tags drop-scroll tests, and breaking the drop's move failed all 11 tests moved to drags (measured).
+- Two of the moved drag tests gained an order check after their first drag, since without it they passed with no move (measured).
+- Breaking the left-side width math failed the moved panel width test (measured).
+- Breaking the send of a waiting rating as another file plays, from the store subscription in `itemRatings.ts`, and its drop as the page closes failed the moved Stats tests (measured).
+- The moved Stats shortcut test sends a second change after the first is sent, as the stars' test before it did, and breaking the keep of the server's answer in `itemRatings.ts` failed it (measured).
+- The Filter and Tags drag tests check that the preset dropdown and the new tag's category dropdown follow a move before Apply or Save, which only the removed arrow key tests checked, and breaking each dropdown's order failed them (measured).
+- The Stats tab's rating fixtures give the random pick the item's rating, since - and = step from the pick's.
+- Settings' Advance after test waits a frame for a typed value to save as the panel closes, since the field now saves as it hides instead of as focus moved to the panel button, and breaking that save failed it (measured).
+- Settings' Notification settings test checks the scroll to Show popups' section in place of its focus.
+- happy-dom lets any element take focus and doesn't give focus back as a dialog closes (measured), so the stacked-dialog Escape test focuses the Edit dialog's name field before its second Escape.
+- `npm run test -- -u` regenerated the foundation, library, filter, and tags snapshots, whose only changes are the removed `tabindex` and the drag handles' help line (measured).
+- Beyond the Scope's list, the bell list Close's focus on the bell, Copy Path's field `tabIndex`, the `[tabindex]` part of the Space rule in `shortcuts.ts`, and the panel close's check for focus on the handle went, which the searches required.
+- Also beyond it, `set` in `itemRatings.ts` no longer first sends a change waiting on another file, which could never happen, since ratings are set only on the playing file and the store subscription sends a waiting change as another plays.
+- The stars' `border-radius`, which only shaped their focus ring, went from the app and from the mockup's `build/common.css`, and `node docs/mockups/reelroulette/build/check.mjs` passed after the pages were rebuilt (measured).
+- `addPreset`, `addTag`, and `openPopover` return nothing, since only the focus moves read their results, and the popups' hold is one on and off.
+- The drag handles' help line reads "Drag to reorder." until the Screen reader slice removes it, and the Min Rating stars take only the Only unrated field's markup, not its focus handlers.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and the `[Unreleased]` Ratings and Drag to reorder bullets in `CHANGELOG.md` dropped the removed behavior, and a Removed bullet says focus rings no longer show and tiles no longer play on Enter or Space, which v0.14.1 had.
+
 #### Shortcut keys slice
 
 **Scope**
@@ -270,6 +295,7 @@ Last milestone completed: M12k6
 - A dropdown gives up focus right after a pick, through one listener for the page's dropdowns beside `listenForShortcuts`.
 - `isTextField` in `src/playback/playerControls.ts` merges into the same text field check, so a key on a slider counts as activity.
 - Every way of closing the panel blurs focus inside it, and `PanelCloseOptions.byKey` goes (`src/panel/panelHost.ts`, `src/ui/Stage.tsx`, `shortcuts.ts`).
+- Every way of closing the bell's list blurs focus inside it, as Escape already does (`src/ui/Notifications.tsx`).
 - `CONTEXT.md` and `docs/domain-inventory.md` describe which keys reach the shortcuts.
 
 **Traps**
@@ -283,14 +309,14 @@ Last milestone completed: M12k6
 - `isTextField` counts a slider as taking keys and repeats `focusTakesKey`'s text field test.
 - Escape on the bell's list already blurs (`src/ui/Notifications.tsx`).
 - The Favorites and Blacklisted pair's tooltip shows while either dropdown has focus, which `src/test/screens/filter.test.ts` checks after a focus, so a pick that gives up focus hides it, as the Decisions accept.
-- Tests that flip: in `src/test/keyboardShortcuts.test.ts`, a slider keeping its keys and `focusTakesKey`'s cases for sliders, checkboxes, radio buttons, and Space on a button, link, `summary`, or tile; and in `src/test/screens/keyboard.test.ts`, "leaves Space on a focused button to the button", a focused slider keeping its arrow keys, and held Space on a focused Favorite (measured).
+- Tests that flip: in `src/test/keyboardShortcuts.test.ts`, a slider keeping its keys and `focusTakesKey`'s cases for sliders, checkboxes, radio buttons, and Space on a button, link, or `summary`; and in `src/test/screens/keyboard.test.ts`, "leaves Space on a focused button to the button", a focused slider keeping its arrow keys, and held Space on a focused Favorite (measured).
 
 **Acceptance**
 
 - Space, ←, and → run their shortcuts on a focused button, slider, checkbox, radio button, or section heading, and not in a text field, a dropdown, or editable text, in keyboard shortcut unit tests and keyboard screen tests.
 - After a click on Next, Space pauses instead of pressing Next again, and after a click on the seek bar, → plays the next item, in keyboard screen tests.
 - After a pick from a dropdown, focus has left it, and → after picking a preset plays the next item, in keyboard screen tests.
-- Closing the panel any way leaves no focus inside it, in Panel screen tests.
+- Closing the panel or the bell's list any way leaves no focus inside it, in Panel and Notifications screen tests.
 - `npm run verify` passes, and a quick spot check in Firefox and Chrome on the Linux desktop: a click on Next then Space, a click on the seek bar then →, and a preset pick then →.
 
 #### Screen reader slice

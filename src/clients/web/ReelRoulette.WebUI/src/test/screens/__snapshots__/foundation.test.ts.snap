@@ -16,7 +16,7 @@ exports[`page structure > keeps the starting markup 1`] = `
         <span class="btn-label">
           "Pair"
     <div class="now-playing" id="now-playing" style="display: none">
-      <span class="is-link" id="now-playing-name" role="button" tabindex="0">
+      <span class="is-link" id="now-playing-name" role="button">
       <span class="muted" id="now-playing-duration">
   <div class="fullscreen-stage" data-panel-mode="side" data-side="right" id="fullscreen-stage" style="--panel-width: 420px">
     <main class="player-col">
@@ -96,7 +96,7 @@ exports[`page structure > keeps the starting markup 1`] = `
             <span class="volume" id="volume-wrap">
               <input aria-label="Volume" id="volume-slider" max="100" min="0" step="1" title="Volume" type="range">
       <div aria-live="polite" class="toasts" data-pos="bottom-center" id="toasts" role="status">
-    <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator" tabindex="0">
+    <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator">
       <span class="handle-grip">
     <aside aria-label="Panel" class="panel" hidden="" id="panel">
       <div class="panel-tabs">
@@ -1070,7 +1070,7 @@ exports[`page structure > keeps the starting markup 1`] = `
               "Settings apply at once and are kept on this device."
     <section aria-labelledby="notify-title" class="notify-list" hidden="" id="notify-list" role="dialog">
       <div class="notify-head">
-        <h2 id="notify-title" tabindex="-1">
+        <h2 id="notify-title">
           "Notifications"
         <button class="btn" data-act="clear" disabled="" type="button">
           "Clear"

@@ -42,9 +42,9 @@ export function isTextField(target: EventTarget | null): boolean {
 
 /**
  * What keeps the controls shown under Timeout, besides a pause, the bell's list, and the rating's stars: a mouse or pen
- * pointer over a control, a drag of the scrub bar or the volume, and keyboard focus on a control.
+ * pointer over a control and a drag of the scrub bar or the volume.
  */
-export type ControlsHold = "pointer" | "drag" | "keyboardFocus";
+export type ControlsHold = "pointer" | "drag";
 
 export interface PlayerControlsOptions {
   device: DeviceStore;

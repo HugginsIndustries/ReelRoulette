@@ -251,7 +251,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
             <span class="material-symbol-icon">
               "edit_note"
   <p class="visually-hidden" id="P0-1">
-    "Drag to reorder, or press the up and down arrow keys."
+    "Drag to reorder."
   <div aria-live="polite" class="visually-hidden">
   <div class="tag-editor-footer">
     <div class="tag-editor-footer-row">

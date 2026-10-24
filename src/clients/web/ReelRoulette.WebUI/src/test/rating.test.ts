@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RATING_CLEAR_EDGE_PX, ratingAt, ratingForKey, ratingText, starFill, stepRating } from "../rating/rating";
+import { RATING_CLEAR_EDGE_PX, ratingAt, ratingText, starFill, stepRating } from "../rating/rating";
 
 describe("rating", () => {
   it("reads as its value text says it: in stars, 1 star in the singular, or Not rated", () => {
@@ -27,23 +27,6 @@ describe("rating", () => {
 
   it("takes a star's width as 36 px when the browser hasn't laid the stars out", () => {
     expect(ratingAt(40, 0)).toBe(1.5);
-  });
-
-  it("steps by half a star on the arrow keys within none and 5, clears on Home, Delete, and Backspace, sets 5 on End, and ignores other keys", () => {
-    expect(ratingForKey(2, "ArrowLeft")).toEqual({ rating: 1.5 });
-    expect(ratingForKey(2, "ArrowDown")).toEqual({ rating: 1.5 });
-    expect(ratingForKey(2, "ArrowRight")).toEqual({ rating: 2.5 });
-    expect(ratingForKey(2, "ArrowUp")).toEqual({ rating: 2.5 });
-    expect(ratingForKey(0.5, "ArrowLeft")).toEqual({ rating: null });
-    expect(ratingForKey(null, "ArrowLeft")).toEqual({ rating: null });
-    expect(ratingForKey(null, "ArrowRight")).toEqual({ rating: 0.5 });
-    expect(ratingForKey(5, "ArrowUp")).toEqual({ rating: 5 });
-    expect(ratingForKey(3, "Home")).toEqual({ rating: null });
-    expect(ratingForKey(3, "Delete")).toEqual({ rating: null });
-    expect(ratingForKey(3, "Backspace")).toEqual({ rating: null });
-    expect(ratingForKey(null, "End")).toEqual({ rating: 5 });
-    expect(ratingForKey(3, "PageUp")).toBeNull();
-    expect(ratingForKey(3, "a")).toBeNull();
   });
 
   it("steps half a star down or up within none and 5 stars", () => {

@@ -92,7 +92,7 @@ describe("Timeout", () => {
     expect(page.shown()).toBe(false);
   });
 
-  it.each(["pointer", "drag", "keyboardFocus"] as const)("stays while the %s hold lasts, and hides Hide after once it ends", (reason) => {
+  it.each(["pointer", "drag"] as const)("stays while the %s hold lasts, and hides Hide after once it ends", (reason) => {
     const page = setup();
     page.controls.hold(reason, true);
     page.wait(10);

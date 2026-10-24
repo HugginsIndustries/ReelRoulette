@@ -6,6 +6,7 @@ import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
 import { createFakePresets, type FakePresets } from "../fakePresetServer";
 import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
+  CLEAR_EDGE_X,
   closeNotices,
   COMPATIBLE_VERSION,
   DEFAULT_VIEWPORT,
@@ -19,13 +20,10 @@ import {
   pointerDown,
   pointerMove,
   pointerUp,
-  pressKey,
-  pressRatingKey,
   randomAnswer,
   ratingRequests,
   resetPage,
   currentStyle,
-  scrollOnFocus,
   selectedPresetLabel,
   setViewport,
   settle,
@@ -426,6 +424,22 @@ function presetHandle(name: string): HTMLButtonElement {
   return within(presetRow(name)).getByRole("button", { name: `Reorder ${name}` }) as HTMLButtonElement;
 }
 
+/**
+ * Drags a preset by its handle `places` rows down, or up when negative, with the preset rows laid out 40 px tall, one
+ * under another: pressed at its middle, moved past the start distance, and dropped just past the middle of the row it
+ * lands on.
+ */
+async function dragPreset(name: string, places: number): Promise<void> {
+  stubRowLayout("#filter-dialog .filter-preset-row", () => 40);
+  const from = presetRows().indexOf(name);
+  const start = from * 40 + 20;
+  const past = Math.sign(places) * 10;
+  pointerDown(presetHandle(name), start);
+  await pointerMove(start + past);
+  await pointerMove((from + places) * 40 + 20 + past);
+  await pointerUp();
+}
+
 /** What screen readers last heard about a preset moving. */
 function presetAnnouncement(): string {
   return byId("filter-panel-presets").querySelector("[aria-live]")?.textContent ?? "";
@@ -452,15 +466,6 @@ function buttonIn(container: HTMLElement, text: string): HTMLButtonElement {
 async function press(button: HTMLElement): Promise<void> {
   button.focus();
   fireEvent.click(button);
-  await settle();
-}
-
-/** Presses a focused button with Enter the way a browser does: the key goes down, then it is clicked with no pointer. */
-async function pressWithKeyboard(button: HTMLElement): Promise<void> {
-  button.focus();
-  fireEvent.keyDown(button, { key: "Enter" });
-  fireEvent.click(button, { detail: 0 });
-  fireEvent.keyUp(button, { key: "Enter" });
   await settle();
 }
 
@@ -616,28 +621,6 @@ describe("opening and closing", () => {
     expect(getComputedStyle(dialog().querySelector("#filter-apply-btn > .btn-label")!).display).toBe("inline-flex");
   });
 
-  it("its section tabs are reached with the keyboard and Enter shows each, keeping focus on it", async () => {
-    await mountFilter();
-    await openDialog();
-    const tabs = within(dialog()).getAllByRole("tab") as HTMLButtonElement[];
-    expect(tabs.map((tab) => [tab.tagName, tab.tabIndex])).toEqual([
-      ["BUTTON", 0],
-      ["BUTTON", 0],
-      ["BUTTON", 0]
-    ]);
-
-    for (const [index, name, panel] of [
-      [2, "Presets", "presets"],
-      [1, "Tags", "tags"],
-      [0, "General", "general"]
-    ] as const) {
-      await pressWithKeyboard(tabs[index]!);
-      expect(selectedTab()).toBe(name);
-      expect(byId(`filter-panel-${panel}`).style.display).not.toBe("none");
-      expect(document.activeElement).toBe(tabs[index]);
-    }
-  });
-
   it("enables Apply and Discard changes, with Apply orange and its dot, only while there are changes, after a change put back and after Clear all too", async () => {
     await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
@@ -678,7 +661,7 @@ describe("opening and closing", () => {
     expect(box("Only never played").checked).toBe(false);
 
     await showTab("Presets");
-    await pressKey(presetHandle("Rich"), "ArrowDown");
+    await dragPreset("Rich", 1);
     expect(applyShowsChanges()).toBe(true);
     expect(clearAllButton().disabled).toBe(true);
     await loadInDialog("Favorites");
@@ -708,7 +691,7 @@ describe("opening and closing", () => {
     await chooseFlag("Favorites", "excluded");
     await showTab("Presets");
     await addPreset("Draft");
-    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    await dragPreset("Favorites", 1);
     await deletePreset("Recent");
     expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
 
@@ -749,7 +732,7 @@ describe("opening and closing", () => {
       await showTab("Presets");
       expect(presetRows(), way).toEqual(["Favorites", "Beach days", "Recent"]);
       await addPreset("Draft");
-      await pressKey(presetHandle("Favorites"), "ArrowDown");
+      await dragPreset("Favorites", 1);
       await deletePreset("Recent");
       expect(presetRows(), way).toEqual(["Beach days", "Favorites", "Draft"]);
       setViewport(viewport);
@@ -1479,12 +1462,6 @@ function minRatingStars(): HTMLElement {
   return within(dialog()).getByRole("slider", { name: "Min Rating", hidden: true });
 }
 
-/** Sets Min Rating with a key on its stars, as from the keyboard. */
-async function minRatingKey(key: string): Promise<void> {
-  minRatingStars().focus();
-  await pressRatingKey(minRatingStars(), key);
-}
-
 describe("Only unrated and Min Rating", () => {
   it("sit at the end of Basic Filters, Only unrated after the other options and Min Rating's stars below it, saying No minimum for none", async () => {
     await mountFilter();
@@ -1501,7 +1478,7 @@ describe("Only unrated and Min Rating", () => {
     expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
   });
 
-  it("the stars change only the tab's filter until Apply, never a rating, and Delete clears them", async () => {
+  it("the stars change only the tab's filter until Apply, never a rating, and a tap on the first star's left edge clears them", async () => {
     stubStarLayout();
     const { server } = await mountFilter();
     await openDialog();
@@ -1511,20 +1488,19 @@ describe("Only unrated and Min Rating", () => {
     expect(applyShowsChanges()).toBe(true);
     expect((await nextPick(server)).filterState).not.toHaveProperty("minRating");
 
-    await minRatingKey("ArrowLeft");
+    await tapStars(minRatingStars(), xFor(3), "touch");
     expect(sliderValue(minRatingStars())).toEqual(["3", "3 stars"]);
     expect(await applyAndWait(server)).toMatchObject({ minRating: 3, onlyUnrated: false });
     expect((await nextPick(server)).filterState).toMatchObject({ minRating: 3 });
 
-    await minRatingKey("Delete");
+    await tapStars(minRatingStars(), CLEAR_EDGE_X);
     expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
-    minRatingStars().blur();
-    await settle();
     expect(await applyAndWait(server)).not.toHaveProperty("minRating");
     expect(ratingRequests(server)).toEqual([]);
   });
 
   it("are flagged together on Only unrated with a minimum, marking the stars, and hold Apply, Add Preset, and Update", async () => {
+    stubStarLayout();
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1536,8 +1512,8 @@ describe("Only unrated and Min Rating", () => {
 
     await click(unrated);
     expect(unrated.hasAttribute("aria-invalid")).toBe(false);
-    await minRatingKey("End");
-    // After the first key, which starts the audio stage and logs it.
+    await tapStars(minRatingStars(), xFor(5));
+    // After the first press, which starts the audio stage and logs it.
     const logsBefore = server.logLines().length;
     for (const field of [unrated, minRatingStars()]) {
       expect(field.getAttribute("aria-invalid"), field.id).toBe("true");
@@ -1553,7 +1529,8 @@ describe("Only unrated and Min Rating", () => {
     expect(applyButton().title).toBe("Clear Only unrated or Min Rating to apply.");
     expect(presetButton("Update preset").title).toBe("Clear Only unrated or Min Rating first.");
     expect(presetButton("Add preset").title).toBe("Clear Only unrated or Min Rating first.");
-    expect(tooltipShown(unrated)).toBe(true);
+    // A pick on the stars gives focus to neither, so the tooltip waits for the pointer over the icon.
+    expect(tooltipShown(unrated)).toBe(false);
 
     for (const button of ["Update preset", "Add preset"]) {
       await showTab("Presets");
@@ -1569,7 +1546,7 @@ describe("Only unrated and Min Rating", () => {
     expect(libraryQueries(server)).toHaveLength(queries);
     expect(server.logLines().slice(logsBefore)).toEqual([]);
 
-    await minRatingKey("Backspace");
+    await tapStars(minRatingStars(), CLEAR_EDGE_X, "touch");
     expect(unrated.hasAttribute("aria-invalid")).toBe(false);
     expect(minRatingStars().hasAttribute("aria-invalid")).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
@@ -2104,7 +2081,7 @@ describe("Presets tab", () => {
     // None loads the default filter, and keeps the preset list's changes.
     await chooseInDialog("");
     expect(heading()).toBe("Preset: Beach days");
-    await pressKey(presetHandle("Beach days"), "ArrowUp");
+    await dragPreset("Beach days", -1);
     await click(loadButton());
     expect(heading()).toBe("Preset: None");
     expect(chipState("Beach")).toBe("none");
@@ -2251,62 +2228,6 @@ describe("Presets tab", () => {
     expect(presets.list[1]).toEqual(BEACH_PRESET);
   });
 
-  for (const [how, activate] of [
-    ["the pointer", press],
-    ["the keyboard", pressWithKeyboard]
-  ] as const) {
-    it(`Add Preset pressed with ${how} moves to the new preset's drag handle`, async () => {
-      await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
-      await openDialog();
-      await click(box("Only never played"));
-      await showTab("Presets");
-      fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
-      await activate(dialogButton("Add preset"));
-      expect(presetRows()).toEqual(["Favorites", "Beach days", "Draft"]);
-      expect(document.activeElement).toBe(presetHandle("Draft"));
-    });
-
-    it(`Add Preset pressed with ${how} moves to the new preset's drag handle when it is the only preset`, async () => {
-      await mountFilter();
-      await openDialog();
-      await click(box("Only never played"));
-      await showTab("Presets");
-      fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
-      await activate(dialogButton("Add preset"));
-      expect(presetHandle("Draft").disabled).toBe(false);
-      expect(document.activeElement).toBe(presetHandle("Draft"));
-    });
-  }
-
-  it("the arrow keys on a preset's handle move it, keeping focus there and saying where it went, until Apply saves them", async () => {
-    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
-    await openDialog();
-    await showTab("Presets");
-
-    expect(await pressKey(presetHandle("Favorites"), "ArrowDown")).toBe(false);
-    expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
-    expect(document.activeElement).toBe(presetHandle("Favorites"));
-    expect(presetAnnouncement()).toBe("Favorites moved to position 2 of 3.");
-    expect(applyShowsChanges()).toBe(true);
-    expect(await pressKey(presetHandle("Recent"), "ArrowUp")).toBe(false);
-    expect(presetRows()).toEqual(["Beach days", "Recent", "Favorites"]);
-    expect(presetAnnouncement()).toBe("Recent moved to position 2 of 3.");
-    expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toEqual([
-      "None",
-      "Beach days",
-      "Recent",
-      "Favorites"
-    ]);
-
-    expect(await pressKey(presetHandle("Beach days"), "ArrowUp")).toBe(false);
-    expect(await pressKey(presetHandle("Favorites"), "ArrowDown")).toBe(false);
-    expect(presetRows()).toEqual(["Beach days", "Recent", "Favorites"]);
-    expect(presets.writes).toHaveLength(0);
-
-    await applyAndWait(server);
-    expect(presets.summaries()).toEqual(["reorder preset-beach,preset-recent,preset-favorites"]);
-  });
-
   it("each preset row has a drag handle, its name, and Edit preset, and nothing else", async () => {
     await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
@@ -2320,7 +2241,7 @@ describe("Presets tab", () => {
       expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder", "Edit preset"]);
     }
     const help = byId(presetHandle("Favorites").getAttribute("aria-describedby") ?? "");
-    expect(help.textContent).toBe("Drag to reorder, or press the up and down arrow keys.");
+    expect(help.textContent).toBe("Drag to reorder.");
   });
 
   describe("dragging a preset", () => {
@@ -2355,8 +2276,13 @@ describe("Presets tab", () => {
       expect(presetRows()).toEqual(["Recent", "Favorites", "Beach days"]);
       expect(transforms()).toEqual(["", "", ""]);
       expect(presetRow("Recent").classList.contains("is-dragging")).toBe(false);
-      expect(document.activeElement).toBe(presetHandle("Recent"));
       expect(presetAnnouncement()).toBe("Recent moved to position 1 of 3.");
+      expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toEqual([
+        "None",
+        "Recent",
+        "Favorites",
+        "Beach days"
+      ]);
       expect(applyShowsChanges()).toBe(true);
       expect(presets.writes).toHaveLength(0);
 
@@ -2384,14 +2310,13 @@ describe("Presets tab", () => {
       expect(presetAnnouncement()).toBe("Favorites moved to position 2 of 3.");
     });
 
-    it("keeps the list where it was scrolled after a drop, and focuses the dropped handle without scrolling", async () => {
+    it("keeps the list where it was scrolled after a drop", async () => {
       await mountLaidOut();
       // The tab's body scrolls the preset list with the rest of its section. It reaches well past the presets, so the
       // pointer stays away from its edges and it scrolls only when told to.
       const list = dialog().querySelector<HTMLElement>(".filter-dialog-body")!;
       stubScroller(list, -200, 600, 1200);
       list.scrollTop = 30;
-      const focusCalls = scrollOnFocus(list);
 
       pointerDown(presetHandle("Favorites"), 20);
       await pointerMove(30);
@@ -2404,8 +2329,6 @@ describe("Presets tab", () => {
       });
       expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
       expect(list.scrollTop).toBe(30);
-      expect(document.activeElement).toBe(presetHandle("Favorites"));
-      expect(focusCalls.map((call) => [call.element.getAttribute("aria-label"), call.preventScroll])).toEqual([["Reorder Favorites", true]]);
     });
 
     it("leaves the order for a tap on a handle, and starts only on the handle, so a drag on a preset's name scrolls", async () => {
@@ -2417,7 +2340,6 @@ describe("Presets tab", () => {
       await pointerMove(14);
       expect(presetRow("Favorites").classList.contains("is-dragging")).toBe(false);
       await pointerUp();
-      expect(document.activeElement).toBe(presetHandle("Favorites"));
 
       pointerDown(presetRow("Favorites").querySelector(".filter-preset-name")!, 10);
       await pointerMove(100);
@@ -2457,7 +2379,6 @@ describe("Presets tab", () => {
 
     await press(buttonIn(confirm, "Cancel"));
     expect(appDialogs()).toEqual([edit]);
-    expect(document.activeElement).toBe(remove);
     expect(name.value).toBe("Shore");
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(heading()).toBe("Preset: Beach days");
@@ -2534,26 +2455,6 @@ describe("Presets tab", () => {
     await applyAndWait(server);
     expect(presets.summaries()).toEqual(["rename preset-beach Sunny days"]);
     await waitFor(() => expect(selectedPresetLabel()).toBe("Sunny days"));
-  });
-
-  it("after Save renames a preset, focus goes to its row's Edit, and after Delete to the next row's, or the previous one's", async () => {
-    await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
-    await openDialog();
-    await showTab("Presets");
-
-    await editPreset("Beach days");
-    fireEvent.input(byId("filter-preset-edit-name"), { target: { value: " Sunny days " } });
-    await press(byId("filter-preset-edit-save-btn"));
-    expect(presetRows()).toEqual(["Favorites", "Sunny days", "Recent"]);
-    expect(document.activeElement).toBe(rowButton("Sunny days", "Edit preset"));
-
-    await deletePreset("Sunny days");
-    expect(document.activeElement).toBe(rowButton("Recent", "Edit preset"));
-    await deletePreset("Recent");
-    expect(document.activeElement).toBe(rowButton("Favorites", "Edit preset"));
-    await deletePreset("Favorites");
-    expect(presetRows()).toEqual([]);
-    expect(document.activeElement).toBe(document.body);
   });
 
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {
@@ -2776,7 +2677,7 @@ describe("preset dropdown, server events, and clear all", () => {
     const { page, server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
-    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    await dragPreset("Favorites", 1);
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
 
     presets.list = [...presets.list, RECENT_PRESET];
@@ -2977,10 +2878,10 @@ describe("unsaved state", () => {
     expect(marks()).toEqual(clear);
 
     await showTab("Presets");
-    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    await dragPreset("Favorites", 1);
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
     expect(marks()).toEqual({ ...clear, apply: true, dot: true, panelDot: true });
-    await pressKey(presetHandle("Favorites"), "ArrowUp");
+    await dragPreset("Favorites", -1);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(marks()).toEqual(clear);
 
@@ -3068,8 +2969,9 @@ describe("unsaved state", () => {
     const { page, server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
-    await pressKey(presetHandle("Favorites"), "ArrowDown");
-    await pressKey(presetHandle("Favorites"), "ArrowUp");
+    await dragPreset("Favorites", 1);
+    expect(presetRows()).toEqual(["Beach days", "Favorites"]);
+    await dragPreset("Favorites", -1);
 
     presets.list = [...presets.list, RECENT_PRESET];
     page.stream().emit("resyncRequired", 40, { reason: "gap" });
@@ -3299,7 +3201,7 @@ describe("controls kept in place", () => {
     await showTab("Presets");
     const list = dialog().querySelector(".filter-preset-list");
     fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
-    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    await dragPreset("Favorites", 1);
     expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
     expect(dialog().querySelector(".filter-preset-list")).toBe(list);
     expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("Draft");

@@ -22,7 +22,6 @@ import {
   movePointer,
   openNotices,
   pageReady,
-  pressRatingKey,
   pressStars,
   randomAnswer,
   ratingAnswer,
@@ -339,13 +338,6 @@ function starShows(): [string | null, boolean, string | null] {
 /** Presses the rating's star with a mouse: the press, then its click. */
 async function pressStar(): Promise<void> {
   fireEvent.pointerDown(ratingButton(), { pointerType: "mouse", button: 0 });
-  await click(ratingButton());
-}
-
-/** Presses the rating's star from the keyboard, with focus on it, as Enter does. */
-async function pressStarByKey(): Promise<void> {
-  ratingButton().focus();
-  fireEvent.keyDown(ratingButton(), { key: "Enter" });
   await click(ratingButton());
 }
 
@@ -2305,14 +2297,6 @@ describe("Hide player controls", () => {
     fireEvent.pointerMove(video(), { pointerType });
   }
 
-  /** A tap on a control: the pointer lands, focus moves there, it lifts, and the click follows. */
-  async function tap(control: HTMLElement): Promise<void> {
-    fireEvent.pointerDown(control, { pointerType: "touch" });
-    control.focus();
-    fireEvent.pointerUp(control, { pointerType: "touch" });
-    await click(control);
-  }
-
   it("Timeout, the default, hides them 3 seconds after the last activity while something plays, and hidden they can't be pressed", async () => {
     useFakeClock();
     useStylesheet();
@@ -2450,38 +2434,6 @@ describe("Hide player controls", () => {
       await pass(100);
       expect(controlsShown()).toBe(false);
     }
-  });
-
-  it("stay while keyboard focus is on a control, but not for the focus a tap leaves on Play", async () => {
-    useFakeClock();
-    await mountAndPlay(serverPicking(VIDEO_ITEM));
-
-    // Tab moves focus to Play.
-    fireEvent.keyDown(document.body, { key: "Tab" });
-    button("Play/Pause").focus();
-    await pass(10000);
-    expect(controlsShown()).toBe(true);
-    button("Play/Pause").blur();
-    await pass(2900);
-    expect(controlsShown()).toBe(true);
-    await pass(100);
-    expect(controlsShown()).toBe(false);
-
-    // Two taps on Play pause and play again, leaving focus on it.
-    moveMouse();
-    await tap(button("Play/Pause"));
-    await tap(button("Play/Pause"));
-    expect(document.activeElement).toBe(button("Play/Pause"));
-    expect(video().paused).toBe(false);
-    await untilHidden();
-
-    // A key pressed with that focus makes it keyboard focus, which keeps them.
-    fireEvent.keyDown(button("Play/Pause"), { key: "Shift" });
-    await pass(10000);
-    expect(controlsShown()).toBe(true);
-    // And a pointer pressed elsewhere makes it a pointer's again.
-    fireEvent.pointerDown(document.body, { pointerType: "mouse" });
-    await untilHidden();
   });
 
   it("stay while the bell's list is open, and hide 3 seconds after it closes", async () => {
@@ -3290,8 +3242,6 @@ describe("the player's indicator", () => {
 });
 
 describe("the player's rating", () => {
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
   /** Plays the first of `items`, with the server taking ratings and the rating's stars laid out. */
   async function playRated(...items: unknown[]): Promise<{ page: MountedPage; server: FakeServer }> {
     stubStarLayout();
@@ -3423,56 +3373,12 @@ describe("the player's rating", () => {
     expect(randomPicks(server)).toBe(1);
   });
 
-  it("stays open while its keys change the rating, which shows at once and is sent once they pause, and closes on Enter, giving focus back to the star", async () => {
-    const { page, server } = await playRated(rated(VIDEO_ITEM, 2));
-
-    await pressStarByKey();
-    expect(document.activeElement).toBe(popoverStars());
-    await pressRatingKey(popoverStars(), "ArrowRight");
-    await pressRatingKey(popoverStars(), "ArrowRight");
-    expect(ratingPopover().hidden).toBe(false);
-    expect(sliderValue(popoverStars())).toEqual(["3", "3 stars"]);
-    expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
-    expect(ratingRequests(server)).toEqual([]);
-    await wait(600);
-    expect(ratingRequests(server)).toEqual([{ itemId: "item-video", rating: 3, clientId: page.clientId() }]);
-    await waitFor(() => expect(popups()).toEqual([{ text: "Rated 3 stars", detail: "holiday clip.mp4" }]));
-
-    expect(fireEvent.keyDown(popoverStars(), { key: "Enter" })).toBe(false);
-    await flush();
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(ratingButton());
-
-    // Closing sends a change the keys were still waiting to send.
-    await pressStarByKey();
-    await pressRatingKey(popoverStars(), "End");
-    fireEvent.keyDown(popoverStars(), { key: "Enter" });
-    await flush();
-    expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([3, 5]);
-  });
-
-  it("takes focus to its stars when opened from the keyboard, leaves focus where it was when opened with a pointer, and closes on a second press of the star", async () => {
+  it("closes on a second press of the star", async () => {
     await playRated(VIDEO_ITEM);
-    button("Loop").focus();
 
     await pressStar();
     expect(ratingPopover().hidden).toBe(false);
-    expect(document.activeElement).toBe(button("Loop"));
     await pressStar();
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(button("Loop"));
-
-    // A press on the star with focus on the stars gives focus back to the star where the press leaves focus, as Safari
-    // does, and closes it where a browser moves focus to the star as it's pressed.
-    await pressStarByKey();
-    expect(document.activeElement).toBe(popoverStars());
-    await pressStar();
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(ratingButton());
-    await pressStarByKey();
-    fireEvent.pointerDown(ratingButton(), { pointerType: "mouse", button: 0 });
-    ratingButton().focus();
-    await click(ratingButton());
     expect(ratingPopover().hidden).toBe(true);
   });
 
@@ -3481,12 +3387,11 @@ describe("the player's rating", () => {
     await click(button("Fullscreen"));
     expect(isPseudoFullscreen()).toBe(true);
 
-    await pressStarByKey();
-    expect(fireEvent.keyDown(popoverStars(), { key: "Escape" })).toBe(false);
+    await pressStar();
+    expect(fireEvent.keyDown(document.body, { key: "Escape" })).toBe(false);
     await flush();
     expect(ratingPopover().hidden).toBe(true);
     expect(isPseudoFullscreen()).toBe(true);
-    expect(document.activeElement).toBe(ratingButton());
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     await flush();
@@ -3500,24 +3405,6 @@ describe("the player's rating", () => {
     await flush();
     expect(ratingPopover().hidden).toBe(false);
     dialog.remove();
-  });
-
-  it("closes as Tab takes focus out of it, either way, focus going where Tab takes it", async () => {
-    await playRated(VIDEO_ITEM);
-
-    await pressStarByKey();
-    fireEvent.keyDown(popoverStars(), { key: "Tab" });
-    button("Favorite").focus();
-    await flush();
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(button("Favorite"));
-
-    await pressStarByKey();
-    fireEvent.keyDown(popoverStars(), { key: "Tab", shiftKey: true });
-    ratingButton().focus();
-    await flush();
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(ratingButton());
   });
 
   it("closes on a press elsewhere, which still does what it does", async () => {
@@ -3560,24 +3447,6 @@ describe("the player's rating", () => {
     await pressStar();
     expect(ratingPopover().hidden).toBe(false);
     expect(indicatorShows()).toBeNull();
-  });
-
-  it("gives focus on its stars back to the star however it closes, as by a volume key or another item playing", async () => {
-    await playRated(VIDEO_ITEM, SECOND_VIDEO);
-    moveVolume(50);
-
-    await pressStarByKey();
-    expect(document.activeElement).toBe(popoverStars());
-    fireEvent.keyDown(popoverStars(), { key: "]" });
-    await flush();
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(ratingButton());
-
-    await pressStarByKey();
-    fireEvent.keyDown(popoverStars(), { key: "r" });
-    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
-    expect(ratingPopover().hidden).toBe(true);
-    expect(document.activeElement).toBe(ratingButton());
   });
 
   it("closes when another item plays, so a rating goes only to the item it was opened for, and when the panel opens", async () => {

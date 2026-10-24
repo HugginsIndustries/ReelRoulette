@@ -395,13 +395,12 @@ describe("keyboard shortcuts", () => {
     expect(fullscreen.exits()).toBe(1);
   });
 
-  it("H opens Settings with Keyboard shortcuts expanded and focus on its heading, from another tab too", async () => {
+  it("H opens Settings with Keyboard shortcuts expanded, from another tab too", async () => {
     await mount(serverPicking(VIDEO_ITEM));
     expect(shortcutsSection().open).toBe(false);
     await press("h");
     expect(shownTab()).toBe("settings");
     expect(shortcutsSection().open).toBe(true);
-    expect(document.activeElement).toBe(shortcutsSection().querySelector("summary"));
 
     shortcutsSection().open = false;
     await press("2");
@@ -415,7 +414,7 @@ describe("keyboard shortcuts", () => {
     await loadVideo(65);
     for (const key of ["Escape", "s", "6", "p"]) {
       await press("h");
-      expect(document.activeElement).toBe(shortcutsSection().querySelector("summary"));
+      shortcutsSection().querySelector("summary")!.focus();
       await press(key, {}, document.activeElement!);
       expect(shownTab()).toBeNull();
       expect(document.activeElement).toBe(document.body);
@@ -425,12 +424,11 @@ describe("keyboard shortcuts", () => {
     }
   });
 
-  it("play or pause on Space while the bell's list is open, whose title takes focus but not Space", async () => {
+  it("play or pause on Space while the bell's list is open", async () => {
     await mount(serverPicking(VIDEO_ITEM));
     await press("k");
     await loadVideo(65);
     await click(document.getElementById("notify-btn")!);
-    expect(document.activeElement?.id).toBe("notify-title");
     expect(await press(" ", {}, document.activeElement!)).toBe(false);
     expect(playIcon()).toBe("play_arrow");
   });
@@ -440,6 +438,7 @@ describe("keyboard shortcuts", () => {
     await press("k");
     await loadVideo(65);
     await click(document.getElementById("notify-btn")!);
+    (document.querySelector('#notify-list [data-act="close"]') as HTMLElement).focus();
     await press("Escape", {}, document.activeElement!);
     expect(document.getElementById("notify-list")!.hidden).toBe(true);
     expect(document.activeElement).toBe(document.body);
@@ -715,22 +714,6 @@ describe("the Stats tab's rating", () => {
     return document.querySelector<HTMLElement>("#stats-body .rating")!;
   }
 
-  it("leaves the focused stars their arrow keys, which step the rating and don't play the previous or next item", async () => {
-    const server = ratingServer();
-    const stars = await openOnSecond(server);
-    stars.focus();
-
-    expect(await press("ArrowLeft", {}, stars)).toBe(false);
-    expect(stars.getAttribute("aria-valuetext")).toBe("1.5 stars");
-    expect(await press("ArrowRight", {}, stars)).toBe(false);
-    await press("ArrowRight", {}, stars);
-    expect(stars.getAttribute("aria-valuetext")).toBe("2.5 stars");
-
-    expect(video().src).toContain("item-video-2");
-    expect(server.requests("POST", "/api/play/item-video")).toHaveLength(0);
-    expect(randomPicks(server)).toBe(2);
-  });
-
   it.each(["mouse", "touch"])(
     "still play the previous or next item after a %s sets the rating, which leaves focus where it was",
     async (pointerType) => {
@@ -740,7 +723,8 @@ describe("the Stats tab's rating", () => {
       expect(focused).not.toBe(stars);
 
       // A click or tap on the third star's right half, in the order a browser sends its events: a mouse's `mousedown`
-      // comes with its press and a tap's after it lifts, and a browser moves focus there unless it is cancelled.
+      // comes with its press and a tap's after it lifts, and unless it is cancelled a browser takes focus off the
+      // focused control, which this shows as focus on the stars.
       const x = STARS_LEFT + STAR_WIDTH * 2 + 27;
       const pointer = { pointerId: 1, pointerType, button: 0, clientX: x };
       const mouseDown = () => {

@@ -117,19 +117,15 @@ describe("notifications", () => {
     expect(notes.unread.value).toBe(1);
   });
 
-  it("pauses a popup's time while a mouse or pen points at it or focus is in it, taking nothing more off for both", () => {
+  it("pauses a popup's time while a mouse or pen points at it", () => {
     const { notes, shown } = setup();
     notes.notify({ kind: "actions", text: "Filters applied." });
     const id = notes.popups.value[0]!.id;
     vi.advanceTimersByTime(2_000);
-    notes.hold(id, "pointer", true);
-    vi.advanceTimersByTime(1_000);
-    notes.hold(id, "focus", true);
-    vi.advanceTimersByTime(10_000);
-    notes.hold(id, "pointer", false);
-    vi.advanceTimersByTime(10_000);
+    notes.hold(id, true);
+    vi.advanceTimersByTime(20_000);
     expect(shown()).toEqual(["Filters applied."]);
-    notes.hold(id, "focus", false);
+    notes.hold(id, false);
     // It had 3 seconds left when the pointer came.
     vi.advanceTimersByTime(2_999);
     expect(shown()).toEqual(["Filters applied."]);
@@ -142,8 +138,8 @@ describe("notifications", () => {
     notes.notify({ kind: "actions", text: "Filters applied." });
     const id = notes.popups.value[0]!.id;
     vi.advanceTimersByTime(4_900);
-    notes.hold(id, "pointer", true);
-    notes.hold(id, "pointer", false);
+    notes.hold(id, true);
+    notes.hold(id, false);
     vi.advanceTimersByTime(799);
     expect(shown()).toEqual(["Filters applied."]);
     vi.advanceTimersByTime(1);

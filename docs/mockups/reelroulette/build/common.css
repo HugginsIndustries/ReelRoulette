@@ -516,7 +516,7 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
    starts at the first star, whose left edge clears the rating, and sits at the right of its line unless the line places
    it. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
    moves, so it never scrolls the tab. */
-.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating { display: flex; margin-left: auto; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 .rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
 .rating-star .material-symbol-icon { font-size: 30px; }
 /* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,

@@ -18,9 +18,9 @@ export interface RatedItem {
 
 /**
  * Item ratings as this device sets and shows them. A new rating shows at once. A pointer's is sent at once, and a
- * key's once the keys pause, focus leaves the control, or another item plays, each to the item it was set on, so
- * stepping through several values sends one request, and one still waiting when the page closes is dropped. A change
- * that ends on the rating it started from sends nothing.
+ * key's once the keys pause or another item plays, each to the item it was set on, so stepping through several values
+ * sends one request, and one still waiting when the page closes is dropped. A change that ends on the rating it started
+ * from sends nothing.
  * The server's answer pops up as Your actions, and a request that fails puts the rating back with a notice. Another
  * device's change, from `itemRatingChanged`, pops up as Other devices.
  */
@@ -32,8 +32,6 @@ export interface ItemRatings {
   shown(itemId: string, read: number | null): number | null;
   /** Sets the item's rating, or clears it with null, sending a key's change once the keys pause. */
   set(item: RatedItem, rating: number | null, options: { byKey: boolean }): void;
-  /** Sends a key's change still waiting, as when focus leaves the control. */
-  send(): void;
   /**
    * Takes the playing item's rating as a new read gives it, such as a history step's play answer, so a change made
    * while the item wasn't playing shows, though this device no longer keeps it, as after a resync.
@@ -173,9 +171,8 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
       return confirmed.has(itemId) ? confirmed.get(itemId)! : read;
     },
     set(item, rating, { byKey }) {
-      if (waiting && waiting.itemId !== item.itemId) {
-        send();
-      }
+      // Ratings are set only on the playing item, and a waiting change is sent as another plays, so one still waiting
+      // is this item's.
       waiting ??= { itemId: item.itemId, fileName: item.fileName, before: item.shown, rating };
       waiting.rating = rating;
       changed();
@@ -186,7 +183,6 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
         send();
       }
     },
-    send,
     takeRead(itemId, rating) {
       keepRead(itemId, rating);
       changed();

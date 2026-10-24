@@ -142,8 +142,8 @@ export interface Notifications {
   dismiss(id: number, atOnce?: boolean): void;
   /** Closes every popup at once. */
   dismissAll(): void;
-  /** A mouse or pen points at a popup, or keyboard focus is in it: its time pauses while either holds. */
-  hold(id: number, cause: "pointer" | "focus", held: boolean): void;
+  /** A mouse or pen points at a popup: its time pauses while it does. */
+  hold(id: number, held: boolean): void;
   /**
    * Changes the popup settings, keeps them on this device, and applies them at once: the popups' position, and for the
    * next message, whether and for which kinds popups show, in fullscreen too, and for how long. Popups showing stay.
@@ -199,12 +199,12 @@ export function messageTime(time: number, now: number): string {
   return new Date(time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-/** A popup's time: what it has left, whether it is counting down, and what holds it paused. */
+/** A popup's time: what it has left, whether it is counting down, and whether the pointer holds it paused. */
 interface PopupTime {
   remaining: number;
   running: boolean;
   started: number;
-  holds: Set<"pointer" | "focus">;
+  held: boolean;
   timer: ReturnType<typeof setTimeout> | undefined;
 }
 
@@ -228,7 +228,7 @@ export function createNotifications(options: NotificationsOptions): Notification
 
   function run(id: number): void {
     const time = times.get(id);
-    if (!time || time.remaining === 0 || time.holds.size > 0) {
+    if (!time || time.remaining === 0 || time.held) {
       return;
     }
     time.started = now();
@@ -237,7 +237,7 @@ export function createNotifications(options: NotificationsOptions): Notification
     time.timer = setTimeout(() => dismiss(id), time.remaining);
   }
 
-  /** Takes off only the time since it last ran, so a second hold, such as focus while the mouse points at it, takes nothing more. */
+  /** Takes off only the time since it last ran. */
   function pause(id: number): void {
     const time = times.get(id);
     if (!time?.running) {
@@ -249,7 +249,7 @@ export function createNotifications(options: NotificationsOptions): Notification
   }
 
   function startTime(id: number, warning: boolean): void {
-    const time = times.get(id) ?? { remaining: 0, running: false, started: 0, holds: new Set(), timer: undefined };
+    const time = times.get(id) ?? { remaining: 0, running: false, started: 0, held: false, timer: undefined };
     times.set(id, time);
     clearTimeout(time.timer);
     time.running = false;
@@ -415,15 +415,16 @@ export function createNotifications(options: NotificationsOptions): Notification
       showing().forEach((popup) => dismiss(popup.id, true));
     },
 
-    hold(id, cause, held) {
+    hold(id, held) {
       const time = times.get(id);
       if (!time) {
         return;
       }
       if (held) {
-        time.holds.add(cause);
+        time.held = true;
         pause(id);
-      } else if (time.holds.delete(cause)) {
+      } else if (time.held) {
+        time.held = false;
         run(id);
       }
     },

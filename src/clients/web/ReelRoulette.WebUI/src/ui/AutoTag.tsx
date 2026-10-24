@@ -19,7 +19,7 @@ export function AutoTag() {
 
 /**
  * Auto Tag's in-app dialog. Escape, or the browser closing it, does what the X does, which waits while a scan runs. It
- * has no outside to click. Focus starts on the X and returns to where it was, the Auto Tag button.
+ * has no outside to click. Focus starts on the X.
  */
 function AutoTagDialog({ view }: { view: TagEditorView | null }) {
   const { tagEditor } = useApp();

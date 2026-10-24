@@ -313,7 +313,7 @@ describe("popups", () => {
     expect(host().childElementCount).toBe(0);
   });
 
-  it("pause while a mouse or pen points at one, or focus is in it, without taking more off, and not for a touch", async () => {
+  it("pause while a mouse or pen points at one, and not for a touch", async () => {
     useFakeClock();
     const services = await mountWithServices();
     await notify(services, { kind: "actions", text: "Paired." });
@@ -321,16 +321,10 @@ describe("popups", () => {
     await wait(2000);
 
     pointer("pointerenter", toast, { pointerType: "mouse" });
-    await wait(10_000);
+    await wait(20_000);
     expect(toasts()).toEqual([toast]);
-    fireEvent.focusIn(dismissButton(toast));
-    await wait(10_000);
     pointer("pointerleave", toast, { pointerType: "mouse" });
-    // Focus still holds it.
-    await wait(10_000);
-    expect(toasts()).toEqual([toast]);
-    fireEvent.focusOut(dismissButton(toast));
-    // The 3 seconds it had left when the mouse came: the second hold took nothing more off.
+    // The 3 seconds it had left when the mouse came.
     await wait(2900);
     expect(toasts()).toEqual([toast]);
     await wait(200);
@@ -569,7 +563,6 @@ describe("the bell", () => {
     expect(list().hidden).toBe(false);
     expect(bell().getAttribute("aria-expanded")).toBe("true");
     expect(currentStyle(bell()).color).toBe(orange());
-    expect(document.activeElement).toBe(listTitle());
 
     await click(bell());
     expect(list().hidden).toBe(true);
@@ -715,16 +708,14 @@ describe("the list", () => {
     expect([recent[0]!.text, recent[49]!.text]).toEqual(["Message 54", "Message 5"]);
     expect(listButton("Clear").disabled).toBe(false);
 
-    bell().focus();
     await click(listButton("Clear"));
     expect(rows("recent")).toEqual([]);
     expect(emptyText().hidden).toBe(false);
     expect(listButton("Clear").disabled).toBe(true);
-    expect(document.activeElement).toBe(listTitle());
     expect(list().hidden).toBe(false);
   });
 
-  it("closes on its Close and the bell, giving focus back to the bell, and on Escape, leaving focus on the page as a key that closes the panel does", async () => {
+  it("closes on its Close, the bell, and Escape, which leaves focus on the page as a key that closes the panel does", async () => {
     await mountWithServices();
     expect(list().getAttribute("role")).toBe("dialog");
     expect(list().getAttribute("aria-labelledby")).toBe("notify-title");
@@ -732,19 +723,15 @@ describe("the list", () => {
     expect(list().hidden).toBe(true);
 
     await click(bell());
-    expect(document.activeElement).toBe(listTitle());
     await click(listButton("Close"));
     expect(list().hidden).toBe(true);
-    expect(document.activeElement).toBe(bell());
 
     await click(bell());
-    expect(document.activeElement).toBe(listTitle());
     await click(bell());
     expect(list().hidden).toBe(true);
-    expect(document.activeElement).toBe(bell());
 
     await click(bell());
-    const allowed = await pressKey(listTitle(), "Escape");
+    const allowed = await pressKey(listButton("Close"), "Escape");
     expect(allowed).toBe(false);
     expect(list().hidden).toBe(true);
     expect(document.activeElement).toBe(document.body);
@@ -757,7 +744,7 @@ describe("the list", () => {
 
     await click(bell());
     expect(list().hidden).toBe(false);
-    await pressKey(listTitle(), "Escape");
+    await pressKey(listButton("Close"), "Escape");
     expect(list().hidden).toBe(true);
     expect(services.panel.isOpen.value).toBe(true);
 
@@ -769,7 +756,7 @@ describe("the list", () => {
     expect(list().hidden).toBe(false);
   });
 
-  it("closes on a press outside it and when the panel opens, leaving focus where they put it", async () => {
+  it("closes on a press outside it and when the panel opens, leaving focus where it was", async () => {
     await mountWithServices();
     await click(bell());
     fireEvent.pointerDown(listTitle());
@@ -785,11 +772,10 @@ describe("the list", () => {
     expect(document.activeElement).toBe(play);
 
     await click(bell());
-    expect(document.activeElement).toBe(listTitle());
     await click(document.getElementById("panel-btn")!);
     expect(list().hidden).toBe(true);
     expect(bell().getAttribute("aria-expanded")).toBe("false");
-    expect(document.activeElement).not.toBe(bell());
+    expect(document.activeElement).toBe(play);
   });
 
   it("opens under the bell, lined up with its left edge in the window's left half and its right edge in the right half", async () => {

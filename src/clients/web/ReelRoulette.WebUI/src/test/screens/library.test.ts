@@ -989,47 +989,6 @@ describe("live updates", () => {
 });
 
 describe("playing a tile", () => {
-  it("Enter or Space on a focused tile plays it and closes the overlay, other keys do not, and the video element stays the same", async () => {
-    useOverlayWidth();
-    const { server } = await mountLibrary(libraryItems(3), (fake) => {
-      fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
-      fake.on("POST", "/api/play/item-2", () => json(playResponse(2)));
-    });
-    const videoNode = video();
-    await openLibrary();
-
-    fireEvent.keyDown(tile("item-1")!, { key: "a" });
-    await flush();
-    expect(server.requests("POST", "/api/play/item-1")).toHaveLength(0);
-
-    fireEvent.keyDown(tile("item-1")!, { key: "Enter" });
-    await flush();
-    expect(server.requests("POST", "/api/play/item-1")).toHaveLength(1);
-    expect(isOpen()).toBe(false);
-    expect(video().src).toBe(`${API_BASE_URL}/api/media/item-1?token=t`);
-
-    await openLibrary();
-    fireEvent.keyDown(tile("item-2")!, { key: " " });
-    await flush();
-    expect(server.requests("POST", "/api/play/item-2")).toHaveLength(1);
-    expect(video().src).toBe(`${API_BASE_URL}/api/media/item-2?token=t`);
-    expect(video()).toBe(videoNode);
-    expect(server.requests("POST", "/api/record-playback")).toHaveLength(0);
-  });
-
-  it("Space on a focused tile only plays the tile, and leaves Play/Pause's shortcut alone, so nothing is picked", async () => {
-    useOverlayWidth();
-    const { server } = await mountLibrary(libraryItems(3), (fake) => {
-      fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
-    });
-    await openLibrary();
-
-    fireEvent.keyDown(tile("item-1")!, { key: " " });
-    await flush();
-    expect(server.requests("POST", "/api/play/item-1")).toHaveLength(1);
-    expect(server.requests("POST", "/api/random")).toHaveLength(0);
-  });
-
   it("a tile whose file the server can't read says it couldn't load, for a video and a photo", async () => {
     useOverlayWidth();
     const { server } = await mountLibrary([libraryItem(1), libraryItem(2, { mediaType: 1 })], (fake) => {

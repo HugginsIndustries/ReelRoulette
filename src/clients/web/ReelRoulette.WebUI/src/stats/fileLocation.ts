@@ -16,7 +16,7 @@ export interface FileLocation {
   showInFileManager(itemId: string, fileName: string): Promise<void>;
   /**
    * Copies the path, with the Clipboard API where the browser has it, and otherwise from a hidden text field next to
-   * `button`, which gets focus back, since a page served over plain HTTP to another device has no Clipboard API.
+   * `button`, since a page served over plain HTTP to another device has no Clipboard API.
    */
   copyPath(path: string, fileName: string, button: HTMLElement): Promise<void>;
 }
@@ -66,14 +66,12 @@ export function createFileLocation(options: FileLocationOptions): FileLocation {
 
 /**
  * Copies `text` from a read-only text field next to `button`, out of sight but not hidden, since iOS won't select a
- * hidden one, and inside the page's fullscreen stage when it is in fullscreen. The field goes, and `button` gets focus
- * back, either way.
+ * hidden one, and inside the page's fullscreen stage when it is in fullscreen. The field goes either way.
  */
 function copyFromField(text: string, button: HTMLElement): boolean {
   const field = document.createElement("textarea");
   field.readOnly = true;
   field.value = text;
-  field.tabIndex = -1;
   field.setAttribute("aria-hidden", "true");
   // 16px, so iOS doesn't zoom in when it takes focus.
   Object.assign(field.style, {
@@ -98,6 +96,5 @@ function copyFromField(text: string, button: HTMLElement): boolean {
     return false;
   } finally {
     field.remove();
-    button.focus({ preventScroll: true });
   }
 }

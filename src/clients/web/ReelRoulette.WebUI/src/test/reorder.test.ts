@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  arrowKeyTarget,
   autoScrollStep,
   draggedRowTop,
   dragStarts,
@@ -90,21 +89,12 @@ describe("how the other rows slide while a row is dragged", () => {
   });
 });
 
-describe("starting a drag, the arrow keys, and scrolling", () => {
+describe("starting a drag and scrolling", () => {
   it("starts a drag only once the pointer has moved more than a few pixels", () => {
     expect(dragStarts(0, 0)).toBe(false);
     expect(dragStarts(3, 4)).toBe(false);
     expect(dragStarts(0, 6)).toBe(true);
     expect(dragStarts(-6, 0)).toBe(true);
-  });
-
-  it("moves a row one place with the up and down arrow keys, and not past either end", () => {
-    expect(arrowKeyTarget("ArrowUp", 2, 4)).toBe(1);
-    expect(arrowKeyTarget("ArrowDown", 2, 4)).toBe(3);
-    expect(arrowKeyTarget("ArrowUp", 0, 4)).toBeNull();
-    expect(arrowKeyTarget("ArrowDown", 3, 4)).toBeNull();
-    expect(arrowKeyTarget("ArrowLeft", 2, 4)).toBeNull();
-    expect(arrowKeyTarget("Enter", 2, 4)).toBeNull();
   });
 
   it("scrolls faster the nearer the pointer is to the scroller's edge, and not away from the edges", () => {

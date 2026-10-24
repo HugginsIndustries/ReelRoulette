@@ -147,7 +147,7 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
         <div class="library-grid-spacer library-grid-spacer-top" style="height: 0px">
         <div class="library-grid-rows">
           <div class="library-grid-row" style="height: 160px">
-            <div class="library-grid-tile" data-item-id="item-1" role="button" style="height: 160px; width: 284.44444444444446px" tabindex="0" title="clip 1.mp4">
+            <div class="library-grid-tile" data-item-id="item-1" role="button" style="height: 160px; width: 284.44444444444446px" title="clip 1.mp4">
               <div class="library-grid-tile-media">
                 <div class="library-grid-tile-scrim">
                 <div aria-hidden="true" class="library-grid-tile-playing">
@@ -155,7 +155,7 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
                     "play_circle"
                 <div class="library-grid-tile-filename">
                   "clip 1.mp4"
-            <div class="library-grid-tile" data-item-id="item-2" role="button" style="height: 160px; width: 284.44444444444446px" tabindex="0" title="clip 2.mp4">
+            <div class="library-grid-tile" data-item-id="item-2" role="button" style="height: 160px; width: 284.44444444444446px" title="clip 2.mp4">
               <div class="library-grid-tile-media">
                 <div class="library-grid-tile-scrim">
                   <img alt="" class="library-grid-tile-image" decoding="async" loading="lazy" src="http://localhost:51301/api/thumbnail/item-2?v=v7">
@@ -164,7 +164,7 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
                     "play_circle"
                 <div class="library-grid-tile-filename">
                   "clip 2.mp4"
-            <div class="library-grid-tile" data-item-id="item-3" role="button" style="height: 160px; width: 213.33333333333331px" tabindex="0" title="clip 3.mp4">
+            <div class="library-grid-tile" data-item-id="item-3" role="button" style="height: 160px; width: 213.33333333333331px" title="clip 3.mp4">
               <div class="library-grid-tile-media">
                 <div class="library-grid-tile-scrim">
                 <div class="library-grid-tile-badge">

@@ -37,12 +37,10 @@ export interface StatsTab {
   close(): void;
   /** Opens the server machine's file manager at the file the tab shows. */
   showInFileManager(): Promise<void>;
-  /** Copies the path of the file the tab shows, giving focus back to `button`, which copied it. */
+  /** Copies the path of the file the tab shows; `button` copied it, and the fallback's text field goes next to it. */
   copyPath(button: HTMLElement): Promise<void>;
-  /** Sets the rating of the file the tab shows, or clears it with null, a key's once the keys pause. */
-  setRating(rating: number | null, options: { byKey: boolean }): void;
-  /** Sends a key's rating still waiting, as when focus leaves the stars. */
-  sendRating(): void;
+  /** Sets the rating of the file the tab shows, or clears it with null. */
+  setRating(rating: number | null): void;
   /** Turns Show exact times on or off, which this device remembers. */
   toggleExactTimes(): void;
 }
@@ -62,7 +60,7 @@ export interface StatsTabOptions {
   /** The popups that say a path was shown or copied. */
   notifications: Pick<Notifications, "notify">;
   /** The ratings this device sets and shows. */
-  ratings: Pick<ItemRatings, "shown" | "set" | "send">;
+  ratings: Pick<ItemRatings, "shown" | "set">;
   /** Where this device remembers Show exact times. */
   device: DeviceStore;
 }
@@ -230,14 +228,11 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
         await fileLocation.copyPath(file.path, file.name, button);
       }
     },
-    setRating(rating, { byKey }) {
+    setRating(rating) {
       const file = view.peek().file;
       if (file?.rows) {
-        ratings.set({ itemId: file.itemId, fileName: file.name, shown: file.rating }, rating, { byKey });
+        ratings.set({ itemId: file.itemId, fileName: file.name, shown: file.rating }, rating, { byKey: false });
       }
-    },
-    sendRating() {
-      ratings.send();
     },
     toggleExactTimes() {
       exactTimes.value = !exactTimes.peek();

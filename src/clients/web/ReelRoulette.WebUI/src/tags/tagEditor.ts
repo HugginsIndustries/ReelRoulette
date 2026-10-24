@@ -221,11 +221,10 @@ export interface TagEditor {
   typeNewTag(text: string): void;
   chooseNewTagCategory(categoryId: string): void;
   /**
-   * Creates the tag in the chosen category, until Save, expanding the category so its chip shows, and returns its name.
-   * It doesn't put the tag on the playing item; the chip's add does. Does nothing while the name is empty or another
-   * tag's, and returns null.
+   * Creates the tag in the chosen category, until Save, expanding the category so its chip shows. It doesn't put the tag
+   * on the playing item; the chip's add does. Does nothing while the name is empty or another tag's.
    */
-  addTag(): string | null;
+  addTag(): void;
 
   /** Opens the Edit Tag dialog. */
   editTag(tagName: string): void;
@@ -960,7 +959,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     addTag() {
       const current = view.peek();
       if (!current || current.addTagDisabled) {
-        return null;
+        return;
       }
       const name = state.newTagName.trim();
       const key = normalizeTagKey(name);
@@ -970,7 +969,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       const upsertTags = new Map(state.pending.upsertTags).set(key, { name, categoryId });
       const expanded = state.expanded.has(categoryId) ? state.expanded : withExpanded([categoryId], true);
       update({ pending: { ...state.pending, deleteTags, upsertTags }, expanded, newTagName: "" });
-      return name;
     },
 
     editTag(tagName) {

@@ -1,6 +1,6 @@
 /**
- * Reordering a list by its rows' drag handles, or with the up and down arrow keys on a handle, as the tag editor's
- * categories and the filter dialog's presets do. Rows are counted among the rows that can move.
+ * Reordering a list by its rows' drag handles, as the tag editor's categories and the filter dialog's presets do. Rows
+ * are counted among the rows that can move.
  */
 
 /** How far the pointer moves on a handle before a drag starts, in pixels, so a tap on the handle changes nothing. */
@@ -72,12 +72,6 @@ export function rowShifts(boxes: readonly RowBox[], from: number, to: number): n
     }
     return 0;
   });
-}
-
-/** Where an arrow key moves the row at `from`: one place up or down, or null for another key and at either end. */
-export function arrowKeyTarget(key: string, from: number, count: number): number | null {
-  const to = key === "ArrowUp" ? from - 1 : key === "ArrowDown" ? from + 1 : null;
-  return to === null || to < 0 || to >= count ? null : to;
 }
 
 /** How far the scroller scrolls in one frame while the pointer is near its top edge (negative) or its bottom edge. */

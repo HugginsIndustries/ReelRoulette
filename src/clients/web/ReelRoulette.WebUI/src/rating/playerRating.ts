@@ -16,23 +16,18 @@ export interface PlayerRating {
   readonly shown: ReadonlySignal<number | null>;
   /** The popover is open. */
   readonly popoverOpen: ReadonlySignal<boolean>;
-  /**
-   * Opens the popover on the playing item, hiding the volume indicator, which shows where it does. Returns whether it
-   * opened.
-   */
-  openPopover(): boolean;
+  /** Opens the popover on the playing item, hiding the volume indicator, which shows where it does. */
+  openPopover(): void;
   closePopover(): void;
   /** Sets the playing item's rating, or clears it with null, sending a key's change once the keys pause. */
   set(rating: number | null, options: { byKey: boolean }): void;
   /** Steps the playing item's rating half a star down, for -1, or up, for 1, as a key's change. */
   step(direction: -1 | 1): void;
-  /** Sends a key's change still waiting, as when focus leaves the stars. */
-  send(): void;
 }
 
 export interface PlayerRatingOptions {
   store: Pick<AppStore, "current" | "pairingRequired">;
-  ratings: Pick<ItemRatings, "shown" | "set" | "send">;
+  ratings: Pick<ItemRatings, "shown" | "set">;
   audio: Pick<AudioStage, "indicatorShown" | "hideIndicator">;
 }
 
@@ -76,17 +71,15 @@ export function createPlayerRating(options: PlayerRatingOptions): PlayerRating {
     popoverOpen,
     openPopover() {
       if (!rateable()) {
-        return false;
+        return;
       }
       audio.hideIndicator();
       popoverOpen.value = true;
-      return true;
     },
     closePopover,
     set,
     step(direction) {
       set(stepRating(shown.peek(), direction), { byKey: true });
-    },
-    send: () => ratings.send()
+    }
   };
 }

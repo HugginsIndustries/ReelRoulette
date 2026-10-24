@@ -867,19 +867,21 @@ describe("Edit Tags dialogs", () => {
     expect(context.view().pending.deleteTags.size).toBe(0);
     expect(context.view().categories?.[0]?.chips.map((chip) => chip.name)).toEqual(["Beach", "Bob"]);
   });
-  it("Add tag only creates the tag, expanding its category, and says which tag it created", async () => {
+  it("Add tag only creates the tag, expanding its category, and a second press with the name field cleared adds nothing", async () => {
     const context = setup();
     const { editor, remembered } = context;
     await openOn(context);
     expect(context.view().categories?.find((category) => category.id === "people")?.collapsed).toBe(true);
     editor.chooseNewTagCategory("people");
     editor.typeNewTag("  Sunset ");
-    expect(editor.addTag()).toBe("Sunset");
+    editor.addTag();
     expect(context.view().pending.upsertTags.get("sunset")).toEqual({ name: "Sunset", categoryId: "people" });
     expect(context.view().selections.size).toBe(0);
     expect(context.view().categories?.find((category) => category.id === "people")?.collapsed).toBe(false);
     expect(remembered.values.get("rr_device.tags.expandedCategories")).toBe('["people"]');
-    expect(editor.addTag()).toBeNull();
+    expect(context.view().newTagName).toBe("");
+    editor.addTag();
+    expect(context.view().pending.upsertTags.size).toBe(1);
   });
 });
 

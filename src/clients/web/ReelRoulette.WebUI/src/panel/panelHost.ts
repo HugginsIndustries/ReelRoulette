@@ -117,11 +117,6 @@ export interface PanelHost {
    * the stage, or the column itself resizes, the panel opens or closes, or its handle changes its width.
    */
   attachPlayer(column: MeasuredElement | null): void;
-  /**
-   * The element that takes focus when the panel closes with focus inside it or on its handle, unless a key closes it:
-   * the panel button.
-   */
-  attachButton(button: { focus(options?: FocusOptions): void } | null): void;
   /** The panel button: opens the panel on its last tab, or closes it as `close` does. */
   toggle(options?: PanelCloseOptions): Promise<void>;
   /** Opens the panel on `tab`, or shows `tab` in the open panel, once the tab it leaves agrees. */
@@ -139,8 +134,7 @@ export interface PanelHost {
 /** How the panel closes. */
 export interface PanelCloseOptions {
   /**
-   * A key closes it, Esc or a shortcut: focus inside the panel or on its handle goes to the page, not the panel button,
-   * so Space plays or pauses afterwards.
+   * A key closes it, Esc or a shortcut: focus inside the panel goes to the page, so Space plays or pauses afterwards.
    */
   byKey?: boolean;
 }
@@ -209,7 +203,6 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
 
   let hooks: Record<PanelTab, PanelTabHooks> | null = null;
   let elements: PanelElements | null = null;
-  let button: { focus(options?: FocusOptions): void } | null = null;
   let stopWatching: (() => void) | null = null;
   let stageObserver: ResizeObserver | null = null;
   let playerColumn: MeasuredElement | null = null;
@@ -290,18 +283,13 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
       return;
     }
     const focused = typeof document === "undefined" ? null : document.activeElement;
-    const hadFocus = !!elements && !!focused && (elements.panel.contains(focused) || elements.handle.contains(focused));
+    const hadFocus = !!elements && !!focused && elements.panel.contains(focused);
     rememberedTabWaits = false;
     isOpen.value = false;
     device.write(OPEN_KEY, false);
     render();
-    if (!hadFocus) {
-      return;
-    }
-    if (options.byKey) {
+    if (hadFocus && options.byKey) {
       (focused as HTMLElement).blur?.();
-    } else {
-      button?.focus({ preventScroll: true });
     }
   }
 
@@ -369,10 +357,6 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
         playerObserver.observe(column);
       }
       measurePlayer();
-    },
-
-    attachButton(attached) {
-      button = attached;
     },
 
     toggle(options) {

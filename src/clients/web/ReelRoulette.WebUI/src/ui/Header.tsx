@@ -36,7 +36,7 @@ function PairingPrompt() {
   );
 }
 
-/** The playing file's name and duration. The name opens the panel on the Stats tab, with a click, Enter, or Space. */
+/** The playing file's name and duration. A click on the name opens the panel on the Stats tab. */
 function NowPlaying() {
   const { panel, store } = useApp();
   const view = nowPlayingView(store.current.value);
@@ -47,15 +47,8 @@ function NowPlaying() {
         id="now-playing-name"
         class="is-link"
         role="button"
-        tabIndex={0}
         title={view ? `${view.title}\nShow stats` : undefined}
         onClick={showStats}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            showStats();
-          }
-        }}
       >
         {view?.name}
       </span>{" "}

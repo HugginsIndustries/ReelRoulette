@@ -16,10 +16,8 @@ import {
   pointerDown,
   pointerMove,
   pointerUp,
-  pressKey,
   randomAnswer,
   resetPage,
-  scrollOnFocus,
   selectedPresetLabel,
   settle,
   tapPage,
@@ -248,15 +246,6 @@ async function press(button: HTMLElement): Promise<void> {
   await settle();
 }
 
-/** Presses a focused button with Enter the way a browser does: the key goes down, then it is clicked with no pointer. */
-async function pressWithKeyboard(button: HTMLElement): Promise<void> {
-  button.focus();
-  fireEvent.keyDown(button, { key: "Enter" });
-  fireEvent.click(button, { detail: 0 });
-  fireEvent.keyUp(button, { key: "Enter" });
-  await settle();
-}
-
 async function typeInto(element: Element, text: string): Promise<void> {
   fireEvent.input(element, { target: { value: text } });
   await settle();
@@ -372,6 +361,22 @@ function categoryToggle(title: string): HTMLButtonElement {
 /** The category's drag handle, which is Uncategorized's dimmed one for Uncategorized. */
 function handle(title: string): HTMLButtonElement {
   return category(title).querySelector(".drag-handle") as HTMLButtonElement;
+}
+
+/**
+ * Drags a category by its handle `places` categories down, or up when negative, with the categories laid out 40 px
+ * tall, as collapsed ones are, 12 px apart: pressed at its middle, moved past the start distance, and dropped just past
+ * the middle of the category it lands on.
+ */
+async function dragCategory(title: string, places: number): Promise<void> {
+  stubRowLayout("#tag-editor-body .tag-category", () => 40, 12);
+  const from = categoryTitles().indexOf(title);
+  const start = from * 52 + 20;
+  const past = Math.sign(places) * 10;
+  pointerDown(handle(title), start);
+  await pointerMove(start + past);
+  await pointerMove((from + places) * 52 + 20 + past);
+  await pointerUp();
 }
 
 /** What screen readers last heard about a category moving. */
@@ -989,8 +994,7 @@ describe("following the playing item", () => {
     await editCategory("Places");
     await typeInto(nameField("Edit Category"), "Scenery");
     await press(dialogButton(nameDialog("Edit Category"), "Save"));
-    await press(handle("People"));
-    await pressKey(handle("People"), "ArrowUp");
+    await dragCategory("People", -1);
 
     await playNext(server, OTHER_ITEM);
     expect(targetLine().hidden).toBe(true);
@@ -1200,8 +1204,8 @@ describe("Edit Tags", () => {
     await typeInto(nameField("Edit Category"), "Scenery");
     await press(dialogButton(nameDialog("Edit Category"), "Save"));
     expect(dot("Scenery").hidden).toBe(false);
-    await press(handle("People"));
-    await pressKey(handle("People"), "ArrowUp");
+    await dragCategory("People", -1);
+    expect(categoryTitles()).toEqual(["Scenery", "People", "Mood", "Uncategorized"]);
     expect(dot("People").hidden).toBe(true);
     expect(savePending()).toBe(true);
 
@@ -1225,7 +1229,7 @@ describe("Edit Tags", () => {
     expect(places.getAttribute("aria-label")).toBe("Reorder Places");
     expect(places.textContent).toBe("drag_indicator");
     expect(places.disabled).toBe(false);
-    expect(byId(places.getAttribute("aria-describedby") ?? "").textContent).toBe("Drag to reorder, or press the up and down arrow keys.");
+    expect(byId(places.getAttribute("aria-describedby") ?? "").textContent).toBe("Drag to reorder.");
     expect(within(category("Places")).getByRole("button", { name: "Edit category Places" }).textContent).toBe("edit_note");
     expect(titles(header("Uncategorized"))).toEqual(["Uncategorized stays last", "Expand category"]);
     expect(handle("Uncategorized").disabled).toBe(true);
@@ -1236,35 +1240,11 @@ describe("Edit Tags", () => {
     }
   });
 
-  it("moves a category with the arrow keys on its handle, keeping focus there and saying where it went, and saves the order", async () => {
-    const { tags } = await mountTags();
-    await openEditor();
-
-    expect(await pressKey(handle("People"), "ArrowUp")).toBe(false);
-    expect(categoryTitles()).toEqual(["Places", "People", "Mood", "Uncategorized"]);
-    expect(document.activeElement).toBe(handle("People"));
-    expect(reorderAnnouncement()).toBe("People moved to position 2 of 3.");
-    expect(optionLabels(footerCategory())).toEqual(["Places", "People", "Mood", "Uncategorized"]);
-    expect(savePending()).toBe(true);
-
-    expect(await pressKey(handle("Places"), "ArrowUp")).toBe(false);
-    expect(await pressKey(handle("Mood"), "ArrowDown")).toBe(false);
-    expect(await pressKey(handle("Uncategorized"), "ArrowUp")).toBe(true);
-    expect(categoryTitles()).toEqual(["Places", "People", "Mood", "Uncategorized"]);
-    expect(reorderAnnouncement()).toBe("People moved to position 2 of 3.");
-
-    await save();
-    expect(tags.saves()).toEqual([
-      { path: "/api/tag-editor/upsert-category", body: { id: "cat-people", name: "People", sortOrder: 1 } },
-      { path: "/api/tag-editor/upsert-category", body: { id: "cat-mood", name: "Mood", sortOrder: 2 } }
-    ]);
-  });
-
   it("says there is nothing to save when categories moved back, and stays open", async () => {
     const { server, tags } = await mountTags();
     await openEditor();
-    await pressKey(handle("Mood"), "ArrowDown");
-    await pressKey(handle("Mood"), "ArrowUp");
+    await dragCategory("Mood", 1);
+    await dragCategory("Mood", -1);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
     expect(savePending()).toBe(true);
 
@@ -1310,8 +1290,8 @@ describe("Edit Tags", () => {
       expect(transforms()).toEqual(["", "", "", ""]);
       expect(category("Places").classList.contains("is-dragging")).toBe(false);
       expect(getComputedStyle(categoryGrid("Places")).display).toBe("flex");
-      expect(document.activeElement).toBe(handle("Places"));
       expect(reorderAnnouncement()).toBe("Places moved to position 2 of 3.");
+      expect(optionLabels(footerCategory())).toEqual(["Mood", "Places", "People", "Uncategorized"]);
       expect(savePending()).toBe(true);
 
       await save();
@@ -1333,12 +1313,11 @@ describe("Edit Tags", () => {
       expect(reorderAnnouncement()).toBe("Places moved to position 3 of 3.");
     });
 
-    it("keeps the list where it was scrolled after a drop, and focuses the dropped handle without scrolling", async () => {
+    it("keeps the list where it was scrolled after a drop", async () => {
       await mountLaidOut();
       // A list reaching well past the categories, so the pointer stays away from its edges and it scrolls only when told to.
       stubScroller(body(), -200, 600, 1200);
       body().scrollTop = 30;
-      const focusCalls = scrollOnFocus(body());
 
       pointerDown(handle("Places"), 20);
       await pointerMove(30);
@@ -1352,8 +1331,6 @@ describe("Edit Tags", () => {
       });
       expect(categoryTitles()).toEqual(["Mood", "Places", "People", "Uncategorized"]);
       expect(body().scrollTop).toBe(30);
-      expect(document.activeElement).toBe(handle("Places"));
-      expect(focusCalls.map((call) => [call.element.getAttribute("aria-label"), call.preventScroll])).toEqual([["Reorder Places", true]]);
     });
 
     it("leaves the order for a tap on a handle, and for a drop where it started", async () => {
@@ -1362,7 +1339,6 @@ describe("Edit Tags", () => {
       await pointerMove(134);
       expect(category("Mood").classList.contains("is-dragging")).toBe(false);
       await pointerUp();
-      expect(document.activeElement).toBe(handle("Mood"));
 
       pointerDown(handle("Mood"), 130);
       await pointerMove(160);
@@ -1473,7 +1449,6 @@ describe("Edit Tags", () => {
     await typeInto(nameField("Edit Category"), "Folks");
     await press(dialogButton(nameDialog("Edit Category"), "Cancel"));
     expect(appDialogs()).toEqual([]);
-    expect(document.activeElement).toBe(within(category("People")).getByRole("button", { name: "Edit category People" }));
 
     await editCategory("People");
     await press(dialogButton(nameDialog("Edit Category"), "Save"));
@@ -1495,7 +1470,6 @@ describe("Edit Tags", () => {
     expect(dialogButton(confirmation(), "Delete").classList.contains("btn-danger")).toBe(true);
     await answer("Cancel");
     expect(appDialogs()).toEqual([nameDialog("Edit Category")]);
-    expect(document.activeElement).toBe(remove);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
 
     await press(remove);
@@ -1567,7 +1541,6 @@ describe("Edit Tags", () => {
     expect(chipNames("People")).toEqual(["Alice", "Bob", "Sunset"]);
     expect(newTagField().value).toBe("");
     expect(chipState("Sunset")).toEqual({ has: "none", pending: null });
-    expect(document.activeElement).toBe(chipButton("Sunset", "Add tag"));
     expect(tags.saves()).toEqual([]);
   });
 
@@ -1587,33 +1560,18 @@ describe("Edit Tags", () => {
     expect(tags.saves()).toEqual([{ path: "/api/tag-editor/upsert-tag", body: { name: "Sunset", categoryId: "cat-mood" } }]);
   });
 
-  for (const [how, activate] of [
-    ["the pointer", press],
-    ["the keyboard", pressWithKeyboard]
-  ] as const) {
-    it(`Add tag pressed with ${how} moves to the new chip's add, opening its category, and one more press puts it on the item`, async () => {
-      await mountTags();
-      await openEditor();
-      expect(categoryGrid("Mood").hidden).toBe(true);
-      await choose(footerCategory(), "cat-mood");
-      await typeInto(newTagField(), "Sunset");
-      await activate(addTagButton());
-      expect(categoryGrid("Mood").hidden).toBe(false);
-      expect(document.activeElement).toBe(chipButton("Sunset", "Add tag"));
+  it("Add tag opens the new chip's category, and a press on the chip's add puts it on the item", async () => {
+    await mountTags();
+    await openEditor();
+    expect(categoryGrid("Mood").hidden).toBe(true);
+    await choose(footerCategory(), "cat-mood");
+    await typeInto(newTagField(), "Sunset");
+    await press(addTagButton());
+    expect(categoryGrid("Mood").hidden).toBe(false);
 
-      await activate(chipButton("Sunset", "Add tag"));
-      expect(chipState("Sunset")).toEqual({ has: "none", pending: "add" });
-    });
-
-    it(`Add tag pressed with ${how} moves to the new chip's Edit while nothing plays`, async () => {
-      await mountTags({ play: false });
-      await openEditor();
-      await typeInto(newTagField(), "Sunset");
-      await activate(addTagButton());
-      expect(chipButton("Sunset", "Add tag").disabled).toBe(true);
-      expect(document.activeElement).toBe(chipButton("Sunset", "Edit tag"));
-    });
-  }
+    await press(chipButton("Sunset", "Add tag"));
+    expect(chipState("Sunset")).toEqual({ has: "none", pending: "add" });
+  });
 
   it("adds a tag only to the catalog when nothing plays", async () => {
     const { tags } = await mountTags({ play: false });
@@ -1696,7 +1654,6 @@ describe("Edit Tags", () => {
     await typeInto(modalName(), "Shore");
     await press(modalButton("Cancel"));
     expect(modalOpen()).toBe(false);
-    expect(document.activeElement).toBe(edit);
     expect(chipNames("Places")).toEqual(["alps", "Beach"]);
 
     await press(chipButton("Loose", "Edit tag"));
@@ -1747,54 +1704,6 @@ describe("Edit Tags", () => {
     ]);
   });
 
-  it("after Save renames a tag, focus goes to its chip's Edit, and after Delete to the next chip's in its category, or the previous one's", async () => {
-    await mountTags();
-    await openEditor();
-
-    await press(chipButton("Beach", "Edit tag"));
-    await typeInto(modalName(), " Shore ");
-    await press(modalButton("Save"));
-    expect(document.activeElement).toBe(chipButton("Shore", "Edit tag"));
-
-    await press(chipButton("Calm", "Edit tag"));
-    await choose(modalCategory(), "cat-people");
-    await press(modalButton("Save"));
-    expect(chipNames("People")).toEqual(["Alice", "Bob", "Calm"]);
-    expect(document.activeElement).toBe(chipButton("Calm", "Edit tag"));
-
-    await deleteTag("Alice");
-    expect(document.activeElement).toBe(chipButton("Bob", "Edit tag"));
-    await deleteTag("Calm");
-    expect(document.activeElement).toBe(chipButton("Bob", "Edit tag"));
-    await deleteTag("Bob");
-    expect(chipNames("People")).toEqual([]);
-    expect(document.activeElement).toBe(document.body);
-  });
-
-  it("after Delete removes a category, focus goes to the next category's Edit, or the previous one's", async () => {
-    await mountTags();
-    await openEditor();
-    const categoryEdit = (title: string) => within(category(title)).getByRole("button", { name: `Edit category ${title}` });
-
-    await editCategory("Mood");
-    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
-    await answer("Delete");
-    expect(categoryTitles()).toEqual(["Places", "People", "Uncategorized"]);
-    expect(document.activeElement).toBe(categoryEdit("People"));
-
-    await editCategory("People");
-    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
-    await answer("Delete");
-    expect(categoryTitles()).toEqual(["Places", "Uncategorized"]);
-    expect(document.activeElement).toBe(categoryEdit("Places"));
-
-    await editCategory("Places");
-    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
-    await answer("Delete");
-    expect(categoryTitles()).toEqual(["Uncategorized"]);
-    expect(document.activeElement).toBe(document.body);
-  });
-
   it("the Edit Tag dialog takes another tag's name without flagging it, and Save sends the rename", async () => {
     const { tags } = await mountTags();
     await openEditor();
@@ -1828,7 +1737,6 @@ describe("Edit Tags", () => {
 
     await answer("Cancel");
     expect(appDialogs()).toEqual([modal()]);
-    expect(document.activeElement).toBe(remove);
     expect(modalName().value).toBe("Robert");
     expect(chipNames("People")).toEqual(["Alice", "Bob"]);
 
@@ -2142,7 +2050,7 @@ describe("saving", () => {
 });
 
 describe("Auto Tag", () => {
-  it("opens over the whole page from the Tags tab, with focus on its X, and gives focus back to its button when it closes", async () => {
+  it("opens over the whole page from the Tags tab, with focus on its X, which closes it", async () => {
     await mountTags();
     await openEditor();
     expect(findAutoTag()).toBeNull();
@@ -2159,8 +2067,6 @@ describe("Auto Tag", () => {
 
     await press(autoTagButton("Close"));
     expect(findAutoTag()).toBeNull();
-    await settle();
-    expect(document.activeElement).toBe(headerButton("Auto Tag"));
     expect(isOpen()).toBe(true);
 
     // Escape closes Auto Tag, not the panel.

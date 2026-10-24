@@ -57,7 +57,7 @@ export function renderGridTileHtml(tile: GridTileRenderInput, thumbnailUrl: stri
 
   // Every tile has the playing icon, which the stylesheet shows only on the playing tile, so the grid can move it
   // without rendering the tiles again. The name is the whole tile's tooltip.
-  return `<div class="${tileClass}" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" title="${name}" tabindex="0" role="button">
+  return `<div class="${tileClass}" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" title="${name}" role="button">
   <div class="library-grid-tile-media">
     <div class="library-grid-tile-scrim">${imgHtml}</div>
     ${badgeHtml}

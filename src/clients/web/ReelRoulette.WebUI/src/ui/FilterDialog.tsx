@@ -1,5 +1,4 @@
 import type { JSX, RefObject } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
 import type { FilterDialogTab, FilterDialogView } from "../filter/filterDialog";
 import { EARLIEST_DAY, LATEST_DAY } from "../filter/filterDateRange";
 import {
@@ -152,25 +151,9 @@ export function FilterDialog() {
   );
 }
 
-/**
- * The Edit button of the preset row at `index`, or of the last row when there are fewer: after a rename, which keeps
- * the preset's place, the renamed row; after a delete, the next row, or the previous one when the last was deleted.
- */
-function presetEditButton(index: number): HTMLElement | null {
-  const rows = document.querySelectorAll<HTMLElement>("#filter-dialog .filter-preset-row");
-  return rows[Math.min(index, rows.length - 1)]?.querySelector<HTMLElement>('[title="Edit preset"]') ?? null;
-}
-
-/** Where focus goes after Add Preset adds a preset: the new last row's drag handle. A button, so no on-screen keyboard opens. */
-function addedPresetFocus(): HTMLElement | null {
-  const rows = document.querySelectorAll<HTMLElement>("#filter-dialog .filter-preset-row");
-  return rows[rows.length - 1]?.querySelector<HTMLElement>(".drag-handle") ?? null;
-}
-
 /** Edit Preset: renames a preset, or deletes it after asking. It shows while the dialog's preset edit is open. */
 function EditPresetDialog({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
-  const index = Math.max(0, view.presets.findIndex((preset) => preset.id === view.presetEdit?.id));
   return (
     <NameDialog
       title="Edit Preset"
@@ -184,7 +167,6 @@ function EditPresetDialog({ view }: { view: FilterDialogView }) {
       onSave={() => filterDialog.savePresetEdit()}
       onCancel={() => filterDialog.cancelPresetEdit()}
       onDelete={() => void filterDialog.deleteEditedPreset()}
-      fallbackFocus={() => presetEditButton(index)}
     />
   );
 }
@@ -423,7 +405,7 @@ function RatingFilterRows({ view }: { view: FilterDialogView }) {
       </span>
       <div class="mode-row min-rating-row">
         <span id="filter-min-rating-label">{MIN_RATING_LABEL}</span>
-        <RatingStars {...pair.partner} rating={draft.minRating} labelledBy="filter-min-rating-label" noneText="No minimum" onSet={(minRating) => filterDialog.changeGeneral({ minRating })} />
+        <RatingStars aria-invalid={pair.partner["aria-invalid"]} aria-describedby={pair.partner["aria-describedby"]} rating={draft.minRating} labelledBy="filter-min-rating-label" noneText="No minimum" onSet={(minRating) => filterDialog.changeGeneral({ minRating })} />
       </div>
     </>
   );
@@ -540,14 +522,6 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
   const nameOf = (id: string) => view.presets.find((preset) => preset.id === id)?.name ?? id;
   const chosen = view.chosenPreset ?? "";
   const reorder = useReorder({ keys: ids, nameOf, onMove: (from, to) => filterDialog.movePreset(from, to) });
-  // Whether Add Preset added a preset, until its row renders and takes focus.
-  const added = useRef(false);
-  useLayoutEffect(() => {
-    if (added.current) {
-      added.current = false;
-      addedPresetFocus()?.focus();
-    }
-  });
   return (
     <>
       <div class="filter-section">
@@ -575,7 +549,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
               <input {...control} type="text" id="filter-new-preset-name" class="ctl" aria-label="New preset name" placeholder="Enter preset name" autocomplete="off" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
             )}
           </ValidatedField>
-          <HeldButton id="filter-add-preset-btn" class="icon-btn" label="Add preset" heldDot {...heldAction(view, "addPreset")} onClick={() => (added.current = filterDialog.addPreset())}>
+          <HeldButton id="filter-add-preset-btn" class="icon-btn" label="Add preset" heldDot {...heldAction(view, "addPreset")} onClick={() => filterDialog.addPreset()}>
             <span class="material-symbol-icon">add</span>
           </HeldButton>
         </div>

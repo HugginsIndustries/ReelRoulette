@@ -179,16 +179,13 @@ const SLIDER_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight", "Ar
 /** The inputs nothing is typed into. A slider is among them, and keeps only its own keys. */
 const UNTYPED_INPUTS: readonly string[] = ["checkbox", "radio", "button", "submit", "reset", "range"];
 
-/**
- * What Space activates, so Space there is left to it. A slider isn't among them, nor what takes focus without a tab stop,
- * such as the bell's list's title.
- */
-const SPACE_ACTIVATES = 'button, a, input:not([type=range]), select, textarea, summary, [tabindex]:not([tabindex="-1"])';
+/** What Space activates, so Space there is left to it. A slider isn't among them. */
+const SPACE_ACTIVATES = "button, a, input:not([type=range]), select, textarea, summary";
 
 /**
  * The focused element takes `key` itself, so the key isn't a shortcut there: every key in a text field, a dropdown, or
  * editable text; a slider's own keys on a slider; the left and right arrows on a checkbox or radio button; and Space on
- * what it activates, such as a button or a library tile.
+ * what it activates, such as a button.
  */
 export function focusTakesKey(target: EventTarget | null, key: string): boolean {
   const element = target as HTMLElement | null;

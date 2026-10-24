@@ -1,15 +1,11 @@
 import { useRef, useState } from "preact/hooks";
-import { RATING_MAX, ratingAt, ratingForKey, ratingText, starFill } from "../rating/rating";
+import { RATING_MAX, ratingAt, ratingText, starFill } from "../rating/rating";
 
 interface RatingStarsBaseProps {
   /** The rating set, or null for none, which the slider's value gives through a preview too. */
   rating: number | null;
-  /** A press's release or a key sets a rating, or clears it with null. */
-  onSet(rating: number | null, byKey: boolean): void;
-  /** Focus left the control. */
-  onBlur(): void;
-  /** Focus came to the control. */
-  onFocus?(): void;
+  /** A press's release sets a rating, or clears it with null. */
+  onSet(rating: number | null): void;
   /** What screen readers hear for no rating. "Not rated" when not given. */
   noneText?: string;
   /** Set while a field checked with the control is flagged, as the validation pattern marks a partner. */
@@ -33,19 +29,15 @@ type RatingStarsProps = RatingStarsBaseProps &
   );
 
 /**
- * Five stars that show a rating with half stars and set it, a slider from 0 to 5 to screen readers, with one tab stop.
- * A press, by any pointer, shows the value under it as it moves and sets it on release, and a mouse over the stars
- * previews the value under it; neither changes the slider's value. A press doesn't take focus, so after a click or a
- * tap the arrow keys still play the previous or next item. While the stars have focus, their keys are their own: the
- * arrows step by half a star, Home, Delete, and Backspace clear the rating, and End is 5 stars.
+ * Five stars that show a rating with half stars and set it, a slider from 0 to 5 to screen readers. A press, by any
+ * pointer, shows the value under it as it moves and sets it on release, and a mouse over the stars previews the value
+ * under it; neither changes the slider's value.
  */
 export function RatingStars({
   rating,
   labelledBy,
   label,
   onSet,
-  onBlur,
-  onFocus,
   noneText,
   "aria-invalid": invalid,
   "aria-describedby": describedBy
@@ -75,7 +67,6 @@ export function RatingStars({
     <div
       class="rating"
       role="slider"
-      tabIndex={0}
       aria-labelledby={labelledBy}
       aria-label={label}
       aria-valuemin={0}
@@ -84,7 +75,8 @@ export function RatingStars({
       aria-valuetext={rating === null && noneText !== undefined ? noneText : ratingText(rating)}
       aria-invalid={invalid}
       aria-describedby={describedBy}
-      // A browser moves focus on `mousedown`, which a tap sends too, so the stars set a rating without taking focus.
+      // A browser moves focus on `mousedown`, which a tap sends too, so a press doesn't take focus off another control,
+      // and the shortcuts' keys stay with the page after a click or a tap.
       onMouseDown={(event) => event.preventDefault()}
       onPointerDown={(event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -98,7 +90,7 @@ export function RatingStars({
         }
       }}
       onPointerUp={(event) => {
-        if (endPress(event)) onSet(valueAt(event.clientX), false);
+        if (endPress(event)) onSet(valueAt(event.clientX));
       }}
       // A press the browser cuts short sets nothing.
       onPointerCancel={endPress}
@@ -107,16 +99,6 @@ export function RatingStars({
       onPointerLeave={(event) => {
         if (event.pointerType === "mouse" && pressId.current === null) setPreview(undefined);
       }}
-      onKeyDown={(event) => {
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
-        const next = ratingForKey(rating, event.key);
-        if (!next) return;
-        // Handled, so the shortcuts leave it, and the arrows don't play the previous or next item.
-        event.preventDefault();
-        onSet(next.rating, true);
-      }}
-      onFocus={onFocus}
-      onBlur={onBlur}
     >
       {Array.from({ length: RATING_MAX }, (_, index) => {
         const fill = starFill(shown, index);

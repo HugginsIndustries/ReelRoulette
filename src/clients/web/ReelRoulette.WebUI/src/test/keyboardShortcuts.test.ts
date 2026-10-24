@@ -207,20 +207,10 @@ describe("focusTakesKey", () => {
     }
   });
 
-  it("gives Space to what it activates: a button, a link, a summary, or a tile or anything else with a tab stop", () => {
-    const tile = document.createElement("div");
-    tile.tabIndex = 0;
-    const inTile = document.createElement("span");
-    tile.append(inTile);
-    for (const target of [document.createElement("button"), document.createElement("a"), document.createElement("summary"), tile, inTile]) {
+  it("gives Space to what it activates: a button, a link, or a summary", () => {
+    for (const target of [document.createElement("button"), document.createElement("a"), document.createElement("summary")]) {
       expect([focusTakesKey(target, " "), focusTakesKey(target, "k"), focusTakesKey(target, "ArrowLeft")]).toEqual([true, false, false]);
     }
-  });
-
-  it("leaves Space to the page on what takes focus without a tab stop, as the bell's list's title does", () => {
-    const title = document.createElement("h2");
-    title.tabIndex = -1;
-    expect(focusTakesKey(title, " ")).toBe(false);
   });
 
   it("gives nothing to the page itself, or to no target", () => {

@@ -60,8 +60,6 @@ export function Player() {
   const seekStretch = useRef<HTMLSpanElement>(null);
   /** The volume slider is pressed, so its drag is one volume change until it's let go. */
   const sliderPressed = useRef(false);
-  /** The last input was a key, not a pointer. */
-  const keyInput = useRef(false);
   const gestures = useMemo(
     () =>
       createMediaGestures({
@@ -141,31 +139,15 @@ export function Player() {
     document.addEventListener("pointerup", releaseSlider);
     document.addEventListener("pointercancel", releaseSlider);
 
-    // Moving the mouse over the player, a press on the controls, which Safari leaves no focus for, and a key press,
-    // outside a field that takes keys, are activity. A touch moving over the player isn't, so the controls a tap shows
-    // come back only through its click, which then lands on the player. Focus on a control keeps the controls shown only
-    // when it's keyboard focus, which `:focus-visible` matches: the last input was a key, not a pointer, so focus a tap or
-    // click leaves on a control doesn't. A touch never counts as over a control.
+    // Moving the mouse over the player, a press on the controls, and a key press outside a field that takes keys are
+    // activity. A touch moving over the player isn't, so the controls a tap shows come back only through its click,
+    // which then lands on the player. A touch never counts as over a control.
     const controlsLayer = overlay.current!;
-    const followFocus = (focused: EventTarget | null) =>
-      controls.hold("keyboardFocus", keyInput.current && controlsLayer.contains(focused as Node | null));
     const onKeyDown = (event: KeyboardEvent) => {
-      keyInput.current = true;
-      followFocus(document.activeElement);
       if (!isTextField(event.target)) controls.activity();
     };
     const onPointerDown = (event: PointerEvent) => {
-      keyInput.current = false;
-      followFocus(document.activeElement);
       if (controlsLayer.contains(event.target as Node | null)) controls.activity();
-    };
-    const onFocusIn = () => {
-      followFocus(document.activeElement);
-      controls.activity();
-    };
-    const onFocusOut = (event: FocusEvent) => {
-      followFocus(event.relatedTarget);
-      controls.activity();
     };
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerType !== "touch") controls.activity();
@@ -180,16 +162,12 @@ export function Player() {
     };
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("pointerdown", onPointerDown, true);
-    controlsLayer.addEventListener("focusin", onFocusIn);
-    controlsLayer.addEventListener("focusout", onFocusOut);
     area.addEventListener("pointermove", onPointerMove, { passive: true });
     controlsLayer.addEventListener("pointerover", onPointerOver);
     controlsLayer.addEventListener("pointerout", onPointerOut);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
-      controlsLayer.removeEventListener("focusin", onFocusIn);
-      controlsLayer.removeEventListener("focusout", onFocusOut);
       area.removeEventListener("pointermove", onPointerMove);
       controlsLayer.removeEventListener("pointerover", onPointerOver);
       controlsLayer.removeEventListener("pointerout", onPointerOut);
@@ -263,7 +241,7 @@ export function Player() {
       <div id="overlay-controls" class="overlay-controls" ref={overlay} onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
         <NotifyButton />
         <PanelButton />
-        <RatingButton keyInput={keyInput} />
+        <RatingButton />
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>
         <button id="blacklist-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.blacklisted.value)} aria-label="Blacklist" title="Blacklist" onClick={press(player.toggleBlacklist)}><span class="material-symbol-icon">thumb_down</span></button>
         <div class="overlay-controls-row overlay-controls-transport">
@@ -376,47 +354,17 @@ function SeekIndicator() {
 /**
  * The playing item's rating: the star at the top right, orange with the rating in its badge while the item is rated,
  * and the popover it opens, the Stats tab's stars at the player's center. Pressing the star does nothing while nothing
- * plays or while the server asks for pairing. Opened from the keyboard, focus moves to the stars; a click or a tap
- * leaves it where it is, as on the Stats tab's stars. The stars are built anew each time it opens, so no preview is
- * left from the last time. A click, tap, or drag that sets a rating closes it; the keys don't, and Enter, Escape, Tab,
- * or a press elsewhere, which still does what it does, does. So do another item playing, a volume change, and the panel
- * opening. Escape comes to it before anything else, except while an in-app dialog is open. However it closes, focus on
- * its stars goes back to the star.
+ * plays or while the server asks for pairing. The stars are built anew each time it opens, so no preview is left from
+ * the last time. A click, tap, or drag that sets a rating closes it, as do Escape and a press elsewhere, which still
+ * does what it does. So do another item playing, a volume change, and the panel opening. Escape comes to it before
+ * anything else, except while an in-app dialog is open.
  */
-function RatingButton({ keyInput }: { keyInput: { readonly current: boolean } }) {
+function RatingButton() {
   const { playerRating } = useApp();
   const button = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
-  /** The popover opened from the keyboard, so focus moves to its stars once they show. */
-  const focusStars = useRef(false);
-  /** The last press was on the star. */
-  const pressedStar = useRef(false);
   const open = playerRating.popoverOpen.value;
   const rating = playerRating.shown.value;
-
-  useLayoutEffect(() => {
-    if (!open || !focusStars.current) return;
-    focusStars.current = false;
-    popover.current!.querySelector<HTMLElement>(".rating")?.focus({ preventScroll: true });
-  }, [open]);
-
-  // As it closes, before its stars are gone, focus on them goes to the star. Focus that Tab moves out has already left.
-  useLayoutEffect(
-    () =>
-      playerRating.popoverOpen.subscribe((isOpen) => {
-        if (!isOpen && popover.current?.contains(document.activeElement)) button.current?.focus({ preventScroll: true });
-      }),
-    []
-  );
-
-  // Each press notes whether it was on the star, for focus leaving the stars, before the press moves focus.
-  useLayoutEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      pressedStar.current = button.current!.contains(event.target as Node | null);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, []);
 
   useLightDismiss({
     open: playerRating.popoverOpen,
@@ -431,20 +379,7 @@ function RatingButton({ keyInput }: { keyInput: { readonly current: boolean } })
       playerRating.closePopover();
       return;
     }
-    focusStars.current = playerRating.openPopover() && keyInput.current;
-  }
-
-  // Focus leaving the popover, as Tab takes it, closes it. Focus a press on the star moves is left to the star, which
-  // closes the popover, so the press doesn't open it again.
-  function onFocusOut(event: FocusEvent): void {
-    if (popover.current!.contains(event.relatedTarget as Node | null) || (!keyInput.current && pressedStar.current)) return;
-    playerRating.closePopover();
-  }
-
-  function onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    playerRating.closePopover();
+    playerRating.openPopover();
   }
 
   const rated = rating !== null;
@@ -457,16 +392,15 @@ function RatingButton({ keyInput }: { keyInput: { readonly current: boolean } })
       </button>
       {/* A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch would land on
           the video under it; a touch on the stars sends no click. */}
-      <div id="rating-popover" class="rating-popover" hidden={!open} ref={popover} onKeyDown={onKeyDown} onFocusOut={onFocusOut} onTouchEnd={(event) => event.preventDefault()}>
+      <div id="rating-popover" class="rating-popover" hidden={!open} ref={popover} onTouchEnd={(event) => event.preventDefault()}>
         {open ? (
           <RatingStars
             rating={rating}
             label="Rating"
-            onSet={(next, byKey) => {
-              playerRating.set(next, { byKey });
-              if (!byKey) playerRating.closePopover();
+            onSet={(next) => {
+              playerRating.set(next, { byKey: false });
+              playerRating.closePopover();
             }}
-            onBlur={playerRating.send}
           />
         ) : null}
       </div>
@@ -477,22 +411,15 @@ function RatingButton({ keyInput }: { keyInput: { readonly current: boolean } })
 /**
  * Opens the panel on its last tab, or closes it. Its icon shows the panel's side and whether it is open, and it is
  * orange while the panel is open. While the Filter or Tags tab holds unsaved changes, an orange dot marks it and its
- * name says so, so they aren't forgotten while the panel is closed. It takes focus back when the panel closes with
- * focus inside it.
+ * name says so, so they aren't forgotten while the panel is closed.
  */
 function PanelButton() {
   const { panel, unsaved } = useApp();
-  const button = useRef<HTMLButtonElement>(null);
-  useLayoutEffect(() => {
-    panel.attachButton(button.current);
-    return () => panel.attachButton(null);
-  }, []);
-
   const open = panel.isOpen.value;
   const held = unsaved.value.filter || unsaved.value.tags;
   const label = (open ? "Close panel" : "Open panel") + (held ? ", unsaved changes" : "");
   return (
-    <button id="panel-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, open)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="panel" ref={button} onClick={press(panel.toggle)}>
+    <button id="panel-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, open)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="panel" onClick={press(panel.toggle)}>
       <span class="material-symbol-icon">{`${panel.side.value}_panel_${open ? "close" : "open"}`}</span>
       <span class="unsaved-dot" hidden={!held}></span>
     </button>

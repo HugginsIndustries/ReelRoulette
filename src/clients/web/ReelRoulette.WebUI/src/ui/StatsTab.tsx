@@ -67,12 +67,7 @@ function FileStats({ file }: { file: StatsFileView }) {
         <>
           <div class="stats-rating">
             <span id="stats-rating-label" class="stats-rating-label">Rating</span>
-            <RatingStars
-              rating={file.rating}
-              labelledBy="stats-rating-label"
-              onSet={(rating, byKey) => statsTab.setRating(rating, { byKey })}
-              onBlur={() => statsTab.sendRating()}
-            />
+            <RatingStars rating={file.rating} labelledBy="stats-rating-label" onSet={statsTab.setRating} />
           </div>
           <dl class="stats-table">
             {file.rows.map((row) => (

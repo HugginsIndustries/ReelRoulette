@@ -37,7 +37,6 @@
   --control-bg-hover: #353535;
   --control-border: #555555;
   --control-fg: #ffffff;
-  --focus-ring: rgba(239, 127, 34, 0.8);
   /* The side panel and its icons. */
   --surface: #111111;
   --surface-border: #333333;
@@ -75,7 +74,6 @@ html.theme-light {
   --control-bg-hover: #e8eaef;
   --control-border: #c5cad3;
   --control-fg: #1a1d21;
-  --focus-ring: rgba(239, 127, 34, 0.95);
   --surface: #f4f5f8;
   --surface-border: #c5cad3;
   --icon: #333333;
@@ -83,6 +81,9 @@ html.theme-light {
 
 /* Checkboxes, radio buttons, sliders, and progress bars use the app's orange accent instead of the browser's blue. */
 input, progress, meter { accent-color: var(--huggins-orange); }
+
+/* No focus ring shows anywhere, the browser's own included. */
+:focus { outline: none; }
 
 .themed-scrollbar {
   scrollbar-width: auto;
@@ -400,12 +401,6 @@ html.theme-light .app-dialog {
   padding: 0 10px;
   min-width: 0;
 }
-.app-dialog button:focus-visible,
-.app-dialog input:focus-visible,
-.app-dialog select:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
 .app-dialog .btn-danger {
   color: var(--error);
 }
@@ -428,7 +423,6 @@ html.theme-light .app-dialog {
 .icon-btn:hover:not(:disabled) { opacity: var(--icon-hover-opacity); }
 .icon-btn:active:not(:disabled) { opacity: var(--icon-pressed-opacity); }
 .icon-btn:disabled { opacity: var(--icon-disabled-opacity); cursor: default; }
-.icon-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 /* A held icon button, such as Apply or Update preset, wraps its icon in a label. As a flex box the label holds no line of
    text, whose spacing would lift the icon, so the icon sits where a plain icon button's does, such as Save's. */
 .icon-btn > .btn-label { display: inline-flex; }
@@ -454,7 +448,6 @@ html.theme-light .app-dialog {
 }
 .btn:hover:not(:disabled) { background: var(--control-bg-hover); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn:focus-visible, .ctl:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .btn.has-pending { color: var(--huggins-orange); }
 .ctl { padding: 0 10px; min-width: 0; }
 input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
@@ -621,10 +614,6 @@ body {
   color: var(--muted-fg);
   opacity: 0.9;
 }
-.pair-section input:focus-visible {
-  outline: 2px solid #7aa7ff;
-  outline-offset: 1px;
-}
 .pair-section button {
   padding: 8px 16px;
   min-height: 40px;
@@ -643,10 +632,6 @@ body {
 .pair-section button:active:not(:disabled) {
   filter: brightness(0.95);
 }
-.pair-section button:focus-visible {
-  outline: 2px solid #7aa7ff;
-  outline-offset: 1px;
-}
 .now-playing {
   font-size: 0.95rem;
   margin-left: auto;
@@ -657,9 +642,8 @@ body {
 }
 .now-playing .muted { color: var(--muted-fg); margin-left: 8px; }
 /* The file name opens the Stats tab. */
-.now-playing .is-link { cursor: pointer; border-radius: 4px; }
+.now-playing .is-link { cursor: pointer; }
 .now-playing .is-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.now-playing .is-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 /* The player keeps its rounded corners in every view, fullscreen and a phone on its side too. It is clipped by a rounded
    clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as ambient mode's blurred canvas, to its
    parent's rounded corners, so on iOS they turned square once ambient mode drew. It claims its touches, so a two-finger
@@ -974,8 +958,6 @@ html.theme-light .ambient canvas {
 .notify-list[hidden] { display: none; }
 .notify-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; border-bottom: 1px solid var(--surface-border); flex: 0 0 auto; }
 .notify-head h2 { margin: 0; font-size: 1.05rem; flex: 1 1 auto; }
-/* The heading takes focus as the list opens, as the mockup does, without a ring. */
-.notify-head h2:focus { outline: none; }
 .notify-head .btn, .notify-foot .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
 .notify-foot .btn .material-symbol-icon { font-size: 20px; }
 /* Notification settings, at the list's foot. */
@@ -1186,8 +1168,7 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
    it never scrolls the tab. */
 .stats-rating { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 6px; font-size: 0.92rem; }
 .stats-rating-label { color: var(--muted-fg); }
-.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.rating { display: flex; margin-left: auto; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 .rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
 .rating-star .material-symbol-icon { font-size: 30px; }
 /* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
@@ -1312,7 +1293,6 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
   align-items: center;
   gap: 8px;
 }
-.tag-category-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .tag-category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A category's header, expanded or collapsed: a count of its tags in use, and the unsaved-changes dot. */
 .category-count {
@@ -1428,7 +1408,6 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 }
 .drag-handle .material-symbol-icon { font-size: 26px; }
 .drag-handle:hover:not(:disabled) { color: var(--icon); }
-.drag-handle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; color: var(--icon); }
 .drag-handle:disabled { opacity: 0.3; cursor: not-allowed; color: var(--muted-fg); }
 .is-dragging .drag-handle { cursor: grabbing; color: var(--huggins-orange); }
 .tag-category.is-dragging,
@@ -1532,13 +1511,6 @@ body.sorting * {
 .library-grid-tile:active {
   opacity: 0.72;
 }
-.library-grid-tile:focus-visible {
-  outline: 2px solid #7aa7ff;
-  outline-offset: 1px;
-}
-html.theme-light .library-grid-tile:focus-visible {
-  outline-color: #2563eb;
-}
 .library-grid-tile-media {
   position: relative;
   width: 100%;
@@ -1631,10 +1603,6 @@ html.theme-light .library-grid-tile:focus-visible {
 .library-overlay button:hover:not(:disabled) {
   background: #353535;
   border-color: #7a7a7a;
-}
-.library-overlay button:focus-visible {
-  outline: 2px solid #7aa7ff;
-  outline-offset: 1px;
 }
 .library-overlay button.icon-glyph-base {
   padding: 0;
@@ -1872,10 +1840,6 @@ html.theme-light .panel {
 .tab:hover {
   background: rgba(127, 127, 127, 0.16);
 }
-.tab:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
 .tab[aria-selected="true"] {
   color: var(--huggins-orange);
 }
@@ -1923,10 +1887,6 @@ html.theme-light .panel {
 }
 .unsaved-dot[hidden] { display: none; }
 #panel-btn .unsaved-dot { top: 6px; right: 5px; box-shadow: 0 0 0 2px #000; }
-.panel-close:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
 .panel-tabs-spacer {
   flex: 1;
 }
@@ -1954,7 +1914,6 @@ html.theme-light .panel {
   display: flex;
   align-items: center;
   justify-content: center;
-  outline: none;
 }
 .handle-grip {
   width: 4px;
@@ -1964,7 +1923,6 @@ html.theme-light .panel {
   transition: background 0.15s, height 0.15s;
 }
 .panel-handle:hover .handle-grip,
-.panel-handle:focus-visible .handle-grip,
 .panel-handle.is-dragging .handle-grip {
   background: var(--huggins-orange);
   height: 88px;
