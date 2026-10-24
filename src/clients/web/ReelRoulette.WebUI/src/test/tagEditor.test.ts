@@ -125,7 +125,6 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   const statuses: string[] = [];
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage: { getItem: () => null, setItem: () => {} },
     device: createDeviceStore(null),
     relay: (_level, message) => {
       statuses.push(message);

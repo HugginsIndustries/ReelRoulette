@@ -197,7 +197,7 @@ function isOpen(): boolean {
 }
 
 /** The panel's own tab, apart from the Filter and Tags tabs' section tabs. */
-function panelTab(name: "Library" | "Filter" | "Tags"): HTMLElement {
+function panelTab(name: "Library" | "Filter" | "Tags" | "Randomization"): HTMLElement {
   // A tab's name says so while it holds unsaved changes.
   return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true });
 }
@@ -1223,16 +1223,12 @@ function filtersLine(): HTMLButtonElement {
   return document.getElementById("library-filter-summary") as HTMLButtonElement;
 }
 
+function randomLine(): HTMLButtonElement {
+  return document.getElementById("library-random-line") as HTMLButtonElement;
+}
+
 function collapseButton(): HTMLButtonElement {
   return document.getElementById("library-controls-toggle") as HTMLButtonElement;
-}
-
-function randomizationModeSelect(): HTMLSelectElement {
-  return within(overlay()).getByRole("combobox", { name: "Choose randomization mode", hidden: true }) as HTMLSelectElement;
-}
-
-function selectedOption(select: HTMLSelectElement): string {
-  return select.options[select.selectedIndex]?.textContent ?? "";
 }
 
 /** The tiles' row heights and widths as the grid laid them out, gaps included. */
@@ -1290,35 +1286,36 @@ const SOURCES = [
 const REMEMBERED_FILTER_KEY = "rr_device.filter.applied";
 
 describe("controls", () => {
-  it("sit above the grid in order: preset, randomization mode, sort with its direction, and search, and the header has neither dropdown", async () => {
+  it("sit above the grid in order: preset and search, then sort with its direction, under the Filters and Random lines, with no randomization dropdown", async () => {
     await mountLibrary(libraryItems(3));
     expect(document.querySelector("header")!.querySelectorAll("select")).toHaveLength(0);
     await openLibrary();
 
     const named = Array.from(controls().querySelectorAll("select, button, input")).map((control) => control.getAttribute("aria-label"));
-    expect(named).toEqual(["Choose preset", "Choose randomization mode", "Sort library", "Toggle sort direction", "Search library"]);
+    expect(named).toEqual(["Choose preset", "Search library", "Sort library", "Toggle sort direction"]);
+    expect(overlay().querySelectorAll("select")).toHaveLength(2);
     const parts = Array.from(overlay().children).map((child) => child.id || child.className);
-    expect(parts).toEqual(["library-overlay-header", "library-filter-summary", "library-controls", "library-overlay-body"]);
+    expect(parts).toEqual(["library-overlay-header", "library-filter-summary", "library-random-line", "library-controls", "library-overlay-body"]);
     expect(controlsShown()).toBe(true);
   });
 
-  it("put the preset and randomization dropdowns in one row from a panel about 440 px wide", async () => {
+  it("put the preset and search in one row from a panel about 440 px wide, and stack them narrower", async () => {
     await mountLibrary(libraryItems(3));
     await openLibrary();
     const pair = presetSelect().parentElement!;
     expect(pair.classList.contains("library-controls-pair")).toBe(true);
-    expect(randomizationModeSelect().parentElement).toBe(pair);
+    expect(Array.from(pair.children)).toEqual([presetSelect(), searchBox()]);
 
     // happy-dom doesn't apply container queries (measured), so the rule's text stands in for the layout.
     const stylesheet = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
     expect(stylesheet).toMatch(/\.library-controls \{\s*container: library-controls \/ inline-size;/);
     expect(stylesheet).toMatch(
-      /@container library-controls \(min-width: 414px\) \{\s*\.library-controls-pair \{\s*flex-direction: row;\s*\}\s*\.library-controls-pair > select \{\s*flex: 1 1 0;\s*\}\s*\}/
+      /@container library-controls \(min-width: 414px\) \{\s*\.library-controls-pair \{\s*flex-direction: row;\s*\}\s*\.library-controls-pair > \* \{\s*flex: 1 1 0;\s*\}\s*\}/
     );
     expect(stylesheet).toMatch(/\.library-controls-pair \{\s*display: flex;\s*flex-direction: column;/);
   });
 
-  it("collapse and expand together with the Filters line, say which, and stay collapsed after a page refresh", async () => {
+  it("collapse and expand together with the Filters line and the Random line, say which, and stay collapsed after a page refresh", async () => {
     useStylesheet();
     const { page } = await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
@@ -1326,6 +1323,8 @@ describe("controls", () => {
     await openLibrary();
     await pickPreset("preset-favorites");
     expect(currentStyle(filtersLine()).display).toBe("block");
+    expect(currentStyle(randomLine()).display).toBe("block");
+    expect(collapseButton().getAttribute("aria-controls")).toBe("library-filter-summary library-random-line library-controls");
     expect(collapseButton().title).toBe("Hide controls & filters");
     expect(collapseButton().getAttribute("aria-label")).toBe("Hide library controls and filters");
     expect(collapseButton().getAttribute("aria-expanded")).toBe("true");
@@ -1334,6 +1333,7 @@ describe("controls", () => {
     await click(collapseButton());
     expect(currentStyle(controls()).display).toBe("none");
     expect(currentStyle(filtersLine()).display).toBe("none");
+    expect(currentStyle(randomLine()).display).toBe("none");
     expect(collapseButton().title).toBe("Show controls & filters");
     expect(collapseButton().getAttribute("aria-label")).toBe("Show library controls and filters");
     expect(collapseButton().getAttribute("aria-expanded")).toBe("false");
@@ -1345,10 +1345,12 @@ describe("controls", () => {
     await openLibrary();
     expect(currentStyle(controls()).display).toBe("none");
     expect(currentStyle(filtersLine()).display).toBe("none");
+    expect(currentStyle(randomLine()).display).toBe("none");
 
     await click(collapseButton());
     expect(currentStyle(controls()).display).not.toBe("none");
     expect(currentStyle(filtersLine()).display).toBe("block");
+    expect(currentStyle(randomLine()).display).toBe("block");
     expect(collapseButton().getAttribute("aria-expanded")).toBe("true");
   });
 });
@@ -1446,6 +1448,55 @@ describe("Filters line", () => {
   });
 });
 
+describe("Random line", () => {
+  /** A tag catalog with People and Places, each with a tag, and Moods, without one. */
+  const CATALOG = {
+    categories: [
+      { id: "places", name: "Places", sortOrder: 1 },
+      { id: "people", name: "People", sortOrder: 0 },
+      { id: "moods", name: "Moods", sortOrder: 2 }
+    ],
+    tags: [
+      { name: "Alice", categoryId: "people" },
+      { name: "Beach", categoryId: "places" }
+    ],
+    items: []
+  };
+
+  it("always shows, naming the options after a bold Random:, Shuffle and Spread by folder until they change", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    expect(filtersLine().hidden).toBe(true);
+    expect(randomLine().hidden).toBe(false);
+    expect(randomLine().querySelector("b")!.textContent).toBe("Random: ");
+    expect(randomLine().textContent).toBe("Random: Shuffle · Spread by folder");
+    expect(randomLine().title).toBe("Open the Randomization tab");
+  });
+
+  it("opens the Randomization tab when tapped or clicked", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+
+    await click(randomLine());
+    expect(isOpen()).toBe(false);
+    expect((document.getElementById("panel-page-randomization") as HTMLElement).hidden).toBe(false);
+    expect(panelTab("Randomization").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("names the categories By category counts, in the tag catalog's order, loading the catalog once the server is ready", async () => {
+    localStorage.setItem(
+      "rr_device.randomization.options",
+      JSON.stringify({ shuffle: false, spreadByFolder: true, spreadByTags: true, tagSpread: "byCategory", spreadCategoryIds: ["places", "moods", "people"], favorLessPlayed: true, favorHigherRated: true })
+    );
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("POST", "/api/tag-editor/model", () => json(CATALOG));
+    });
+    await openLibrary();
+    await waitFor(() => expect(randomLine().textContent).toBe("Random: Spread by folder, People, and Places · Favor less played and higher rated"));
+    expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(1);
+  });
+});
+
 describe("rows", () => {
   const MIXED = [
     { thumbnailWidth: 1920, thumbnailHeight: 1080 },
@@ -1540,7 +1591,7 @@ describe("tile icons and tooltip", () => {
 });
 
 describe("memory", () => {
-  it("keeps the collapsed controls, the preset and its filter, randomization mode, and sort and direction after a page refresh, and not the search", async () => {
+  it("keeps the collapsed controls, the preset and its filter, and sort and direction after a page refresh, and not the search", async () => {
     const presets = (server: FakeServer) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
       server.on("POST", "/api/random", () => randomAnswer(playResponse(1)));
@@ -1548,7 +1599,6 @@ describe("memory", () => {
     const first = await mountLibrary(libraryItems(3), presets);
     await openLibrary();
     await pickPreset("preset-favorites");
-    fireEvent.change(randomizationModeSelect(), { target: { value: "SpreadMode" } });
     fireEvent.change(sortSelect(), { target: { value: "Duration" } });
     await click(directionButton());
     fireEvent.input(searchBox(), { target: { value: "clip" } });
@@ -1565,7 +1615,6 @@ describe("memory", () => {
     });
     await openLibrary();
     expect(selectedPresetLabel()).toBe("Favorites");
-    expect(selectedOption(randomizationModeSelect())).toBe("Spread Mode");
     expect(sortSelect().value).toBe("Duration");
     expect(directionButton().textContent).toBe("Shortest → Longest");
     expect(searchBox().value).toBe("");

@@ -24,7 +24,7 @@ import { createFrameClock, type FramedVideo } from "./frameStep";
 import { mediaFailureMessage, probeMedia, SKIP_LIMIT, skipText, type MediaFailure } from "./mediaFailure";
 import { basenameFromPath, formatPlaybackPosition, playingFileName } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
-import { createRandomPicker, randomPickRequest } from "./randomPick";
+import { createRandomPicker, currentRandomPickRequest } from "./randomPick";
 import { createSeekIndicator, type SeekIndicator } from "./seekIndicator";
 
 /** An element the player shows and hides by setting its `display`. */
@@ -102,6 +102,12 @@ export interface FrameScheduler {
  */
 export type PlayOrigin = "library" | "forward" | "back";
 
+/**
+ * Where a play attempt came from: a play's origin, or inserted, a Random pick that Insert put right after the playing
+ * item, which skips a file that can't play by picking again with Insert.
+ */
+type AttemptOrigin = PlayOrigin | "inserted";
+
 export interface PlayOptions {
   /**
    * Where the play came from. A library play's server has already recorded it, as `POST /api/play/{itemId}` does; any
@@ -173,8 +179,9 @@ export interface Player {
   /** Plays the current item, a play the user started, so the count of files skipped in a row starts over. */
   playCurrent(options?: PlayOptions): void;
   /**
-   * Picks a new item, as Next does at the end of history and Random from anywhere in it, and adds it at the end. A
-   * press starts the count of files skipped in a row over, as Next, Previous, and the first Play do.
+   * Picks a new item, as Next does at the end of history and Random from anywhere in it, and puts it where Random
+   * behavior says: at the end with Jump, or right after the playing item with Insert. A press starts the count of files
+   * skipped in a row over, as Next, Previous, and the first Play do.
    */
   pickRandom(): Promise<void>;
   /**
@@ -323,7 +330,7 @@ export function createPlayer(options: PlayerOptions): Player {
   let autoPausedVideo = false;
   let autoHeldPhoto = false;
   /** Where the attempt playing now came from. */
-  let attemptOrigin: PlayOrigin = "forward";
+  let attemptOrigin: AttemptOrigin = "forward";
   /** Files skipped in a row, which starts over when a file loads and when the user starts a play. */
   let skips = 0;
   /**
@@ -711,7 +718,7 @@ export function createPlayer(options: PlayerOptions): Player {
    * Starts a play attempt for `item`: the last item stops at once, Loading… holds until the media plays, loads, or
    * fails, and the play is recorded unless the server already recorded it. The media loads with `loadMedia`.
    */
-  function beginAttempt(item: PlayingItem, origin: PlayOrigin, recordPlayback: boolean): number {
+  function beginAttempt(item: PlayingItem, origin: AttemptOrigin, recordPlayback: boolean): number {
     const { video, photo, emptyState, seekSlider } = elements!;
     store.playAttemptId.value += 1;
     const attemptId = store.playAttemptId.peek();
@@ -806,7 +813,7 @@ export function createPlayer(options: PlayerOptions): Player {
   }
 
   /** Plays the current item from where `origin` says it came from. */
-  function play(origin: PlayOrigin): void {
+  function play(origin: AttemptOrigin): void {
     const item = store.current.peek();
     if (!item || !elements) return;
     loadMedia(item, beginAttempt(item, origin, origin !== "library"));
@@ -1100,8 +1107,9 @@ export function createPlayer(options: PlayerOptions): Player {
 
   /**
    * Goes on from a failure whose cause is known. A file this browser can't play, or a missing one, reached forward or
-   * back is skipped in the same direction with a Skipped files popup, up to ten in a row; Previous at the oldest entry
-   * has nowhere to go. Anything else stops on its message.
+   * back is skipped in the same direction with a Skipped files popup, up to ten in a row, and one Insert put after the
+   * playing item by picking again with Insert; Previous at the oldest entry has nowhere to go. Anything else stops on
+   * its message.
    */
   function failed(attempt: ArmedAttempt, failure: MediaFailure): void {
     failurePhase = "failing";
@@ -1115,6 +1123,8 @@ export function createPlayer(options: PlayerOptions): Player {
     notifications.notify({ kind: "skips", text: skipText(failure), detail: fileName, key: "skip" });
     if (attemptOrigin === "back") {
       stepHistory(-1);
+    } else if (attemptOrigin === "inserted") {
+      void pick("afterCurrent");
     } else {
       advance();
     }
@@ -1153,7 +1163,11 @@ export function createPlayer(options: PlayerOptions): Player {
     autoPauseHolds = false;
   }
 
-  async function pick(): Promise<void> {
+  /**
+   * Picks with the applied filter and the Randomization tab's options, and puts the pick at the end of the history or,
+   * with `afterCurrent`, right after the playing item. Each answer brings this device's Shuffle cycle numbers.
+   */
+  async function pick(placement: "end" | "afterCurrent" = "end"): Promise<void> {
     const refusal = playRefusalNotice(store);
     if (refusal) {
       settleFailedMedia();
@@ -1161,12 +1175,7 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
 
-    const body = randomPickRequest({
-      clientId: store.identity.clientId,
-      appliedFilter: store.appliedFilter.peek(),
-      presets: store.presets.peek(),
-      selectedPresetValue: store.selectedPresetValue()
-    });
+    const body = currentRandomPickRequest(store);
 
     // A press while a pick is waiting sends nothing and holds nothing more; the pick that waits shows Loading….
     if (!pickWaiting) {
@@ -1178,6 +1187,9 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     pickWaiting = false;
+    if ((outcome.kind === "picked" || outcome.kind === "none") && outcome.cycle) {
+      store.randomCycle.value = outcome.cycle;
+    }
     try {
       if (outcome.kind !== "picked") {
         settleFailedMedia();
@@ -1199,9 +1211,15 @@ export function createPlayer(options: PlayerOptions): Player {
       }
 
       // The media holds Loading… before the pick lets go of it, so a pick and its media load are one loading period.
-      // A pick goes at the end of history, keeping every entry, wherever in it the press came from.
-      store.appendHistory(outcome.item);
-      play("forward");
+      // A pick goes at the end of history, or right after the playing item, keeping every entry either way, wherever in
+      // it the press came from.
+      if (placement === "afterCurrent") {
+        store.insertHistory(outcome.item);
+        play("inserted");
+      } else {
+        store.appendHistory(outcome.item);
+        play("forward");
+      }
     } finally {
       store.loading.release("pick");
     }
@@ -1379,7 +1397,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
     pickRandom() {
       userStarted();
-      return pick();
+      return pick(store.randomBehavior.peek() === "insert" ? "afterCurrent" : "end");
     },
 
     playOrPause() {

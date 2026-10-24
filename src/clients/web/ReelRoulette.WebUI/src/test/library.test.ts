@@ -10,6 +10,7 @@ import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
+import { createTagCatalog } from "../tags/tagCatalog";
 import { REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 const PLAYED: PlayingItem = {
@@ -109,7 +110,6 @@ function setup() {
   const clock = { ms: 0 };
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage: { getItem: () => null, setItem: () => {} },
     device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message),
     now: () => clock.ms
@@ -175,6 +175,7 @@ function setup() {
     notifications,
     panel,
     device: createDeviceStore(null),
+    tagCatalog: createTagCatalog({ api, connection }),
     createGrid(_host, onCoverage) {
       const grid = fakeGrid(onCoverage, page);
       grids.push(grid);

@@ -7,7 +7,6 @@ function setup() {
   const relayed: string[] = [];
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage: { getItem: () => null, setItem: () => {} },
     device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message.split(" hasCurrent")[0]!)
   });

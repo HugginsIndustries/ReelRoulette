@@ -16,6 +16,7 @@ import { createPlayerControls, type PlayerControls } from "../playback/playerCon
 import { createItemRatings } from "../rating/itemRatings";
 import { createPlayerRating, type PlayerRating } from "../rating/playerRating";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
+import { createRandomizationTab, type RandomizationTab } from "../random/randomizationTab";
 import { createSettings, type Settings } from "../settings/settings";
 import { createLibraryBaseline } from "../stats/libraryBaseline";
 import { createStatsTab, type StatsTab } from "../stats/statsTab";
@@ -37,8 +38,8 @@ export interface UnsavedTabs {
 /**
  * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, when its
  * controls show, its sound and loudness normalization and compression, ambient mode's glow, fullscreen, side panel, the
- * panel's library, filter, tag editor, and stats tabs, and the settings its Settings tab sets, with Auto-Pause pausing
- * the player as its mode says while the panel and Auto Tag cover it.
+ * panel's library, tag editor, stats, filter, and randomization tabs, and the settings its Settings tab sets, with
+ * Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -65,6 +66,7 @@ export interface AppServices {
   filterDialog: FilterDialog;
   tagEditor: TagEditor;
   statsTab: StatsTab;
+  randomization: RandomizationTab;
   /** Whether the Filter and Tags tabs hold unsaved changes, which the tabs' dots and the panel button's dot both show. */
   unsaved: ReadonlySignal<UnsavedTabs>;
   /** The lasting state the player's indicator shows, or null. */
@@ -91,7 +93,6 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       clientType: getClientType(),
       deviceName: getDeviceName()
     },
-    storage: localStorage,
     device,
     relay(level, message) {
       void api.relayLog(level, message);
@@ -147,10 +148,11 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     paused: player.paused,
     openFromControls: computed(() => notifications.listOpen.value || playerRating.popoverOpen.value)
   });
-  // After the player, so the player handles an item-state event before the library does.
-  const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
-  // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by.
+  // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by, and whose categories
+  // By category lists and the Library tab's Random line names.
   const tagCatalog = createTagCatalog({ api, connection });
+  // After the player, so the player handles an item-state event before the library does.
+  const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device, tagCatalog });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications, tagCatalog });
   const tagEditor = createTagEditor({
     store,
@@ -176,6 +178,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     ratings,
     device
   });
+  const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
   const settings = createSettings({ device });
   const ambient = createAmbient({
     enabled: settings.ambient,
@@ -193,13 +196,6 @@ export function createAppServices(config: RuntimeConfig): AppServices {
         return true;
       }
     },
-    filter: {
-      enter: () => void filterDialog.open(),
-      leave() {
-        filterDialog.close();
-        return true;
-      }
-    },
     tags: {
       enter: () => tagEditor.open(),
       leave() {
@@ -211,6 +207,20 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       enter: () => statsTab.open(),
       leave() {
         statsTab.close();
+        return true;
+      }
+    },
+    filter: {
+      enter: () => void filterDialog.open(),
+      leave() {
+        filterDialog.close();
+        return true;
+      }
+    },
+    randomization: {
+      enter: () => randomization.open(),
+      leave() {
+        randomization.close();
         return true;
       }
     },
@@ -252,6 +262,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     filterDialog,
     tagEditor,
     statsTab,
+    randomization,
     unsaved: computed(() => ({
       filter: filterDialog.view.value?.unsaved ?? false,
       tags: tagEditor.view.value?.savePending ?? false

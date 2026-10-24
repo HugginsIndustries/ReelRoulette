@@ -8,6 +8,8 @@ import {
   type FilterState
 } from "../filter/filterStateModel";
 import { PLAYBACK_REQUEST_TIMEOUT_MS, readJson, refusalError, UnauthorizedError, withTimeout } from "../api/serverRequest";
+import { randomPickOptionsRequest, type RandomOptions } from "../random/randomOptions";
+import type { AppStore, RandomCycle } from "../state/appStore";
 import type { components } from "../types/openapi.generated";
 
 type PlaybackItemResponse = components["schemas"]["PlaybackItemResponse"];
@@ -20,11 +22,13 @@ export interface RandomPickInputs {
   presets: readonly { id: string; filterState?: ApiFilterState | null }[];
   /** The preset dropdown's value: a preset id, empty for None, or the starred row. */
   selectedPresetValue: string;
+  /** The Randomization tab's options. */
+  options: RandomOptions;
 }
 
 /**
- * The body of `POST /api/random`. It names the preset dropdown's preset only while that preset's filter still equals
- * the applied filter.
+ * The body of `POST /api/random`, which `POST /api/random/cycle` takes too, with the Randomization tab's options. It
+ * names the preset dropdown's preset only while that preset's filter still equals the applied filter.
  */
 export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
   const selectedPreset =
@@ -42,7 +46,8 @@ export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
     clientId: inputs.clientId,
     includeVideos: true,
     includePhotos: true,
-    filterState: serializeFilterStateForApi(inputs.appliedFilter)
+    filterState: serializeFilterStateForApi(inputs.appliedFilter),
+    options: randomPickOptionsRequest(inputs.options)
   };
   if (presetId) {
     body.presetId = presetId;
@@ -50,12 +55,26 @@ export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
   return body;
 }
 
+/** The pick body for the applied filter, the preset dropdown's preset, and the Randomization tab's options as they are now. */
+export function currentRandomPickRequest(
+  store: Pick<AppStore, "identity" | "appliedFilter" | "presets" | "selectedPresetValue" | "randomOptions">
+): RandomPickRequest {
+  return randomPickRequest({
+    clientId: store.identity.clientId,
+    appliedFilter: store.appliedFilter.peek(),
+    presets: store.presets.peek(),
+    selectedPresetValue: store.selectedPresetValue(),
+    options: store.randomOptions.peek()
+  });
+}
+
 export type RandomPickOutcome =
   /** A pick is already waiting for the server, so nothing was sent. */
   | { kind: "busy" }
-  | { kind: "picked"; item: PlaybackItemResponse }
-  /** The server found nothing eligible for the filter. */
-  | { kind: "none" }
+  /** The picked item, and this device's Shuffle cycle numbers after the pick. */
+  | { kind: "picked"; item: PlaybackItemResponse; cycle: RandomCycle | null }
+  /** The server found nothing eligible for the filter, and its cycle numbers say so. */
+  | { kind: "none"; cycle: RandomCycle | null }
   | { kind: "unauthorized" }
   /** The server refused the pick, with an `HttpStatusError`, or the request failed. */
   | { kind: "failed"; error: unknown }
@@ -116,10 +135,11 @@ async function request(send: RandomPickSend, body: string, signal: AbortSignal):
 
     const data = await readJson<Partial<RandomPickResponse> | null>(response);
     const item = data?.item;
+    const cycle = data?.cycle ?? null;
     if (!item?.mediaUrl) {
-      return { kind: "none" };
+      return { kind: "none", cycle };
     }
-    return { kind: "picked", item };
+    return { kind: "picked", item, cycle };
   } catch (error) {
     // A send that answers 401 itself, as `api.request` does, asks for pairing and throws.
     if (error instanceof UnauthorizedError) {

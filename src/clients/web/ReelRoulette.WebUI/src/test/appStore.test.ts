@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultFilterState, HEADER_PRESET_STARRED_VALUE, serializeFilterStateForApi } from "../filter/filterStateModel";
 import { createAppStore, type AppStoreOptions, type PlayingItem } from "../state/appStore";
+import { DEFAULT_RANDOM_OPTIONS } from "../random/randomOptions";
 import { createDeviceStore } from "../state/deviceStore";
 
 const FAVORITES = {
@@ -29,7 +30,6 @@ function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, stri
   let now = 1_000;
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage,
     relay: (_level, message) => relayed.push(message),
     now: () => now,
     ...options,
@@ -46,37 +46,45 @@ function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, stri
 }
 
 describe("createAppStore", () => {
-  it("starts with the saved Advance after, autoplay settings, and randomization mode, and the defaults when they are missing or invalid", () => {
+  it("starts with the saved Advance after, autoplay settings, random pick options, and Random behavior, and the defaults when they are missing or invalid", () => {
+    const savedOptions = { ...DEFAULT_RANDOM_OPTIONS, shuffle: false, rememberPlaysForDays: null, favorHigherRated: true };
     const saved = setup({
       saved: {
         "rr_device.playback.advanceAfter": "3600",
         "rr_device.playback.autoplayMode": '"timer"',
         "rr_device.playback.loopStopsAutoplay": "false",
-        rr_randomizationMode: "SpreadMode"
+        "rr_device.randomization.options": JSON.stringify(savedOptions),
+        "rr_device.randomization.behavior": '"insert"'
       }
     }).store;
     expect(saved.advanceAfterSeconds.value).toBe(3600);
     expect(saved.autoplayMode.value).toBe("timer");
     expect(saved.loopStopsAutoplay.value).toBe(false);
-    expect(saved.randomizationMode.value).toBe("SpreadMode");
+    expect(saved.randomOptions.value).toEqual(savedOptions);
+    expect(saved.randomBehavior.value).toBe("insert");
 
     const invalid = setup({
       saved: {
         "rr_device.playback.advanceAfter": "3601",
         "rr_device.playback.autoplayMode": '"keep"',
         "rr_device.playback.loopStopsAutoplay": '"no"',
-        rr_randomizationMode: "Shuffle"
+        "rr_device.randomization.options": '"SpreadMode"',
+        "rr_device.randomization.behavior": '"after"'
       }
     }).store;
     expect(invalid.advanceAfterSeconds.value).toBe(10);
     expect(invalid.autoplayMode.value).toBe("normal");
     expect(invalid.loopStopsAutoplay.value).toBe(true);
-    expect(invalid.randomizationMode.value).toBe("SmartShuffle");
+    expect(invalid.randomOptions.value).toEqual(DEFAULT_RANDOM_OPTIONS);
+    expect(invalid.randomBehavior.value).toBe("jump");
 
     const empty = setup().store;
     expect(empty.advanceAfterSeconds.value).toBe(10);
     expect(empty.autoplayMode.value).toBe("normal");
     expect(empty.loopStopsAutoplay.value).toBe(true);
+    expect(empty.randomOptions.value).toEqual(DEFAULT_RANDOM_OPTIONS);
+    expect(empty.randomBehavior.value).toBe("jump");
+    expect(empty.randomCycle.value).toBeNull();
     expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "", message: true });
   });
 
@@ -130,14 +138,20 @@ describe("createAppStore", () => {
     expect(kept.loop.value).toBe(false);
   });
 
-  it("saves the randomization mode, and an empty one as Smart Shuffle", () => {
+  it("saves the random pick options and Random behavior on this device, under the device's own keys only", () => {
     const { store, storage } = setup();
-    store.setRandomizationMode("PureRandom");
-    expect(storage.values.get("rr_randomizationMode")).toBe("PureRandom");
+    const options = { ...DEFAULT_RANDOM_OPTIONS, spreadByTags: true, tagSpread: "byCategory" as const, spreadCategoryIds: ["people"] };
+    store.setRandomOptions(options);
+    store.setRandomBehavior("insert");
+    expect(store.randomOptions.value).toEqual(options);
+    expect(store.randomBehavior.value).toBe("insert");
+    expect(JSON.parse(storage.values.get("rr_device.randomization.options")!)).toEqual(options);
+    expect(storage.values.get("rr_device.randomization.behavior")).toBe('"insert"');
+    expect(storage.writtenKeys).toEqual(["rr_device.randomization.options", "rr_device.randomization.behavior"]);
 
-    store.setRandomizationMode("");
-    expect(store.randomizationMode.value).toBe("SmartShuffle");
-    expect(storage.values.get("rr_randomizationMode")).toBe("SmartShuffle");
+    const kept = setup({ saved: Object.fromEntries(storage.values) }).store;
+    expect(kept.randomOptions.value).toEqual(options);
+    expect(kept.randomBehavior.value).toBe("insert");
   });
 
   it("relays a message's text with the playing state, and relays a repeat once a second", () => {
@@ -282,6 +296,43 @@ describe("createAppStore", () => {
     expect(store.current.value?.isBlacklisted).toBe(true);
     expect(store.stepHistory(-1)).toBe(true);
     expect(store.current.value?.itemId).toBe("c");
+  });
+
+  it("inserts a random pick right after the playing entry, keeping the entries after it, with its last-seen favorite and blacklist", () => {
+    const { store } = setup();
+    const item = (itemId: string): PlayingItem => ({
+      id: `/media/${itemId}.mp4`,
+      itemId,
+      displayName: `${itemId}.mp4`,
+      mediaType: "video",
+      mediaUrl: `/api/media/${itemId}`,
+      isFavorite: false,
+      isBlacklisted: false,
+      rating: null
+    });
+    store.itemStates.remember("d", { isFavorite: true, isBlacklisted: false });
+
+    store.insertHistory(item("a"));
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a"]);
+    expect(store.historyIndex.value).toBe(0);
+    store.appendHistory(item("b"));
+    store.appendHistory(item("c"));
+    expect(store.stepHistory(-1)).toBe(true);
+    expect(store.stepHistory(-1)).toBe(true);
+
+    store.insertHistory(item("d"));
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "d", "b", "c"]);
+    expect(store.historyIndex.value).toBe(1);
+    expect(store.current.value?.itemId).toBe("d");
+    expect(store.current.value?.isFavorite).toBe(true);
+    expect(store.stepHistory(1)).toBe(true);
+    expect(store.current.value?.itemId).toBe("b");
+
+    // At the end of the history, Insert adds at the end, as Jump does.
+    expect(store.stepHistory(1)).toBe(true);
+    store.insertHistory(item("e"));
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "d", "b", "c", "e"]);
+    expect(store.historyIndex.value).toBe(4);
   });
 
   it("does not step through history before anything plays", () => {

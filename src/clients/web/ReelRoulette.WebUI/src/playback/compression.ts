@@ -1,5 +1,5 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
-import { isBoolean, type DeviceStore } from "../state/deviceStore";
+import { isBoolean, isRecord, type DeviceStore } from "../state/deviceStore";
 import { dbToGain } from "./loudnessNormalization";
 
 /** The per-device store's keys for Compression and its settings. */
@@ -99,10 +99,6 @@ export function webAudioMakeupDb(thresholdDb: number, kneeDb: number, ratio: num
 /** The gain after the compressor, in dB: Web Audio's makeup taken back, and the values' own makeup gain applied. */
 export function compressionGainDb(values: CompressorValues): number {
   return values.makeupDb - webAudioMakeupDb(values.thresholdDb, values.kneeDb, values.ratio);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function inRange(value: unknown, key: keyof CompressorValues): value is number {

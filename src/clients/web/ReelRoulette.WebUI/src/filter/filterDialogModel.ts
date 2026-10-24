@@ -1,4 +1,5 @@
 import { compareTagNames } from "../library/tagNameOrder";
+import { categoriesWithTags } from "../tags/tagEditorModel";
 import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 import {
   DATE_RANGE_PRESETS,
@@ -525,10 +526,6 @@ export function filterTagCategories(
   expanded: ReadonlySet<string>,
   applied: FilterState = filter
 ): FilterTagCategory[] {
-  const categories = (model?.categories || [])
-    .slice()
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || compareTagNames(a.name, b.name));
-  const tags = model?.tags || [];
   const chip = (name: string): FilterTagChip => ({
     name,
     included: containsIgnoringCase(filter.selectedTags, name),
@@ -549,14 +546,7 @@ export function filterTagCategories(
 
   const blocks: FilterTagCategory[] = [];
   const catalogNames = new Set<string>();
-  for (const category of categories) {
-    const names = tags
-      .filter((tag) => tag.categoryId === category.id)
-      .map((tag) => tag.name)
-      .sort(compareTagNames);
-    if (names.length === 0) {
-      continue;
-    }
+  for (const { category, names } of categoriesWithTags(model?.categories || [], model?.tags || [])) {
     for (const name of names) {
       catalogNames.add(String(name).toLowerCase());
     }

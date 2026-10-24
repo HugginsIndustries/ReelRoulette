@@ -82,6 +82,9 @@ export const LIBRARY_STATS = {
   sources: []
 };
 
+/** The Shuffle cycle the fake server answers with until a test sets its own: a device with no picks of nothing eligible. */
+export const EMPTY_CYCLE = { picked: 0, eligible: 0, remaining: 0 };
+
 /** Answers the page's requests by method and path. Unknown routes answer 404. */
 export class FakeServer {
   readonly calls: FetchCall[] = [];
@@ -95,6 +98,8 @@ export class FakeServer {
     this.on("POST", "/api/library/query", () => json({ items: [], totalCount: 0, searchBaselineCount: 0 }));
     this.on("POST", "/api/record-playback", () => json({}));
     this.on("GET", "/api/library/stats", () => json(LIBRARY_STATS));
+    this.on("POST", "/api/random/cycle", () => json(EMPTY_CYCLE));
+    this.on("POST", "/api/random/reset", () => status(204));
   }
 
   on(method: string, path: string, reply: Reply): this {

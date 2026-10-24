@@ -20,12 +20,13 @@ Instructions:
 
 Commit Message:
 
-M12k6: Take random pick options on the random route, with Shuffle cycle and reset routes and memory per device
+M12k6: Set random pick options in the WebUI's Randomization tab, with the Shuffle cycle card, Random behavior, and the Random line
 
-- API: POST /api/random takes the random pick options in place of the randomization mode, each missing or unknown one at its default, and answers the picked item, or null when nothing is eligible, with the device's Shuffle cycle numbers. POST /api/random/cycle reads those numbers for a filter and options, and POST /api/random/reset clears the device's Shuffle memory.
-- Server: random-pick memory is kept per client id instead of per client and session, so tabs and app relaunches on one device share it, and a pick drops the memory of devices whose last pick is past its window. The pick's last.log line names the options and the window.
-- Core: the candidate read adds each file's date added, date created, and rating, and its tags while Spread by tags is on, in one read transaction. One helper groups item tags for every read that needs it.
-- Contract: RandomResponse is PlaybackItemResponse, which the play route answers, sessionId leaves the random request, and OpenAPI, the generated WebUI types, and docs/api.md describe the options and both routes.
-- WebUI: random picks send no options until the Randomization tab, so every pick shuffles and spreads by folder, and the pick reads the item from the new answer.
-- Tests: every random test seeds or scripts its rolls, with a test clock for the window and the per-device memory, replacing the flaky Weighted random test.
-- Docs: CONTEXT.md, docs/architecture.md, docs/domain-inventory.md, and CHANGELOG.md follow, ISSUES.md drops "Shuffle states pile up for every client session", and MILESTONES.md records the Contract slice's evidence and what it leaves for the WebUI slice.
+- WebUI: a Randomization tab, between Filter and Settings, sets Shuffle with Remember plays for and Reset now, Spread by folder and by tags, all tags or chosen categories, the four Favor options, and Random behavior, each applying at once and kept per device; every pick sends the options.
+- WebUI: the Shuffle cycle card shows this device's picked, eligible, and remaining files from each pick's answer and the cycle route, which it reads again when the server becomes ready or asks for a resync, and Reset now clears the device's memory through the reset route, disabled with a reason while the server holds back or asks for pairing.
+- WebUI: Random behavior's Insert puts a Random or R pick right after the playing item, keeping the plays ahead, and a skipped file there picks again with Insert.
+- WebUI: the Library tab's randomization dropdown is gone, with its bare storage key; preset and search share a row above sort, and a Random line under the Filters line names the options and opens the tab.
+- WebUI: the panel's tabs are Library, Tags, Stats, Filter, Randomization, and Settings, and 1 to 6 open them in that order.
+- Refactor: the Settings tab's controls, the Stats tab's cards, the held-back message, the category order, and the record check are shared rather than copied.
+- Mockup: Reset now's disabled state and the cycle card's failure reason match the app.
+- Docs: CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md follow, M12k6 moves to MILESTONES-COMPLETED.md with the WebUI slice's evidence and two corrected Traps, and its release check joins the testing checklist, whose Library tab check drops the randomization dropdown and whose Random check names Jump; the keyboard navigation and profile visibility milestones name the new shared files and the Random line.

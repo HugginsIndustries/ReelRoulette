@@ -87,7 +87,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, the panel opens beside the player or as an overlay by width, and a phone on its side fills the screen with the player.
 - [ ] As an installed app on the iPad and an Android phone, the header (upright) and the panel and the player's controls (upright, on its side, and on Android in fullscreen) stay clear of the notch, the status bar, and the home indicator; with the phone on its side, stopping the server shows the reconnecting indicator on the player.
 - [ ] As an installed app on an iPad, launched in landscape and in portrait, the page and pseudo-fullscreen reach the bottom of the screen, and still do after turning it.
-- [ ] In the WebUI's Library tab on a phone, a tablet, and a desktop browser, the preset and randomization dropdowns share a row in a panel about 440 px wide or wider and stack in a narrower one, the four controls take two rows on a phone on its side, and the tiles' favorite, blacklist, and playing icons show solid, with no gap between outline and fill.
+- [ ] In the WebUI's Library tab on a phone, a tablet, and a desktop browser, the preset dropdown and search share a row in a panel about 440 px wide or wider and stack in a narrower one, the preset and search take the first row and sort the second on a phone on its side, and the tiles' favorite, blacklist, and playing icons show solid, with no gap between outline and fill.
 - [ ] On a phone and a desktop browser, in both themes, the WebUI's Filter and Tags tabs look as the mockup shows them, Auto Tag covers the whole page, in fullscreen too, its count columns line up under their headers, and tapping a tag category's header toggles it.
 - [ ] On a phone and a desktop browser, with Auto-Pause on Responsive, playback keeps going on every tab beside the player, and the overlay and Auto Tag pause it and resume it on close.
 - [ ] In both themes on a phone and a desktop browser, the scrub bar and checkboxes are orange, the player's time is white, and the scrub bar moves smoothly on a video and fills smoothly on a photo with Autoplay on.
@@ -114,7 +114,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 - [ ] With compression on, quiet and loud moments within a video come closer without audible pumping, in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 - [ ] On a desktop browser and the Pixel's installed app, the player's controls hide about 3 seconds after the last activity while a video plays, a mouse move or a tap shows them, and autoplay moving on to the next item leaves them hidden; on the Pixel, a tap where a hidden button sits only shows the controls.
-- [ ] On a desktop browser and the Pixel's installed app, Random from the middle of the history plays a new item, after which Previous goes to the item that was last before it, and the fullscreen button shows the exit icon in fullscreen.
+- [ ] On a desktop browser and the Pixel's installed app, with Random behavior on Jump, Random from the middle of the history plays a new item, after which Previous goes to the item that was last before it, and the fullscreen button shows the exit icon in fullscreen.
 - [ ] In Firefox on the desktop, K, Space, J and L, M, the left and right arrows, and [ and ] work, and H opens the shortcut reference, in normal view and in fullscreen.
 - [ ] On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows the controls, and the page doesn't zoom or flash a tap highlight.
 - [ ] On the server machine at `http://localhost`, Show in File Manager opens the file manager with the playing file selected on Linux and Windows, for a file whose path has spaces; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
@@ -126,6 +126,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On the iPad and an Android phone in both orientations, and in a desktop browser, the player's star shows the playing item's rating in its badge, and its popover sets one by touch or click and closes.
 - [ ] In the WebUI, Only unrated and a Min Rating each limit browse and random play, the rating sort orders the library, and a preset saved with a Min Rating keeps it.
 - [ ] In the WebUI, Added and Created limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
+- [ ] On a desktop browser, the iPad, and an Android phone, the Randomization tab's options change the picks at once, the Random line names them and opens the tab, and they're kept after a page refresh.
 
 ## Release Flow
 

@@ -1048,7 +1048,8 @@ html.theme-light .ambient canvas {
 .fullscreen-stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] { bottom: 112px; }
 .player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
 /* The Filter, Tags, Stats, and Settings tabs, as the mockup lays them out: a head with the heading and a body that
-   scrolls, with icon buttons in the head and a footer in the Filter and Tags tabs. */
+   scrolls, with icon buttons in the head and a footer in the Filter and Tags tabs. The Randomization tab is laid out
+   as the Settings tab is. */
 .filter-dialog,
 .tag-editor,
 .stats-tab,
@@ -1159,7 +1160,7 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
   padding: 10px;
 }
 .tag-editor-body .tag-category { background: var(--surface); }
-/* The Stats and Settings tabs: their sections, each bordered, in a body that scrolls. */
+/* The Stats, Randomization, and Settings tabs: their sections, each bordered, in a body that scrolls. */
 .stats-body,
 .settings-body {
   flex: 1;
@@ -1206,7 +1207,8 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .stat-card { border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 10px; }
 .stat-card .value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .stat-card .label { font-size: 0.8rem; color: var(--muted-fg); }
-.stats-section .filter-hint.is-error { color: var(--error); opacity: 1; }
+.stats-section .filter-hint.is-error,
+.settings-section .filter-hint.is-error { color: var(--error); opacity: 1; }
 .setting { margin-bottom: 12px; }
 .setting:last-child { margin-bottom: 0; }
 .setting-label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.92rem; }
@@ -1245,6 +1247,9 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .setting-fields:disabled, .choice-row label:has(input:disabled) { opacity: 0.55; }
 .setting-fields:disabled .choice-row label:has(input:disabled) { opacity: 1; }
 #settings-popup-position { justify-self: start; min-width: 12rem; }
+/* The Randomization tab's cycle card, under its heading, and Remember plays for, as wide as Popup position. */
+.cycle-body { padding-top: 4px; }
+#randomization-window { min-width: 12rem; }
 /* The Keyboard shortcuts section opens like Ambient mode settings, from its heading. */
 .setting-more.shortcuts-more { margin: 0; }
 .shortcuts-more summary h3 { margin: 0; }
@@ -1653,8 +1658,8 @@ html.theme-light .library-overlay-status-error {
   color: #b42318;
 }
 
-/* The Library tab's controls, in order: the preset and randomization mode, sort with its direction, and search. They
-   collapse with the Filters line. */
+/* The Library tab's controls, in order: the preset and search, then sort with its direction. They collapse with the
+   Filters line and the Random line. */
 .library-controls {
   container: library-controls / inline-size;
   flex: 0 0 auto;
@@ -1667,12 +1672,13 @@ html.theme-light .library-overlay-status-error {
   flex-direction: column;
   gap: 8px;
 }
-/* The preset and randomization mode share a row from a panel about 440 px wide, the controls being 26 px narrower. */
+/* The preset and search share a row from a panel about 440 px wide, the controls being 26 px narrower; narrower, they
+   stack. */
 @container library-controls (min-width: 414px) {
   .library-controls-pair {
     flex-direction: row;
   }
-  .library-controls-pair > select {
+  .library-controls-pair > * {
     flex: 1 1 0;
   }
 }
@@ -1706,11 +1712,12 @@ html.theme-light .library-overlay-status-error {
   white-space: nowrap;
 }
 .library-controls.is-collapsed,
-.library-filter-summary.is-collapsed {
+.library-line.is-collapsed {
   display: none !important;
 }
-/* The Filters line: one line naming the applied filters, which opens the Filter tab. */
-.library-overlay button.library-filter-summary {
+/* The Filters line and the Random line: each one line, naming the applied filters or the random pick options, which
+   opens the Filter or the Randomization tab. */
+.library-overlay button.library-line {
   flex: 0 0 auto;
   display: block;
   width: 100%;
@@ -1726,10 +1733,10 @@ html.theme-light .library-overlay-status-error {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.library-overlay button.library-filter-summary[hidden] {
+.library-overlay button.library-line[hidden] {
   display: none;
 }
-.library-filter-summary b {
+.library-line b {
   color: var(--page-fg);
   font-weight: 600;
 }
@@ -1757,7 +1764,7 @@ html.theme-light .library-controls select {
 html.theme-light .library-overlay-summary {
   color: #555;
 }
-html.theme-light .library-overlay button.library-filter-summary {
+html.theme-light .library-overlay button.library-line {
   background: transparent;
   color: var(--muted-fg);
   border-color: var(--surface-border);
@@ -2043,7 +2050,7 @@ body.short-screen .stats-tab-header h2,
 body.short-screen .settings-tab-header h2 {
   font-size: 1rem;
 }
-body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-filter-summary),
+body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-line),
 body.short-screen .library-overlay-search,
 body.short-screen .library-controls select,
 body.short-screen .app-dialog button,
@@ -2057,7 +2064,7 @@ body.short-screen .text-tab {
   min-height: 38px;
   font-size: 1rem;
 }
-/* The Library tab's four controls take two rows. */
+/* The Library tab's controls take two rows: the preset and search, then sort with its direction across both columns. */
 body.short-screen .library-controls {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2065,6 +2072,9 @@ body.short-screen .library-controls {
 }
 body.short-screen .library-controls-pair {
   display: contents;
+}
+body.short-screen .library-controls-sort {
+  grid-column: 1 / -1;
 }
 body.short-screen .app-dialog {
   max-height: calc(100dvh - 12px);

@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
+import type { DeviceStorage } from "../state/deviceStore";
 import { HttpStatusError, readJson, refusalError, sendRequest } from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
@@ -23,19 +24,17 @@ const SESSION_ID_KEY = "rr_sessionId";
 let fallbackClientId: string | null = null;
 let fallbackSessionId: string | null = null;
 
-type StorageLike = Pick<Storage, "getItem" | "setItem">;
-
-function tryGetStorage(storage: unknown): StorageLike | null {
+function tryGetStorage(storage: unknown): DeviceStorage | null {
   if (!storage || typeof storage !== "object") {
     return null;
   }
 
-  const candidate = storage as Partial<StorageLike>;
+  const candidate = storage as Partial<DeviceStorage>;
   if (typeof candidate.getItem !== "function" || typeof candidate.setItem !== "function") {
     return null;
   }
 
-  return candidate as StorageLike;
+  return candidate as DeviceStorage;
 }
 
 function buildApiUrl(config: Pick<RuntimeConfig, "apiBaseUrl">, path: string): string {

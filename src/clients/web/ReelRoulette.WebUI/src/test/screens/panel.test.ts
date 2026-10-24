@@ -124,7 +124,7 @@ function tabRow(): HTMLElement {
   return panel().querySelector(".panel-tablist") as HTMLElement;
 }
 
-function tab(name: "Library" | "Filter" | "Tags" | "Settings"): HTMLButtonElement {
+function tab(name: "Library" | "Filter" | "Tags" | "Randomization" | "Settings"): HTMLButtonElement {
   // A tab's name says so while it holds unsaved changes.
   return within(tabRow()).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
 }
@@ -272,13 +272,13 @@ describe("panel button", () => {
 });
 
 describe("tabs", () => {
-  it("are one row of icons, Library, Filter, Tags, Stats, and Settings, each with a tooltip and an accessible name", async () => {
+  it("are one row of icons, Library, Tags, Stats, Filter, Randomization, and Settings, each with a tooltip and an accessible name", async () => {
     await mount();
     const tabs = within(tabRow()).getAllByRole("tab", { hidden: true });
 
-    expect(tabs.map((button) => button.getAttribute("aria-label"))).toEqual(["Library", "Filter", "Tags", "Stats", "Settings"]);
-    expect(tabs.map((button) => button.title)).toEqual(["Library", "Filter", "Tags", "Stats", "Settings"]);
-    expect(tabs.map(icon)).toEqual(["browse", "filter_alt", "tag", "bar_chart", "settings"]);
+    expect(tabs.map((button) => button.getAttribute("aria-label"))).toEqual(["Library", "Tags", "Stats", "Filter", "Randomization", "Settings"]);
+    expect(tabs.map((button) => button.title)).toEqual(["Library", "Tags", "Stats", "Filter", "Randomization", "Settings"]);
+    expect(tabs.map(icon)).toEqual(["browse", "tag", "bar_chart", "filter_alt", "casino", "settings"]);
     expect(tabs.every((button) => button.parentElement === tabRow())).toBe(true);
     expect(tabRow().getAttribute("role")).toBe("tablist");
   });
@@ -287,7 +287,7 @@ describe("tabs", () => {
     await mount();
     await click(panelButton());
 
-    for (const name of ["Settings", "Tags", "Filter", "Library"] as const) {
+    for (const name of ["Settings", "Randomization", "Tags", "Filter", "Library"] as const) {
       await click(tab(name));
       expect(shownPages()).toEqual([name]);
       expect(selectedTab()).toBe(name);

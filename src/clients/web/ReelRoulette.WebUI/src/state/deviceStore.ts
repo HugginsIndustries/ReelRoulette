@@ -18,6 +18,11 @@ export function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
 }
 
+/** Takes a setting kept as a record of fields, for `read`, so each field can be checked on its own. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export type DeviceStorage = Pick<Storage, "getItem" | "setItem">;
 
 export function createDeviceStore(storage: DeviceStorage | null): DeviceStore {

@@ -245,11 +245,11 @@ describe("Stats tab", () => {
     expect(document.getElementById("panel")!.hidden).toBe(false);
   });
 
-  it("is the Stats tab, with its icon, between Tags and Settings", async () => {
+  it("is the Stats tab, with its icon, between Tags and Filter", async () => {
     await mountStats({ play: false });
     const tabs = [...document.querySelectorAll(".panel-tablist .panel-tab")];
 
-    expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual(["Library", "Filter", "Tags", "Stats", "Settings"]);
+    expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual(["Library", "Tags", "Stats", "Filter", "Randomization", "Settings"]);
     expect(document.getElementById("panel-tab-stats")!.textContent).toBe("bar_chart");
   });
 

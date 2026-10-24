@@ -244,7 +244,7 @@ describe("a phone on its side", () => {
     expect(currentStyle(document.getElementById("autotag-full")!).minHeight).not.toBe("38px");
   });
 
-  it("puts the Library tab's four controls in two rows, as the mockup does", async () => {
+  it("puts the Library tab's controls in two rows, the preset and search, then sort across both columns, as the mockup does", async () => {
     stubCoarsePointer();
     setViewport(ON_ITS_SIDE);
     await mount();
@@ -254,6 +254,7 @@ describe("a phone on its side", () => {
     expect(currentStyle(controls).display).toBe("grid");
     expect(currentStyle(controls).gridTemplateColumns).toBe("1fr 1fr");
     expect(currentStyle(controls.querySelector(".library-controls-pair")!).display).toBe("contents");
+    expect(currentStyle(controls.querySelector(".library-controls-sort")!).gridColumn).toBe("1 / -1");
     expect(currentStyle(document.getElementById("preset-select")!).minHeight).toBe("38px");
     expect(currentStyle(document.getElementById("library-search-input")!).minHeight).toBe("38px");
   });

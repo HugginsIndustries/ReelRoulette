@@ -1,5 +1,5 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
-import { isBoolean, type DeviceStore } from "../state/deviceStore";
+import { isBoolean, isRecord, type DeviceStore } from "../state/deviceStore";
 
 /** The per-device store's keys for Loudness normalization and its settings. */
 export const NORMALIZATION_KEY = "audio.normalization";
@@ -106,10 +106,6 @@ export function automaticLine(baseline: number | null): string {
 /** A gain in dB as the linear factor a gain node takes. */
 export function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function inRange(value: unknown, range: { min: number; max: number }): value is number {

@@ -241,10 +241,10 @@ describe("keyboard shortcuts", () => {
     expect(video().currentTime).toBe(25);
     expect(seekSlider().value).toBe("25");
 
-    await press("5");
+    await press("6");
     const steps = within(panel()).getByRole("radiogroup", { name: "Seek step", hidden: true });
     await click(within(steps).getByRole("radio", { name: "10 seconds", hidden: true }));
-    await press("5");
+    await press("6");
     await press("k");
     await press("l");
     expect(video().currentTime).toBe(35);
@@ -284,6 +284,29 @@ describe("keyboard shortcuts", () => {
     await press("r");
     expect(randomPicks(server)).toBe(3);
     expect(video().src).toContain("item-video-3");
+    // Jump, the default, adds the pick at the end of the history.
+    await press("ArrowLeft");
+    expect(video().src).toContain("item-video-2");
+  });
+
+  it("R, with Random behavior on Insert, puts the pick right after the playing item, keeping the plays ahead after it", async () => {
+    localStorage.setItem("rr_device.randomization.behavior", '"insert"');
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, THIRD_VIDEO);
+    await mount(server);
+    await press("k");
+    await press("ArrowRight");
+    await press("ArrowLeft");
+    expect(video().src).toContain("item-video?");
+
+    await press("r");
+    expect(randomPicks(server)).toBe(3);
+    expect(video().src).toContain("item-video-3");
+    await press("ArrowRight");
+    expect(video().src).toContain("item-video-2");
+    expect(randomPicks(server)).toBe(3);
+    await press("ArrowLeft");
+    await press("ArrowLeft");
+    expect(video().src).toContain("item-video?");
   });
 
   it("F and B favorite and blacklist the playing item, A turns Autoplay on and off, and M mutes", async () => {
@@ -353,14 +376,14 @@ describe("keyboard shortcuts", () => {
     expect([volumeSlider().value, volumeIndicator()]).toEqual(["95", { shown: true, text: "95%" }]);
   });
 
-  it("1 to 5 open the panel on Library, Filter, Tags, Stats, and Settings, the open tab's key closes it, T and S open Tags and Settings, and P shows or hides it", async () => {
+  it("1 to 6 open the panel on Library, Tags, Stats, Filter, Randomization, and Settings, the open tab's key closes it, T and S open Tags and Settings, and P shows or hides it", async () => {
     await mount(serverPicking(VIDEO_ITEM));
     const shown: (string | null)[] = [];
-    for (const key of ["1", "1", "2", "3", "4", "5", "t", "s", "s", "p", "p"]) {
+    for (const key of ["1", "1", "2", "3", "4", "5", "6", "t", "s", "s", "p", "p"]) {
       await press(key);
       shown.push(shownTab());
     }
-    expect(shown).toEqual(["library", null, "filter", "tags", "stats", "settings", "tags", "settings", null, "settings", null]);
+    expect(shown).toEqual(["library", null, "tags", "stats", "filter", "randomization", "settings", "tags", "settings", null, "settings", null]);
   });
 
   it("Shift+F enters and leaves fullscreen", async () => {
@@ -390,7 +413,7 @@ describe("keyboard shortcuts", () => {
     await mount(serverPicking(VIDEO_ITEM));
     await press("k");
     await loadVideo(65);
-    for (const key of ["Escape", "s", "5", "p"]) {
+    for (const key of ["Escape", "s", "6", "p"]) {
       await press("h");
       expect(document.activeElement).toBe(shortcutsSection().querySelector("summary"));
       await press(key, {}, document.activeElement!);
@@ -426,7 +449,7 @@ describe("keyboard shortcuts", () => {
 
   it("lists every binding in the reference, and H among them", async () => {
     await mount(serverPicking(VIDEO_ITEM));
-    await press("5");
+    await press("6");
     const list = shortcutsSection().querySelector(".shortcut-list")!;
     const rows = Array.from(list.querySelectorAll("dt")).map((term) => [term.textContent, term.nextElementSibling?.textContent]);
     expect(rows).toEqual([
@@ -443,7 +466,7 @@ describe("keyboard shortcuts", () => {
       ["M", "Mute"],
       [", / .", "One frame back or forward, while a video is paused"],
       ["[ / ]", "Volume down or up by the volume step"],
-      ["1 – 5", "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"],
+      ["1 – 6", "Open Library, Tags, Stats, Filter, Randomization, or Settings; the open tab's key closes the panel"],
       ["T", "Tags"],
       ["S", "Settings"],
       ["P", "Show or hide the panel"],
@@ -687,7 +710,7 @@ describe("the Stats tab's rating", () => {
     await press("k");
     await press("ArrowRight");
     expect(video().src).toContain("item-video-2");
-    await press("4");
+    await press("3");
     await waitFor(() => expect(document.querySelector("#stats-body .rating")).not.toBeNull());
     return document.querySelector<HTMLElement>("#stats-body .rating")!;
   }

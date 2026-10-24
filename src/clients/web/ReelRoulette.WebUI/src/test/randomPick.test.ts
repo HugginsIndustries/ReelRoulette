@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpStatusError, PLAYBACK_REQUEST_TIMEOUT_MS, UnexpectedResponseError } from "../api/serverRequest";
 import { HEADER_PRESET_STARRED_VALUE, createDefaultFilterState } from "../filter/filterStateModel";
+import { DEFAULT_RANDOM_OPTIONS } from "../random/randomOptions";
 import {
   createRandomPicker,
   randomPickRequest,
@@ -8,7 +9,7 @@ import {
   type RandomPickOutcome,
   type RandomPickSend
 } from "../playback/randomPick";
-import { randomAnswer } from "./randomAnswer";
+import { answerCycle, randomAnswer } from "./randomAnswer";
 import { LIBRARY_EMPTY } from "./serverReasons";
 
 interface SentRequest {
@@ -68,12 +69,12 @@ describe("randomPick", () => {
     expect(JSON.parse(sent[0].body)).toEqual({ press: 1 });
 
     sent[0].resolve(randomAnswer(randomItem("a")));
-    await expect(first).resolves.toEqual({ kind: "picked", item: randomItem("a") });
+    await expect(first).resolves.toEqual({ kind: "picked", item: randomItem("a"), cycle: answerCycle(true) });
 
     const next = picker.pick({ press: 4 });
     expect(sent).toHaveLength(2);
     sent[1].resolve(randomAnswer(randomItem("b")));
-    await expect(next).resolves.toEqual({ kind: "picked", item: randomItem("b") });
+    await expect(next).resolves.toEqual({ kind: "picked", item: randomItem("b"), cycle: answerCycle(true) });
   });
 
   it("cancels a pick the server does not answer within the timeout and lets the next press start a fresh one", async () => {
@@ -99,7 +100,7 @@ describe("randomPick", () => {
     expect(sent).toHaveLength(2);
     expect(sent[1].signal.aborted).toBe(false);
     sent[1].resolve(randomAnswer(randomItem("b")));
-    await expect(fresh).resolves.toEqual({ kind: "picked", item: randomItem("b") });
+    await expect(fresh).resolves.toEqual({ kind: "picked", item: randomItem("b"), cycle: answerCycle(true) });
   });
 
   it("ignores an answer that arrives after a newer pick was sent", async () => {
@@ -117,7 +118,7 @@ describe("randomPick", () => {
     await expect(picker.pick({ press: 3 })).resolves.toEqual({ kind: "busy" });
 
     sent[1].resolve(randomAnswer(randomItem("b")));
-    await expect(newer).resolves.toEqual({ kind: "picked", item: randomItem("b") });
+    await expect(newer).resolves.toEqual({ kind: "picked", item: randomItem("b"), cycle: answerCycle(true) });
     expect(sent).toHaveLength(2);
   });
 
@@ -138,11 +139,11 @@ describe("randomPick", () => {
     const refused = await picker.pick({});
     expect(refused).toEqual({ kind: "failed", error: expect.any(HttpStatusError) });
     expect(refused).toMatchObject({ error: { status: 503, reason: LIBRARY_EMPTY } });
-    await expect(picker.pick({})).resolves.toEqual({ kind: "none" });
+    await expect(picker.pick({})).resolves.toEqual({ kind: "none", cycle: answerCycle(null) });
     await expect(picker.pick({})).resolves.toEqual({ kind: "failed", error: new TypeError("Failed to fetch") });
     const unexpected = await picker.pick({});
     expect(unexpected).toEqual({ kind: "failed", error: expect.any(UnexpectedResponseError) });
-    await expect(picker.pick({})).resolves.toEqual({ kind: "picked", item: randomItem("a") });
+    await expect(picker.pick({})).resolves.toEqual({ kind: "picked", item: randomItem("a"), cycle: answerCycle(true) });
   });
 });
 
@@ -152,7 +153,8 @@ describe("randomPickRequest", () => {
     clientId: "client-1",
     appliedFilter: { ...createDefaultFilterState(), favoritesMode: "only" },
     presets: [favorites],
-    selectedPresetValue: " preset-favorites "
+    selectedPresetValue: " preset-favorites ",
+    options: DEFAULT_RANDOM_OPTIONS
   };
 
   it("names the preset dropdown's preset while its filter equals the applied filter", () => {
@@ -164,7 +166,35 @@ describe("randomPickRequest", () => {
       presetId: "preset-favorites"
     });
     expect(body.filterState?.favoritesMode).toBe("only");
-    expect(Object.keys(body)).toEqual(["clientId", "includeVideos", "includePhotos", "filterState", "presetId"]);
+    expect(Object.keys(body)).toEqual(["clientId", "includeVideos", "includePhotos", "filterState", "options", "presetId"]);
+  });
+
+  it("sends the Randomization tab's options, the defaults until they change", () => {
+    expect(randomPickRequest(inputs).options).toEqual({
+      shuffle: true,
+      rememberPlaysForDays: 30,
+      spreadByFolder: true,
+      spreadByTags: "off",
+      favorLessPlayed: false,
+      favorNewlyAdded: false,
+      favorNewlyCreated: false,
+      favorHigherRated: false
+    });
+    const changed = randomPickRequest({
+      ...inputs,
+      options: { ...DEFAULT_RANDOM_OPTIONS, shuffle: false, rememberPlaysForDays: null, spreadByTags: true, tagSpread: "byCategory", spreadCategoryIds: ["people"], favorHigherRated: true }
+    });
+    expect(changed.options).toEqual({
+      shuffle: false,
+      rememberPlaysForDays: null,
+      spreadByFolder: true,
+      spreadByTags: "byCategory",
+      spreadCategoryIds: ["people"],
+      favorLessPlayed: false,
+      favorNewlyAdded: false,
+      favorNewlyCreated: false,
+      favorHigherRated: true
+    });
   });
 
   it("leaves the preset out for None, the starred row, and a preset whose filter no longer matches", () => {

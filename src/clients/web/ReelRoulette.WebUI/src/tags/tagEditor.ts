@@ -17,8 +17,8 @@ import {
   type TaggedItem
 } from "../library/tagSave";
 import type { AppApi } from "../state/appApi";
-import type { AppStore, StorageLike } from "../state/appStore";
-import type { DeviceStore } from "../state/deviceStore";
+import type { AppStore } from "../state/appStore";
+import type { DeviceStorage, DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
@@ -270,7 +270,7 @@ export interface TagEditorOptions {
   /** This device's memory, for the categories expanded. */
   device: DeviceStore;
   /** Browser `localStorage`, for Scan full library. */
-  localStorage: StorageLike;
+  localStorage: DeviceStorage;
   /** The in-app dialogs, for the confirmations and the notices of what failed. */
   dialogs: Pick<Dialogs, "confirm" | "notice">;
   /** The one-off messages: a save that landed says so. */

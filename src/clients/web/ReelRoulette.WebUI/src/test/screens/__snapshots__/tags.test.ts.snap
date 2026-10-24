@@ -80,9 +80,9 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
 `;
 
 exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag dialog's > edit tag dialog 1`] = `
-"<dialog aria-labelledby="P0-14" class="app-dialog" open="">
+"<dialog aria-labelledby="P0-15" class="app-dialog" open="">
   <div class="dialog-body">
-    <h3 id="P0-14">
+    <h3 id="P0-15">
       "Edit Tag"
     <label for="tag-edit-name">
       "Tag Name"
@@ -123,7 +123,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
   <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
     <section class="tag-category">
       <div class="tag-category-header">
-        <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle" title="Drag to reorder" type="button">
+        <button aria-describedby="P0-1" aria-label="Reorder Places" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
         <button aria-controls="tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag on this item, unsaved changes" class="tag-category-toggle" title="Collapse category" type="button">
@@ -162,7 +162,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
               "edit_note"
     <section class="tag-category is-collapsed">
       <div class="tag-category-header">
-        <button aria-describedby="P0-2" aria-label="Reorder Mood" class="drag-handle" title="Drag to reorder" type="button">
+        <button aria-describedby="P0-1" aria-label="Reorder Mood" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
         <button aria-controls="tag-grid-cat-mood" aria-expanded="false" aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
@@ -189,7 +189,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
               "edit_note"
     <section class="tag-category">
       <div class="tag-category-header">
-        <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle" title="Drag to reorder" type="button">
+        <button aria-describedby="P0-1" aria-label="Reorder People" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
         <button aria-controls="tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag on this item, unsaved changes" class="tag-category-toggle" title="Collapse category" type="button">
@@ -250,7 +250,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <button aria-label="Edit tag Loose" class="icon-btn" title="Edit tag" type="button">
             <span class="material-symbol-icon">
               "edit_note"
-  <p class="visually-hidden" id="P0-2">
+  <p class="visually-hidden" id="P0-1">
     "Drag to reorder, or press the up and down arrow keys."
   <div aria-live="polite" class="visually-hidden">
   <div class="tag-editor-footer">

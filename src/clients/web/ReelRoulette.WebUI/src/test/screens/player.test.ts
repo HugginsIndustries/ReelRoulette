@@ -2254,6 +2254,32 @@ describe("Random", () => {
     expect(video().src).toBe(SECOND_VIDEO_URL);
   });
 
+  it("with Random behavior on Insert, from the middle of history puts the pick right after the playing item, keeping the plays ahead after it, while Next at the end still adds at the end", async () => {
+    localStorage.setItem("rr_device.randomization.behavior", '"insert"');
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, PHOTO_ITEM);
+    const { store } = await mountWithServices(server);
+
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    await click(button("Next"));
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+
+    await click(button("Random"));
+    await waitFor(() => expect(photo().src).toBe(PHOTO_URL));
+    expect(randomPicks(server)).toBe(3);
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["item-video", "item-photo", "item-video-2"]);
+    expect(store.historyIndex.value).toBe(1);
+    await click(button("Next"));
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    expect(randomPicks(server)).toBe(3);
+
+    await click(button("Next"));
+    await waitFor(() => expect(randomPicks(server)).toBe(4));
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["item-video", "item-photo", "item-video-2", "item-photo"]);
+  });
+
   it("with nothing playing, picks as Play does", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mount(server);

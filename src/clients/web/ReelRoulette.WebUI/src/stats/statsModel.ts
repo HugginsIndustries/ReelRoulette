@@ -38,7 +38,7 @@ export interface StatsFileView {
 }
 
 /** What the Stats tab shows of the library: its cards, a message in their place, or nothing yet. */
-export type StatsLibraryView = { kind: "cards"; cards: StatsCard[] } | { kind: "message"; text: string; error: boolean } | { kind: "none" };
+export type StatsLibraryView = { kind: "cards"; cards: StatsCard[] } | { kind: "message"; text: string } | { kind: "none" };
 
 export interface StatsView {
   /** The playing file, or null while nothing plays. */

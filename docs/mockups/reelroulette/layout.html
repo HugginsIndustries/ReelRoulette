@@ -7818,15 +7818,28 @@ function renderRandomLine() {
   line.append(label, randomSummary());
 }
 $("lib-random").addEventListener("click", () => showTab("randomization"));
-// The Shuffle cycle card, in place of its numbers: the server's message, or a failed load while the server can't be
-// reached. Its numbers show while Shuffle is off too, since every pick is remembered.
+// The Shuffle cycle card, in place of its numbers: the server's message, or a failed load, with why while the server
+// can't be reached. Its numbers show while Shuffle is off too, since every pick is remembered.
 function cycleMessage() {
   const message = serverMessage();
   if (message) return message;
-  if (state.situation === "reconnecting" || state.situation === "noanswer") return { text: "Shuffle cycle load failed.", error: true };
+  if (state.situation === "reconnecting") return { text: "Shuffle cycle load failed: Couldn't reach the server.", error: true };
+  if (state.situation === "noanswer") return { text: "Shuffle cycle load failed.", error: true };
   return null;
 }
+// Why Reset now can't reset, its tooltip, while the server fails the compatibility check, runs without a library, or
+// asks for pairing.
+function resetBlockedReason() {
+  if (state.situation === "incompatible") return "Cannot reset: server compatibility check failed.";
+  if (state.situation === "nolibrary") return "Cannot reset: the server is running without a library.";
+  if (state.pairing) return "Cannot reset: this device isn't paired.";
+  return null;
+}
+// The cycle card, and Reset now, which follows the same server states.
 function renderCycle() {
+  const reason = resetBlockedReason();
+  $("rnd-reset").disabled = reason !== null;
+  $("rnd-reset").title = reason ?? "";
   const host = $("rnd-cycle-body");
   host.textContent = "";
   const message = cycleMessage();
@@ -7901,7 +7914,6 @@ bindChoice("rnd-behavior", "randomBehavior", (value) => value);
 // Reset now forgets this device's picks at once, with no confirmation, as the server clears its memory.
 $("rnd-reset").addEventListener("click", () => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Shuffle reset failed: Couldn't reach the server." });
-  if (state.pairing || heldBack()) return;
   shuffleMemory.clear();
   lastPickId = null;
   renderCycle();

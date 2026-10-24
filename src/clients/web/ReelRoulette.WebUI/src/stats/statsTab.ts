@@ -9,7 +9,7 @@ import type { ItemRatings } from "../rating/itemRatings";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import { isBoolean, type DeviceStore } from "../state/deviceStore";
-import { noLibraryText } from "../state/lastingStates";
+import { heldBackText } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import { createCoalescedRefresh } from "./coalescedRefresh";
@@ -89,17 +89,9 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
   /** The connection has stopped, as when the page closes, so nothing loads. */
   let stopped = false;
 
-  /** The server's own message while it fails the compatibility check or runs without a library. */
-  function blockedMessage(): string | null {
-    if (store.compatibilityBlocked.value) {
-      return store.compatibilityMessage.value;
-    }
-    return store.noLibrary.value ? noLibraryText(store.libraryMessage.value) : null;
-  }
-
   const view = computed<StatsView>(() => {
     const playing = store.current.value;
-    const blocked = blockedMessage();
+    const blocked = heldBackText(store);
     const unavailable = blocked !== null || store.pairingRequired.value;
     // Read so the view follows what the playback events said, which the tracker keeps outside signals.
     void lastPlayedChanged.value;
@@ -130,11 +122,11 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
     if (store.pairingRequired.value) {
       library = { kind: "none" };
     } else if (blocked !== null) {
-      library = { kind: "message", text: blocked, error: true };
+      library = { kind: "message", text: blocked };
     } else if (loadedStats) {
       library = { kind: "cards", cards: libraryCards(loadedStats) };
     } else if (failure.value !== null) {
-      library = { kind: "message", text: failure.value, error: true };
+      library = { kind: "message", text: failure.value };
     }
     return { file, library };
   });

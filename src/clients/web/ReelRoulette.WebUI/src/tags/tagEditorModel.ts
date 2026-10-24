@@ -229,10 +229,27 @@ function canonicalizeCategories(categories: readonly Partial<TagCategory>[]): Ta
 }
 
 /** Orders categories by their saved sort order, then name, as the Tags tab starts them and the Stats tab orders tags. */
-export function bySortOrderThenName(a: TagCategory, b: TagCategory): number {
+export function bySortOrderThenName(a: { name: string; sortOrder?: number | null }, b: { name: string; sortOrder?: number | null }): number {
   const x = Number(a.sortOrder || 0);
   const y = Number(b.sortOrder || 0);
   return x !== y ? x - y : compareTagNames(a.name, b.name);
+}
+
+/**
+ * The catalog's categories that have tags, by sort order, then name, each with its tags' names in name order, as the
+ * Filter tab lists them for its tag filters and the Randomization tab for Spread by tags.
+ */
+export function categoriesWithTags<C extends { id: string; name: string; sortOrder?: number | null }>(
+  categories: readonly C[],
+  tags: readonly { name: string; categoryId: string }[]
+): { category: C; names: string[] }[] {
+  return [...categories].sort(bySortOrderThenName).flatMap((category) => {
+    const names = tags
+      .filter((tag) => tag.categoryId === category.id)
+      .map((tag) => tag.name)
+      .sort(compareTagNames);
+    return names.length === 0 ? [] : [{ category, names }];
+  });
 }
 
 /** The model's category ids by sort order, then name: the order the editor starts with. */

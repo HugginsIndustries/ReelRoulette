@@ -20,8 +20,9 @@ import {
 import { createItemStateCache, type ItemStateCache } from "../library/currentItemState";
 import { statusLogLine } from "../logging/relayLogLines";
 import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds";
+import { isRandomBehavior, readRandomOptions, type RandomBehavior, type RandomOptions } from "../random/randomOptions";
 import type { components } from "../types/openapi.generated";
-import { isBoolean, type DeviceStore } from "./deviceStore";
+import { isBoolean, isRecord, type DeviceStore } from "./deviceStore";
 
 /** The Settings tab's Advance after, the timer both autoplay modes use, in the per-device store. */
 const ADVANCE_AFTER_KEY = "playback.advanceAfter";
@@ -29,22 +30,14 @@ const AUTOPLAY_MODE_KEY = "playback.autoplayMode";
 const LOOP_STOPS_AUTOPLAY_KEY = "playback.loopStopsAutoplay";
 const LOOP_KEY = "player.loop";
 const AUTOPLAY_KEY = "player.autoplay";
-const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
+const RANDOM_OPTIONS_KEY = "randomization.options";
+const RANDOM_BEHAVIOR_KEY = "randomization.behavior";
 const DEFAULT_ADVANCE_AFTER_SECONDS = 10;
 export const MIN_ADVANCE_AFTER_SECONDS = 1;
 export const MAX_ADVANCE_AFTER_SECONDS = 3600;
-const DEFAULT_RANDOMIZATION_MODE = "SmartShuffle";
 const APPLIED_FILTER_KEY = "filter.applied";
 /** A repeated message is relayed to the server log at most once in this window. */
 const STATUS_RELAY_REPEAT_MS = 1000;
-
-export const RANDOMIZATION_MODES: readonly { value: string; label: string }[] = [
-  { value: "SmartShuffle", label: "Smart Shuffle" },
-  { value: "PureRandom", label: "Pure Random" },
-  { value: "WeightedRandom", label: "Weighted Random" },
-  { value: "SpreadMode", label: "Spread Mode" },
-  { value: "WeightedWithSpread", label: "Weighted with Spread" }
-];
 
 export const PRESET_MENU_LOADING = "Loading...";
 export const PRESET_MENU_LOAD_FAILED = "Error loading presets";
@@ -53,6 +46,9 @@ export const PRESET_MENU_NO_LIBRARY = "Running without a library";
 
 /** The playing item, as the play response and a random pick's item describe it. */
 export type PlayingItem = components["schemas"]["PlaybackItemResponse"];
+
+/** This device's Shuffle cycle: the eligible files picked within the window, the eligible files, and those remaining. */
+export type RandomCycle = components["schemas"]["RandomPickCycleResponse"];
 
 /**
  * How autoplay moves on: Normal advances a photo after Advance after and a video at its end; Timer advances every item
@@ -113,8 +109,6 @@ export interface ServerVersion {
   apiVersion: string;
 }
 
-export type StorageLike = Pick<Storage, "getItem" | "setItem">;
-
 /** Changes one screen makes that another screen acts on. */
 export interface AppStoreEvents {
   /** A pick in the preset dropdown, which the header held before the Library tab, changed the applied filter. */
@@ -155,7 +149,15 @@ export interface AppStore {
    * preset, which the dropdown then shows as None*, until the filter becomes the default or another preset's.
    */
   readonly activePresetId: Signal<string | null>;
-  readonly randomizationMode: Signal<string>;
+  /** The Randomization tab's options, kept on this device and sent with each random pick. Change them with `setRandomOptions`. */
+  readonly randomOptions: ReadonlySignal<RandomOptions>;
+  /**
+   * The Randomization tab's Random behavior, Jump until set, kept on this device: where the player's Random button and
+   * R put a pick in the history. Change it with `setRandomBehavior`.
+   */
+  readonly randomBehavior: ReadonlySignal<RandomBehavior>;
+  /** This device's Shuffle cycle numbers, as the last random pick or cycle read answered them, or null before one has. */
+  readonly randomCycle: Signal<RandomCycle | null>;
   /**
    * The Settings tab's Advance after, in seconds, kept on this device: how long a photo shows, and the timer of Timer
    * mode and of a short video Loop repeats. Change it with `setAdvanceAfter`.
@@ -226,7 +228,9 @@ export interface AppStore {
   pickHeaderPreset(value: string): void;
   /** The value of the preset dropdown's selected entry: a preset id, empty for None, or the starred row. */
   selectedPresetValue(): string;
-  setRandomizationMode(mode: string): void;
+  /** Sets the random pick options and keeps them on this device. */
+  setRandomOptions(options: RandomOptions): void;
+  setRandomBehavior(behavior: RandomBehavior): void;
   /** Sets Advance after and keeps it on this device. Anything but a whole number from 1 to 3600 seconds is ignored. */
   setAdvanceAfter(seconds: number): void;
   setAutoplayMode(mode: AutoplayMode): void;
@@ -243,6 +247,11 @@ export interface AppStore {
    * keeping every entry, as a random pick goes there from anywhere in it.
    */
   appendHistory(item: PlayingItem): void;
+  /**
+   * Makes `item` the playing item, with its last-seen favorite and blacklist, and puts it in the history right after
+   * the playing entry, keeping the entries after it, as Insert puts a Random pick.
+   */
+  insertHistory(item: PlayingItem): void;
   /** Makes the previous or next history entry the playing item. Returns false at either end of history. */
   stepHistory(step: -1 | 1): boolean;
   on<K extends keyof AppStoreEvents>(event: K, listener: AppStoreEvents[K]): void;
@@ -250,9 +259,10 @@ export interface AppStore {
 
 export interface AppStoreOptions {
   identity: ClientIdentity;
-  /** Browser `localStorage`, for the per-device randomization mode. */
-  storage: StorageLike;
-  /** Remembers the applied filter and its preset, Advance after, the autoplay settings, Loop, and Autoplay on this device. */
+  /**
+   * Remembers the applied filter and its preset, Advance after, the autoplay settings, Loop, Autoplay, and the random
+   * pick options and Random behavior on this device.
+   */
   device: DeviceStore;
   /** Sends one line to the server log. */
   relay: (level: string, message: string) => void;
@@ -265,11 +275,6 @@ function isAdvanceAfter(value: unknown): value is number {
 
 function isAutoplayMode(value: unknown): value is AutoplayMode {
   return value === "normal" || value === "timer";
-}
-
-function readRandomizationMode(storage: StorageLike): string {
-  const saved = storage.getItem(RANDOMIZATION_MODE_KEY);
-  return saved && RANDOMIZATION_MODES.some((mode) => mode.value === saved) ? saved : DEFAULT_RANDOMIZATION_MODE;
 }
 
 /** The applied filter and its preset as the store has them, read so an effect follows each. */
@@ -307,6 +312,8 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const advanceAfterSeconds = signal(options.device.read(ADVANCE_AFTER_KEY, DEFAULT_ADVANCE_AFTER_SECONDS, isAdvanceAfter));
   const autoplayMode = signal(options.device.read<AutoplayMode>(AUTOPLAY_MODE_KEY, "normal", isAutoplayMode));
   const loopStopsAutoplay = signal(options.device.read(LOOP_STOPS_AUTOPLAY_KEY, true, isBoolean));
+  const randomOptions = signal(readRandomOptions(options.device.read<Record<string, unknown> | null>(RANDOM_OPTIONS_KEY, null, isRecord)));
+  const randomBehavior = signal(options.device.read<RandomBehavior>(RANDOM_BEHAVIOR_KEY, "jump", isRandomBehavior));
   const noLibrary = computed(() => libraryState.value !== "ready");
 
   const store: AppStore = {
@@ -322,7 +329,9 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     presetMenu: signal<PresetMenu>({ entries: [{ label: PRESET_MENU_LOADING, value: "" }], selectedValue: "", message: true }),
     appliedFilter: signal(restoredFilter),
     activePresetId: signal<string | null>(remembered?.presetId ?? null),
-    randomizationMode: signal(readRandomizationMode(options.storage)),
+    randomOptions,
+    randomBehavior,
+    randomCycle: signal<RandomCycle | null>(null),
     advanceAfterSeconds,
     autoplayMode,
     loopStopsAutoplay,
@@ -416,9 +425,14 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       return store.presetMenu.peek().selectedValue;
     },
 
-    setRandomizationMode(mode) {
-      store.randomizationMode.value = mode || DEFAULT_RANDOMIZATION_MODE;
-      options.storage.setItem(RANDOMIZATION_MODE_KEY, store.randomizationMode.peek());
+    setRandomOptions(next) {
+      randomOptions.value = next;
+      options.device.write(RANDOM_OPTIONS_KEY, next);
+    },
+
+    setRandomBehavior(behavior) {
+      randomBehavior.value = behavior;
+      options.device.write(RANDOM_BEHAVIOR_KEY, behavior);
     },
 
     setAdvanceAfter(seconds) {
@@ -467,6 +481,16 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       const history = [...store.history.peek(), item];
       store.history.value = history;
       store.historyIndex.value = history.length - 1;
+    },
+
+    insertHistory(item) {
+      store.itemStates.applyTo(item);
+      store.current.value = item;
+      const index = store.historyIndex.peek() + 1;
+      const history = [...store.history.peek()];
+      history.splice(index, 0, item);
+      store.history.value = history;
+      store.historyIndex.value = index;
     },
 
     stepHistory(step) {

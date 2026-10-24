@@ -1,4 +1,4 @@
-import { Fragment, type ComponentChildren } from "preact";
+import { Fragment } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { APP_VERSION } from "../config/appVersion";
 import { SHORTCUT_LINES } from "../keyboard/shortcuts";
@@ -25,13 +25,7 @@ import type { AutoplayMode } from "../state/appStore";
 import type { FieldProblem } from "../validation/fieldValidation";
 import { useApp } from "./appContext";
 import { SettingTextField } from "./FieldValidation";
-
-/** One choice of a group of radio buttons: its name, and a line under it when the name needs one. */
-interface Choice<T extends string> {
-  value: T;
-  title: string;
-  description?: string;
-}
+import { Checkbox, Choices, OptionList, Section, type Choice } from "./SettingControls";
 
 const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
   { value: "normal", title: "Normal", description: "Photos advance after the timer; videos play to the end." },
@@ -180,122 +174,30 @@ export function SettingsTab() {
         <h2>Settings</h2>
       </div>
       <div id="settings-body" class="settings-body themed-scrollbar">
-        <Section id="playback" title="Playback">
+        <Section id="settings-playback" title="Playback">
           <PlaybackSettings />
         </Section>
-        <Section id="audio" title="Audio">
+        <Section id="settings-audio" title="Audio">
           <AudioSettings />
         </Section>
-        <Section id="player-controls" title="Player controls">
+        <Section id="settings-player-controls" title="Player controls">
           <PlayerControlsSettings />
         </Section>
-        <Section id="appearance" title="Appearance">
+        <Section id="settings-appearance" title="Appearance">
           <AppearanceSettings />
         </Section>
-        <Section id="notifications" title="Notifications">
+        <Section id="settings-notifications" title="Notifications">
           <NotificationSettings />
         </Section>
-        <Section id="panel" title="Panel">
+        <Section id="settings-panel" title="Panel">
           <PanelSettings />
         </Section>
         <KeyboardShortcuts />
-        <Section id="diagnostics" title="Diagnostics">
+        <Section id="settings-diagnostics" title="Diagnostics">
           <Diagnostics />
         </Section>
         <p class="setting-hint">Settings apply at once and are kept on this device.</p>
       </div>
-    </div>
-  );
-}
-
-function Section({ id, title, children }: { id: string; title: string; children: ComponentChildren }) {
-  return (
-    <section class="settings-section" aria-labelledby={`settings-${id}-heading`}>
-      <h3 id={`settings-${id}-heading`}>{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-/**
- * A labeled list of radio buttons, for one value, or checkboxes, for each of a set. Each is named by its choice's title
- * alone, with its line, when it has one, as its description, so a screen reader reads them apart. The group's hint,
- * when it has one, is its description. A choice may have more after it, such as the field it shows.
- */
-function OptionList<T extends string>(props: {
-  id: string;
-  label: string;
-  type: "radio" | "checkbox";
-  choices: readonly Choice<T>[];
-  isChecked: (value: T) => boolean;
-  onChange: (value: T, checked: boolean) => void;
-  disabled?: boolean;
-  describedBy?: string;
-  after?: Partial<Record<T, ComponentChildren>>;
-}) {
-  const { id, label, type, choices, isChecked, onChange, disabled, describedBy, after } = props;
-  const stacked = choices.some((choice) => choice.description);
-  return (
-    <>
-      <span class="setting-label" id={`${id}-label`}>{label}</span>
-      <div
-        class={stacked ? "choice-stack" : "choice-row"}
-        role={type === "radio" ? "radiogroup" : "group"}
-        aria-labelledby={`${id}-label`}
-        aria-describedby={describedBy}
-      >
-        {choices.map((choice) => {
-          const input = {
-            name: id,
-            value: choice.value,
-            checked: isChecked(choice.value),
-            disabled,
-            "aria-labelledby": `${id}-${choice.value}`,
-            "aria-describedby": choice.description ? `${id}-${choice.value}-description` : undefined,
-            onChange: (event: Event) => onChange(choice.value, (event.currentTarget as HTMLInputElement).checked)
-          };
-          return (
-            <Fragment key={choice.value}>
-              <label>
-                {type === "radio" ? <input type="radio" {...input} /> : <input type="checkbox" {...input} />}
-                <span>
-                  <span id={`${id}-${choice.value}`}>{choice.title}</span>
-                  {choice.description ? <small id={`${id}-${choice.value}-description`}>{choice.description}</small> : null}
-                </span>
-              </label>
-              {after?.[choice.value] ?? null}
-            </Fragment>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-/** Radio buttons for one setting, as an `OptionList`, with a hint under them when it has one. */
-function Choices<T extends string>(props: {
-  id: string;
-  label: string;
-  choices: readonly Choice<T>[];
-  value: T;
-  onChange: (value: T) => void;
-  hint?: string;
-}) {
-  const { value, onChange, hint, ...list } = props;
-  return (
-    <div class="setting">
-      <OptionList
-        {...list}
-        type="radio"
-        isChecked={(choice) => choice === value}
-        onChange={(choice) => onChange(choice)}
-        describedBy={hint ? `${list.id}-hint` : undefined}
-      />
-      {hint ? (
-        <p class="setting-hint" id={`${list.id}-hint`}>
-          {hint}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -649,26 +551,6 @@ function PlayerControlsSettings() {
           )
         }}
       />
-    </div>
-  );
-}
-
-/** A setting that is on or off, with a hint under it, when it has one, as its description. */
-function Checkbox(props: { id: string; label: string; hint?: string; checked: boolean; onChange: (on: boolean) => void }) {
-  const { id, label, hint, checked, onChange } = props;
-  return (
-    <div class="setting">
-      <div class="choice-row">
-        <label>
-          <input type="checkbox" id={id} checked={checked} aria-describedby={hint ? `${id}-hint` : undefined} onChange={(event) => onChange(event.currentTarget.checked)} />
-          {label}
-        </label>
-      </div>
-      {hint ? (
-        <p class="setting-hint" id={`${id}-hint`}>
-          {hint}
-        </p>
-      ) : null}
     </div>
   );
 }

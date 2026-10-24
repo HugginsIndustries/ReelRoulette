@@ -1,9 +1,10 @@
-import { computed, signal, type ReadonlySignal } from "@preact/signals";
+import { computed, signal, untracked, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem } from "../api/coreApi";
 import { errorText, noticeRequestFailure, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterSource } from "../filter/filterDialogModel";
 import { filterSummaryParts } from "../filter/filterSummaryModel";
+import { randomLineText, spreadCategories } from "../random/randomOptions";
 import { playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
@@ -11,8 +12,9 @@ import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import { isBoolean, type DeviceStore } from "../state/deviceStore";
-import { noLibraryText, playRefusalNotice } from "../state/lastingStates";
+import { heldBackText, playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
+import type { TagCatalog } from "../tags/tagCatalog";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { RefreshKeptSource } from "../types/serverContracts";
 import { KEPT_SOURCES_LOG_TEXT, keptSourcesMessage, type KeptSourceFolder } from "./keptSources";
@@ -91,6 +93,8 @@ export interface Library {
   readonly controlsCollapsed: ReadonlySignal<boolean>;
   /** The applied filters as the Filters line names them, empty when no filter applies. */
   readonly filterSummary: ReadonlySignal<string[]>;
+  /** The random pick options as the Random line names them after its label, such as "Shuffle · Spread by folder". */
+  readonly randomLine: ReadonlySignal<string>;
   /** The tab's count line, "{matching} / {total}", or null while it is hidden. */
   readonly summary: ReadonlySignal<BrowseResultSummary | null>;
   /** The sort direction button's label. It changes when a page in the new order arrives. */
@@ -127,6 +131,8 @@ export interface Library {
   toggleControls(): void;
   /** Shows the Filter tab, as the Filters line does. */
   openFilterTab(): Promise<void>;
+  /** Shows the Randomization tab, as the Random line does. */
+  openRandomizationTab(): Promise<void>;
   /**
    * Plays a tile's item through the server, closes the panel as the overlay, and hands the item to the player. A play
    * that fails shows in the notice; one the server answers with 401 shows the pairing prompt.
@@ -148,6 +154,8 @@ export interface LibraryOptions {
   panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
   /** Remembers whether the controls are collapsed, and the sort and direction. */
   device: DeviceStore;
+  /** The tag catalog the tabs share, whose categories the Random line names under By category. */
+  tagCatalog: Pick<TagCatalog, "catalog" | "ensureLoaded">;
   /** Defaults to the grid controller. */
   createGrid?: CreateLibraryGrid;
   /** Defaults to `requestAnimationFrame`. */
@@ -155,7 +163,7 @@ export interface LibraryOptions {
 }
 
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player, panel, device, dialogs, notifications } = options;
+  const { store, api, connection, player, panel, device, dialogs, notifications, tagCatalog } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const createGrid: CreateLibraryGrid =
     options.createGrid ?? ((host, onCoverage) => createLibraryGridController(host, apiBaseUrl, { onCoverage }));
@@ -169,6 +177,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const controls = signal(initialControls);
   const controlsCollapsed = signal(device.read(CONTROLS_COLLAPSED_KEY, false, isBoolean));
   const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
+  const randomLine = computed(() => randomLineText(store.randomOptions.value, spreadCategories(tagCatalog.catalog.value)));
   const summary = signal<BrowseResultSummary | null>(null);
   const directionLabel = signal(getSortDirectionLabel(initialControls.sortMode, initialControls.sortDescending));
   const body = signal<LibraryBody>({ kind: "blank" });
@@ -249,17 +258,6 @@ export function createLibrary(options: LibraryOptions): Library {
   }
 
   /**
-   * Nothing loads while the server fails the compatibility check or runs without a library, and the tab says why in
-   * place of the grid: the compatibility message, or the server's message for its library state.
-   */
-  function blockedMessage(): string | null {
-    if (store.compatibilityBlocked.peek()) {
-      return store.compatibilityMessage.peek();
-    }
-    return store.noLibrary.peek() ? noLibraryText(store.libraryMessage.peek()) : null;
-  }
-
-  /**
    * While hidden, only a grid already shown is updated, and its layout waits until the tab shows. While shown, a
    * window without a result shows its message in place of the grid, and so does a server that failed the
    * compatibility check or runs without a library.
@@ -276,7 +274,9 @@ export function createLibrary(options: LibraryOptions): Library {
       return;
     }
 
-    const blockedBy = blockedMessage();
+    // Nothing loads while the server fails the compatibility check or runs without a library, and the tab says why in
+    // place of the grid. Read untracked, since a subscription can render the window.
+    const blockedBy = untracked(() => heldBackText(store));
     if (blockedBy !== null) {
       summary.value = null;
       body.value = { kind: "message", message: { text: blockedBy, error: true, live: false } };
@@ -351,6 +351,22 @@ export function createLibrary(options: LibraryOptions): Library {
       // The Filters line counts the chosen sources without their total until a later load succeeds.
       void api.relayLog("warn", "library=filter-summary-sources-failed");
     }
+  }
+
+  /**
+   * Loads the tag catalog for the Random line, which names the chosen categories under By category, when none has
+   * loaded since the page started or the last resync.
+   */
+  function loadCatalogForRandomLine(): void {
+    const randomOptions = store.randomOptions.peek();
+    const namesCategories = randomOptions.spreadByTags && randomOptions.tagSpread === "byCategory" && randomOptions.spreadCategoryIds.length > 0;
+    if (!serverReady || store.heldBack.peek() || store.pairingRequired.peek() || tagCatalog.catalog.peek() || !namesCategories) {
+      return;
+    }
+    tagCatalog.ensureLoaded().catch(() => {
+      // The Random line reads "tags" in place of the categories' names until a later load succeeds.
+      void api.relayLog("warn", "library=random-line-catalog-failed");
+    });
   }
 
   /**
@@ -484,7 +500,10 @@ export function createLibrary(options: LibraryOptions): Library {
     serverReady = true;
     void session.ensureLoaded(store.appliedFilter.peek(), controls.peek());
     void loadSourcesForSummary();
+    loadCatalogForRandomLine();
   });
+  // A resync drops the catalog, so the Random line loads it again.
+  tagCatalog.catalog.subscribe(() => loadCatalogForRandomLine());
   // The player updates the playing item and its buttons first.
   connection.on("itemStateChanged", (payload) => {
     if (!payload?.itemId) return;
@@ -529,6 +548,7 @@ export function createLibrary(options: LibraryOptions): Library {
     controls,
     controlsCollapsed,
     filterSummary,
+    randomLine,
     summary,
     directionLabel,
     body,
@@ -638,6 +658,10 @@ export function createLibrary(options: LibraryOptions): Library {
 
     openFilterTab() {
       return panel.showTab("filter");
+    },
+
+    openRandomizationTab() {
+      return panel.showTab("randomization");
     },
 
     play

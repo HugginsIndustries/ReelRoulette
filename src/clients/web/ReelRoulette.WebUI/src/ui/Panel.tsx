@@ -3,6 +3,7 @@ import { PANEL_MIN_WIDTH, PANEL_TABS, type PanelTab } from "../panel/panelHost";
 import { useApp } from "./appContext";
 import { FilterDialog } from "./FilterDialog";
 import { LibraryOverlay } from "./LibraryOverlay";
+import { RandomizationTab } from "./RandomizationTab";
 import { ScreenBoundary } from "./ScreenBoundary";
 import { SettingsTab } from "./SettingsTab";
 import { StatsTab } from "./StatsTab";
@@ -10,9 +11,10 @@ import { TagEditor } from "./TagEditor";
 
 const TABS: Record<PanelTab, { label: string; icon: string }> = {
   library: { label: "Library", icon: "browse" },
-  filter: { label: "Filter", icon: "filter_alt" },
   tags: { label: "Tags", icon: "tag" },
   stats: { label: "Stats", icon: "bar_chart" },
+  filter: { label: "Filter", icon: "filter_alt" },
+  randomization: { label: "Randomization", icon: "casino" },
   settings: { label: "Settings", icon: "settings" }
 };
 
@@ -30,9 +32,10 @@ export function Panel() {
   const handle = useRef<HTMLDivElement>(null);
   const aside = useRef<HTMLElement>(null);
   const library = useRef<HTMLElement>(null);
-  const filter = useRef<HTMLElement>(null);
   const tags = useRef<HTMLElement>(null);
   const stats = useRef<HTMLElement>(null);
+  const filter = useRef<HTMLElement>(null);
+  const randomization = useRef<HTMLElement>(null);
   const settings = useRef<HTMLElement>(null);
 
   // The pages' own effects have run by now, so a tab remembered open can start once the server has been checked.
@@ -41,7 +44,14 @@ export function Panel() {
       stage: aside.current!.parentElement!,
       panel: aside.current!,
       handle: handle.current!,
-      pages: { library: library.current!, filter: filter.current!, tags: tags.current!, stats: stats.current!, settings: settings.current! }
+      pages: {
+        library: library.current!,
+        tags: tags.current!,
+        stats: stats.current!,
+        filter: filter.current!,
+        randomization: randomization.current!,
+        settings: settings.current!
+      }
     });
     return () => panel.detach();
   }, []);
@@ -57,11 +67,6 @@ export function Panel() {
             <LibraryOverlay />
           </ScreenBoundary>
         </section>
-        <section id="panel-page-filter" class="panel-page" role="tabpanel" aria-labelledby="panel-tab-filter" hidden ref={filter}>
-          <ScreenBoundary screen="filter" relay={relay}>
-            <FilterDialog />
-          </ScreenBoundary>
-        </section>
         <section id="panel-page-tags" class="panel-page" role="tabpanel" aria-labelledby="panel-tab-tags" hidden ref={tags}>
           <ScreenBoundary screen="tags" relay={relay}>
             <TagEditor />
@@ -70,6 +75,16 @@ export function Panel() {
         <section id="panel-page-stats" class="panel-page" role="tabpanel" aria-labelledby="panel-tab-stats" hidden ref={stats}>
           <ScreenBoundary screen="stats" relay={relay}>
             <StatsTab />
+          </ScreenBoundary>
+        </section>
+        <section id="panel-page-filter" class="panel-page" role="tabpanel" aria-labelledby="panel-tab-filter" hidden ref={filter}>
+          <ScreenBoundary screen="filter" relay={relay}>
+            <FilterDialog />
+          </ScreenBoundary>
+        </section>
+        <section id="panel-page-randomization" class="panel-page" role="tabpanel" aria-labelledby="panel-tab-randomization" hidden ref={randomization}>
+          <ScreenBoundary screen="randomization" relay={relay}>
+            <RandomizationTab />
           </ScreenBoundary>
         </section>
         <section id="panel-page-settings" class="panel-page" role="tabpanel" aria-labelledby="panel-tab-settings" hidden ref={settings}>
@@ -89,8 +104,8 @@ export function Panel() {
 function PanelTabs() {
   const { panel, unsaved } = useApp();
   const shown = panel.tab.value;
-  // The Library, Stats, and Settings tabs hold no changes, so they have no dot.
-  const dots: Record<PanelTab, boolean | null> = { library: null, stats: null, settings: null, ...unsaved.value };
+  // The Library, Stats, Randomization, and Settings tabs hold no changes, so they have no dot.
+  const dots: Record<PanelTab, boolean | null> = { library: null, stats: null, randomization: null, settings: null, ...unsaved.value };
   return (
     <div class="panel-tabs">
       <div class="panel-tablist" role="tablist" aria-label="Panel tabs">

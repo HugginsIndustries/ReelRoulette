@@ -8,28 +8,22 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
     <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
       <span aria-hidden="true">
       <span class="visually-hidden">
-    <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
+    <button aria-controls="library-filter-summary library-random-line library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
       <span aria-hidden="true" class="material-symbol-icon">
         "unfold_less"
-  <button class="library-filter-summary" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
+  <button class="library-line" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
     <b>
       "Filters:"
+  <button class="library-line" id="library-random-line" title="Open the Randomization tab" type="button">
+    <b>
+      "Random:"
+    "Shuffle · Spread by folder"
   <div class="library-controls" id="library-controls">
     <div class="library-controls-pair">
       <select aria-label="Choose preset" id="preset-select">
         <option value="">
           "None"
-      <select aria-label="Choose randomization mode" id="randomization-mode-select">
-        <option value="SmartShuffle">
-          "Smart Shuffle"
-        <option value="PureRandom">
-          "Pure Random"
-        <option value="WeightedRandom">
-          "Weighted Random"
-        <option value="SpreadMode">
-          "Spread Mode"
-        <option value="WeightedWithSpread">
-          "Weighted with Spread"
+      <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
     <div class="library-controls-sort">
       <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
         <option value="Name">
@@ -48,7 +42,6 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
           "Rating"
       <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
         "A–Z"
-    <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
   <div class="library-overlay-body" id="library-overlay-body">
     <p class="library-overlay-status library-overlay-status-error" role="alert">
       "Library load failed."
@@ -63,28 +56,22 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
     <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
       <span aria-hidden="true">
       <span class="visually-hidden">
-    <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
+    <button aria-controls="library-filter-summary library-random-line library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
       <span aria-hidden="true" class="material-symbol-icon">
         "unfold_less"
-  <button class="library-filter-summary" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
+  <button class="library-line" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
     <b>
       "Filters:"
+  <button class="library-line" id="library-random-line" title="Open the Randomization tab" type="button">
+    <b>
+      "Random:"
+    "Shuffle · Spread by folder"
   <div class="library-controls" id="library-controls">
     <div class="library-controls-pair">
       <select aria-label="Choose preset" id="preset-select">
         <option value="">
           "None"
-      <select aria-label="Choose randomization mode" id="randomization-mode-select">
-        <option value="SmartShuffle">
-          "Smart Shuffle"
-        <option value="PureRandom">
-          "Pure Random"
-        <option value="WeightedRandom">
-          "Weighted Random"
-        <option value="SpreadMode">
-          "Spread Mode"
-        <option value="WeightedWithSpread">
-          "Weighted with Spread"
+      <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
     <div class="library-controls-sort">
       <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
         <option value="Name">
@@ -103,7 +90,6 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
           "Rating"
       <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
         "A–Z"
-    <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
   <div class="library-overlay-body" id="library-overlay-body">
     <p aria-live="polite" class="library-overlay-status">
       "Loading library…"
@@ -120,28 +106,22 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
         "3 / 3"
       <span class="visually-hidden">
         "3 of 3 items"
-    <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
+    <button aria-controls="library-filter-summary library-random-line library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
       <span aria-hidden="true" class="material-symbol-icon">
         "unfold_less"
-  <button class="library-filter-summary" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
+  <button class="library-line" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
     <b>
       "Filters:"
+  <button class="library-line" id="library-random-line" title="Open the Randomization tab" type="button">
+    <b>
+      "Random:"
+    "Shuffle · Spread by folder"
   <div class="library-controls" id="library-controls">
     <div class="library-controls-pair">
       <select aria-label="Choose preset" id="preset-select">
         <option value="">
           "None"
-      <select aria-label="Choose randomization mode" id="randomization-mode-select">
-        <option value="SmartShuffle">
-          "Smart Shuffle"
-        <option value="PureRandom">
-          "Pure Random"
-        <option value="WeightedRandom">
-          "Weighted Random"
-        <option value="SpreadMode">
-          "Spread Mode"
-        <option value="WeightedWithSpread">
-          "Weighted with Spread"
+      <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
     <div class="library-controls-sort">
       <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
         <option value="Name">
@@ -160,7 +140,6 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
           "Rating"
       <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
         "A–Z"
-    <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
   <div class="library-overlay-body" id="library-overlay-body">
     <div class="library-overlay-browse">
       <p class="library-overlay-status" hidden="">

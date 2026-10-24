@@ -6,6 +6,7 @@ import { createAudioStage, type AudioStage } from "../playback/audioStage";
 import { COMPRESSION_PRESETS } from "../playback/compression";
 import { createPlayer, type PlayerElements, type PlayOrigin } from "../playback/player";
 import { SEEK_INDICATOR_MS } from "../playback/seekIndicator";
+import { DEFAULT_RANDOM_OPTIONS } from "../random/randomOptions";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
@@ -195,7 +196,6 @@ function setup(
   const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage: { getItem: () => null, setItem: () => {} },
     device,
     relay: (_level, message) => relayed.push(message)
   });
@@ -414,6 +414,28 @@ describe("createPlayer", () => {
     await page.player.pickRandom();
     expect(page.notices).toEqual(["No eligible media for current filters.", "Cannot play: server compatibility check failed."]);
     expect(page.requests("/api/random")).toHaveLength(1);
+  });
+
+  it("sends the Randomization tab's options with each pick, and keeps the cycle numbers each answer brings, one that finds nothing included", async () => {
+    const page = setup();
+    page.store.setRandomOptions({ ...DEFAULT_RANDOM_OPTIONS, shuffle: false, rememberPlaysForDays: 7, favorLessPlayed: true });
+    page.replies.set("/api/random", () => randomAnswer(VIDEO, { picked: 3, eligible: 10, remaining: 7 }));
+    await page.player.pickRandom();
+    expect(page.requests("/api/random")[0]!.body.options).toEqual({
+      shuffle: false,
+      rememberPlaysForDays: 7,
+      spreadByFolder: true,
+      spreadByTags: "off",
+      favorLessPlayed: true,
+      favorNewlyAdded: false,
+      favorNewlyCreated: false,
+      favorHigherRated: false
+    });
+    expect(page.store.randomCycle.value).toEqual({ picked: 3, eligible: 10, remaining: 7 });
+
+    page.replies.set("/api/random", () => randomAnswer(null));
+    page.player.next();
+    await vi.waitFor(() => expect(page.store.randomCycle.value).toEqual({ picked: 0, eligible: 0, remaining: 0 }));
   });
 
   it("shows each pick that ends without playing in the notice alone", async () => {
@@ -2239,6 +2261,22 @@ describe("a file that fails to load", () => {
     expect(page.store.history.value.map((item) => item.itemId)).toEqual(["item-mkv", "item-other"]);
     expect(page.elements.video.src).toContain("item-other");
     expect(leakedLines(page)).toEqual([]);
+  });
+
+  it("skips a file this browser can't play that Insert put after the playing item by picking again with Insert, keeping the plays ahead after it", async () => {
+    const page = setup({ "rr_device.randomization.behavior": '"insert"' });
+    seedHistory(page, [VIDEO, PHOTO], 0);
+    page.answerRandom(MKV, SECOND_VIDEO);
+    answerProbe(page, MKV, () => media(206));
+    await page.player.pickRandom();
+    expect(page.store.history.value.map((item) => item.itemId)).toEqual(["item-video", "item-mkv", "item-photo"]);
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-other"));
+    expect(page.requests("/api/random")).toHaveLength(2);
+    expect(page.store.history.value.map((item) => item.itemId)).toEqual(["item-video", "item-mkv", "item-other", "item-photo"]);
+    expect(page.store.historyIndex.value).toBe(2);
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a file this browser can't play.", detail: "Holiday.MKV", key: "skip" }]);
   });
 
   it("skips a missing file autoplay reaches, and goes on", async () => {

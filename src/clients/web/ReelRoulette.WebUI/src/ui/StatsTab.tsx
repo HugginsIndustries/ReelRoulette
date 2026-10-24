@@ -2,6 +2,7 @@ import { Fragment } from "preact";
 import type { StatsFileView, StatsLibraryView } from "../stats/statsModel";
 import { useApp } from "./appContext";
 import { RatingStars } from "./RatingStars";
+import { StatCards, StatCardsMessage } from "./StatCards";
 
 /**
  * The panel's Stats tab, as the mockup lays it out: Show exact times in its header, orange while on, then the playing
@@ -97,23 +98,10 @@ function FileStats({ file }: { file: StatsFileView }) {
 /** The library's cards, or a message in their place, such as why they couldn't load. */
 function LibraryStats({ library }: { library: StatsLibraryView }) {
   if (library.kind === "message") {
-    return (
-      <p class="filter-hint is-error" role="alert">
-        {library.text}
-      </p>
-    );
+    return <StatCardsMessage text={library.text} />;
   }
   if (library.kind === "none") {
     return null;
   }
-  return (
-    <div class="stats-grid">
-      {library.cards.map((card) => (
-        <div key={card.label} class="stat-card">
-          <div class="value">{card.value}</div>
-          <div class="label">{card.label}</div>
-        </div>
-      ))}
-    </div>
-  );
+  return <StatCards cards={library.cards} />;
 }

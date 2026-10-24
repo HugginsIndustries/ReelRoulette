@@ -92,7 +92,6 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
   const deviceWrites: string[] = [];
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage: { getItem: () => null, setItem: () => {} },
     device: createDeviceStore({ getItem: () => null, setItem: (key) => void deviceWrites.push(key) }),
     relay: () => {}
   });

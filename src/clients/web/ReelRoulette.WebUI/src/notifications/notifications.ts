@@ -1,5 +1,5 @@
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
-import type { DeviceStore } from "../state/deviceStore";
+import { isRecord, type DeviceStore } from "../state/deviceStore";
 
 /** The kinds of one-off message, each of which the popup settings can turn off. */
 export type NotificationKind = "actions" | "devices" | "refresh" | "skips" | "connection";
@@ -165,10 +165,6 @@ export interface NotificationsOptions {
   inFullscreen: ReadonlySignal<boolean>;
   /** Defaults to `Date.now`. */
   now?: () => number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 /** The popup settings kept on this device, each field falling back to its default. */

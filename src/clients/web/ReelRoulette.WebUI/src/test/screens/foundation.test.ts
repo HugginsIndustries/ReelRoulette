@@ -61,13 +61,6 @@ const PHOTO_ITEM = {
   isBlacklisted: false
 };
 
-/** The Library tab's randomization mode, its tab shown so the user can reach it. */
-async function randomizationModeSelect(): Promise<HTMLSelectElement> {
-  fireEvent.click(document.getElementById("panel-tab-library")!);
-  await settle();
-  return screen.getByRole("combobox", { name: "Choose randomization mode" }) as HTMLSelectElement;
-}
-
 function optionLabels(select: HTMLSelectElement): string[] {
   return Array.from(select.options).map((option) => option.textContent ?? "");
 }
@@ -480,35 +473,6 @@ describe("preset dropdown", () => {
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["Error loading presets"]));
     expect(presetSelect().disabled).toBe(true);
     await waitFor(() => expect(server.logLines()).toContain("status=Error loading presets: HTTP 500 hasCurrent=false attempt=0"));
-  });
-});
-
-describe("randomization mode", () => {
-  it("starts on Smart Shuffle and keeps a pick in localStorage", async () => {
-    mountPage();
-    const select = await randomizationModeSelect();
-    expect(selectedLabel(select)).toBe("Smart Shuffle");
-    expect(optionLabels(select)).toEqual([
-      "Smart Shuffle",
-      "Pure Random",
-      "Weighted Random",
-      "Spread Mode",
-      "Weighted with Spread"
-    ]);
-
-    fireEvent.change(select, { target: { value: "WeightedRandom" } });
-    expect(localStorage.getItem("rr_randomizationMode")).toBe("WeightedRandom");
-  });
-
-  it("restores a saved mode and ignores an unknown one", async () => {
-    localStorage.setItem("rr_randomizationMode", "SpreadMode");
-    mountPage();
-    expect(selectedLabel(await randomizationModeSelect())).toBe("Spread Mode");
-
-    resetPage();
-    localStorage.setItem("rr_randomizationMode", "NotAMode");
-    mountPage();
-    expect(selectedLabel(await randomizationModeSelect())).toBe("Smart Shuffle");
   });
 });
 

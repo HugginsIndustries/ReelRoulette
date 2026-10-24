@@ -104,10 +104,6 @@ exports[`page structure > keeps the starting markup 1`] = `
           <button aria-controls="panel-page-library" aria-label="Library" aria-selected="true" class="tab panel-tab" id="panel-tab-library" role="tab" title="Library" type="button">
             <span class="material-symbol-icon">
               "browse"
-          <button aria-controls="panel-page-filter" aria-label="Filter" aria-selected="false" class="tab panel-tab" id="panel-tab-filter" role="tab" title="Filter" type="button">
-            <span class="material-symbol-icon">
-              "filter_alt"
-            <span class="unsaved-dot" hidden="">
           <button aria-controls="panel-page-tags" aria-label="Tags" aria-selected="false" class="tab panel-tab" id="panel-tab-tags" role="tab" title="Tags" type="button">
             <span class="material-symbol-icon">
               "tag"
@@ -115,6 +111,13 @@ exports[`page structure > keeps the starting markup 1`] = `
           <button aria-controls="panel-page-stats" aria-label="Stats" aria-selected="false" class="tab panel-tab" id="panel-tab-stats" role="tab" title="Stats" type="button">
             <span class="material-symbol-icon">
               "bar_chart"
+          <button aria-controls="panel-page-filter" aria-label="Filter" aria-selected="false" class="tab panel-tab" id="panel-tab-filter" role="tab" title="Filter" type="button">
+            <span class="material-symbol-icon">
+              "filter_alt"
+            <span class="unsaved-dot" hidden="">
+          <button aria-controls="panel-page-randomization" aria-label="Randomization" aria-selected="false" class="tab panel-tab" id="panel-tab-randomization" role="tab" title="Randomization" type="button">
+            <span class="material-symbol-icon">
+              "casino"
           <button aria-controls="panel-page-settings" aria-label="Settings" aria-selected="false" class="tab panel-tab" id="panel-tab-settings" role="tab" title="Settings" type="button">
             <span class="material-symbol-icon">
               "settings"
@@ -130,28 +133,22 @@ exports[`page structure > keeps the starting markup 1`] = `
             <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
               <span aria-hidden="true">
               <span class="visually-hidden">
-            <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
+            <button aria-controls="library-filter-summary library-random-line library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
               <span aria-hidden="true" class="material-symbol-icon">
                 "unfold_less"
-          <button class="library-filter-summary" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
+          <button class="library-line" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
             <b>
               "Filters:"
+          <button class="library-line" id="library-random-line" title="Open the Randomization tab" type="button">
+            <b>
+              "Random:"
+            "Shuffle · Spread by folder"
           <div class="library-controls" id="library-controls">
             <div class="library-controls-pair">
               <select aria-label="Choose preset" id="preset-select">
                 <option value="">
                   "None"
-              <select aria-label="Choose randomization mode" id="randomization-mode-select">
-                <option value="SmartShuffle">
-                  "Smart Shuffle"
-                <option value="PureRandom">
-                  "Pure Random"
-                <option value="WeightedRandom">
-                  "Weighted Random"
-                <option value="SpreadMode">
-                  "Spread Mode"
-                <option value="WeightedWithSpread">
-                  "Weighted with Spread"
+              <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
             <div class="library-controls-sort">
               <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
                 <option value="Name">
@@ -170,36 +167,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "Rating"
               <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
                 "A–Z"
-            <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
           <div class="library-overlay-body" id="library-overlay-body">
-      <section aria-labelledby="panel-tab-filter" class="panel-page" hidden="" id="panel-page-filter" role="tabpanel">
-        <div class="filter-dialog" id="filter-dialog">
-          <div class="filter-dialog-header">
-            <h2 id="filter-dialog-heading">
-              "Preset: None"
-          <div aria-label="Filter sections" class="filter-dialog-tabstrip" role="tablist">
-            <button aria-selected="true" class="tab text-tab filter-tab" data-filter-tab="general" role="tab" type="button">
-              "General"
-            <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="tags" role="tab" type="button">
-              "Tags"
-            <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="presets" role="tab" type="button">
-              "Presets"
-          <div class="filter-dialog-body themed-scrollbar">
-            <div class="filter-panel" id="filter-panel-general">
-            <div class="filter-panel" id="filter-panel-tags" style="display: none">
-            <div class="filter-panel" id="filter-panel-presets" style="display: none">
-          <div class="filter-dialog-footer">
-            <button aria-label="Clear all filters" class="icon-btn" disabled="" id="filter-clear-all-btn" title="Clear all filters" type="button">
-              <span class="material-symbol-icon">
-                "filter_alt_off"
-            <button aria-label="Discard changes" class="icon-btn" disabled="" id="filter-discard-btn" title="Discard changes" type="button">
-              <span class="material-symbol-icon">
-                "undo"
-            <button aria-label="Apply" class="held-action icon-btn" disabled="" id="filter-apply-btn" title="Apply" type="button">
-              <span class="btn-label">
-                <span class="material-symbol-icon">
-                  "save"
-              <span class="unsaved-dot" hidden="">
       <section aria-labelledby="panel-tab-tags" class="panel-page" hidden="" id="panel-page-tags" role="tabpanel">
         <div class="tag-editor" id="tag-editor">
           <div class="tag-editor-header">
@@ -246,6 +214,161 @@ exports[`page structure > keeps the starting markup 1`] = `
             <section aria-labelledby="stats-library-heading" class="stats-section">
               <h3 id="stats-library-heading">
                 "Library"
+      <section aria-labelledby="panel-tab-filter" class="panel-page" hidden="" id="panel-page-filter" role="tabpanel">
+        <div class="filter-dialog" id="filter-dialog">
+          <div class="filter-dialog-header">
+            <h2 id="filter-dialog-heading">
+              "Preset: None"
+          <div aria-label="Filter sections" class="filter-dialog-tabstrip" role="tablist">
+            <button aria-selected="true" class="tab text-tab filter-tab" data-filter-tab="general" role="tab" type="button">
+              "General"
+            <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="tags" role="tab" type="button">
+              "Tags"
+            <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="presets" role="tab" type="button">
+              "Presets"
+          <div class="filter-dialog-body themed-scrollbar">
+            <div class="filter-panel" id="filter-panel-general">
+            <div class="filter-panel" id="filter-panel-tags" style="display: none">
+            <div class="filter-panel" id="filter-panel-presets" style="display: none">
+          <div class="filter-dialog-footer">
+            <button aria-label="Clear all filters" class="icon-btn" disabled="" id="filter-clear-all-btn" title="Clear all filters" type="button">
+              <span class="material-symbol-icon">
+                "filter_alt_off"
+            <button aria-label="Discard changes" class="icon-btn" disabled="" id="filter-discard-btn" title="Discard changes" type="button">
+              <span class="material-symbol-icon">
+                "undo"
+            <button aria-label="Apply" class="held-action icon-btn" disabled="" id="filter-apply-btn" title="Apply" type="button">
+              <span class="btn-label">
+                <span class="material-symbol-icon">
+                  "save"
+              <span class="unsaved-dot" hidden="">
+      <section aria-labelledby="panel-tab-randomization" class="panel-page" hidden="" id="panel-page-randomization" role="tabpanel">
+        <div class="settings-tab" id="randomization-tab">
+          <div class="settings-tab-header">
+            <h2>
+              "Randomization"
+          <div class="settings-body themed-scrollbar" id="randomization-body">
+            <section aria-labelledby="randomization-cycle-heading" class="stats-section">
+              <details class="setting-more shortcuts-more" id="randomization-cycle" open="">
+                <summary>
+                  <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
+                    "chevron_right"
+                  <h3 id="randomization-cycle-heading">
+                    "Shuffle cycle"
+                <div class="cycle-body" id="randomization-cycle-body">
+            <section aria-labelledby="randomization-shuffle-heading" class="settings-section">
+              <h3 id="randomization-shuffle-heading">
+                "Shuffle"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="randomization-shuffle-on-hint" id="randomization-shuffle-on" type="checkbox">
+                    "Shuffle"
+                <p class="setting-hint" id="randomization-shuffle-on-hint">
+                  "Nothing repeats until everything has played, or until Remember plays for has passed."
+              <div class="setting">
+                <label class="setting-label" for="randomization-window">
+                  "Remember plays for"
+                <select class="ctl" id="randomization-window">
+                  <option value="1">
+                    "1 day"
+                  <option value="7">
+                    "7 days"
+                  <option value="30">
+                    "30 days"
+                  <option value="90">
+                    "90 days"
+                  <option value="all">
+                    "Until everything has played"
+              <div class="setting">
+                <button class="btn" id="randomization-reset" type="button">
+                  "Reset now"
+                <p class="setting-hint">
+                  "Forgets this device's picks and starts a new cycle."
+            <section aria-labelledby="randomization-spread-heading" class="settings-section">
+              <h3 id="randomization-spread-heading">
+                "Spread"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="randomization-spread-folder-hint" id="randomization-spread-folder" type="checkbox">
+                    "Spread by folder"
+                <p class="setting-hint" id="randomization-spread-folder-hint">
+                  "Skips the folders of recent picks."
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="randomization-spread-tags-hint" id="randomization-spread-tags" type="checkbox">
+                    "Spread by tags"
+                <p class="setting-hint" id="randomization-spread-tags-hint">
+                  "Files that share tags with recent picks come up less, rarer tags more so."
+                <fieldset class="setting-fields setting-sub" disabled="" id="randomization-tag-fields">
+                  <div class="choice-stack">
+                    <label>
+                      <input name="randomization-tag-spread" type="radio" value="allTags">
+                      <span>
+                        "All tags"
+                    <span class="vfield vfield-after">
+                      <label>
+                        <input id="randomization-by-category" name="randomization-tag-spread" type="radio" value="byCategory">
+                        <span>
+                          "By category"
+                    <div class="setting-sub" hidden="" id="randomization-categories">
+            <section aria-labelledby="randomization-favor-heading" class="settings-section">
+              <h3 id="randomization-favor-heading">
+                "Favor"
+              <div aria-labelledby="randomization-favor-heading" class="choice-stack" role="group">
+                <label>
+                  <input aria-describedby="randomization-favor-favorLessPlayed-description" aria-labelledby="randomization-favor-favorLessPlayed" name="randomization-favor" type="checkbox" value="favorLessPlayed">
+                  <span>
+                    <span id="randomization-favor-favorLessPlayed">
+                      "Less played"
+                    <small id="randomization-favor-favorLessPlayed-description">
+                      "Files played less, or not lately, come up more often."
+                <label>
+                  <input aria-describedby="randomization-favor-favorNewlyAdded-description" aria-labelledby="randomization-favor-favorNewlyAdded" name="randomization-favor" type="checkbox" value="favorNewlyAdded">
+                  <span>
+                    <span id="randomization-favor-favorNewlyAdded">
+                      "Newly added"
+                    <small id="randomization-favor-favorNewlyAdded-description">
+                      "Recently added files get a share of the picks, newer ones more often."
+                <label>
+                  <input aria-describedby="randomization-favor-favorNewlyCreated-description" aria-labelledby="randomization-favor-favorNewlyCreated" name="randomization-favor" type="checkbox" value="favorNewlyCreated">
+                  <span>
+                    <span id="randomization-favor-favorNewlyCreated">
+                      "Newly created"
+                    <small id="randomization-favor-favorNewlyCreated-description">
+                      "Recently created files get a share of the picks, newer ones more often."
+                <label>
+                  <input aria-describedby="randomization-favor-favorHigherRated-description" aria-labelledby="randomization-favor-favorHigherRated" name="randomization-favor" type="checkbox" value="favorHigherRated">
+                  <span>
+                    <span id="randomization-favor-favorHigherRated">
+                      "Higher rated"
+                    <small id="randomization-favor-favorHigherRated-description">
+                      "Higher-rated files come up more often. An unrated file counts as 2.5 stars."
+            <section aria-labelledby="randomization-behavior-section-heading" class="settings-section">
+              <h3 id="randomization-behavior-section-heading">
+                "Random behavior"
+              <div class="setting">
+                <div aria-describedby="randomization-behavior-hint" aria-labelledby="randomization-behavior-section-heading" class="choice-stack" role="radiogroup">
+                  <label>
+                    <input aria-describedby="randomization-behavior-jump-description" aria-labelledby="randomization-behavior-jump" name="randomization-behavior" type="radio" value="jump">
+                    <span>
+                      <span id="randomization-behavior-jump">
+                        "Jump"
+                      <small id="randomization-behavior-jump-description">
+                        "Adds the pick at the end of the history."
+                  <label>
+                    <input aria-describedby="randomization-behavior-insert-description" aria-labelledby="randomization-behavior-insert" name="randomization-behavior" type="radio" value="insert">
+                    <span>
+                      <span id="randomization-behavior-insert">
+                        "Insert"
+                      <small id="randomization-behavior-insert-description">
+                        "Puts the pick right after the current item, keeping the plays ahead after it."
+                <p class="setting-hint" id="randomization-behavior-hint">
+                  "For the player's Random button and R."
+            <p class="setting-hint">
+              "Options apply at once and are kept on this device."
       <section aria-labelledby="panel-tab-settings" class="panel-page" hidden="" id="panel-page-settings" role="tabpanel">
         <div class="settings-tab" id="settings-tab">
           <div class="settings-tab-header">
@@ -880,9 +1003,9 @@ exports[`page structure > keeps the starting markup 1`] = `
                       "1"
                     "–"
                     <kbd>
-                      "5"
+                      "6"
                   <dd>
-                    "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"
+                    "Open Library, Tags, Stats, Filter, Randomization, or Settings; the open tab's key closes the panel"
                   <dt>
                     <kbd>
                       "T"

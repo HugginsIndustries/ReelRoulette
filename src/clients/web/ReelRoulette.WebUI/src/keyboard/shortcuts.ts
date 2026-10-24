@@ -137,9 +137,9 @@ export const SHORTCUT_LINES: readonly ShortcutLine[] = [
     ]
   },
   {
-    keys: ["1", "5"],
+    keys: ["1", "6"],
     join: "–",
-    text: "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel",
+    text: "Open Library, Tags, Stats, Filter, Randomization, or Settings; the open tab's key closes the panel",
     bindings: PANEL_TABS.map((tab, index) => ({ key: String(index + 1), action: tab }))
   },
   { keys: ["T"], text: "Tags", bindings: [{ key: "t", action: "tags" }] },

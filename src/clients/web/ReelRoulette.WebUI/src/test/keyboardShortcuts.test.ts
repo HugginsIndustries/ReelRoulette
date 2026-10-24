@@ -85,10 +85,11 @@ const BOUND: readonly [KeyPress, ShortcutAction][] = [
   [press("["), "volumeDown"],
   [press("]"), "volumeUp"],
   [press("1"), "library"],
-  [press("2"), "filter"],
-  [press("3"), "tags"],
-  [press("4"), "stats"],
-  [press("5"), "settings"],
+  [press("2"), "tags"],
+  [press("3"), "stats"],
+  [press("4"), "filter"],
+  [press("5"), "randomization"],
+  [press("6"), "settings"],
   [press("t"), "tags"],
   [press("s"), "settings"],
   [press("p"), "panel"],
@@ -118,7 +119,7 @@ describe("shortcutFor", () => {
     );
     expect(acting.sort()).toEqual(
       [
-        " ", ",", ".", "-", "=", "1", "2", "3", "4", "5", "ArrowLeft", "ArrowRight", "Shift+F", "Shift+f", "[", "]",
+        " ", ",", ".", "-", "=", "1", "2", "3", "4", "5", "6", "ArrowLeft", "ArrowRight", "Shift+F", "Shift+f", "[", "]",
         "Shift+0", "Shift+1", "Shift+2", "Shift+3", "Shift+4", "Shift+5", "Shift+)", "Shift+!", "Shift+@", "Shift+#", "Shift+$", "Shift+%",
         "a", "b", "f", "h", "j", "k", "l", "m", "p", "r", "s", "t", "A", "B", "F", "H", "J", "K", "L", "M", "P", "R", "S", "T"
       ].sort()
@@ -165,7 +166,7 @@ describe("shortcutFor", () => {
     ]);
     expect(actions.flat().some((action) => (PANEL_TABS as readonly (string | null)[]).includes(action))).toBe(false);
     // Without Shift, the digits still open the tabs, and Shift with the digits past 5 does nothing.
-    expect(["1", "5"].map((key) => shortcutFor(press(key)))).toEqual(["library", "settings"]);
+    expect(["1", "6"].map((key) => shortcutFor(press(key)))).toEqual(["library", "settings"]);
     expect([press("^", { shiftKey: true }), press("6", { code: "Digit6", shiftKey: true }), press("(", { shiftKey: true })].map(shortcutFor)).toEqual([null, null, null]);
   });
 

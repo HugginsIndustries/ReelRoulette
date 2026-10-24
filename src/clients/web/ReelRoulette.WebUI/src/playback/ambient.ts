@@ -1,5 +1,5 @@
 import { computed, effect, untracked, type ReadonlySignal } from "@preact/signals";
-import type { DeviceStore } from "../state/deviceStore";
+import { isRecord, type DeviceStore } from "../state/deviceStore";
 import type { FrameScheduler } from "./player";
 
 /** The per-device store's key for whether ambient mode is on. */
@@ -53,10 +53,6 @@ export function formatAmbientSetting(setting: AmbientSetting, value: number): st
     default:
       return `${value}%`;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Ambient mode's settings as this device keeps them, each one outside its range or not kept at its default. */

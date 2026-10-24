@@ -99,7 +99,6 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   const device = createDeviceStore(null);
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    storage: { getItem: () => null, setItem: () => {} },
     device,
     relay: () => {}
   });
@@ -146,7 +145,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     stage: { get clientWidth() { return viewport.width(); } },
     panel: { hidden: true, contains: () => false },
     handle: { hidden: true, offsetWidth: 12, contains: () => false },
-    pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true }, stats: { hidden: true }, settings: { hidden: true } }
+    pages: { library: { hidden: true }, tags: { hidden: true }, stats: { hidden: true }, filter: { hidden: true }, randomization: { hidden: true }, settings: { hidden: true } }
   });
   const autoTagOpen = signal(false);
   createAutoPause({ mode: signal(mode), panel, overPage: autoTagOpen, player });

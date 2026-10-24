@@ -60,7 +60,7 @@ function fakeElements(viewport: ReturnType<typeof fakeViewport>) {
         },
         contains: () => false
       },
-      pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true }, stats: { hidden: true }, settings: { hidden: true } }
+      pages: { library: { hidden: true }, tags: { hidden: true }, stats: { hidden: true }, filter: { hidden: true }, randomization: { hidden: true }, settings: { hidden: true } }
     }
   };
 }
@@ -70,7 +70,7 @@ function recordingTabs() {
   const calls: string[] = [];
   const refuse: Partial<Record<PanelTab, boolean | Promise<boolean>>> = {};
   const hooks = {} as Record<PanelTab, PanelTabHooks>;
-  for (const tab of ["library", "filter", "tags", "stats", "settings"] as const) {
+  for (const tab of ["library", "tags", "stats", "filter", "randomization", "settings"] as const) {
     hooks[tab] = {
       enter: () => calls.push(`enter ${tab}`),
       leave() {

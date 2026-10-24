@@ -314,11 +314,11 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
               "sync"
-          <button aria-describedby="P0-19" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-describedby="P0-20" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "save"
-          <span class="visually-hidden" id="P0-19">
+          <span class="visually-hidden" id="P0-20">
             "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
@@ -326,18 +326,18 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-21" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-describedby="P0-22" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "add"
-          <span class="visually-hidden" id="P0-21">
+          <span class="visually-hidden" id="P0-22">
             "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-18" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-19" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -346,7 +346,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-18" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-19" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -354,7 +354,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-18">
+        <p class="visually-hidden" id="P0-19">
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
@@ -686,11 +686,11 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
               "sync"
-          <button aria-describedby="P0-19" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-describedby="P0-20" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "save"
-          <span class="visually-hidden" id="P0-19">
+          <span class="visually-hidden" id="P0-20">
             "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
@@ -698,18 +698,18 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-21" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-describedby="P0-22" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "add"
-          <span class="visually-hidden" id="P0-21">
+          <span class="visually-hidden" id="P0-22">
             "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-18" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-19" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -718,7 +718,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-18" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-19" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -726,7 +726,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-18">
+        <p class="visually-hidden" id="P0-19">
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
@@ -1058,11 +1058,11 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
               "sync"
-          <button aria-describedby="P0-19" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-describedby="P0-20" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "save"
-          <span class="visually-hidden" id="P0-19">
+          <span class="visually-hidden" id="P0-20">
             "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
@@ -1070,18 +1070,18 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-21" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-describedby="P0-22" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "add"
-          <span class="visually-hidden" id="P0-21">
+          <span class="visually-hidden" id="P0-22">
             "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-18" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-19" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -1090,7 +1090,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-18" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-19" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -1098,7 +1098,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-18">
+        <p class="visually-hidden" id="P0-19">
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">

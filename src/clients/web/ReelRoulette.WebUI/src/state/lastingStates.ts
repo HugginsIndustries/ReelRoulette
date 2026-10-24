@@ -11,6 +11,18 @@ export function noLibraryText(libraryMessage: string | null): string {
   return libraryMessage ? `Running without a library. ${libraryMessage}` : "Running without a library.";
 }
 
+/**
+ * Why the page loads nothing from the server, which the Library, Stats, and Randomization tabs say in place of what
+ * they show: the compatibility message while the server fails the check, or its message for its library state while it
+ * runs without a library. Null otherwise. It reads the store's signals, so a computed follows them.
+ */
+export function heldBackText(store: Pick<AppStore, "compatibilityBlocked" | "compatibilityMessage" | "noLibrary" | "libraryMessage">): string | null {
+  if (store.compatibilityBlocked.value) {
+    return store.compatibilityMessage.value;
+  }
+  return store.noLibrary.value ? noLibraryText(store.libraryMessage.value) : null;
+}
+
 /** The notice for Play, or a tile's play, while the server fails the compatibility check. */
 export const INCOMPATIBLE_PLAY_NOTICE = "Cannot play: server compatibility check failed.";
 
