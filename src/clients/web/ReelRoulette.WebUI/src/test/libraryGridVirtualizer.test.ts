@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { buildRows } from "../library/libraryGridLayout";
 import {
-  countVisibleRows,
   createVirtualizerState,
   findVisibleRowRange,
   measureTrailingItemsHeight,
-  rebuildOffsetIndex
+  rebuildOffsetIndex,
+  type VisibleGridWindow
 } from "../library/libraryGridVirtualizer";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
+
+function visibleRowCount(window: VisibleGridWindow): number {
+  return window.endExclusive - window.firstVisibleRow;
+}
 
 function makeItem(index: number): LibraryProjectionItem {
   return {
@@ -44,7 +48,7 @@ describe("libraryGridVirtualizer", () => {
 
     const midScroll = Math.floor(state.offsetIndex.totalExtentHeight / 2);
     const window = findVisibleRowRange(state.offsetIndex, midScroll, 800, 900);
-    const visibleCount = countVisibleRows(window);
+    const visibleCount = visibleRowCount(window);
 
     expect(visibleCount).toBeLessThan(state.rows.length / 4);
     expect(visibleCount).toBeGreaterThan(0);
@@ -52,7 +56,7 @@ describe("libraryGridVirtualizer", () => {
 
   it("spacer heights sum to total extent", () => {
     const aspects = Array.from({ length: 40 }, () => 16 / 9);
-    const rows = buildRows(aspects, 0, aspects.length, 640).rows;
+    const rows = buildRows(aspects, 0, aspects.length, 640);
     const offsetIndex = rebuildOffsetIndex(rows);
     const window = findVisibleRowRange(offsetIndex, 500, 400, 900);
 
@@ -80,9 +84,9 @@ describe("libraryGridVirtualizer", () => {
 
   it("measures the trailing items from the top of the row holding the first of them", () => {
     const aspects = Array.from({ length: 40 }, () => 16 / 9);
-    const rows = buildRows(aspects, 0, aspects.length, 480).rows;
+    const rows = buildRows(aspects, 0, aspects.length, 480);
     const state = { rows, offsetIndex: rebuildOffsetIndex(rows) };
-    expect(rows.every((row) => row.itemCount === 2)).toBe(true);
+    expect(rows.every((row) => row.tiles.length === 2)).toBe(true);
     const { rowTopOffsets, totalExtentHeight } = state.offsetIndex;
 
     expect(measureTrailingItemsHeight(state, 10)).toBe(totalExtentHeight - rowTopOffsets[15]!);
@@ -96,7 +100,7 @@ describe("libraryGridVirtualizer", () => {
     const items = [makeItem(0), makeItem(1)];
     const state = createVirtualizerState(items, 920);
     const window = findVisibleRowRange(state.offsetIndex, 0, 800);
-    expect(countVisibleRows(window)).toBeGreaterThanOrEqual(1);
-    expect(countVisibleRows(window)).toBeLessThanOrEqual(state.rows.length);
+    expect(visibleRowCount(window)).toBeGreaterThanOrEqual(1);
+    expect(visibleRowCount(window)).toBeLessThanOrEqual(state.rows.length);
   });
 });

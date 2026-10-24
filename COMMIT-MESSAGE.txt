@@ -20,9 +20,10 @@ Instructions:
 
 Commit Message:
 
-M12l: Show the library grid's smooth zoom in the mockup and record Sharper Thumbnails
+M12l: Keep the library grid's rows and tiles instead of rebuilding them
 
-- MILESTONES.md: WebUI Grid Row Reuse and Zoom zooms smoothly instead of in steps. During Ctrl+scroll or a pinch the grid scales around the pointer or the pinch's center, and when the gesture settles the rows reflow once at the new row height, with the tiles animating to their new places and the tile under the pointer keeping its vertical place. Tiles are spaced evenly, 1 px apart across a row and between rows, at every row height. Its Decisions, slices, release checks, and Not included follow, and the Row reuse slice keeps tiles through a reflow. The Mockup slice is complete, approved in the user's review, with its evidence.
-- MILESTONES.md: New backlog item P58, Sharper Thumbnails, groups larger thumbnails, with the measured sharpness on an iPad, storage, and generation figures, a sharper photo resize, not enlarging small videos, and the one-time rebuild marker they would share. Thumbnails stay at 480 px for now.
-- Mockup: Ctrl+scroll, a trackpad pinch, and a touch pinch zoom the library grid's row height from 100 to 300 px, scaling the grid while the gesture lasts and reflowing it once when it settles, and each device remembers the row height. Tiles sit 1 px apart across a row and between rows instead of 2 px across. Ctrl+scroll never zooms the page, and the index's Library notes and design table describe the zoom.
-- Mockup: The library grid follows a filter applied from the Filter tab instead of keeping its old tiles until the page reloads.
+- WebUI: The library grid keeps the rows and tiles in view instead of rebuilding every visible row through innerHTML, so it no longer flickers while scrolling on an iPad or after a hard refresh. Scrolling adds and removes only the rows that come into or leave view, and a patch, a further page, a reload, or a width change keeps each tile and its image by item, moving it into its new row and changing it only where it differs.
+- WebUI: New libraryGridRows.ts and libraryGridTile.ts build rows and tiles as elements, replacing the HTML-text row and tile models, and unused layout fields and helpers are removed.
+- Tests: Row reuse tests in the controller tests, now on happy-dom, a tile patching screen test, and element-based tile tests. The grid markup snapshot changes only in how many decimals the tile widths show.
+- Docs: CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md describe the kept rows and tiles and the fixed flicker.
+- MILESTONES.md: The Row reuse slice of WebUI Grid Row Reuse and Zoom is complete, with its evidence, including before-and-after timings in headless Firefox and the user's spot check on the iPad and a desktop browser.

@@ -164,7 +164,7 @@ Last milestone completed: M12k7
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | Ctrl+scroll and a pinch scaling the library grid smoothly and settling into one animated reflow at the new row height, with tiles evenly 1 px apart, approved by the user. |
-| Row reuse | ⏳ Planned | Grid rows and tiles kept and updated in place instead of rebuilt through `innerHTML`, and tiles kept through a reflow, so the grid no longer flickers on an iPad or after a hard refresh. |
+| Row reuse | ✅ Complete | Grid rows and tiles kept and updated in place instead of rebuilt through `innerHTML`, and tiles kept through a reflow, so the grid no longer flickers on an iPad or after a hard refresh. |
 | Grid zoom | ⏳ Planned | Ctrl+scroll, a trackpad pinch, and a touch pinch scaling the grid and settling into one animated reflow at the new row height, kept per device, tiles evenly 1 px apart, and Ctrl+scroll never zooming the page. |
 
 #### Mockup slice
@@ -241,6 +241,30 @@ Last milestone completed: M12k7
 - Scrolling keeps the rows and image elements that stay visible instead of rebuilding them, which stands in for the flicker on an iPad and after a hard refresh, in WebUI tests for row reuse.
 - Before-and-after timings for rendering a large window in a browser are recorded.
 - `npm run verify` passes, and a spot check on the user's own iPad and desktop browser, without the VM: on the iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker, and in the desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
+
+**Evidence**
+
+- The grid keeps its rows in view by their place in the layout and its tiles by item id, moves a tile into whichever row holds it, and changes a tile only where it differs (`src/library/libraryGridRows.ts` and `src/library/libraryGridTile.ts`, which replace `libraryGridRowModel.ts` and `libraryGridTileModel.ts`).
+- No grid row or tile is built from HTML text; tiles are built as elements with the same markup as before.
+- An item loaded twice, as when the library changes between two pages, gets a tile in each place.
+- A thumbnail that fails to load stays blank until its tile leaves the view and comes back or its thumbnail changes, since a kept image is never requested again; the user chose no retry.
+- The controller tests run in happy-dom, with stubs for the box size, a hidden scroller ignoring scrolling, and ResizeObserver, whose happy-dom version never calls back (`src/test/libraryGridController.test.ts`).
+- Row reuse tests show that scrolling keeps the rows and images that stay visible and creates images only for tiles coming into view, that scrolling down adds and removes only the rows coming into and leaving view and moves none of the rows that stay, that a reflow at a new width keeps the tile and image elements of the items in view and moves them into their new rows, that no grid element's `innerHTML` is set while loading, scrolling, reflowing, adding a page, or patching, and that an item loaded twice keeps both tiles.
+- After a scroll, a reflow that narrows the grid, an added page, a patch, and a reflow that widens it, which moves tiles into earlier rows still shown, the kept grid's markup equals that of a new grid for the same items, width, and scroll position, in the row reuse tests, and the layout and Library rows tests pass unchanged apart from the removed fields.
+- A tile patching test in the Library screen tests shows that a favorite or blacklist event changes only that tile and that playback, tag, and rating events change no tile, without a query.
+- The tile tests check the built markup, that an update with nothing changed writes nothing, and that a new thumbnail version changes the kept image's `src` (`src/test/libraryGridTile.test.ts`).
+- Each kind of break failed its tests and passed once restored: building every row and tile again on each render, emptying rows through `innerHTML`, a kept tile never taking its new width, two copies of an item sharing one tile, rewriting the tooltip on every update, and moving every row that stays when the top row leaves while scrolling down (measured).
+- The Library markup snapshot changed only in tile widths, which the grid now sets through the element's style and happy-dom keeps to six decimals, such as 284.444444px for 284.44444444444446px (measured).
+- Unused layout code is removed: `getFallbackThumbnailDimensions`, `FALLBACK_HEIGHT`, the rows' `rowWidth`, `aspectRatioUsed`, `itemCount`, and `maxColumns`, `countVisibleRows`, and the controller's `getVisibleRowCountForFixture`.
+- In headless Firefox 157 with a throwaway profile and no network, with 10,000 items in a 420 × 800 px panel, as medians of 15 runs including style and layout, in two passes in opposite orders, before and after in ms (measured):
+  - Opening: 1.68 and 1.66 before, 1.64 and 1.68 after.
+  - Scrolling a screen height in 20 scroll events: 17.68 and 16.34 before, 7.28 and 8.36 after, the slowest event 2.10 and 2.00 before, 1.10 and 1.46 after.
+  - A favorite patch: 2.48 and 2.32 before, 0.84 and 1.14 after.
+  - A width change: 2.16 and 2.06 before, 2.02 and 2.00 after.
+  - An added page of 200: 2.08 and 2.12 before, 0.86 and 0.86 after.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the kept rows and tiles and the fixed flicker.
+- `npm run verify` passes, with 2,133 tests in 88 files.
+- In the user's spot check, scrolling the library grid a screen height in landscape on the iPad with the WebUI installed as an app showed no flicker, and neither did opening the library and scrolling the grid in the desktop browser after a hard refresh (Ctrl+F5).
 
 #### Grid zoom slice
 

@@ -34,7 +34,7 @@ export function buildGridRowsFromItems(
     return [];
   }
   const aspects = buildItemAspectRatios(items);
-  return buildRows(aspects, 0, aspects.length, layoutWidth).rows;
+  return buildRows(aspects, 0, aspects.length, layoutWidth);
 }
 
 export function rebuildOffsetIndex(rows: readonly LibraryGridRowLayout[]): GridOffsetIndex {
@@ -151,10 +151,6 @@ export function createVirtualizerState(
     rows,
     offsetIndex: rebuildOffsetIndex(rows)
   };
-}
-
-export function countVisibleRows(window: VisibleGridWindow): number {
-  return Math.max(0, window.endExclusive - window.firstVisibleRow);
 }
 
 /** Height from the top of the row holding the first of the last `itemCount` items to the end of the grid. */

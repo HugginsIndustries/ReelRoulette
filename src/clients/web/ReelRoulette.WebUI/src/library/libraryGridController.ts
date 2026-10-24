@@ -1,8 +1,6 @@
 import { computeAvailableLayoutWidth } from "./libraryGridLayout";
-import { renderGridRowHtml } from "./libraryGridRowModel";
-import { PLAYING_TILE_CLASS } from "./libraryGridTileModel";
+import { createLibraryGridRows, type LibraryGridRows } from "./libraryGridRows";
 import {
-  countVisibleRows,
   createVirtualizerState,
   findVisibleRowRange,
   measureTrailingItemsHeight,
@@ -25,7 +23,7 @@ export interface LibraryGridCoverage {
 
 export interface LibraryGridController {
   setBrowseContent(input: { visibleItems: readonly LibraryProjectionItem[]; resetScroll?: boolean }): void;
-  /** Marks the playing item's tile, or none, on the tiles shown and on those rendered later. */
+  /** Marks the playing item's tile, or none, on the tiles shown and on those shown later. */
   setPlayingItemId(itemId: string | null): void;
   measureCoverage(): LibraryGridCoverage | null;
   flushDeferredLayout(): void;
@@ -40,7 +38,7 @@ export function createLibraryGridController(
   let browseRoot: HTMLElement | null = null;
   let scrollEl: HTMLElement | null = null;
   let topSpacerEl: HTMLElement | null = null;
-  let rowsEl: HTMLElement | null = null;
+  let gridRows: LibraryGridRows | null = null;
   let bottomSpacerEl: HTMLElement | null = null;
   let emptyEl: HTMLElement | null = null;
 
@@ -75,8 +73,10 @@ export function createLibraryGridController(
     topSpacerEl = document.createElement("div");
     topSpacerEl.className = "library-grid-spacer library-grid-spacer-top";
 
-    rowsEl = document.createElement("div");
+    const rowsEl = document.createElement("div");
     rowsEl.className = "library-grid-rows";
+    gridRows = createLibraryGridRows(rowsEl, apiBaseUrl);
+    gridRows.setPlayingItemId(playingItemId);
 
     bottomSpacerEl = document.createElement("div");
     bottomSpacerEl.className = "library-grid-spacer library-grid-spacer-bottom";
@@ -113,14 +113,14 @@ export function createLibraryGridController(
   }
 
   function updateVisibleRows(force = false): void {
-    if (!scrollEl || !topSpacerEl || !rowsEl || !bottomSpacerEl) {
+    if (!scrollEl || !topSpacerEl || !gridRows || !bottomSpacerEl) {
       return;
     }
 
     if (virtualizerState.rows.length === 0) {
       topSpacerEl.style.height = "0px";
       bottomSpacerEl.style.height = "0px";
-      rowsEl.replaceChildren();
+      gridRows.clear();
       lastVisibleStart = 0;
       lastVisibleEnd = 0;
       return;
@@ -146,9 +146,7 @@ export function createLibraryGridController(
     topSpacerEl.style.height = `${window.topSpacerHeight}px`;
     bottomSpacerEl.style.height = `${window.bottomSpacerHeight}px`;
 
-    const visibleRows = virtualizerState.rows.slice(window.firstVisibleRow, window.endExclusive);
-    const html = visibleRows.map((row) => renderGridRowHtml(row, items, apiBaseUrl, playingItemId)).join("");
-    rowsEl.innerHTML = html;
+    gridRows.show(virtualizerState.rows, window.firstVisibleRow, window.endExclusive, items);
     reportCoverage();
   }
 
@@ -220,8 +218,8 @@ export function createLibraryGridController(
       }
 
       virtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
-      if (rowsEl && topSpacerEl && bottomSpacerEl) {
-        rowsEl.replaceChildren();
+      if (gridRows && topSpacerEl && bottomSpacerEl) {
+        gridRows.clear();
         topSpacerEl.style.height = "0px";
         bottomSpacerEl.style.height = "0px";
       }
@@ -244,15 +242,10 @@ export function createLibraryGridController(
     rebuildVirtualizer(wantsReset);
   }
 
-  // Moves the class between the tiles shown, so the grid doesn't render them again.
+  // Moves the mark between the tiles shown, changing nothing else.
   function setPlayingItemId(itemId: string | null): void {
     playingItemId = itemId;
-    if (!rowsEl) {
-      return;
-    }
-    for (const tile of rowsEl.querySelectorAll<HTMLElement>(".library-grid-tile")) {
-      tile.classList.toggle(PLAYING_TILE_CLASS, itemId !== null && tile.dataset.itemId === itemId);
-    }
+    gridRows?.setPlayingItemId(itemId);
   }
 
   function flushDeferredLayout(): void {
@@ -280,7 +273,7 @@ export function createLibraryGridController(
     browseRoot = null;
     scrollEl = null;
     topSpacerEl = null;
-    rowsEl = null;
+    gridRows = null;
     bottomSpacerEl = null;
     emptyEl = null;
     items = [];
@@ -299,40 +292,4 @@ export function createLibraryGridController(
     flushDeferredLayout,
     destroy
   };
-}
-
-/** Exported for tests that assert virtualization window sizing. */
-export function getVisibleRowCountForFixture(
-  itemCount: number,
-  layoutWidth: number,
-  scrollTop: number,
-  viewportHeight: number
-): number {
-  const items = Array.from({ length: itemCount }, (_, index) => ({
-    id: `id-${index}`,
-    sourceId: "s1",
-    fileName: `f-${index}.mp4`,
-    fullPath: null,
-    relativePath: "",
-    playCount: 0,
-    lastPlayedUtcMs: null,
-    dateAddedUtcMs: null,
-    dateCreatedUtcMs: null,
-    durationSeconds: null,
-    mediaType: "video" as const,
-    isFavorite: false,
-    isBlacklisted: false,
-    hasAudio: null,
-    integratedLoudness: null,
-    peakDb: null,
-    rating: null,
-    tags: [],
-    hasThumbnail: false,
-    thumbnailVersion: null,
-    thumbnailWidth: null,
-    thumbnailHeight: null
-  }));
-  const state = createVirtualizerState(items, layoutWidth);
-  const window = findVisibleRowRange(state.offsetIndex, scrollTop, viewportHeight);
-  return countVisibleRows(window);
 }

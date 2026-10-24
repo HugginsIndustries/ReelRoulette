@@ -985,6 +985,70 @@ describe("live updates", () => {
   });
 });
 
+describe("tile patching", () => {
+  /** What the grid's rows changed while `emit`'s event was handled. */
+  async function gridChangesBy(emit: () => void): Promise<MutationRecord[]> {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((list) => records.push(...list));
+    observer.observe(overlay().querySelector(".library-grid-rows")!, { subtree: true, childList: true, attributes: true, characterData: true });
+    emit();
+    await flush();
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+    return records;
+  }
+
+  // Without the Blacklisted filter, so blacklisting a tile patches it rather than reloading the window.
+  const EVERYTHING_PRESET = {
+    id: "preset-everything",
+    name: "Everything",
+    filterState: { blacklistedMode: "off", selectedTags: [], excludedTags: [], includedSourceIds: [] }
+  };
+
+  it("a favorite or blacklist event changes only that tile, and playback, tag, and rating events change no tile", async () => {
+    const { page, library } = await mountLibrary(libraryItems(30, { hasThumbnail: true, thumbnailVersion: "v1" }), (server) => {
+      server.on("GET", "/api/presets", () => json([EVERYTHING_PRESET]));
+    });
+    await pickPreset("preset-everything");
+    await openLibrary();
+    const queries = library.queries().length;
+    const tiles = Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-tile"));
+    expect(tiles.length).toBe(30);
+    const onlyIn = (records: MutationRecord[], itemId: string) =>
+      records.length > 0 && records.every((record) => tile(itemId)!.contains(record.target));
+
+    const favorited = await gridChangesBy(() =>
+      page.stream().emit("itemStateChanged", 2, { itemId: "item-3", isFavorite: true, isBlacklisted: false })
+    );
+    expect(onlyIn(favorited, "item-3")).toBe(true);
+    expect(tile("item-3")!.querySelector(".library-grid-tile-badge")?.textContent).toBe("favorite");
+
+    const blacklisted = await gridChangesBy(() =>
+      page.stream().emit("itemStateChanged", 3, { itemId: "item-4", isFavorite: false, isBlacklisted: true })
+    );
+    expect(onlyIn(blacklisted, "item-4")).toBe(true);
+    expect(tile("item-4")!.querySelector(".library-grid-tile-badge")?.textContent).toBe("thumb_down");
+
+    const played = await gridChangesBy(() =>
+      page.stream().emit("playbackRecorded", 4, { itemId: "item-5", playCount: 4, lastPlayedUtc: "2026-10-07T00:00:00Z" })
+    );
+    const tagged = await gridChangesBy(() =>
+      page.stream().emit("itemTagsChanged", 5, { resolvedItemIds: ["item-6"], addedTags: ["Beach"], removedTags: [] })
+    );
+    const rated = await gridChangesBy(() =>
+      page.stream().emit("itemRatingChanged", 6, { itemId: "item-7", path: "C:\\media\\clip 7.mp4", rating: 4, previousRating: null, clientId: "another-client" })
+    );
+    expect(played).toHaveLength(0);
+    expect(tagged).toHaveLength(0);
+    expect(rated).toHaveLength(0);
+
+    expect(library.queries()).toHaveLength(queries);
+    const after = Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-tile"));
+    expect(after).toHaveLength(tiles.length);
+    after.forEach((element, index) => expect(element).toBe(tiles[index]));
+  });
+});
+
 describe("playing a tile", () => {
   it("a tile whose file the server can't read says it couldn't load, for a video and a photo", async () => {
     useOverlayWidth();

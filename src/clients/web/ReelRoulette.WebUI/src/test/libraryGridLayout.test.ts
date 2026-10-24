@@ -29,12 +29,12 @@ describe("libraryGridLayout", () => {
 
   it("buildRows packs all items across rows", () => {
     const aspects = [16 / 9, 4 / 3, 16 / 9, 1, 16 / 9];
-    const result = buildRows(aspects, 0, aspects.length, 920);
+    const rows = buildRows(aspects, 0, aspects.length, 920);
 
-    const itemCount = result.rows.reduce((sum, row) => sum + row.itemCount, 0);
+    const itemCount = rows.reduce((sum, row) => sum + row.tiles.length, 0);
     expect(itemCount).toBe(5);
-    expect(result.maxColumns).toBeGreaterThanOrEqual(2);
-    for (const row of result.rows) {
+    expect(Math.max(...rows.map((row) => row.tiles.length))).toBeGreaterThanOrEqual(2);
+    for (const row of rows) {
       expect(row.rowHeight).toBeGreaterThanOrEqual(MIN_ROW_HEIGHT);
       expect(row.rowHeight).toBeLessThanOrEqual(MAX_ROW_HEIGHT);
     }
@@ -42,12 +42,12 @@ describe("libraryGridLayout", () => {
 
   it("buildRows honors partial range", () => {
     const aspects = [16 / 9, 4 / 3, 16 / 9];
-    const result = buildRows(aspects, 1, 3, 640);
+    const rows = buildRows(aspects, 1, 3, 640);
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]!.itemCount).toBe(2);
-    expect(result.rows[0]!.startItemIndex).toBe(1);
-    expect(result.rows[0]!.endItemIndexExclusive).toBe(3);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tiles).toHaveLength(2);
+    expect(rows[0]!.startItemIndex).toBe(1);
+    expect(rows[0]!.endItemIndexExclusive).toBe(3);
   });
 
   it("computeAvailableLayoutWidth clamps to minimum width", () => {

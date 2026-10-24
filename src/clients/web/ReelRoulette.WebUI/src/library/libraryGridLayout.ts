@@ -13,27 +13,18 @@ export const MIN_ASPECT_RATIO = 0.25;
 export const MAX_ASPECT_RATIO = 4.0;
 export const FALLBACK_PHOTO_ASPECT_RATIO = 4 / 3;
 export const FALLBACK_VIDEO_ASPECT_RATIO = 16 / 9;
-export const FALLBACK_HEIGHT = 100;
 
 export interface LibraryGridTileLayout {
   tileWidth: number;
   tileHeight: number;
   itemIndex: number;
-  aspectRatioUsed: number;
 }
 
 export interface LibraryGridRowLayout {
   tiles: LibraryGridTileLayout[];
   startItemIndex: number;
   endItemIndexExclusive: number;
-  itemCount: number;
   rowHeight: number;
-  rowWidth: number;
-}
-
-export interface LibraryGridLayoutResult {
-  rows: LibraryGridRowLayout[];
-  maxColumns: number;
 }
 
 export function computeAvailableLayoutWidth(measuredViewportWidth: number): number {
@@ -53,11 +44,6 @@ export function getAspectRatio(
   }
 
   return mediaType === "photo" ? FALLBACK_PHOTO_ASPECT_RATIO : FALLBACK_VIDEO_ASPECT_RATIO;
-}
-
-export function getFallbackThumbnailDimensions(mediaType: LibraryGridMediaType): { width: number; height: number } {
-  const aspect = mediaType === "photo" ? FALLBACK_PHOTO_ASPECT_RATIO : FALLBACK_VIDEO_ASPECT_RATIO;
-  return { width: FALLBACK_HEIGHT * aspect, height: FALLBACK_HEIGHT };
 }
 
 export function projectionMediaTypeToGridMediaType(mediaType: LibraryMediaType): LibraryGridMediaType {
@@ -82,8 +68,7 @@ export function buildRows(
   startIndex: number,
   endExclusive: number,
   layoutWidth: number
-): LibraryGridLayoutResult {
-  let maxColumns = 1;
+): LibraryGridRowLayout[] {
   const rows: LibraryGridRowLayout[] = [];
 
   const pendingAspects: number[] = [];
@@ -111,8 +96,7 @@ export function buildRows(
       tiles.push({
         tileWidth: widths[i]!,
         tileHeight: rowHeight,
-        itemIndex: pendingItemIndexes[i]!,
-        aspectRatioUsed: pendingAspects[i]!
+        itemIndex: pendingItemIndexes[i]!
       });
     }
 
@@ -120,11 +104,8 @@ export function buildRows(
       tiles,
       startItemIndex: pendingItemIndexes[0]!,
       endItemIndexExclusive: pendingItemIndexes[pendingItemIndexes.length - 1]! + 1,
-      itemCount: tiles.length,
-      rowHeight,
-      rowWidth: widths.reduce((a, b) => a + b, 0) + (tiles.length - 1) * HORIZONTAL_GAP
+      rowHeight
     });
-    maxColumns = Math.max(maxColumns, tiles.length);
 
     pendingAspects.length = 0;
     pendingItemIndexes.length = 0;
@@ -147,7 +128,7 @@ export function buildRows(
   }
 
   addRow(true);
-  return { rows, maxColumns };
+  return rows;
 }
 
 export function getGridRowMeasuredHeight(row: LibraryGridRowLayout): number {

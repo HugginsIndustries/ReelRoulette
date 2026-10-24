@@ -280,14 +280,14 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the sort modes, typed from the contract's, each with its name in the sort list and its direction labels, and the sort and search text held by the Library tab.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`
   - justified-row layout (`getAspectRatio`, `buildRows`), at the Library tab's tile size, rows 100 to 240 px high aiming for 160; layout width uses full scrollport.
-- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridTileModel.ts`
-  - grid tile HTML with the file name as the tile's tooltip, thumbnail URL builder, filled favorite and blacklist badges, and the playing icon every tile has, which shows only on the playing tile.
-- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridRowModel.ts`
-  - justified grid row HTML composition.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridTile.ts`
+  - one item's grid tile element, changed in place only where it differs: the file name as the tile's tooltip, thumbnail URL builder, filled favorite and blacklist badges, and the playing icon every tile has, which shows only on the playing tile.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridRows.ts`
+  - the rows in view, kept by their place in the layout, with each item's tile kept by item id and moved into whichever row holds it, so scrolling, patches, further pages, reloads, and width changes create only the rows and tiles coming into view; an item loaded twice gets a tile in each place.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridVirtualizer.ts`
   - row offset index, visible-window calculation (900px overscan), and the height of the last loaded page.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridController.ts`
-  - Library tab grid DOM lifecycle (mount, scroll, fill coverage with the last page's height, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy), the message for no matches, and the playing tile, moved between the tiles shown without rendering them again.
+  - Library tab grid DOM lifecycle (mount, scroll, fill coverage with the last page's height, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy), the message for no matches, and the playing tile, moved between the tiles shown without changing them otherwise.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - what a refused play says (`playRefusalFailure`), by the item's media type, which the player also uses for a refused history step, recovery, or media recheck: its own words for a missing, unavailable, unsupported, or unreadable file, and otherwise `requestFailure`'s wording for "Playback failed".
 - `src/clients/web/ReelRoulette.WebUI/src/playback/randomPick.ts`
