@@ -115,7 +115,7 @@ public sealed class LibraryPlaybackService
             _serverLog?.Append("info", $"Random pick memory dropped devices={dropped}.");
         }
 
-        var selected = _catalog.Session.ReadPlaybackItemById(picked.Item.Id);
+        var selected = _catalog.Session.ReadPlaybackItem(picked.Item.Id);
         if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
         {
             error = "Selected item not found.";

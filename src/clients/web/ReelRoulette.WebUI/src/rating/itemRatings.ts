@@ -6,7 +6,8 @@ import { basenameFromPath } from "../playback/nowPlaying";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
-import type { ItemRatingChangedPayload } from "../types/serverContracts";
+import { countText } from "../text/countText";
+import type { BulkItemRatingChangedPayload, ItemRatingChangedPayload } from "../types/serverContracts";
 import { parseRating, RATING_KEY_PAUSE_MS, ratingText } from "./rating";
 
 /** An item as a rating control shows it: its id, its file's name for the popups, and the rating it shows now. */
@@ -22,7 +23,7 @@ export interface RatedItem {
  * sends one request, and one still waiting when the page closes is dropped. A change that ends on the rating it started
  * from sends nothing.
  * The server's answer pops up as Your actions, and a request that fails puts the rating back with a notice. Another
- * device's change, from `itemRatingChanged`, pops up as Other devices.
+ * device's change, from `itemRatingChanged` or `bulkItemRatingChanged`, pops up as Other devices.
  */
 export interface ItemRatings {
   /**
@@ -58,6 +59,15 @@ interface WaitingChange {
 /** The popup's text for a rating set, or cleared with null. */
 function changeText(rating: number | null): string {
   return rating === null ? "Rating cleared" : `Rated ${ratingText(rating)}`;
+}
+
+/** The Other devices popup for a rating set, or cleared, on several items at once. */
+function bulkRatingText(payload: BulkItemRatingChangedPayload): string {
+  const items = countText(payload.count, "item");
+  const rating = parseRating(payload.rating);
+  return rating === null
+    ? `Cleared the rating on ${items} on another device`
+    : `Rated ${items} ${ratingText(rating)} on another device`;
 }
 
 export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
@@ -144,6 +154,18 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
       detail: basenameFromPath(payload.path || ""),
       key: `sync-rating:${itemId}`
     });
+  });
+  connection.on("bulkItemRatingChanged", (payload) => {
+    if (!payload) return;
+    for (const item of payload.items ?? []) {
+      keepConfirmed(item.itemId, parseRating(item.rating));
+    }
+    changed();
+    // As for one item's change, this device's own batch already said so, and one without a client id is another's.
+    if (payload.clientId && payload.clientId === store.identity.clientId) {
+      return;
+    }
+    notifications.notify({ kind: "devices", text: bulkRatingText(payload), key: "sync-bulk-rating" });
   });
   // Events may have been missed, so the ratings they brought may be out of date; the reads that follow have them.
   connection.on("resyncRequired", () => {

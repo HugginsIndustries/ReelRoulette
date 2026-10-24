@@ -140,61 +140,87 @@ Last milestone completed: M12l
 
 ### M12m - WebUI Multi-Select and Bulk Actions
 
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI selects several library items, or every item that matches, and favorites, blacklists, rates, tags, clears the playback stats of, or removes them all at once.
+- **Status**: 🚧 In Progress
+- **Goal**: The WebUI selects several library items, or every item that matches, and favorites, blacklists, rates, tags, or clears the playback stats of all of them at once, or deletes their files.
 - **Depends on**: WebUI Grid Row Reuse and Zoom, which updates a tile in place, so selection marks are tile updates, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and Item Ratings, whose rating and star control Rate… uses, and Rating Filter and Sort, whose rating change kind in the tile effect rule the bulk rating event goes through.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
 
 - Select all selects every item that matches the search and filters, loaded or not, and each bulk action applies to all of them.
-- Each bulk action acknowledges itself in a Your actions popup: "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Rated {n} items {rating}.", "Cleared the rating on {n} items.", "Updated tags on {n} items.", "Cleared playback stats for {n} items.", and "Removed {n} items from the library.", or "Removed {n} items from the library and deleted their files.", with "1 item" for one, and {rating} as Item Ratings words it, such as "3.5 stars".
+- Each bulk action acknowledges itself in a Your actions popup: "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Rated {n} items {rating}.", "Cleared the rating on {n} items.", "Updated tags on {n} items.", and "Cleared playback stats for {n} items.", with "1 item" for one, and {rating} as Item Ratings words it, such as "3.5 stars".
+- Removing items from the library always deletes their files from disk, and the action is named for what it does. An item removed with its file left on disk wouldn't stay removed: the refresh's source stage adds every file in a source folder that the catalog doesn't hold as a new item, with no tags, favorite, or play stats and a new date added. Blacklisting covers hiding a file and keeping it.
+- A bulk change's {n} is the `count` its route answers and its event carries, the named items in the library, so the device that made the change and other devices say the same number.
+- Item ids match exactly as the server generates them, so looking up the items a request names reads the id's primary key index instead of scanning it.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | An ids-only library query, a bulk favorite and blacklist route with one event, bulk rating with one event, an item removal route with its event, the tag-count read for a selection, and the WebUI's handling of the bulk and item removal events. |
+| Contract | ✅ Complete | An ids-only library query, bulk favorite and blacklist with one event, bulk rating with one event, a delete-files route with its event, the tag-count read for a selection, exact id matching, and the WebUI's handling of the bulk and removal events. |
 | Selection | ⏳ Planned | Selecting tiles by their check icon or a long press, the selection bar with Select all, and the Esc order. |
-| Bulk actions | ⏳ Planned | The Actions menu's favorite, blacklist, rate, clear playback stats, and remove from library actions, the control-token prompt remove from library asks through, and favorite and blacklist answers applied to the item they were for. |
+| Bulk actions | ⏳ Planned | The Actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload, a resync in place of a bulk event too large to send, and favorite and blacklist answers applied to the item they were for. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
 
 #### Contract slice
 
 **Scope**
 
-- The library query gains an ids-only option that returns every matching id in one response, for Select all.
-- One bulk route takes many ids and sets or clears favorite or blacklist on all of them in one request, publishing one event for all of them in place of one request and one `itemStateChanged` per item.
-- Bulk rating sets or clears one rating on many ids in one request and publishes one rating event for all of them, carrying each item's previous rating. Promotion decides whether it stays its own event or shares the bulk favorite and blacklist event.
-- A route removes items from the library, with the delete-from-disk option the desktop remove dialog offered.
-- The item removal route is gated as the `/control` routes are: open from the server machine, and from another machine only with the control token.
-- Removing items publishes an event so connected clients update, and every open WebUI requeries its library window on it.
+- `POST /api/library/query-ids` answers the id of every item the library query with the same search and filters matches, with no paging, cap, or order, for Select all.
+- `POST /api/bulk/item-state` sets or clears favorite or blacklist on many ids in one write, with the single routes' rule that a favorite clears blacklist and a blacklist clears favorite, and publishes one `bulkItemStateChanged` for the request in place of one `itemStateChanged` per item.
+- `POST /api/bulk/rating` sets or clears one rating on many ids in one write and publishes an event of its own, `bulkItemRatingChanged`, for the request, carrying each changed item's previous rating.
+- Each bulk event carries what the request set, `count`, the named items in the library, and only the items that changed, with their values before and after, and is published when `count` is above 0. Each bulk route answers that `count`.
+- The single favorite, blacklist, and rating routes write through the same Core code with one id, and keep their answers and events.
+- `POST /api/library/delete-files` deletes the named items' files from disk, outside the operations lock, and then removes the items whose files it deleted, with their tags, in one write. An item whose file isn't on disk, or can't be deleted, stays and is named in `failedItemIds`.
+- Delete files is gated as the `/control` routes are, by their one check (`ServerPairingAuthMiddleware.IsControlRequestAuthorized`): open from the server machine, and from another machine only with a control session or the control token. Any other caller gets 403 with `control_token_required`, not 401, which the WebUI reads as a device that needs pairing.
+- Delete files publishes `itemsRemoved` with the removed ids, and every open WebUI reloads its library window, its Stats tab, and the loudness baseline on it.
+- Duplicate apply deletes its files through the same code, writes the same `last.log` lines, takes the same check, and publishes `itemsRemoved`.
+- Each bulk request writes one `last.log` line with its counts and elapsed time, and a refused delete files or duplicate apply writes a warning with the caller's address.
 - The WebUI applies the patch-or-reload rule to each id in a bulk event, the bulk rating event included, and reloads its window at most once.
 - The bulk requests send the device's `clientId`, and the bulk events carry it back as `clientId`, as WebUI Notifications does for one item's favorite or blacklist.
-- Other devices show one Other devices popup for the batch: "Added {n} items to favorites on another device", "Removed {n} items from favorites on another device", "Blacklisted {n} items on another device", "Removed {n} items from the blacklist on another device", "Rated {n} items {rating} on another device", or "Cleared the rating on {n} items on another device", with "1 item" for one. The device whose `clientId` the event carries shows only its Your actions popup.
-- For a selection of every matching item, the Tags tab's chip states and collapsed counts need each tag's count across the selection, which the WebUI can't work out for items it hasn't loaded. The slice measures the existing tag-editor model, which takes item ids, on the 49,055-item catalog against a counts-only addition, and uses the cheaper one.
+- Other devices show one Other devices popup for the batch: "Added {n} items to favorites on another device", "Removed {n} items from favorites on another device", "Blacklisted {n} items on another device", "Removed {n} items from the blacklist on another device", "Rated {n} items {rating} on another device", or "Cleared the rating on {n} items on another device", with "1 item" for one and {n} grouped as the count line is. The device whose `clientId` the event carries shows no Other devices popup.
+- Item ids match exactly in every route, so each lookup reads the id's primary key index.
+- For a selection of every matching item, the Tags tab's chip states and collapsed counts need each tag's count across the selection, which the WebUI can't work out for items it hasn't loaded. The tag-editor model's `countsOnly` answers `tagCounts`, how many of the items hold each tag, and `itemCount`, how many of them are in the library, in place of each item's tags, as the cheaper read the slice measured.
 - OpenAPI and generated WebUI types.
 
 **Traps**
 
 - `POST /api/favorite` and `POST /api/blacklist` take one item id each.
 - `POST /api/playback/clear-stats` and `POST /api/tag-editor/apply-item-tags` each take a list of item ids, `itemIds`, so a selection of items that aren't loaded can be cleared. Clear-stats refuses a request that names no ids without `allItems`.
-- No route removes items from the library.
-- The ids-only response is about 1.9 MB for the developer catalog's 49,055 items, worked out from 36-character ids (inferred).
+- Every id lookup was case-insensitive (`COLLATE NOCASE` in `ResolveItemId`), which the id's primary key index can't serve, so each lookup scanned the index: about 0.5 ms an id, and about 25 s for a request naming every item, holding the catalog's write lock (measured before promotion).
+- The refresh's source stage adds every file in a source folder that the catalog doesn't hold as a new item (`InsertDiscoveredItem` in `RefreshPipelineService.cs`).
 - Item Ratings' `POST /api/rating` takes one item, and its `itemRatingChanged` names one item.
 - The tag-editor model takes item ids (`TagEditorModelRequest.itemIds`).
+- `sseClient.ts` listens only for the event types in its handler map, so an event type `serverConnection.ts` doesn't register is dropped.
+- Each reload of the library window aborts the one before, so patching a batch one item at a time sends up to one query an item (measured).
 
 **Acceptance**
 
 - The ids-only query returns every matching id, in server tests for the ids-only query.
 - Bulk favorite and blacklist send one request and publish one event, and the WebUI reloads its window at most once for it, in server tests for the bulk route and its one event, and WebUI tests that the bulk event reloads the window at most once.
-- The bulk event carries the request's `clientId`, in server tests for the bulk route, and other devices show one Other devices popup for the batch while the device that made the change shows only its Your actions popup, in WebUI tests of the bulk event's popups.
+- The bulk event carries the request's `clientId`, in server tests for the bulk route, and other devices show one Other devices popup for the batch while the device that made the change shows none, in WebUI tests of the bulk event's popups.
 - Bulk rating sends one request and publishes one rating event with each item's previous rating and the request's `clientId`, the WebUI reloads its window at most once for it, and its popups follow the same rule, in server tests for bulk rating and its event and WebUI tests of the bulk rating event.
-- The item removal route removes items with and without deleting from disk, in server tests of the route.
+- Delete files deletes the files and removes their items, keeps an item whose file is missing or can't be deleted, and refuses a caller from another machine without the control token with 403, and duplicate apply refuses that caller too and publishes `itemsRemoved`, in server tests of the routes.
 - Removing items updates connected WebUI sessions through events and list requery, in WebUI tests for event handling.
-- The measurement of the tag-editor model against a counts-only addition on the 49,055-item catalog is recorded, and the cheaper read is used.
-- The ids-only query, the bulk route, bulk rating and its event, and the item removal route and its event are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
+- The measurement of the tag-editor model against a counts-only addition on the catalog is recorded, and the cheaper read is used.
+- The ids-only query, the bulk route, bulk rating and its event, and the delete-files route and its event are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- Measured on a copy of the newest server backup of the developer catalog, 49,466 items, with Python's SQLite 3.53.4 (the server bundles 3.53.3), writes in WAL with synchronous=NORMAL as the server opens the catalog (measured):
+  - The tag-editor model for every item: 27.2 s with the case-insensitive lookup, and 0.34 s with exact lookups, answering 3.8 MB of each item's tags. Counts per tag from the same ids: 55 ms, answering 12 KB for the catalog's 283 tags. The counts read is used.
+  - Every matching id: 35 ms, answering 1.98 MB.
+  - Setting or clearing favorite on every item in one transaction: about 0.5 s. Clearing every item's playback stats: 0.24 s. Deleting the rows of 5,000 items: 0.37 s, and of every item, 5.3 s.
+- Every stored id in the catalog is a lowercase 36-character id the server generated (measured).
+- `BulkActionRouteTests.cs` covers the ids query past one page with search, filter, and a disabled source; bulk favorite and blacklist setting and clearing with the clearing rule, one write and one event listing only the changed items, `count`, and the request's `clientId`, and no event when no named item is in the library; bulk rating likewise; delete files deleting files, items, and tags, keeping a missing and an undeletable file's items in `failedItemIds`, one `itemsRemoved`, a log line without paths, and the gate for localhost, a LAN caller with and without a control session, and the bearer token; duplicate apply's gate, its `itemsRemoved`, and its log lines; each bulk request's log line, with none for a single favorite or rating, and a warning for each refused delete files or duplicate apply; `countsOnly` across chunks, with tags in different casing counted as one; and each new request, answer, and payload against its OpenAPI schema.
+- Tests that named items by an id in another casing now show that such an id names no item (`ApplyItemTags_LeavesAnItemAlone_WhenItsIdIsInAnotherCasing`, the session, list, and playback read tests that used upper-case ids, and the WebUI tag save test that matches item ids exactly), and the other tests that used upper-case ids use the server's lower-case ones. The WebUI's tag save and the duplicate scan compare item ids exactly too.
+- WebUI tests show that a bulk favorite or rating batch that calls for a reload sends one query, a patch-only batch sends none and patches every tile it names, a batch that brings an item outside the window into the filter reloads once, `itemsRemoved` sends one query and reloads the Stats tab and the baseline, another device's batch shows one popup with the batch's text while this device's own shows none, and a batch naming the playing item updates its buttons, the item-state cache, and the rating star.
+- Each break failed its tests and passed once restored: publishing one bulk event per item, removing delete files' gate or letting the shared `/control` check pass every caller, which also failed four `/control` gate tests, putting the case-insensitive lookup back, patching a batch one item at a time in parallel (five queries where three were expected), dropping the own-device check from the bulk popups, dropping duplicate apply's gate or its `itemsRemoved`, the refusal's warning, or the bulk log lines, and sending the single favorite and rating through the bulk path that logs (measured).
+- The single favorite, blacklist, and rating routes write through the bulk Core code with one id, in place of three transactions a change. Their route tests pass unchanged, and the service tests take `SetRating`'s new answer and lower-case ids. Duplicate apply deletes its files through the delete-files code, outside the operations lock, with the same answers, and writes the same `last.log` lines, named `Duplicate apply`, whose test failed before it wrote them (measured).
+- Unused code is removed: the WebUI's `parseLibraryProjection`, `parseLibraryProjectionSummary`, and what only they used, the server's `UpdateItemFlag` and `UpdateItem`, `ReadPlaybackItemById`, which `ReadPlaybackItem` replaces, and Core's one-item `SetFavorite`, `SetBlacklist`, and `SetRating`, whose tests call `SetItemsFlag` and `SetItemsRating` with one id. One count helper, `text/countText.ts`, replaces the Filters line's and the kept-source notice's own, and `ApplyItemTags` passes its lists to Core, which trims and dedupes them, in place of doing it twice.
+- `shared/api/openapi.yaml`, the generated WebUI types, `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the new routes and events, exact id matching, and the counts read.
+- `dotnet build ReelRoulette.sln` passes with no warnings, `dotnet test ReelRoulette.sln` passes with 720 Core and 19 ServerApp tests, SystemChecks passes, and `npm run verify` passes with 2,197 tests in 91 files.
 
 #### Selection slice
 
@@ -237,20 +263,21 @@ Last milestone completed: M12l
 
 **Scope**
 
-- Actions is a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and Remove from library…, in red.
-- Add to and Remove from favorites and the blacklist send one request to the bulk route, and Clear playback stats sends ids.
-- Rate… opens an in-app dialog with Item Ratings' star control, designed in the mockup, which sets the chosen rating on every selected item, or clears it, in one bulk rating request.
+- Actions is a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and the delete action, in red, named for what it does: it deletes the selected items' files from disk and removes them from the library.
+- Add to and Remove from favorites and the blacklist send one request to `POST /api/bulk/item-state`, and Clear playback stats sends ids.
+- Rate… opens an in-app dialog with Item Ratings' star control, designed in the mockup, which sets the chosen rating on every selected item, or clears it, in one `POST /api/bulk/rating` request.
 - Bulk Add to favorites clears each item's blacklisting, and Add to blacklist clears its favorite, as the player's buttons do.
 - Clear playback stats… asks "Clear playback stats for {n} items?", with Cancel focused and a red Clear.
-- Remove from library is an admin action. From another machine it asks for the control token first, in a control-token prompt that this milestone builds on `POST /control/pair`; on the server machine, which the merged localhost helper decides, it asks for none. It then asks to confirm, naming the count, and sends the selection to the item removal route.
+- The delete action is an admin action. From another machine it asks for the control token first, in a control-token prompt that this milestone builds on `POST /control/pair`; on the server machine, which the merged localhost helper decides, it asks for none. It then asks to confirm, naming the count, and sends the selection to `POST /api/library/delete-files`.
 - WebUI Admin Section's gate reuses the control-token prompt.
-- Deleting the files from disk is an option in Remove from library's confirmation, off by default, and when it is on the question says the files will be permanently deleted from disk.
-- The wording of Remove from library:
+- The delete action's confirmation always says the files will be permanently deleted from disk, with no choice to keep them.
+- The wording of the delete action:
   - The token prompt is a dialog titled "Control token" that says "This is an admin action. Enter the server's control token.", with the token field under the field validation pattern and Continue.
-  - The confirmation asks "Remove {n} items from the library? Their files stay on disk." with a red Remove.
-  - With "Also delete the files from disk" checked it asks "Remove {n} items from the library and permanently delete their {n} files from disk? This can't be undone." with a red Remove and Delete.
-  - For one item they say "1 item", "Its file stays", and "its file".
-- Removing the selected items from the library ends selection.
+  - The action's name, its confirmation, its Your actions popup, and what it says when some files couldn't be deleted (`failedItemIds`) are settled in the mockup review, starting from "Remove {n} items from the library and permanently delete their {n} files from disk? This can't be undone." with a red Remove and Delete, and "1 item" and "its file" for one.
+- The delete action ends selection.
+- Each Your actions popup's {n} is the `count` the bulk route answers.
+- Clear-stats publishes `resyncRequired` with the `lastEventId` and `currentRevision` its OpenAPI schema requires, in place of a payload with only its reason.
+- The slice measures the size of a bulk event that changes every item of the catalog, and a bulk change above the size it settles on publishes `resyncRequired` in place of its bulk event.
 - A favorite or blacklist answer applies to the item it was for. The fix is straightforward: cache the answer under its `itemId` and apply it only when that item is still playing.
 
 **Traps**
@@ -258,18 +285,25 @@ Last milestone completed: M12l
 - The desktop acted on selected items from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library.
 - `toggleFlag` in `src/playback/player.ts` clears the other flag when it sets one.
 - `src/playback/player.ts` applies a favorite or blacklist answer to the item playing when the answer arrives, so pressing Next before it does marks the new item locally and caches that state under its id until an event for it corrects it.
-- The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, which `shared/api/openapi.yaml` names but no route's response refers to).
+- The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, the answer of `POST /api/favorite` and `POST /api/blacklist`).
+- The WebUI's requests read every 401 as a device that needs pairing (`createServerRequester` in `src/api/serverRequest.ts`), so delete files refuses with 403 and `control_token_required`, and the control-token prompt posts `/control/pair` without that handling, as pairing posts `/api/pair` (`serverConnection.ts`).
+- Clear-stats publishes `resyncRequired` with only `{ reason: "playbackStatsCleared" }` (`ClearPlaybackStats` in `ServerHostComposition.cs`), so every device does a full resync after a clear, and the WebUI never sent clear-stats before this milestone.
+- A bulk event lists every item it changed, about 147 bytes each, so one that changes every item of the 49,466-item catalog is about 7 MB (inferred).
+- Every open device gets each event, and the server keeps its last 256 events for replay (`EventHistoryCapacity` in `ServerStateService.cs`).
 
 **Acceptance**
 
-- The WebUI applies favorite, blacklist, clear stats, and, for admins, remove from library to all selected items, in WebUI tests for each bulk action.
+- The WebUI applies favorite, blacklist, clear stats, and, for admins, the delete action to all selected items, in WebUI tests for each bulk action.
 - Each bulk action applies to every item Select all selected, including items not loaded, in WebUI tests for each bulk action.
-- Remove from library asks to confirm with the count. Deleting files from disk is off by default, and turning it on makes the question say the files will be permanently deleted from disk, in WebUI tests for each bulk action.
-- From another machine, Remove from library asks for the control token in the control-token prompt before its confirmation, and on the server machine it asks for none, in WebUI tests of the control-token prompt.
+- The delete action asks to confirm with the count and says the files will be permanently deleted from disk, in WebUI tests for each bulk action.
+- From another machine, the delete action asks for the control token in the control-token prompt before its confirmation, and on the server machine it asks for none, in WebUI tests of the control-token prompt.
 - Bulk Add to favorites clears blacklisting, and Add to blacklist clears favorite, on each selected item, in WebUI tests for each bulk action.
 - Bulk favorite and blacklist send one request for the whole selection, in WebUI tests for each bulk action.
 - Rate… sets or clears the rating on every selected item, including items Select all selected that aren't loaded, in one request, and says so in its Your actions popup, in WebUI tests for each bulk action.
 - A favorite or blacklist answer that arrives after Next applies to the item it was for, not the item now playing, in WebUI tests for a favorite answer after Next.
+- The device that made a bulk change shows only its Your actions popup, with the count the server answered, in WebUI tests for each bulk action.
+- Clear-stats' `resyncRequired` carries `lastEventId` and `currentRevision` and matches its OpenAPI schema, in server tests for clear-stats.
+- The size of a bulk event that changes every item of the catalog is recorded, and a bulk change above the size settled on publishes `resyncRequired` in place of its bulk event, in server tests for the bulk routes.
 - `npm run verify` passes.
 
 #### Tag edits slice
@@ -278,7 +312,7 @@ Last milestone completed: M12l
 
 - The WebUI edits several items' tags in the Tags tab, with no dialog.
 - Edit tags in Actions opens the Tags tab with the line "Editing tags for {n} items", like the line WebUI Tags and Filter Tabs shows for an item that isn't playing.
-- While the tab edits several items, a collapsed category's count is how many of its tags the selected items have, and a chip shows green for a tag all of them have and orange for a tag only some have, and Add or Remove applies to all of them. The counts come from the read the Contract slice picks.
+- While the tab edits several items, a collapsed category's count is how many of its tags the selected items have, and a chip shows green for a tag all of them have and orange for a tag only some have, and Add or Remove applies to all of them. The counts come from the tag-editor model's `countsOnly` read.
 - Save applies the changes to every selected item and says "Updated tags on {n} items.".
 - The tab edits the selection while selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or discarded.
 - Choosing Edit tags while the tab holds unsaved changes to another item's tags asks "Discard changes?" first.
@@ -296,7 +330,8 @@ Last milestone completed: M12l
 
 #### Release checks
 
-- Manual: In the WebUI on a desktop browser and a phone, select several items, and every matching item with Select all, apply each bulk action, and the tiles update.
+- Manual: In the WebUI on a desktop browser and a phone, select several items, and every matching item with Select all, apply each bulk action but the delete action, and the tiles update.
+- Manual: Copy a throwaway video into a source folder and refresh the library, then in a desktop browser select its tile and delete it with the delete action: the file is gone from the folder and its tile from the grid.
 
 #### Not included
 
@@ -305,6 +340,7 @@ Last milestone completed: M12l
 - Keep Playing, which is WebUI Autoplay Modes, whose Timer mode replaces it.
 - Loudness normalization, which is WebUI Loudness Normalization.
 - Removing a source with its items, which is Admin Source Management.
+- Removing items from the library while keeping their files, since the next refresh would add the files back as new items.
 
 ### M12n1 - WebUI Loop Range
 
@@ -1140,6 +1176,7 @@ Last milestone completed: M12l
 **Traps**
 
 - Desktop Client Removal leaves `/api/duplicates/scan` and `/api/duplicates/apply` with no caller. The routes exist, so this slice needs no contract change beyond the Duplicate contract slice's rating (measured before promotion).
+- `POST /api/duplicates/apply` takes the `/control` routes' check, as delete files does: from another machine without a control session it answers 403 with `control_token_required`, not 401. It publishes `itemsRemoved` for the items it removed.
 - The scan request's `scope` already takes `CurrentSource`, `AllEnabledSources`, and `AllSources` (`DuplicateScanRequest`) (measured).
 - The desktop decided Select Best in `DuplicateGroupViewModel` (`DuplicatesDialog.axaml.cs`, in git history from before Desktop Client Removal): the file with the most plays, then the newest. The server and the WebUI have no keep rule.
 
@@ -1161,7 +1198,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
-- **Depends on**: WebUI Admin Section, Browser-Playable Filter, whose Filter tab reload on `sourceStateChanged` the new source events reuse, and WebUI Multi-Select and Bulk Actions, whose item removal route it uses, and Library Profiles, whose profiles' source lists a removed source leaves.
+- **Depends on**: WebUI Admin Section, Browser-Playable Filter, whose Filter tab reload on `sourceStateChanged` the new source events reuse, and WebUI Multi-Select and Bulk Actions, whose Core item removal (`DeleteItems`) and `itemsRemoved` event removing a source reuses, but not its delete-files route, which deletes the files from disk, and Library Profiles, whose profiles' source lists a removed source leaves.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1287,7 +1324,7 @@ Last milestone completed: M12l
 
 #### Not included
 
-- The item removal route and removing items from the library, which is WebUI Multi-Select and Bulk Actions.
+- Deleting items' files and removing those items from the library, which is WebUI Multi-Select and Bulk Actions.
 - Duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
 - Moving source management behind admin accounts, which is Auth Cutover for API and Admin.
 - Per-user source visibility, which is Per-User Source Permissions.

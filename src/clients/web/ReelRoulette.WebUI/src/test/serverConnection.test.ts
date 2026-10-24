@@ -158,7 +158,7 @@ describe("createServerConnection", () => {
     expect(store.presetMenu.value.entries.map((entry) => entry.label)).toEqual(["None", "Favorites"]);
   });
 
-  it("passes item, playback, tag, tag catalog, and source state events on, and a finished refresh once per run", async () => {
+  it("passes item, bulk item, removal, playback, tag, tag catalog, and source state events on, and a finished refresh once per run", async () => {
     const { connection, sources } = setup();
     const received: Array<[string, unknown]> = [];
     connection.on("itemStateChanged", (payload) => received.push(["itemStateChanged", payload]));
@@ -167,6 +167,9 @@ describe("createServerConnection", () => {
     connection.on("tagCatalogChanged", (payload) => received.push(["tagCatalogChanged", payload]));
     connection.on("sourceStateChanged", (payload) => received.push(["sourceStateChanged", payload]));
     connection.on("refreshCompleted", () => received.push(["refreshCompleted", null]));
+    connection.on("bulkItemStateChanged", (payload) => received.push(["bulkItemStateChanged", payload]));
+    connection.on("bulkItemRatingChanged", (payload) => received.push(["bulkItemRatingChanged", payload]));
+    connection.on("itemsRemoved", (payload) => received.push(["itemsRemoved", payload]));
     connection.start();
     await settle();
 
@@ -179,6 +182,11 @@ describe("createServerConnection", () => {
     const finished = { snapshot: { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] } };
     stream.emit("refreshStatusChanged", 6, finished);
     stream.emit("refreshStatusChanged", 7, finished);
+    const bulkState = { flag: "favorite", value: true, count: 1, items: [], clientId: null };
+    const bulkRating = { rating: 2, count: 1, items: [], clientId: null };
+    stream.emit("bulkItemStateChanged", 8, bulkState);
+    stream.emit("bulkItemRatingChanged", 9, bulkRating);
+    stream.emit("itemsRemoved", 10, { itemIds: ["d"] });
 
     expect(received).toEqual([
       ["itemStateChanged", { itemId: "a" }],
@@ -186,7 +194,10 @@ describe("createServerConnection", () => {
       ["itemTagsChanged", { resolvedItemIds: ["c"] }],
       ["tagCatalogChanged", { reason: "deleteTag", categories: [], tags: [] }],
       ["sourceStateChanged", { sourceId: "source-1", isEnabled: false }],
-      ["refreshCompleted", null]
+      ["refreshCompleted", null],
+      ["bulkItemStateChanged", bulkState],
+      ["bulkItemRatingChanged", bulkRating],
+      ["itemsRemoved", { itemIds: ["d"] }]
     ]);
   });
 

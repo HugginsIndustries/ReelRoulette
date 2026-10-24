@@ -111,6 +111,7 @@ Reconnect and recovery:
 - One check decides what counts as localhost: a direct connection from the server machine. A request through a reverse proxy never counts, even from a proxy on the server machine, and the server takes the client's address, scheme, and host only from a proxy that connects from loopback.
 - Pairing covers `/api` routes only, so the WebUI's files and runtime config load before a device is paired.
 - The control plane trusts localhost and requires the control token from every other address. The token is generated on first start and kept in `core-settings.json`. A control session also authorizes API requests, so the Operator works from another machine once the token is entered.
+- The two `/api` routes that delete files, `POST /api/library/delete-files` and `POST /api/duplicates/apply`, also take the control plane's check, after pairing. A caller it refuses gets 403 with `control_token_required`, not 401, since the WebUI reads every 401 as a device that needs pairing.
 
 ## Control Plane and Operator Surface
 

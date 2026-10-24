@@ -244,7 +244,7 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(filter, controls());
     session.setOverlayVisible(false);
 
-    await session.applyFavorite({ itemId: "a", isFavorite: true, isBlacklisted: false });
+    await session.applyFavorites([{ itemId: "a", isFavorite: true, isBlacklisted: false }]);
 
     expect(calls).toBe(1);
     expect(session.snapshot().items[0]?.isFavorite).toBe(true);
@@ -258,7 +258,7 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
-    await session.applyFavorite({ itemId: "a", path: "/media/a.mp4", isFavorite: true, isBlacklisted: false });
+    await session.applyFavorites([{ itemId: "a", path: "/media/a.mp4", isFavorite: true, isBlacklisted: false }]);
     await session.applyPlayback({ itemId: "b", playCount: 1 });
 
     expect(calls).toBe(1);
@@ -276,7 +276,7 @@ describe("libraryQuerySession", () => {
     session.setOverlayVisible(false);
     session.noteScroll(80);
 
-    await session.applyFavorite({ itemId: "a", isFavorite: false, isBlacklisted: true });
+    await session.applyFavorites([{ itemId: "a", isFavorite: false, isBlacklisted: true }]);
 
     expect(calls).toEqual([0, 0]);
     expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["b"]);
@@ -291,10 +291,10 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
-    await session.applyFavorite({ itemId: "other", isFavorite: false, isBlacklisted: true });
+    await session.applyFavorites([{ itemId: "other", isFavorite: false, isBlacklisted: true }]);
     expect(calls).toBe(1);
 
-    await session.applyFavorite({ itemId: "other", isFavorite: true, isBlacklisted: false });
+    await session.applyFavorites([{ itemId: "other", isFavorite: true, isBlacklisted: false }]);
     expect(calls).toBe(2);
   });
 
@@ -306,24 +306,24 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
-    await session.applyFavorite({
+    await session.applyFavorites([{
       itemId: "other",
       isFavorite: true,
       isBlacklisted: false,
       previousIsFavorite: false,
       previousIsBlacklisted: false
-    });
+    }]);
     expect(calls).toBe(1);
     expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["a"]);
 
     // A favorite clears blacklist, so a blacklisted item enters the default filter and the window reloads.
-    await session.applyFavorite({
+    await session.applyFavorites([{
       itemId: "blacklisted",
       isFavorite: true,
       isBlacklisted: false,
       previousIsFavorite: false,
       previousIsBlacklisted: true
-    });
+    }]);
     expect(calls).toBe(2);
   });
 
@@ -342,14 +342,14 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
-    await session.applyFavorite({
+    await session.applyFavorites([{
       itemId: "id-lower",
       path: "/media/clip.mp4",
       isFavorite: true,
       isBlacklisted: false,
       previousIsFavorite: false,
       previousIsBlacklisted: false
-    });
+    }]);
     await session.applyPlayback({ itemId: "id-lower", playCount: 2 });
     await session.applyTags({ resolvedItemIds: ["id-lower"], addedTags: ["Night"], removedTags: [] });
 
@@ -516,7 +516,7 @@ describe("libraryQuerySession", () => {
     });
     const loading = session.ensureLoaded(createDefaultFilterState(), controls());
     await Promise.resolve();
-    const updating = session.applyFavorite({ itemId: "missing", isFavorite: true, isBlacklisted: false });
+    const updating = session.applyFavorites([{ itemId: "missing", isFavorite: true, isBlacklisted: false }]);
     await Promise.resolve();
     releaseFirst(page([item("stale")], 1, 1));
     await Promise.all([loading, updating]);
@@ -601,8 +601,8 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
     const rendered = renders.length;
 
-    await session.applyRating({ itemId: "a", rating: 3.5, previousRating: null });
-    await session.applyRating({ itemId: "other", rating: 2, previousRating: null });
+    await session.applyRatings([{ itemId: "a", rating: 3.5, previousRating: null }]);
+    await session.applyRatings([{ itemId: "other", rating: 2, previousRating: null }]);
 
     expect(calls).toBe(1);
     expect(session.snapshot().items.map((entry) => entry.rating)).toEqual([3.5, null]);
@@ -618,7 +618,7 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded({ ...createDefaultFilterState(), onlyUnrated: true }, controls());
     session.noteScroll(80);
 
-    await session.applyRating({ itemId: "a", rating: 4, previousRating: null });
+    await session.applyRatings([{ itemId: "a", rating: 4, previousRating: null }]);
 
     expect(filters).toEqual([true, true]);
     expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["b"]);
@@ -633,9 +633,133 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls({ sortMode: "Rating", sortDescending: true }));
 
-    await session.applyRating({ itemId: "other", rating: 5, previousRating: 4.5 });
+    await session.applyRatings([{ itemId: "other", rating: 5, previousRating: 4.5 }]);
 
     expect(calls).toBe(2);
+  });
+
+  it("reloads the loaded window once for a batch of favorite changes that each call for a reload", async () => {
+    const calls: number[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push(request.offset);
+      const all = [item("a", { isFavorite: true }), item("b", { isFavorite: true }), item("c", { isFavorite: true }), item("d", { isFavorite: true })];
+      return calls.length > 1 ? page(all.slice(3), 1, 4) : page(all, 4, 4);
+    });
+    await session.ensureLoaded({ ...createDefaultFilterState(), favoritesMode: "only" }, controls());
+
+    const unfavorited = (itemId: string) => ({
+      itemId,
+      isFavorite: false,
+      isBlacklisted: false,
+      previousIsFavorite: true,
+      previousIsBlacklisted: false
+    });
+    await session.applyFavorites([unfavorited("a"), unfavorited("b"), unfavorited("c")]);
+
+    expect(calls).toEqual([0, 0]);
+    expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["d"]);
+  });
+
+  it("patches every loaded tile a batch of favorite changes names, rendering once, when none calls for a reload", async () => {
+    let calls = 0;
+    const renders: string[] = [];
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a"), item("b"), item("c")], 3, 3);
+    });
+    session.setListener((event) => renders.push(event.scroll));
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    const rendered = renders.length;
+
+    const favorited = (itemId: string) => ({
+      itemId,
+      isFavorite: true,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: false
+    });
+    await session.applyFavorites([favorited("a"), favorited("c"), favorited("outside")]);
+
+    expect(calls).toBe(1);
+    expect(session.snapshot().items.map((entry) => entry.isFavorite)).toEqual([true, false, true]);
+    expect(renders.slice(rendered)).toEqual(["keep"]);
+  });
+
+  it("reloads once for a batch that brings an item outside the window into the filter", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a"), item("b")], 2, 2);
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+
+    // Removing the blacklist brings an item the default filter left out into it.
+    await session.applyFavorites([
+      { itemId: "a", isFavorite: true, isBlacklisted: false, previousIsFavorite: false, previousIsBlacklisted: false },
+      { itemId: "hidden-1", isFavorite: false, isBlacklisted: false, previousIsFavorite: false, previousIsBlacklisted: true },
+      { itemId: "hidden-2", isFavorite: false, isBlacklisted: false, previousIsFavorite: false, previousIsBlacklisted: true }
+    ]);
+
+    expect(calls).toBe(2);
+  });
+
+  it("does nothing for a batch that changed no item", async () => {
+    let calls = 0;
+    const renders: string[] = [];
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a")], 1, 1);
+    });
+    session.setListener((event) => renders.push(event.scroll));
+    await session.ensureLoaded({ ...createDefaultFilterState(), favoritesMode: "only" }, controls({ sortMode: "Rating" }));
+    const rendered = renders.length;
+
+    await session.applyFavorites([]);
+    await session.applyRatings([]);
+
+    expect(calls).toBe(1);
+    expect(renders.slice(rendered)).toEqual([]);
+  });
+
+  it("reloads the loaded window once for a batch of rating changes under the rating sort or a minimum rating", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a", { rating: 4 }), item("b", { rating: 4 }), item("c", { rating: 4 })], 3, 3);
+    });
+    const rated = (itemId: string, rating: number | null) => ({ itemId, rating, previousRating: 4 });
+    await session.ensureLoaded(createDefaultFilterState(), controls({ sortMode: "Rating", sortDescending: true }));
+
+    await session.applyRatings([rated("a", 2), rated("b", 2), rated("outside", 2)]);
+    expect(calls).toBe(2);
+
+    await session.resetQuery({ ...createDefaultFilterState(), minRating: 3 }, controls());
+    expect(calls).toBe(3);
+    await session.applyRatings([rated("a", 1), rated("b", null), rated("c", 2.5)]);
+    expect(calls).toBe(4);
+  });
+
+  it("patches every loaded tile a batch of rating changes names, rendering once, when none calls for a reload", async () => {
+    let calls = 0;
+    const renders: string[] = [];
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a", { rating: 4 }), item("b", { rating: 4 }), item("c")], 3, 3);
+    });
+    session.setListener((event) => renders.push(event.scroll));
+    await session.ensureLoaded({ ...createDefaultFilterState(), minRating: 3 }, controls());
+    const rendered = renders.length;
+
+    // Each stays at or above the minimum, and the item outside the window was in the filter before.
+    await session.applyRatings([
+      { itemId: "a", rating: 5, previousRating: 4 },
+      { itemId: "b", rating: 3.5, previousRating: 4 },
+      { itemId: "outside", rating: 5, previousRating: 4 }
+    ]);
+
+    expect(calls).toBe(1);
+    expect(session.snapshot().items.map((entry) => entry.rating)).toEqual([5, 3.5, null]);
+    expect(renders.slice(rendered)).toEqual(["keep"]);
   });
 
   it("reloads a catalog rename or delete under any tag filter", async () => {

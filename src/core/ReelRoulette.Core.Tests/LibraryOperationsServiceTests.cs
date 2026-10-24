@@ -208,23 +208,24 @@ public sealed class LibraryOperationsServiceTests
             CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", "/media/movie.mp4") { RatingHalfStars = 3 }]);
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
-            var changed = service.SetRating("item-1", 8, out var before);
+            var changed = service.SetRating("item-1", 8);
             Assert.Equal("item-1", changed!.Id);
             Assert.Equal("/media/movie.mp4", changed.FullPath);
             Assert.Equal(8, changed.RatingHalfStars);
-            Assert.Equal(3, before!.RatingHalfStars);
+            Assert.Equal(3, changed.PreviousRatingHalfStars);
+            Assert.True(changed.Changed);
 
-            var same = service.SetRating("item-1", 8, out var sameBefore);
+            var same = service.SetRating("item-1", 8);
             Assert.Equal(8, same!.RatingHalfStars);
-            Assert.Equal(8, sameBefore!.RatingHalfStars);
+            Assert.Equal(8, same.PreviousRatingHalfStars);
+            Assert.False(same.Changed);
 
-            var cleared = service.SetRating("item-1", null, out var clearedBefore);
+            var cleared = service.SetRating("item-1", null);
             Assert.Null(cleared!.RatingHalfStars);
-            Assert.Equal(8, clearedBefore!.RatingHalfStars);
+            Assert.Equal(8, cleared.PreviousRatingHalfStars);
 
-            Assert.Null(service.SetRating("missing", 4, out var missingBefore));
-            Assert.Null(missingBefore);
-            Assert.Null(service.SetRating(" ", 4, out _));
+            Assert.Null(service.SetRating("missing", 4));
+            Assert.Null(service.SetRating(" ", 4));
         }
         finally
         {
@@ -263,7 +264,7 @@ public sealed class LibraryOperationsServiceTests
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var revision = host.Session.Revision;
 
-            var favorited = service.SetFavorite("ITEM-1", isFavorite: true);
+            var favorited = service.SetFavorite("item-1", isFavorite: true);
             Assert.NotNull(favorited);
             Assert.Equal("item-1", favorited!.ItemId);
             Assert.Equal(@"C:\media\movie.mp4", favorited.Path);
@@ -276,7 +277,7 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(revision + 1, host.Session.Revision);
             Assert.Null(service.SetFavorite("missing", isFavorite: true));
 
-            var blacklisted = service.SetBlacklist("ITEM-2", isBlacklisted: true);
+            var blacklisted = service.SetBlacklist("item-2", isBlacklisted: true);
             Assert.NotNull(blacklisted);
             Assert.Equal("item-2", blacklisted!.ItemId);
             Assert.Equal(@"C:\media\other.mp4", blacklisted.Path);
@@ -323,7 +324,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void ApplyItemTags_ShouldPersistTagChanges_ForItemIdsInAnyCase()
+    public void ApplyItemTags_LeavesAnItemAlone_WhenItsIdIsInAnotherCasing()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -349,15 +350,14 @@ public sealed class LibraryOperationsServiceTests
                 ItemIds = ["item-1", "ITEM-2"],
                 AddTags = ["newTag"],
                 RemoveTags = ["old"]
-            });
+            }, out _, out var resolvedItemIds);
 
+            // Ids are matched exactly, so an id in another casing names no item.
             Assert.True(changed);
-            var items = LoadLibrary(appDataRoot).Items;
-            Assert.All(items, item =>
-            {
-                Assert.DoesNotContain("old", item.Tags, StringComparer.OrdinalIgnoreCase);
-                Assert.Contains("newTag", item.Tags, StringComparer.OrdinalIgnoreCase);
-            });
+            Assert.Equal(["item-1"], resolvedItemIds);
+            var items = LoadLibrary(appDataRoot).Items.ToDictionary(item => item.Id);
+            Assert.Equal(["newTag"], items["item-1"].Tags);
+            Assert.Equal(["old"], items["item-2"].Tags);
         }
         finally
         {
@@ -517,7 +517,7 @@ public sealed class LibraryOperationsServiceTests
 
             var changed = service.ApplyItemTags(new ApplyItemTagsRequest
             {
-                ItemIds = ["item-1", "ITEM-2"],
+                ItemIds = ["item-1", "item-2"],
                 AddTags = ["Fresh"],
                 RemoveTags = ["Old"]
             }, out var catalogChanged);
@@ -534,8 +534,8 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal("Auto", appliedRow.TagName);
             Assert.Equal(["item-2"], appliedRow.ChangedItemIds);
 
-            var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["ITEM-1", "missing"] });
-            var item = Assert.Single(model.Items, candidate => candidate.ItemId == "ITEM-1");
+            var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["item-1", "missing"] });
+            var item = Assert.Single(model.Items, candidate => candidate.ItemId == "item-1");
             Assert.Equal(["Newer"], item.Tags);
             Assert.Contains(model.Categories, category => category.Id == "places" && category.Name == "Places");
             Assert.Contains(model.Tags, tag => tag.Name == "Newer" && tag.CategoryId == "places");
@@ -1346,8 +1346,9 @@ public sealed class LibraryOperationsServiceTests
                         ItemIds = ["keep-1", "remove-1"]
                     }
                 ]
-            });
+            }, out var skippedRemoved);
             Assert.Equal(0, skipped.RemovedFromLibrary);
+            Assert.Empty(skippedRemoved);
             Assert.True(File.Exists(removePath));
 
             var response = service.ApplyDuplicateSelection(new ReelRoulette.Server.Contracts.DuplicateApplyRequest
@@ -1360,9 +1361,10 @@ public sealed class LibraryOperationsServiceTests
                         ItemIds = ["keep-1", "remove-1", "missing-1"]
                     }
                 ]
-            });
+            }, out var removedItemIds);
 
             Assert.Equal(1, response.DeletedOnDisk);
+            Assert.Equal(["remove-1"], removedItemIds);
             Assert.Equal(1, response.RemovedFromLibrary);
             var failure = Assert.Single(response.Failures);
             Assert.Equal(missingPath, failure.FullPath);

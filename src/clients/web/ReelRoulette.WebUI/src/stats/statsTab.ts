@@ -190,7 +190,10 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
     request();
   });
   connection.on("itemStateChanged", request);
+  connection.on("bulkItemStateChanged", request);
   connection.on("itemRatingChanged", request);
+  connection.on("bulkItemRatingChanged", request);
+  connection.on("itemsRemoved", request);
   connection.on("itemTagsChanged", request);
   connection.on("tagCatalogChanged", request);
   connection.on("refreshCompleted", request);

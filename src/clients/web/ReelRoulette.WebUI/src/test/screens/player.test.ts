@@ -22,6 +22,7 @@ import {
   movePointer,
   openNotices,
   pageReady,
+  popupsShown,
   pressStars,
   randomAnswer,
   ratingAnswer,
@@ -917,6 +918,84 @@ describe("favorite and blacklist", () => {
       )
     );
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
+  });
+
+  /** One item's favorite and blacklist in a batch, with the ones before. */
+  function batchItem(itemId: string, after: [boolean, boolean], before: [boolean, boolean]) {
+    return { itemId, isFavorite: after[0], isBlacklisted: after[1], previousIsFavorite: before[0], previousIsBlacklisted: before[1] };
+  }
+
+  it("follow a batch's item states for the playing item and an item played again, and another device's batch pops up once", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    const page = await mountAndPlay(server);
+
+    page.stream().emit("bulkItemStateChanged", 2, {
+      flag: "favorite",
+      value: true,
+      count: 3,
+      items: [batchItem("item-video", [true, false], [false, false]), batchItem("item-elsewhere", [true, false], [false, false])],
+      clientId: "another-client"
+    });
+    await flush();
+    expect(isLit("Favorite")).toBe(true);
+    expect(popupsShown()).toEqual(["Added 3 items to favorites on another device"]);
+
+    await click(button("Next"));
+    page.stream().emit("bulkItemStateChanged", 3, {
+      flag: "blacklist",
+      value: true,
+      count: 1234,
+      items: [batchItem("item-video", [false, true], [true, false])],
+      clientId: "another-client"
+    });
+    await flush();
+    expect(isLit("Blacklist")).toBe(false);
+    expect(popupsShown()).toEqual(["Blacklisted 1,234 items on another device"]);
+
+    await click(button("Previous"));
+    expect(isLit("Blacklist")).toBe(true);
+    expect(isLit("Favorite")).toBe(false);
+    await waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining([
+          statusLogLine("Added 3 items to favorites on another device", VIDEO_ITEM, 1),
+          statusLogLine("Blacklisted 1,234 items on another device", SECOND_VIDEO, 2)
+        ])
+      )
+    );
+  });
+
+  it("another device's batch says what it did to how many items, and this device's own batch pops up nothing", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mountAndPlay(server);
+
+    page.stream().emit("bulkItemStateChanged", 2, {
+      flag: "favorite",
+      value: true,
+      count: 4,
+      items: [batchItem("item-video", [true, false], [false, false])],
+      clientId: page.clientId()
+    });
+    await flush();
+    // It still follows its own batch.
+    expect(isLit("Favorite")).toBe(true);
+    expect(popupsShown()).toEqual([]);
+
+    const batches: Array<[{ flag: string; value: boolean; count: number }, string]> = [
+      [{ flag: "favorite", value: false, count: 2 }, "Removed 2 items from favorites on another device"],
+      [{ flag: "blacklist", value: false, count: 1 }, "Removed 1 item from the blacklist on another device"]
+    ];
+    let revision = 3;
+    for (const [batch, text] of batches) {
+      page.stream().emit("bulkItemStateChanged", revision++, { ...batch, items: [], clientId: "another-client" });
+      await flush();
+      expect(popupsShown()).toEqual([text]);
+    }
+    // A batch without a client id counts as another device's.
+    page.stream().emit("bulkItemStateChanged", revision++, { flag: "favorite", value: true, count: 1, items: [] });
+    await flush();
+    expect(popupsShown()).toEqual(["Added 1 item to favorites on another device"]);
+    expect(server.logLines().some((line) => line.includes("Added 4 items"))).toBe(false);
   });
 });
 
@@ -3525,6 +3604,44 @@ describe("the player's rating", () => {
     page.stream().emit("resyncRequired", 3, {});
     await flush();
     expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
+  });
+
+  it("follows a batch's rating on the playing item, and another device's batch pops up once, while this device's own pops up nothing", async () => {
+    const { page, server } = await playRated(rated(VIDEO_ITEM, 2));
+
+    page.stream().emit("bulkItemRatingChanged", 2, {
+      rating: 3.5,
+      count: 2,
+      items: [
+        { itemId: "item-video", rating: 3.5, previousRating: 2 },
+        { itemId: "item-elsewhere", rating: 3.5, previousRating: null }
+      ],
+      clientId: "another-client"
+    });
+    await flush();
+    expect(starShows()).toEqual(["Rating, 3.5 stars", true, "3.5"]);
+    expect(popupsShown()).toEqual(["Rated 2 items 3.5 stars on another device"]);
+
+    page.stream().emit("bulkItemRatingChanged", 3, {
+      rating: null,
+      count: 1234,
+      items: [{ itemId: "item-video", rating: null, previousRating: 3.5 }],
+      clientId: "another-client"
+    });
+    await flush();
+    expect(starShows()).toEqual(["Rating", false, null]);
+    expect(popupsShown()).toEqual(["Cleared the rating on 1,234 items on another device"]);
+
+    page.stream().emit("bulkItemRatingChanged", 4, {
+      rating: 1,
+      count: 1,
+      items: [{ itemId: "item-video", rating: 1, previousRating: null }],
+      clientId: page.clientId()
+    });
+    await flush();
+    expect(starShows()).toEqual(["Rating, 1 star", true, "1"]);
+    expect(popupsShown()).toEqual(["Cleared the rating on 1,234 items on another device"]);
+    expect(server.logLines().some((line) => line.includes("Rated 1 item"))).toBe(false);
   });
 
   it("shows the rating a history step's play answer gives, so a change made while the item wasn't playing shows after a resync", async () => {

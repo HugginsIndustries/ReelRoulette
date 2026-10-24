@@ -186,9 +186,10 @@ export async function runTagEditorSave(steps: readonly TagSaveStep[], client: Ta
   return { ok: true, accepted, failed: null, failure: null };
 }
 
+/** Item ids match exactly, as the server sends them. */
 function itemMatches(item: TaggedItem, itemId: string): boolean {
-  const key = itemId.trim().toLowerCase();
-  return key !== "" && item.id.trim().toLowerCase() === key;
+  const id = itemId.trim();
+  return id !== "" && item.id.trim() === id;
 }
 
 function hasTag(tags: readonly string[], name: string): boolean {
@@ -276,7 +277,7 @@ function recordChange(undos: TagUndo[], item: TaggedItem, before: readonly strin
 export function undoTagChanges(items: TaggedItem[], undos: readonly TagUndo[]): void {
   for (const undo of undos) {
     for (const item of items) {
-      if (item.id.trim().toLowerCase() !== undo.itemId.trim().toLowerCase()) {
+      if (item.id.trim() !== undo.itemId.trim()) {
         continue;
       }
       item.tags = mergeLibraryItemTags(item.tags, undo.add, undo.remove);
@@ -382,9 +383,9 @@ export type TagSaveAppliedTag = {
 };
 
 export function replaceWithLiveTags(loaded: TaggedItem[], current: readonly TaggedItem[]): void {
-  const byId = new Map(current.map((item) => [item.id.trim().toLowerCase(), item.tags ?? []]));
+  const byId = new Map(current.map((item) => [item.id.trim(), item.tags ?? []]));
   for (const item of loaded) {
-    const key = item.id.trim().toLowerCase();
+    const key = item.id.trim();
     if (!byId.has(key)) {
       continue;
     }
@@ -397,9 +398,9 @@ export function snapshotTags(items: readonly TaggedItem[]): Array<{ id: string; 
 }
 
 export function restoreTags(items: TaggedItem[], snapshot: readonly { id: string; tags: readonly string[] }[]): void {
-  const byId = new Map(snapshot.map((entry) => [entry.id.trim().toLowerCase(), entry.tags]));
+  const byId = new Map(snapshot.map((entry) => [entry.id.trim(), entry.tags]));
   for (const item of items) {
-    const tags = byId.get(item.id.trim().toLowerCase());
+    const tags = byId.get(item.id.trim());
     if (!tags) {
       continue;
     }
@@ -450,22 +451,18 @@ export function echoesForSave(steps: readonly TagSaveStep[]): TagEcho[] {
   return echoes;
 }
 
+/** The ids, trimmed, without blank ones, and each once, in their order. */
 function distinctIds(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const trimmed = value.trim();
-    const key = trimmed.toLowerCase();
-    if (!trimmed || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(trimmed);
-  }
-  return result;
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function norm(values: readonly string[]): string[] {
+/** The ids, trimmed and each once, sorted, for comparing two lists of item ids. */
+function idKeys(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))].sort();
+}
+
+/** The tag names, trimmed, in lower case and each once, sorted, for comparing two lists of tags. */
+function tagKeys(values: readonly string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const value of values) {
@@ -484,32 +481,32 @@ function norm(values: readonly string[]): string[] {
   return result;
 }
 
-function sameList(left: readonly string[], right: readonly string[]): boolean {
-  const a = norm(left);
-  const b = norm(right);
+function sameList(left: readonly string[], right: readonly string[], keys: (values: readonly string[]) => string[]): boolean {
+  const a = keys(left);
+  const b = keys(right);
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function matchesEcho(expected: TagEcho, incoming: TagEcho): boolean {
-  if (!sameList(expected.addedTags, incoming.addedTags) || !sameList(expected.removedTags, incoming.removedTags)) {
+  if (!sameList(expected.addedTags, incoming.addedTags, tagKeys) || !sameList(expected.removedTags, incoming.removedTags, tagKeys)) {
     return false;
   }
   if (expected.supersetIds) {
-    const expectedIds = norm(expected.itemIds);
+    const expectedIds = idKeys(expected.itemIds);
     if (expectedIds.length === 0) {
       return false;
     }
-    const incomingIds = new Set(norm(incoming.itemIds));
+    const incomingIds = new Set(idKeys(incoming.itemIds));
     return expectedIds.every((id) => incomingIds.has(id));
   }
   if (!expected.subsetIds) {
-    return sameList(expected.itemIds, incoming.itemIds);
+    return sameList(expected.itemIds, incoming.itemIds, idKeys);
   }
-  const incomingIds = norm(incoming.itemIds);
+  const incomingIds = idKeys(incoming.itemIds);
   if (incomingIds.length === 0) {
     return false;
   }
-  const expectedIds = new Set(norm(expected.itemIds));
+  const expectedIds = new Set(idKeys(expected.itemIds));
   return incomingIds.every((id) => expectedIds.has(id));
 }
 
@@ -560,7 +557,7 @@ export function createTagSaveSession() {
         if (slot.seen || Boolean(slot.echo.supersetIds) !== superset || !matchesEcho(slot.echo, echo)) {
           continue;
         }
-        const count = norm(slot.echo.itemIds).length;
+        const count = idKeys(slot.echo.itemIds).length;
         if (count >= bestCount) {
           continue;
         }
@@ -662,7 +659,7 @@ export function createTagSaveSession() {
       }
       const changedByTag = new Map<string, Set<string>>();
       for (const row of applied) {
-        const tags = norm([row.tagName]);
+        const tags = tagKeys([row.tagName]);
         if (tags.length !== 1) {
           continue;
         }
@@ -672,7 +669,7 @@ export function createTagSaveSession() {
           ids = new Set<string>();
           changedByTag.set(key, ids);
         }
-        for (const id of norm(row.changedItemIds)) {
+        for (const id of idKeys(row.changedItemIds)) {
           ids.add(id);
         }
       }
@@ -680,9 +677,9 @@ export function createTagSaveSession() {
         if (slot.seen || !slot.echo.subsetIds) {
           continue;
         }
-        const tags = norm(slot.echo.addedTags);
+        const tags = tagKeys(slot.echo.addedTags);
         const ids = tags.length === 1 ? changedByTag.get(tags[0] ?? "") : undefined;
-        if (!ids || !norm(slot.echo.itemIds).some((id) => ids.has(id))) {
+        if (!ids || !idKeys(slot.echo.itemIds).some((id) => ids.has(id))) {
           slot.seen = true;
         }
       }

@@ -1,4 +1,5 @@
 import { ratingText } from "../rating/rating";
+import { countText } from "../text/countText";
 import { localDay } from "../time/timeText";
 import { DATE_RANGE_PRESETS, type FilterDateRange } from "./filterDateRange";
 import {
@@ -16,10 +17,6 @@ import { formatDurationForDisplay, type FilterState } from "./filterStateModel";
 export const FILTER_SUMMARY_LABEL = "Filters: ";
 /** What separates the applied filters on the Filters line. */
 export const FILTER_SUMMARY_SEPARATOR = " · ";
-
-function counted(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
 
 /**
  * How the Filters line names a date filter's range after its label: "in last 30 days", "this year", or a custom range
@@ -76,7 +73,7 @@ export function filterSummaryParts(filter: FilterState, sources: readonly Filter
       const checked = sources.filter((source) => containsIgnoringCase(filter.includedSourceIds, source.id)).length;
       parts.push(`${checked} of ${sources.length} sources`);
     } else {
-      parts.push(counted(filter.includedSourceIds.length, "source"));
+      parts.push(countText(filter.includedSourceIds.length, "source"));
     }
   }
   if (filter.minDurationSeconds != null) {
@@ -92,10 +89,10 @@ export function filterSummaryParts(filter: FilterState, sources: readonly Filter
     }
   }
   if (filter.selectedTags.length > 0) {
-    parts.push(counted(filter.selectedTags.length, "tag"));
+    parts.push(countText(filter.selectedTags.length, "tag"));
   }
   if (filter.excludedTags.length > 0) {
-    parts.push(`${counted(filter.excludedTags.length, "tag")} excluded`);
+    parts.push(`${countText(filter.excludedTags.length, "tag")} excluded`);
   }
   return parts;
 }

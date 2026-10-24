@@ -100,6 +100,36 @@ public sealed class LibraryCatalogSession
     }
 
     /// <summary>
+    /// The id of every item the browse query with the same search and filter matches, with no page, no cap, and no
+    /// order, from one read.
+    /// </summary>
+    public List<string> QueryListIds(LibraryListRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        LibraryCatalogListSql.RegisterCollation(connection);
+        using var transaction = connection.BeginTransaction(deferred: true);
+
+        var catalogTags = ReadCatalogTags(connection);
+        var args = new LibraryCatalogListSql.SqlArgs();
+        var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, FilterClock.From(Time), args);
+        var ids = new List<string>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = ListIdsSql(where);
+            args.Bind(command);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                ids.Add(reader.GetString(0));
+            }
+        }
+
+        transaction.Commit();
+        return ids;
+    }
+
+    /// <summary>
     /// The columns the browse page and an item's read select, which <see cref="ReadListedItem(SqliteDataReader)"/>
     /// reads by position.
     /// </summary>
@@ -123,6 +153,9 @@ public sealed class LibraryCatalogSession
 
     /// <summary>The browse count query.</summary>
     internal static string ListCountSql(string where) => $"SELECT COUNT(*) {LibraryCatalogListSql.FromClause} {where};";
+
+    /// <summary>The ids query for selecting every match.</summary>
+    internal static string ListIdsSql(string where) => $"SELECT items.id {LibraryCatalogListSql.FromClause} {where};";
 
     /// <summary>The random candidates query.</summary>
     internal static string RandomCandidatesSql(string where) => $"""
@@ -277,30 +310,17 @@ public sealed class LibraryCatalogSession
 
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         LibraryCatalogItem? item;
-        using (var transaction = connection.BeginTransaction())
+        using (var command = connection.CreateCommand())
         {
-            var id = ResolveItemId(connection, transaction, identifier);
-            if (id == null)
-            {
-                transaction.Rollback();
-                return null;
-            }
-
-            using var command = connection.CreateCommand();
-            command.Transaction = transaction;
             command.CommandText = $"""
                 SELECT {ListedItemColumnsSql}
                 FROM items
                 WHERE items.id = $id
                 LIMIT 1;
                 """;
-            command.Parameters.AddWithValue("$id", id);
-            using (var reader = command.ExecuteReader())
-            {
-                item = reader.Read() ? ReadListedItem(reader) : null;
-            }
-
-            transaction.Rollback();
+            command.Parameters.AddWithValue("$id", identifier.Trim());
+            using var reader = command.ExecuteReader();
+            item = reader.Read() ? ReadListedItem(reader) : null;
         }
 
         if (item == null)
@@ -442,61 +462,26 @@ public sealed class LibraryCatalogSession
         return items;
     }
 
+    /// <summary>The id and path of each named item, in catalog order. An id no item has is skipped.</summary>
     public IReadOnlyList<CatalogStoredItem> ReadItemsByIds(IReadOnlyList<string> ids)
     {
-        var requested = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var id in ids)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                continue;
-            }
-
-            var trimmed = id.Trim();
-            if (seen.Add(trimmed))
-            {
-                requested.Add(trimmed);
-            }
-        }
-
+        var requested = DistinctIds(ids);
         if (requested.Count == 0)
         {
             return [];
         }
 
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        var rows = new List<(int Position, CatalogStoredItem Item)>();
-        for (var offset = 0; offset < requested.Count; offset += ItemIdChunk)
-        {
-            var count = Math.Min(ItemIdChunk, requested.Count - offset);
-            using var command = connection.CreateCommand();
-            var parameters = new string[count];
-            for (var index = 0; index < count; index++)
+        var rows = ReadItemRows(connection, transaction: null, requested, "id, full_path, position", reader =>
+            (Position: reader.GetInt32(2), Item: new CatalogStoredItem
             {
-                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
-                parameters[index] = name;
-                command.Parameters.AddWithValue(name, requested[offset + index]);
-            }
-
-            command.CommandText = $"""
-                SELECT id, full_path, position
-                FROM items
-                WHERE id COLLATE NOCASE IN ({string.Join(", ", parameters)});
-                """;
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                rows.Add((reader.GetInt32(2), new CatalogStoredItem
-                {
-                    Id = reader.GetString(0),
-                    FullPath = reader.GetString(1)
-                }));
-            }
-        }
-
-        rows.Sort((left, right) => left.Position.CompareTo(right.Position));
-        return rows.Select(row => row.Item).ToList();
+                Id = reader.GetString(0),
+                FullPath = reader.GetString(1)
+            }));
+        return rows.Values
+            .OrderBy(row => row.Position)
+            .Select(row => row.Item)
+            .ToList();
     }
 
     public IReadOnlyList<CatalogRefreshSource> ReadRefreshSources()
@@ -1112,106 +1097,157 @@ public sealed class LibraryCatalogSession
 
     public bool DeleteItem(string id)
     {
-        return Commit((connection, transaction) =>
-        {
-            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM item_tags WHERE item_id = $id;", ("$id", id));
-            return LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM items WHERE id = $id;", ("$id", id)) > 0;
-        });
-    }
-
-    public bool SetFavorite(string identifier, bool isFavorite)
-    {
-        if (string.IsNullOrWhiteSpace(identifier))
-        {
-            return false;
-        }
-
-        var favorite = isFavorite ? 1 : 0;
-        return Commit((connection, transaction) =>
-        {
-            var id = ResolveItemId(connection, transaction, identifier);
-            if (id == null)
-            {
-                return false;
-            }
-
-            return LibraryCatalogStore.Execute(
-                connection,
-                transaction,
-                """
-                UPDATE items
-                SET is_favorite = $favorite,
-                    is_blacklisted = CASE WHEN $favorite = 1 THEN 0 ELSE is_blacklisted END
-                WHERE id = $id
-                  AND (is_favorite != $favorite OR ($favorite = 1 AND is_blacklisted != 0));
-                """,
-                ("$id", id),
-                ("$favorite", favorite)) > 0;
-        });
-    }
-
-    public bool SetBlacklist(string identifier, bool isBlacklisted)
-    {
-        if (string.IsNullOrWhiteSpace(identifier))
-        {
-            return false;
-        }
-
-        var blacklisted = isBlacklisted ? 1 : 0;
-        return Commit((connection, transaction) =>
-        {
-            var id = ResolveItemId(connection, transaction, identifier);
-            if (id == null)
-            {
-                return false;
-            }
-
-            return LibraryCatalogStore.Execute(
-                connection,
-                transaction,
-                """
-                UPDATE items
-                SET is_blacklisted = $blacklisted,
-                    is_favorite = CASE WHEN $blacklisted = 1 THEN 0 ELSE is_favorite END
-                WHERE id = $id
-                  AND (is_blacklisted != $blacklisted OR ($blacklisted = 1 AND is_favorite != 0));
-                """,
-                ("$id", id),
-                ("$blacklisted", blacklisted)) > 0;
-        });
+        return DeleteItems([id]).Count > 0;
     }
 
     /// <summary>
-    /// Sets the item's rating in half stars, or clears it with null, and says whether it changed. A rating is
-    /// independent of favorite and blacklist, so neither changes.
+    /// Removes the named items, with their tags, in one write, and returns the ids of the items it removed. An id no
+    /// item has is skipped.
     /// </summary>
-    public bool SetRating(string identifier, int? halfStars)
+    public IReadOnlyList<string> DeleteItems(IReadOnlyList<string> ids)
     {
-        if (halfStars is int value && !ItemRating.IsStoredValue(value))
+        var requested = DistinctIds(ids);
+        if (requested.Count == 0)
+        {
+            return [];
+        }
+
+        var removed = new List<string>();
+        Commit((connection, transaction) =>
+        {
+            removed.Clear();
+            var found = ReadItemRows(connection, transaction, requested, "id", reader => reader.GetString(0));
+            removed.AddRange(requested.Where(found.ContainsKey));
+            if (removed.Count == 0)
+            {
+                return false;
+            }
+
+            ForEachIdChunk(connection, transaction, removed, "DELETE FROM item_tags WHERE item_id IN ({0});", command => command.ExecuteNonQuery());
+            ForEachIdChunk(connection, transaction, removed, "DELETE FROM items WHERE id IN ({0});", command => command.ExecuteNonQuery());
+            return true;
+        });
+        return removed;
+    }
+
+    /// <summary>
+    /// Sets or clears <paramref name="flag"/> on every named item in one write. Setting favorite clears blacklist, and
+    /// setting blacklist clears favorite. Returns each named item in the library, in request order, with its favorite
+    /// and blacklist before and after. An id no item has is skipped.
+    /// </summary>
+    public IReadOnlyList<CatalogItemFlagChange> SetItemsFlag(IReadOnlyList<string> identifiers, CatalogItemFlag flag, bool value)
+    {
+        var ids = DistinctIds(identifiers);
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var changes = new List<CatalogItemFlagChange>();
+        Commit((connection, transaction) =>
+        {
+            changes.Clear();
+            var rows = ReadItemRows(connection, transaction, ids, "id, full_path, is_favorite, is_blacklisted", reader =>
+                (FullPath: reader.GetString(1), IsFavorite: reader.GetInt32(2) != 0, IsBlacklisted: reader.GetInt32(3) != 0));
+            using var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE items SET is_favorite = $favorite, is_blacklisted = $blacklisted WHERE id = $id;";
+            var idParameter = update.Parameters.Add("$id", SqliteType.Text);
+            var favoriteParameter = update.Parameters.Add("$favorite", SqliteType.Integer);
+            var blacklistedParameter = update.Parameters.Add("$blacklisted", SqliteType.Integer);
+            var changed = false;
+            foreach (var id in ids)
+            {
+                if (!rows.TryGetValue(id, out var before))
+                {
+                    continue;
+                }
+
+                var isFavorite = flag == CatalogItemFlag.Favorite ? value : before.IsFavorite && !value;
+                var isBlacklisted = flag == CatalogItemFlag.Blacklist ? value : before.IsBlacklisted && !value;
+                var change = new CatalogItemFlagChange
+                {
+                    Id = id,
+                    FullPath = before.FullPath,
+                    IsFavorite = isFavorite,
+                    IsBlacklisted = isBlacklisted,
+                    PreviousIsFavorite = before.IsFavorite,
+                    PreviousIsBlacklisted = before.IsBlacklisted
+                };
+                changes.Add(change);
+                if (!change.Changed)
+                {
+                    continue;
+                }
+
+                idParameter.Value = id;
+                favoriteParameter.Value = isFavorite ? 1 : 0;
+                blacklistedParameter.Value = isBlacklisted ? 1 : 0;
+                changed |= update.ExecuteNonQuery() > 0;
+            }
+
+            return changed;
+        });
+        return changes;
+    }
+
+    /// <summary>
+    /// Sets one rating in half stars on every named item in one write, or clears it with null. A rating is independent
+    /// of favorite and blacklist, so neither changes. Returns each named item in the library, in request order, with
+    /// its rating before and after. An id no item has is skipped.
+    /// </summary>
+    public IReadOnlyList<CatalogItemRatingChange> SetItemsRating(IReadOnlyList<string> identifiers, int? halfStars)
+    {
+        if (halfStars is int stored && !ItemRating.IsStoredValue(stored))
         {
             throw new ArgumentOutOfRangeException(nameof(halfStars), halfStars, "A rating is 1 to 10 half stars, or null for none.");
         }
 
-        if (string.IsNullOrWhiteSpace(identifier))
+        var ids = DistinctIds(identifiers);
+        if (ids.Count == 0)
         {
-            return false;
+            return [];
         }
 
-        return Commit((connection, transaction) =>
+        var changes = new List<CatalogItemRatingChange>();
+        Commit((connection, transaction) =>
         {
-            var id = ResolveItemId(connection, transaction, identifier);
-            if (id == null)
+            changes.Clear();
+            var rows = ReadItemRows(connection, transaction, ids, "id, full_path, rating", reader =>
+                (FullPath: reader.GetString(1), RatingHalfStars: reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2)));
+            using var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE items SET rating = $rating WHERE id = $id;";
+            var idParameter = update.Parameters.Add("$id", SqliteType.Text);
+            update.Parameters.AddWithValue("$rating", (object?)halfStars ?? DBNull.Value);
+            var changed = false;
+            foreach (var id in ids)
             {
-                return false;
+                if (!rows.TryGetValue(id, out var before))
+                {
+                    continue;
+                }
+
+                var change = new CatalogItemRatingChange
+                {
+                    Id = id,
+                    FullPath = before.FullPath,
+                    RatingHalfStars = halfStars,
+                    PreviousRatingHalfStars = before.RatingHalfStars
+                };
+                changes.Add(change);
+                if (!change.Changed)
+                {
+                    continue;
+                }
+
+                idParameter.Value = id;
+                changed |= update.ExecuteNonQuery() > 0;
             }
 
-            return LibraryCatalogStore.Execute(
-                connection,
-                transaction,
-                "UPDATE items SET rating = $rating WHERE id = $id AND rating IS NOT $rating;",
-                ("$id", id),
-                ("$rating", (object?)halfStars ?? DBNull.Value)) > 0;
+            return changed;
         });
+        return changes;
     }
 
     public CatalogItemState? RecordPlayback(string identifier)
@@ -1224,18 +1260,13 @@ public sealed class LibraryCatalogSession
         CatalogItemState? recorded = null;
         var committed = Commit((connection, transaction) =>
         {
-            var id = ResolveItemId(connection, transaction, identifier);
-            if (id == null)
-            {
-                return false;
-            }
-
-            var current = ReadItemState(connection, transaction, id);
+            var current = ReadItemState(connection, transaction, identifier);
             if (current == null)
             {
                 return false;
             }
 
+            var id = current.Id;
             var nextPlayCount = current.PlayCount;
             if (nextPlayCount < int.MaxValue)
             {
@@ -1275,12 +1306,8 @@ public sealed class LibraryCatalogSession
     /// <summary>Clears the playback stats of the named items only. No ids clears nothing.</summary>
     public int ClearPlaybackStats(IReadOnlyCollection<string> itemIds)
     {
-        var requested = itemIds
-            .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
-            .Select(identifier => identifier.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (requested.Length == 0)
+        var requested = DistinctIds(itemIds);
+        if (requested.Count == 0)
         {
             return 0;
         }
@@ -1288,15 +1315,8 @@ public sealed class LibraryCatalogSession
         var cleared = 0;
         var committed = Commit((connection, transaction) =>
         {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var identifier in requested)
+            foreach (var id in requested)
             {
-                var id = ResolveItemId(connection, transaction, identifier);
-                if (id == null || !seen.Add(id))
-                {
-                    continue;
-                }
-
                 cleared += LibraryCatalogStore.Execute(
                     connection,
                     transaction,
@@ -1332,12 +1352,10 @@ public sealed class LibraryCatalogSession
         }
 
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        using var transaction = connection.BeginTransaction();
-        var state = ReadItemState(connection, transaction, identifier);
-        transaction.Rollback();
-        return state;
+        return ReadItemState(connection, transaction: null, identifier);
     }
 
+    /// <summary>The item with exactly this catalog id, trimmed, and whether its source is enabled, for playing it.</summary>
     public CatalogPlaybackItem? ReadPlaybackItem(string identifier)
     {
         if (string.IsNullOrWhiteSpace(identifier))
@@ -1346,32 +1364,7 @@ public sealed class LibraryCatalogSession
         }
 
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        using var transaction = connection.BeginTransaction();
-        var id = ResolveItemId(connection, transaction, identifier);
-        if (id == null)
-        {
-            transaction.Rollback();
-            return null;
-        }
-
-        var item = ReadPlaybackRow(connection, transaction, id);
-        transaction.Rollback();
-        return item;
-    }
-
-    /// <summary>
-    /// The same fields as <see cref="ReadPlaybackItem"/> for an item id exactly as stored, without
-    /// resolving another casing and without taking the write lock.
-    /// </summary>
-    public CatalogPlaybackItem? ReadPlaybackItemById(string id)
-    {
-        if (string.IsNullOrEmpty(id))
-        {
-            return null;
-        }
-
-        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        return ReadPlaybackRow(connection, transaction: null, id);
+        return ReadPlaybackRow(connection, transaction: null, identifier.Trim());
     }
 
     private static CatalogPlaybackItem? ReadPlaybackRow(SqliteConnection connection, SqliteTransaction? transaction, string id)
@@ -1737,7 +1730,11 @@ public sealed class LibraryCatalogSession
         });
     }
 
-    public CatalogTagEditorRead ReadTagEditor(IReadOnlyList<string>? identifiers)
+    /// <summary>
+    /// The tag catalog and the tags of each named item, or with <paramref name="countsOnly"/>, in place of each item's
+    /// tags, how many of the named items hold each tag and how many of them are in the library.
+    /// </summary>
+    public CatalogTagEditorRead ReadTagEditor(IReadOnlyList<string>? identifiers, bool countsOnly = false)
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         using var transaction = connection.BeginTransaction();
@@ -1775,22 +1772,24 @@ public sealed class LibraryCatalogSession
             }
         }
 
+        var requested = DistinctIds(identifiers);
         var items = new List<CatalogItemTagRead>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var identifier in identifiers ?? [])
+        List<CatalogTagItemCount>? tagCounts = null;
+        int? itemCount = null;
+        if (countsOnly)
         {
-            if (string.IsNullOrWhiteSpace(identifier) || !seen.Add(identifier.Trim()))
+            (tagCounts, itemCount) = ReadTagItemCounts(connection, transaction, requested);
+        }
+        else
+        {
+            foreach (var id in requested)
             {
-                continue;
+                items.Add(new CatalogItemTagRead
+                {
+                    ItemId = id,
+                    Tags = ResolveItemId(connection, transaction, id) == null ? [] : ReadItemTagNames(connection, transaction, id)
+                });
             }
-
-            var requested = identifier.Trim();
-            var itemId = ResolveItemId(connection, transaction, requested);
-            items.Add(new CatalogItemTagRead
-            {
-                ItemId = requested,
-                Tags = itemId == null ? [] : ReadItemTagNames(connection, transaction, itemId)
-            });
         }
 
         transaction.Rollback();
@@ -1798,8 +1797,51 @@ public sealed class LibraryCatalogSession
         {
             Categories = categories,
             Tags = tags,
-            Items = items
+            Items = items,
+            TagCounts = tagCounts,
+            ItemCount = itemCount
         };
+    }
+
+    /// <summary>
+    /// Each tag the named items hold, compared ignoring case, with how many of them hold it and the name one of them
+    /// holds it by, and how many of the named items are in the library.
+    /// </summary>
+    private static (List<CatalogTagItemCount> TagCounts, int ItemCount) ReadTagItemCounts(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        IReadOnlyList<string> ids)
+    {
+        var itemCount = 0;
+        ForEachIdChunk(connection, transaction, ids, "SELECT COUNT(*) FROM items WHERE id IN ({0});", command =>
+            itemCount += Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture));
+
+        // Ids are distinct, so each chunk counts its own items and the chunks' counts add up.
+        var byFold = new Dictionary<string, (string Name, int Count)>(StringComparer.Ordinal);
+        ForEachIdChunk(
+            connection,
+            transaction,
+            ids,
+            """
+            SELECT name_fold, MIN(name), COUNT(DISTINCT item_tags.item_id)
+            FROM item_tags
+            WHERE item_id IN ({0})
+            GROUP BY name_fold;
+            """,
+            command =>
+            {
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    var fold = reader.GetString(0);
+                    var name = reader.GetString(1);
+                    var count = reader.GetInt32(2);
+                    byFold[fold] = byFold.TryGetValue(fold, out var existing)
+                        ? (string.CompareOrdinal(existing.Name, name) <= 0 ? existing.Name : name, existing.Count + count)
+                        : (name, count);
+                }
+            });
+        return (byFold.Values.Select(entry => new CatalogTagItemCount(entry.Name, entry.Count)).ToList(), itemCount);
     }
 
     public bool ApplyItemTagEdits(
@@ -1824,11 +1866,7 @@ public sealed class LibraryCatalogSession
     {
         catalogChanged = false;
         resolvedItemIds = [];
-        var ids = identifiers
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var ids = DistinctIds(identifiers);
         var adds = DistinctTagNames(addTags);
         var removes = DistinctTagNames(removeTags);
         if (ids.Count == 0)
@@ -1838,7 +1876,6 @@ public sealed class LibraryCatalogSession
 
         var insertedCatalog = false;
         var resolved = new List<string>();
-        var seenIds = new HashSet<string>(StringComparer.Ordinal);
         var committed = Commit((connection, transaction) =>
         {
             var changed = false;
@@ -1851,10 +1888,9 @@ public sealed class LibraryCatalogSession
                 }
             }
 
-            foreach (var identifier in ids)
+            foreach (var itemId in ids)
             {
-                var itemId = ResolveItemId(connection, transaction, identifier);
-                if (itemId == null || !seenIds.Add(itemId))
+                if (ResolveItemId(connection, transaction, itemId) == null)
                 {
                     continue;
                 }
@@ -2040,14 +2076,91 @@ public sealed class LibraryCatalogSession
         string FileName,
         int MediaType);
 
-    /// <summary>The item with this catalog id, in any casing. A full path names no item.</summary>
+    /// <summary>
+    /// The item with exactly this catalog id, which the server generates and clients send back as they got it, so the
+    /// lookup reads the id's primary key index. Another casing or a full path names no item.
+    /// </summary>
     private static string? ResolveItemId(SqliteConnection connection, SqliteTransaction transaction, string identifier)
     {
         return ScalarString(
             connection,
             transaction,
-            "SELECT id FROM items WHERE id = $id COLLATE NOCASE LIMIT 1;",
+            "SELECT id FROM items WHERE id = $id LIMIT 1;",
             ("$id", identifier.Trim()));
+    }
+
+    /// <summary>The named ids, trimmed, without blank ones, and each once, in request order.</summary>
+    private static List<string> DistinctIds(IEnumerable<string>? identifiers)
+    {
+        var ids = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var identifier in identifiers ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(identifier))
+            {
+                continue;
+            }
+
+            var id = identifier.Trim();
+            if (seen.Add(id))
+            {
+                ids.Add(id);
+            }
+        }
+
+        return ids;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="sql"/> for <paramref name="ids"/>, at most <see cref="ItemIdChunk"/> of them at a time, with
+    /// the chunk's id parameters in place of its <c>{0}</c>.
+    /// </summary>
+    private static void ForEachIdChunk(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        IReadOnlyList<string> ids,
+        string sql,
+        Action<SqliteCommand> run)
+    {
+        for (var offset = 0; offset < ids.Count; offset += ItemIdChunk)
+        {
+            var count = Math.Min(ItemIdChunk, ids.Count - offset);
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            var parameters = new string[count];
+            for (var index = 0; index < count; index++)
+            {
+                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
+                parameters[index] = name;
+                command.Parameters.AddWithValue(name, ids[offset + index]);
+            }
+
+            command.CommandText = string.Format(CultureInfo.InvariantCulture, sql, string.Join(", ", parameters));
+            run(command);
+        }
+    }
+
+    /// <summary>
+    /// Reads <paramref name="columns"/>, the first of which is the id, of each of <paramref name="ids"/> that names an
+    /// item, keyed by its id.
+    /// </summary>
+    private static Dictionary<string, T> ReadItemRows<T>(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        IReadOnlyList<string> ids,
+        string columns,
+        Func<SqliteDataReader, T> read)
+    {
+        var rows = new Dictionary<string, T>(StringComparer.Ordinal);
+        ForEachIdChunk(connection, transaction, ids, $"SELECT {columns} FROM items WHERE id IN ({{0}});", command =>
+        {
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows[reader.GetString(0)] = read(reader);
+            }
+        });
+        return rows;
     }
 
     private static string? ResolveItemByPath(SqliteConnection connection, SqliteTransaction transaction, string fullPath)
@@ -2059,14 +2172,8 @@ public sealed class LibraryCatalogSession
             ("$fold", LibraryCatalogStore.Fold(fullPath.Trim())));
     }
 
-    private static CatalogItemState? ReadItemState(SqliteConnection connection, SqliteTransaction transaction, string identifier)
+    private static CatalogItemState? ReadItemState(SqliteConnection connection, SqliteTransaction? transaction, string identifier)
     {
-        var id = ResolveItemId(connection, transaction, identifier);
-        if (id == null)
-        {
-            return null;
-        }
-
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -2075,7 +2182,7 @@ public sealed class LibraryCatalogSession
             WHERE id = $id
             LIMIT 1;
             """;
-        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$id", identifier.Trim());
         using var reader = command.ExecuteReader();
         if (!reader.Read())
         {
@@ -2808,7 +2915,15 @@ public sealed class CatalogTagEditorRead
     public List<LibraryCatalogCategory> Categories { get; init; } = [];
     public List<LibraryCatalogTag> Tags { get; init; } = [];
     public List<CatalogItemTagRead> Items { get; init; } = [];
+
+    /// <summary>With counts only, each tag the named items hold and how many of them hold it; otherwise null.</summary>
+    public List<CatalogTagItemCount>? TagCounts { get; init; }
+
+    /// <summary>With counts only, how many of the named items are in the library; otherwise null.</summary>
+    public int? ItemCount { get; init; }
 }
+
+public readonly record struct CatalogTagItemCount(string Name, int ItemCount);
 
 public sealed class CatalogItemTagRead
 {
@@ -2865,6 +2980,37 @@ public sealed class CatalogItemState
 
     /// <summary>The rating in half stars, or null for none (see <see cref="ItemRating"/>).</summary>
     public int? RatingHalfStars { get; init; }
+}
+
+/// <summary>The flag a bulk change sets or clears.</summary>
+public enum CatalogItemFlag
+{
+    Favorite,
+    Blacklist
+}
+
+/// <summary>One item's favorite and blacklist before and after a favorite or blacklist change.</summary>
+public sealed class CatalogItemFlagChange
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
+    public bool IsFavorite { get; init; }
+    public bool IsBlacklisted { get; init; }
+    public bool PreviousIsFavorite { get; init; }
+    public bool PreviousIsBlacklisted { get; init; }
+
+    public bool Changed => IsFavorite != PreviousIsFavorite || IsBlacklisted != PreviousIsBlacklisted;
+}
+
+/// <summary>One item's rating, in half stars or null for none, before and after a rating change.</summary>
+public sealed class CatalogItemRatingChange
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
+    public int? RatingHalfStars { get; init; }
+    public int? PreviousRatingHalfStars { get; init; }
+
+    public bool Changed => RatingHalfStars != PreviousRatingHalfStars;
 }
 
 public sealed class CatalogPlaybackItem

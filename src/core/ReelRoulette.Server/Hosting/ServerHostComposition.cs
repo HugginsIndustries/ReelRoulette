@@ -17,6 +17,12 @@ public static class ServerHostComposition
     internal const string FileManagerErrorItemNotFound = "file_manager_item_not_found";
     internal const string FileManagerErrorFileMissing = "file_manager_file_missing";
     internal const string FileManagerErrorFailed = "file_manager_failed";
+    internal const string ErrorControlTokenRequired = "control_token_required";
+
+    /// <summary>The reason a route that deletes files gives a caller the <c>/control</c> routes don't accept.</summary>
+    internal const string FileDeletionNeedsControlToken = "Deleting files is an admin action, which needs the server's control token.";
+    internal const string BulkFlagFavorite = "favorite";
+    internal const string BulkFlagBlacklist = "blacklist";
 
     /// <summary>The reason for a 404 about an item id the catalog doesn't hold, as after a refresh removed its file.</summary>
     internal const string ItemNotInLibrary = "The file is no longer in the library.";
@@ -290,6 +296,10 @@ public static class ServerHostComposition
             return Results.Json(outcome.Body);
         });
 
+        app.MapPost("/api/library/query-ids", QueryLibraryIds);
+
+        app.MapPost("/api/library/delete-files", DeleteFiles);
+
         app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>
         {
             return Results.Ok(operations.GetLibraryStats());
@@ -369,6 +379,10 @@ public static class ServerHostComposition
 
         app.MapPost("/api/rating", SetRating);
 
+        app.MapPost("/api/bulk/item-state", SetBulkItemState);
+
+        app.MapPost("/api/bulk/rating", SetBulkRating);
+
         app.MapPost("/api/record-playback", RecordPlayback);
 
         app.MapPost("/api/playback/clear-stats", ClearPlaybackStats);
@@ -429,10 +443,7 @@ public static class ServerHostComposition
             return Results.Ok(operations.ScanDuplicates(request));
         });
 
-        app.MapPost("/api/duplicates/apply", (DuplicateApplyRequest request, LibraryOperationsService operations) =>
-        {
-            return Results.Ok(operations.ApplyDuplicateSelection(request));
-        });
+        app.MapPost("/api/duplicates/apply", ApplyDuplicates);
 
         app.MapPost("/api/autotag/scan", (AutoTagScanRequest request, LibraryOperationsService operations) =>
         {
@@ -723,28 +734,215 @@ public static class ServerHostComposition
             return Results.BadRequest(new { error = "rating must be a multiple of 0.5 from 0.5 to 5, or null" });
         }
 
-        var after = operations.SetRating(request.ItemId, halfStars, out var before);
-        if (after == null || before == null)
+        var change = operations.SetRating(request.ItemId, halfStars);
+        if (change == null)
         {
             return Results.NotFound(new { error = ItemNotInLibrary });
         }
 
-        var rating = ItemRating.ToStars(after.RatingHalfStars);
+        var rating = ItemRating.ToStars(change.RatingHalfStars);
         var revision = state.GetCurrentRevision();
-        if (after.RatingHalfStars != before.RatingHalfStars)
+        if (change.Changed)
         {
             revision = state.PublishExternal("itemRatingChanged", new ItemRatingChangedPayload
             {
-                ItemId = after.Id,
-                Path = after.FullPath,
+                ItemId = change.Id,
+                Path = change.FullPath,
                 Rating = rating,
-                PreviousRating = ItemRating.ToStars(before.RatingHalfStars),
+                PreviousRating = ItemRating.ToStars(change.PreviousRatingHalfStars),
                 ClientId = NormalizeOptionalIdentity(request.ClientId)
             }).Revision;
         }
 
-        return Results.Ok(new ItemRatingResponse { ItemId = after.Id, Rating = rating, Revision = revision });
+        return Results.Ok(new ItemRatingResponse { ItemId = change.Id, Rating = rating, Revision = revision });
     }
+
+    /// <summary>
+    /// Sets or clears favorite or blacklist on every named item in one write, and publishes one
+    /// <c>bulkItemStateChanged</c> for all of them, naming the client that made it, when any is in the library.
+    /// </summary>
+    internal static IResult SetBulkItemState(BulkItemStateRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (!NamesAnyItem(request.ItemIds))
+        {
+            return Results.BadRequest(new { error = "itemIds is required" });
+        }
+
+        CatalogItemFlag flag;
+        switch (request.Flag)
+        {
+            case BulkFlagFavorite:
+                flag = CatalogItemFlag.Favorite;
+                break;
+            case BulkFlagBlacklist:
+                flag = CatalogItemFlag.Blacklist;
+                break;
+            default:
+                return Results.BadRequest(new { error = "flag must be favorite or blacklist" });
+        }
+
+        var changes = operations.SetItemsFlag(request.ItemIds!, flag, request.Value);
+        if (changes.Count > 0)
+        {
+            state.PublishExternal("bulkItemStateChanged", new BulkItemStateChangedPayload
+            {
+                Flag = request.Flag,
+                Value = request.Value,
+                Count = changes.Count,
+                Items = changes
+                    .Where(change => change.Changed)
+                    .Select(change => new BulkItemState
+                    {
+                        ItemId = change.Id,
+                        IsFavorite = change.IsFavorite,
+                        IsBlacklisted = change.IsBlacklisted,
+                        PreviousIsFavorite = change.PreviousIsFavorite,
+                        PreviousIsBlacklisted = change.PreviousIsBlacklisted
+                    })
+                    .ToList(),
+                ClientId = NormalizeOptionalIdentity(request.ClientId)
+            });
+        }
+
+        return Results.Ok(new BulkChangeResponse { Count = changes.Count });
+    }
+
+    /// <summary>
+    /// Sets or clears one rating, in stars, on every named item in one write, and publishes one
+    /// <c>bulkItemRatingChanged</c> for all of them, naming the client that made it, when any is in the library.
+    /// </summary>
+    internal static IResult SetBulkRating(BulkRatingRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (!NamesAnyItem(request.ItemIds))
+        {
+            return Results.BadRequest(new { error = "itemIds is required" });
+        }
+
+        if (!ItemRating.TryFromStars(request.Rating, out var halfStars))
+        {
+            return Results.BadRequest(new { error = "rating must be a multiple of 0.5 from 0.5 to 5, or null" });
+        }
+
+        var changes = operations.SetItemsRating(request.ItemIds!, halfStars);
+        if (changes.Count > 0)
+        {
+            state.PublishExternal("bulkItemRatingChanged", new BulkItemRatingChangedPayload
+            {
+                Rating = ItemRating.ToStars(halfStars),
+                Count = changes.Count,
+                Items = changes
+                    .Where(change => change.Changed)
+                    .Select(change => new BulkItemRating
+                    {
+                        ItemId = change.Id,
+                        Rating = ItemRating.ToStars(change.RatingHalfStars),
+                        PreviousRating = ItemRating.ToStars(change.PreviousRatingHalfStars)
+                    })
+                    .ToList(),
+                ClientId = NormalizeOptionalIdentity(request.ClientId)
+            });
+        }
+
+        return Results.Ok(new BulkChangeResponse { Count = changes.Count });
+    }
+
+    /// <summary>
+    /// Deletes the named items' files from disk and removes those items, for a caller the <c>/control</c> routes
+    /// accept, and publishes <c>itemsRemoved</c> with the items it removed.
+    /// </summary>
+    internal static IResult DeleteFiles(
+        HttpContext context,
+        DeleteFilesRequest request,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions,
+        CoreSettingsService settings,
+        ServerLogService logs,
+        ServerStateService state,
+        LibraryOperationsService operations)
+    {
+        if (RefuseFileDeletion(context, "Delete files", options, sessions, settings, logs) is { } refused)
+        {
+            return refused;
+        }
+
+        if (!NamesAnyItem(request.ItemIds))
+        {
+            return Results.BadRequest(new { error = "itemIds is required" });
+        }
+
+        var response = operations.DeleteFiles(request.ItemIds!, out var removedItemIds);
+        PublishItemsRemoved(state, removedItemIds);
+        return Results.Ok(response);
+    }
+
+    /// <summary>
+    /// Deletes each duplicate group's files but the one it keeps, for a caller the <c>/control</c> routes accept, as
+    /// delete files does, and publishes <c>itemsRemoved</c> with the items it removed.
+    /// </summary>
+    internal static IResult ApplyDuplicates(
+        HttpContext context,
+        DuplicateApplyRequest request,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions,
+        CoreSettingsService settings,
+        ServerLogService logs,
+        ServerStateService state,
+        LibraryOperationsService operations)
+    {
+        if (RefuseFileDeletion(context, "Duplicate apply", options, sessions, settings, logs) is { } refused)
+        {
+            return refused;
+        }
+
+        var response = operations.ApplyDuplicateSelection(request, out var removedItemIds);
+        PublishItemsRemoved(state, removedItemIds);
+        return Results.Ok(response);
+    }
+
+    /// <summary>
+    /// The 403 for a route that deletes files, when the caller isn't one the <c>/control</c> routes accept, with a
+    /// warning in <c>last.log</c>, or null for a caller they accept. It is 403, not 401, since the client reads every
+    /// 401 as a device that needs pairing.
+    /// </summary>
+    private static IResult? RefuseFileDeletion(
+        HttpContext context,
+        string action,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions,
+        CoreSettingsService settings,
+        ServerLogService logs)
+    {
+        if (ServerPairingAuthMiddleware.IsControlRequestAuthorized(context, options, sessions, settings))
+        {
+            return null;
+        }
+
+        var remote = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        logs.Append("warn", $"{action} refused from {remote}: no control session or control token.");
+        return Results.Json(
+            new { error = FileDeletionNeedsControlToken, code = ErrorControlTokenRequired },
+            statusCode: StatusCodes.Status403Forbidden);
+    }
+
+    private static void PublishItemsRemoved(ServerStateService state, IReadOnlyList<string> removedItemIds)
+    {
+        if (removedItemIds.Count > 0)
+        {
+            state.PublishExternal("itemsRemoved", new ItemsRemovedPayload { ItemIds = removedItemIds.ToList() });
+        }
+    }
+
+    /// <summary>The ids of every item the library query with the same filter and search matches.</summary>
+    internal static IResult QueryLibraryIds(LibraryIdsQueryRequest? request, LibraryOperationsService operations)
+    {
+        var response = operations.QueryLibraryIds(request, out var error);
+        return response == null
+            ? Results.BadRequest(new { error = error ?? "Invalid library query" })
+            : Results.Ok(response);
+    }
+
+    private static bool NamesAnyItem(IReadOnlyList<string>? itemIds) =>
+        itemIds?.Any(id => !string.IsNullOrWhiteSpace(id)) == true;
 
     /// <summary>
     /// Publishes the change to every client, the one that made it too, naming that client so it can tell its own change
@@ -777,7 +975,7 @@ public static class ServerHostComposition
     /// </summary>
     internal static IResult ClearPlaybackStats(ClearPlaybackStatsRequest request, LibraryOperationsService operations, ServerStateService state)
     {
-        var namesItems = request.ItemIds?.Any(id => !string.IsNullOrWhiteSpace(id)) == true;
+        var namesItems = NamesAnyItem(request.ItemIds);
         if (request.AllItems && namesItems)
         {
             return Results.BadRequest(new { error = "Send allItems or itemIds, not both" });

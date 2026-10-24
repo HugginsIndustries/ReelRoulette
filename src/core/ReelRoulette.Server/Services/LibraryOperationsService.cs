@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Fingerprints;
@@ -197,6 +198,33 @@ public sealed class LibraryOperationsService
         });
     }
 
+    /// <summary>
+    /// The id of every item the browse query with the same filter and search matches, for selecting all of them, or
+    /// the reason the filter is refused.
+    /// </summary>
+    public LibraryIdsQueryResponse? QueryLibraryIds(LibraryIdsQueryRequest? request, out string? error)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        request ??= new LibraryIdsQueryRequest();
+        if (!LibraryListFilterParser.TryParse(request.FilterState, out var filter, out error))
+        {
+            return null;
+        }
+
+        List<string> ids;
+        lock (_lock)
+        {
+            ids = _catalog.Session.QueryListIds(new LibraryListRequest
+            {
+                Search = request.Search,
+                Filter = filter
+            });
+        }
+
+        _serverLog.Append("info", $"Library ids query total={ids.Count} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        return new LibraryIdsQueryResponse { Ids = ids };
+    }
+
     public LibraryStatsResponse GetLibraryStats()
     {
         lock (_lock)
@@ -247,16 +275,7 @@ public sealed class LibraryOperationsService
     /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
     public LibraryStateResponse? SetFavorite(string itemId, bool isFavorite, out LibraryStateResponse? previous)
     {
-        previous = null;
-        if (string.IsNullOrWhiteSpace(itemId))
-        {
-            return null;
-        }
-
-        lock (_lock)
-        {
-            return UpdateItemFlag(itemId, () => _catalog.Session.SetFavorite(itemId, isFavorite), out previous);
-        }
+        return SetItemFlag(itemId, CatalogItemFlag.Favorite, isFavorite, out previous);
     }
 
     public LibraryStateResponse? SetBlacklist(string itemId, bool isBlacklisted)
@@ -267,47 +286,95 @@ public sealed class LibraryOperationsService
     /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
     public LibraryStateResponse? SetBlacklist(string itemId, bool isBlacklisted, out LibraryStateResponse? previous)
     {
-        previous = null;
-        if (string.IsNullOrWhiteSpace(itemId))
-        {
-            return null;
-        }
+        return SetItemFlag(itemId, CatalogItemFlag.Blacklist, isBlacklisted, out previous);
+    }
 
+    /// <summary>
+    /// Sets or clears favorite or blacklist on every named item in one write, for a bulk request, and returns each
+    /// named item in the library with its favorite and blacklist before and after. It writes one <c>last.log</c> line
+    /// with the counts and the elapsed time.
+    /// </summary>
+    public IReadOnlyList<CatalogItemFlagChange> SetItemsFlag(IReadOnlyList<string> itemIds, CatalogItemFlag flag, bool value)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var changes = WriteItemsFlag(itemIds, flag, value);
+        var flagName = flag == CatalogItemFlag.Favorite ? "favorite" : "blacklist";
+        _serverLog.Append(
+            "info",
+            $"Bulk item state flag={flagName} value={(value ? "true" : "false")} count={changes.Count} changed={changes.Count(change => change.Changed)} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        return changes;
+    }
+
+    private IReadOnlyList<CatalogItemFlagChange> WriteItemsFlag(IReadOnlyList<string> itemIds, CatalogItemFlag flag, bool value)
+    {
         lock (_lock)
         {
-            return UpdateItemFlag(itemId, () => _catalog.Session.SetBlacklist(itemId, isBlacklisted), out previous);
+            return _catalog.Session.SetItemsFlag(itemIds, flag, value);
         }
     }
 
     /// <summary>
-    /// Sets the item's rating in half stars, or clears it with null, and returns the item's state after the change,
-    /// with <paramref name="previous"/> its state before, so the caller can tell whether the rating changed. Both are
-    /// null for an item not in the library.
+    /// Sets the item's rating in half stars, or clears it with null, and returns the item with its rating before and
+    /// after, so the caller can tell whether it changed, or null for an item not in the library.
     /// </summary>
-    public CatalogItemState? SetRating(string itemId, int? halfStars, out CatalogItemState? previous)
+    public CatalogItemRatingChange? SetRating(string itemId, int? halfStars)
     {
-        previous = null;
-        if (string.IsNullOrWhiteSpace(itemId))
-        {
-            return null;
-        }
+        return string.IsNullOrWhiteSpace(itemId) ? null : WriteItemsRating([itemId], halfStars).FirstOrDefault();
+    }
 
+    /// <summary>
+    /// Sets one rating in half stars on every named item in one write, or clears it with null, for a bulk request, and
+    /// returns each named item in the library with its rating before and after. It writes one <c>last.log</c> line
+    /// with the counts and the elapsed time.
+    /// </summary>
+    public IReadOnlyList<CatalogItemRatingChange> SetItemsRating(IReadOnlyList<string> itemIds, int? halfStars)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var changes = WriteItemsRating(itemIds, halfStars);
+        var rating = ItemRating.ToStars(halfStars)?.ToString(CultureInfo.InvariantCulture) ?? "none";
+        _serverLog.Append(
+            "info",
+            $"Bulk rating rating={rating} count={changes.Count} changed={changes.Count(change => change.Changed)} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        return changes;
+    }
+
+    private IReadOnlyList<CatalogItemRatingChange> WriteItemsRating(IReadOnlyList<string> itemIds, int? halfStars)
+    {
         lock (_lock)
         {
-            return UpdateItem(itemId, () => _catalog.Session.SetRating(itemId, halfStars), out previous);
+            return _catalog.Session.SetItemsRating(itemIds, halfStars);
         }
+    }
+
+    /// <summary>
+    /// Deletes the file of each named item from disk and removes the items whose files it deleted, with their tags, in
+    /// one write. <paramref name="removedItemIds"/> is the ids of the items it removed. An item whose file isn't on
+    /// disk, or can't be deleted, stays and is listed in the response's failures; an id no item has is skipped.
+    /// </summary>
+    public DeleteFilesResponse DeleteFiles(IReadOnlyList<string> itemIds, out IReadOnlyList<string> removedItemIds)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        IReadOnlyList<CatalogStoredItem> items;
+        lock (_lock)
+        {
+            items = _catalog.Session.ReadItemsByIds(itemIds);
+        }
+
+        var outcome = DeleteFilesAndItems("Delete files", items, stopwatch);
+        removedItemIds = outcome.RemovedItemIds;
+        return new DeleteFilesResponse
+        {
+            DeletedCount = outcome.Deleted.Count,
+            FailedItemIds = outcome.Failures.Select(failure => failure.Item.Id).ToList()
+        };
     }
 
     public TagEditorModelResponse GetTagEditorModel(TagEditorModelRequest? request)
     {
         lock (_lock)
         {
-            var requestedIds = (request?.ItemIds ?? [])
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => id.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var read = _catalog.Session.ReadTagEditor(requestedIds);
+            var countsOnly = request?.CountsOnly == true;
+            var read = _catalog.Session.ReadTagEditor(request?.ItemIds, countsOnly);
             var categories = read.Categories
                 .Select(MapCategory)
                 .Where(category => !string.IsNullOrWhiteSpace(category.Name))
@@ -334,7 +401,12 @@ public sealed class LibraryOperationsService
                         ItemId = item.ItemId,
                         Tags = item.Tags
                     })
-                    .ToList()
+                    .ToList(),
+                TagCounts = read.TagCounts?
+                    .Select(tag => new TagItemCount { Name = tag.Name, ItemCount = tag.ItemCount })
+                    .OrderBy(tag => tag.Name, TagNameComparer.Instance)
+                    .ToList(),
+                ItemCount = read.ItemCount
             };
         }
     }
@@ -351,32 +423,9 @@ public sealed class LibraryOperationsService
 
     public bool ApplyItemTags(ApplyItemTagsRequest request, out bool catalogChanged, out List<string> resolvedItemIds)
     {
-        catalogChanged = false;
-        resolvedItemIds = [];
-        var itemIds = request.ItemIds
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var addTags = request.AddTags
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => tag.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var removeTags = request.RemoveTags
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => tag.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (itemIds.Count == 0)
-        {
-            return false;
-        }
-
         lock (_lock)
         {
-            return _catalog.Session.ApplyItemTagEdits(itemIds, addTags, removeTags, out catalogChanged, out resolvedItemIds);
+            return _catalog.Session.ApplyItemTagEdits(request.ItemIds, request.AddTags, request.RemoveTags, out catalogChanged, out resolvedItemIds);
         }
     }
 
@@ -518,7 +567,7 @@ public sealed class LibraryOperationsService
 
             var list = _catalog.Session.ReadDuplicateScanItems(scope, sourceId);
             var readyItems = list.Where(IsReadyFingerprint).ToList();
-            var readyById = readyItems.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            var readyById = readyItems.ToDictionary(item => item.Id, StringComparer.Ordinal);
             var groups = FingerprintDuplicateHelper.BuildExactDuplicateGroups(readyItems.Select(item => new FingerprintDuplicateItem
             {
                 ItemId = item.Id,
@@ -565,14 +614,22 @@ public sealed class LibraryOperationsService
         }
     }
 
-    public DuplicateApplyResponse ApplyDuplicateSelection(DuplicateApplyRequest request)
+    /// <summary>
+    /// Deletes the files of each selection's items but the one it keeps, and removes those items, as delete files
+    /// does. <paramref name="removedItemIds"/> is the ids of the items it removed. A selection whose kept item isn't in
+    /// the library is skipped.
+    /// </summary>
+    public DuplicateApplyResponse ApplyDuplicateSelection(DuplicateApplyRequest request, out IReadOnlyList<string> removedItemIds)
     {
+        var stopwatch = Stopwatch.StartNew();
+        removedItemIds = [];
         var response = new DuplicateApplyResponse();
         if (request.Selections.Count == 0)
         {
             return response;
         }
 
+        var toDelete = new List<CatalogStoredItem>();
         lock (_lock)
         {
             foreach (var selection in request.Selections)
@@ -582,47 +639,92 @@ public sealed class LibraryOperationsService
                     continue;
                 }
 
+                var keepItemId = selection.KeepItemId.Trim();
                 var matched = _catalog.Session.ReadItemsByIds(selection.ItemIds);
-                if (!matched.Any(item => string.Equals(item.Id, selection.KeepItemId, StringComparison.OrdinalIgnoreCase)))
+                if (matched.Any(item => item.Id == keepItemId))
                 {
-                    continue;
-                }
-
-                foreach (var item in matched)
-                {
-                    if (string.Equals(item.Id, selection.KeepItemId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        if (File.Exists(item.FullPath))
-                        {
-                            File.Delete(item.FullPath);
-                            response.DeletedOnDisk++;
-                        }
-                        else
-                        {
-                            response.Failures.Add(new DuplicateApplyFailure { ItemId = item.Id, FullPath = item.FullPath, Reason = "File not found" });
-                            continue;
-                        }
-
-                        if (_catalog.Session.DeleteItem(item.Id))
-                        {
-                            response.RemovedFromLibrary++;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        response.Failures.Add(new DuplicateApplyFailure { ItemId = item.Id, FullPath = item.FullPath, Reason = ex.Message });
-                    }
+                    toDelete.AddRange(matched.Where(item => item.Id != keepItemId));
                 }
             }
         }
 
+        var outcome = DeleteFilesAndItems("Duplicate apply", toDelete, stopwatch);
+        removedItemIds = outcome.RemovedItemIds;
+        response.DeletedOnDisk = outcome.Deleted.Count;
+        response.RemovedFromLibrary = outcome.RemovedItemIds.Count;
+        response.Failures = outcome.Failures
+            .Select(failure => new DuplicateApplyFailure
+            {
+                ItemId = failure.Item.Id,
+                FullPath = failure.Item.FullPath,
+                Reason = failure.Error?.Message ?? "File not found"
+            })
+            .ToList();
         return response;
     }
+
+    /// <summary>
+    /// Deletes each item's file from disk outside the operations lock, since a share can be slow, and then removes the
+    /// items whose files it deleted in one write. A file that isn't on disk, or whose delete throws, is a failure
+    /// with that exception, or none for a missing file, and its item stays. It writes one <c>last.log</c> line, named
+    /// <paramref name="action"/>, with the counts and the time since <paramref name="stopwatch"/> started, and when
+    /// some files stay, a warning with how many were missing and the errors' types, both without paths.
+    /// </summary>
+    private FileDeletionOutcome DeleteFilesAndItems(string action, IReadOnlyList<CatalogStoredItem> items, Stopwatch stopwatch)
+    {
+        var deleted = new List<CatalogStoredItem>();
+        var failures = new List<(CatalogStoredItem Item, Exception? Error)>();
+        foreach (var item in items)
+        {
+            try
+            {
+                if (!File.Exists(item.FullPath))
+                {
+                    failures.Add((item, null));
+                    continue;
+                }
+
+                File.Delete(item.FullPath);
+                deleted.Add(item);
+            }
+            catch (Exception ex)
+            {
+                failures.Add((item, ex));
+            }
+        }
+
+        IReadOnlyList<string> removed = [];
+        if (deleted.Count > 0)
+        {
+            lock (_lock)
+            {
+                removed = _catalog.Session.DeleteItems(deleted.Select(item => item.Id).ToList());
+            }
+        }
+
+        _serverLog.Append(
+            "info",
+            $"{action} found={items.Count} deleted={deleted.Count} removed={removed.Count} failed={failures.Count} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        if (failures.Count > 0)
+        {
+            var missing = failures.Count(failure => failure.Error == null);
+            var errors = failures
+                .Where(failure => failure.Error != null)
+                .Select(failure => failure.Error!.GetType().Name)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            _serverLog.Append(
+                "warn",
+                $"{action} kept {failures.Count} items: missing={missing} errors=[{string.Join(", ", errors)}].");
+        }
+
+        return new FileDeletionOutcome(deleted, removed, failures);
+    }
+
+    private sealed record FileDeletionOutcome(
+        IReadOnlyList<CatalogStoredItem> Deleted,
+        IReadOnlyList<string> RemovedItemIds,
+        IReadOnlyList<(CatalogStoredItem Item, Exception? Error)> Failures);
 
     public AutoTagScanResponse ScanAutoTags(AutoTagScanRequest request)
     {
@@ -802,45 +904,37 @@ public sealed class LibraryOperationsService
     private static bool ItemHasTag(CatalogAutoTagScanItem item, string tagName) =>
         item.Tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
 
-    private LibraryStateResponse? UpdateItemFlag(string identifier, Action update, out LibraryStateResponse? previous)
-    {
-        var after = UpdateItem(identifier, update, out var before);
-        previous = before == null ? null : ToStateResponse(before);
-        return after == null ? null : ToStateResponse(after);
-    }
-
     /// <summary>
-    /// Reads the item's state before and after the update. Both are null for an item not in the library, or one gone
-    /// by the time the update finished.
+    /// Sets or clears one item's flag, and returns its state after the change, with <paramref name="previous"/> its
+    /// state before. Both are null for an item not in the library.
     /// </summary>
-    private CatalogItemState? UpdateItem(string identifier, Action update, out CatalogItemState? previous)
+    private LibraryStateResponse? SetItemFlag(string itemId, CatalogItemFlag flag, bool value, out LibraryStateResponse? previous)
     {
         previous = null;
-        var before = _catalog.Session.ReadItemState(identifier);
-        if (before == null)
+        if (string.IsNullOrWhiteSpace(itemId))
         {
             return null;
         }
 
-        update();
-        var after = _catalog.Session.ReadItemState(before.Id);
-        if (after == null)
+        var change = WriteItemsFlag([itemId], flag, value).FirstOrDefault();
+        if (change == null)
         {
             return null;
         }
 
-        previous = before;
-        return after;
-    }
-
-    private static LibraryStateResponse ToStateResponse(CatalogItemState state)
-    {
+        previous = new LibraryStateResponse
+        {
+            ItemId = change.Id,
+            Path = change.FullPath,
+            IsFavorite = change.PreviousIsFavorite,
+            IsBlacklisted = change.PreviousIsBlacklisted
+        };
         return new LibraryStateResponse
         {
-            ItemId = state.Id,
-            Path = state.FullPath,
-            IsFavorite = state.IsFavorite,
-            IsBlacklisted = state.IsBlacklisted
+            ItemId = change.Id,
+            Path = change.FullPath,
+            IsFavorite = change.IsFavorite,
+            IsBlacklisted = change.IsBlacklisted
         };
     }
 

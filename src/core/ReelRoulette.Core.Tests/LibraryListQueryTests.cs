@@ -350,7 +350,7 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
-    public void ReadPlaybackItemById_ReadsOnlyThatExactId()
+    public void ReadPlaybackItem_ReadsThatItemsFields_ByItsExactId()
     {
         using var dir = new TempDirectory();
         var session = Open(dir);
@@ -359,7 +359,7 @@ public sealed class LibraryListQueryTests
         Add(session, "keep", "on", "keep.mp4", "keep.mp4", favorite: true, duration: TimeSpan.FromSeconds(12), mediaType: 1);
         Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4", blacklisted: true);
 
-        var item = session.ReadPlaybackItemById("keep");
+        var item = session.ReadPlaybackItem("keep");
         Assert.NotNull(item);
         Assert.Equal("keep", item!.Id);
         Assert.Equal("/media/keep.mp4", item.FullPath);
@@ -369,10 +369,10 @@ public sealed class LibraryListQueryTests
         Assert.True(item.IsFavorite);
         Assert.False(item.IsBlacklisted);
         Assert.True(item.IsSourceEnabled);
-        Assert.True(session.ReadPlaybackItemById("hidden")!.IsBlacklisted);
-        Assert.Null(session.ReadPlaybackItemById("KEEP"));
-        Assert.Null(session.ReadPlaybackItemById("/media/keep.mp4"));
-        Assert.Null(session.ReadPlaybackItemById(""));
+        Assert.True(session.ReadPlaybackItem("hidden")!.IsBlacklisted);
+        Assert.Null(session.ReadPlaybackItem("KEEP"));
+        Assert.Null(session.ReadPlaybackItem("/media/keep.mp4"));
+        Assert.Null(session.ReadPlaybackItem(""));
     }
 
     [Fact]
@@ -386,7 +386,8 @@ public sealed class LibraryListQueryTests
         Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4");
         Add(session, "ghost", "ghost", "ghost.mp4", "ghost.mp4");
 
-        var byId = session.ReadPlaybackItem("KEEP");
+        Assert.Null(session.ReadPlaybackItem("KEEP"));
+        var byId = session.ReadPlaybackItem(" keep ");
         Assert.NotNull(byId);
         Assert.Equal("keep", byId!.Id);
         Assert.Equal("/media/keep.mp4", byId.FullPath);
@@ -1006,7 +1007,8 @@ public sealed class LibraryListQueryTests
         var stats = session.ReadLibraryStats();
         Assert.Equal(-16.0, stats.Global.BaselineLoudnessLufs);
 
-        var byId = session.ReadListedItem("KEEP");
+        Assert.Null(session.ReadListedItem("KEEP"));
+        var byId = session.ReadListedItem("keep");
         Assert.NotNull(byId);
         Assert.Equal("keep", byId!.Id);
         Assert.Equal("/media/keep.mp4", byId.FullPath);
@@ -1062,7 +1064,7 @@ public sealed class LibraryListQueryTests
         Assert.Equal(3, session.QueryList(new LibraryListRequest { Filter = new FilterStateModel(), Limit = 1 }).TotalCount);
         Assert.Equal(counted + 3, session.ListCountQueries);
 
-        Assert.True(session.SetFavorite("a", true));
+        Assert.True(Assert.Single(session.SetItemsFlag(["a"], CatalogItemFlag.Favorite, true)).Changed);
         var afterWrite = session.QueryList(new LibraryListRequest { Filter = favorites, Limit = 1 });
 
         Assert.Equal(counted + 5, session.ListCountQueries);
@@ -1167,7 +1169,7 @@ public sealed class LibraryListQueryTests
             Add(session, id, "on", id + ".mp4", id + ".mp4");
             if (halfStars is int value)
             {
-                Assert.True(session.SetRating(id, value));
+                Assert.True(Assert.Single(session.SetItemsRating([id], value)).Changed);
             }
         }
 
@@ -1191,7 +1193,7 @@ public sealed class LibraryListQueryTests
             Add(session, id, "on", id + ".mp4", id + ".mp4");
         }
 
-        Assert.True(session.SetRating("b", 6));
+        Assert.True(Assert.Single(session.SetItemsRating(["b"], 6)).Changed);
         foreach (var (descending, index) in new[] { (false, "idx_items_rating_asc"), (true, "idx_items_rating_desc") })
         {
             var plans = QueryPlans(session, new FilterStateModel(), LibraryListSort.Rating, descending);

@@ -20,7 +20,7 @@ public sealed class LibraryCatalogSessionTests
         }));
 
         var second = new LibraryCatalogSession(first.DatabasePath);
-        Assert.True(first.SetFavorite("item-1", true));
+        Assert.True(Assert.Single(first.SetItemsFlag(["item-1"], CatalogItemFlag.Favorite, true)).Changed);
         Assert.True(second.SetDuration("item-1", TimeSpan.FromSeconds(90.5).Ticks));
 
         var item = Assert.Single(LibraryCatalogStore.Read(first.DatabasePath).Items);
@@ -351,7 +351,7 @@ public sealed class LibraryCatalogSessionTests
         var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.Equal(0, session.Revision);
 
-        Assert.False(session.SetFavorite("missing", true));
+        Assert.Empty(session.SetItemsFlag(["missing"], CatalogItemFlag.Favorite, true));
         Assert.Equal(0, session.Revision);
 
         Assert.True(session.InsertItem(new LibraryCatalogItem
@@ -513,27 +513,29 @@ public sealed class LibraryCatalogSessionTests
         }));
         var revision = session.Revision;
 
-        Assert.True(session.SetFavorite("item-a", true));
+        Assert.True(Assert.Single(session.SetItemsFlag(["item-a"], CatalogItemFlag.Favorite, true)).Changed);
         var favorited = session.ReadItemState("item-a");
         Assert.NotNull(favorited);
         Assert.True(favorited!.IsFavorite);
         Assert.False(favorited.IsBlacklisted);
         Assert.Equal(revision + 1, session.Revision);
-        Assert.False(session.SetFavorite("ITEM-A", true));
-        Assert.False(session.SetFavorite("missing", true));
+        Assert.Empty(session.SetItemsFlag(["ITEM-A"], CatalogItemFlag.Favorite, true));
+        Assert.Empty(session.SetItemsFlag(["missing"], CatalogItemFlag.Favorite, true));
         Assert.Equal(revision + 1, session.Revision);
 
-        Assert.True(session.SetBlacklist("ITEM-B", true));
+        Assert.Empty(session.SetItemsFlag(["ITEM-B"], CatalogItemFlag.Blacklist, true));
+        Assert.Equal(revision + 1, session.Revision);
+        Assert.True(Assert.Single(session.SetItemsFlag(["item-b"], CatalogItemFlag.Blacklist, true)).Changed);
         var blacklisted = session.ReadItemState("item-b");
         Assert.NotNull(blacklisted);
         Assert.True(blacklisted!.IsBlacklisted);
         Assert.False(blacklisted.IsFavorite);
         Assert.Equal(4, blacklisted.PlayCount);
-        Assert.True(session.SetBlacklist("item-b", false));
+        Assert.True(Assert.Single(session.SetItemsFlag(["item-b"], CatalogItemFlag.Blacklist, false)).Changed);
         var blacklistCleared = session.ReadItemState("item-b");
         Assert.False(blacklistCleared!.IsBlacklisted);
         Assert.False(blacklistCleared.IsFavorite);
-        Assert.False(session.SetBlacklist("item-a", false));
+        Assert.False(Assert.Single(session.SetItemsFlag(["item-a"], CatalogItemFlag.Blacklist, false)).Changed);
         Assert.True(session.ReadItemState("item-a")!.IsFavorite);
 
         var neverPlayed = session.RecordPlayback("item-a");
@@ -553,7 +555,8 @@ public sealed class LibraryCatalogSessionTests
         var secondPlay = session.RecordPlayback("item-b");
         Assert.Equal(6, secondPlay!.PlayCount);
         Assert.Equal(firstPlay.LastPlayedUtc, secondPlay.PreviousLastPlayedUtc);
-        var saturated = session.RecordPlayback("ITEM-MAX");
+        Assert.Null(session.RecordPlayback("ITEM-MAX"));
+        var saturated = session.RecordPlayback("item-max");
         Assert.NotNull(saturated);
         Assert.Equal(int.MaxValue, saturated!.PlayCount);
         Assert.NotNull(saturated.LastPlayedUtc);
@@ -615,25 +618,25 @@ public sealed class LibraryCatalogSessionTests
         var revision = session.Revision;
 
         Assert.Equal(4, session.ReadItemState("item-rated")!.RatingHalfStars);
-        Assert.True(session.SetRating("item-a", 7));
+        Assert.True(Assert.Single(session.SetItemsRating(["item-a"], 7)).Changed);
         Assert.Equal(7, session.ReadItemState("item-a")!.RatingHalfStars);
         Assert.Equal(revision + 1, session.Revision);
-        Assert.False(session.SetRating("ITEM-A", 7));
+        Assert.Empty(session.SetItemsRating(["ITEM-A"], 7));
         Assert.Equal(revision + 1, session.Revision);
-        Assert.True(session.SetRating("item-a", 10));
+        Assert.True(Assert.Single(session.SetItemsRating(["item-a"], 10)).Changed);
         Assert.Equal(10, session.ReadListedItem("item-a")!.RatingHalfStars);
-        Assert.True(session.SetRating("item-a", null));
+        Assert.True(Assert.Single(session.SetItemsRating(["item-a"], null)).Changed);
         Assert.Null(session.ReadItemState("item-a")!.RatingHalfStars);
-        Assert.False(session.SetRating("item-a", null));
-        Assert.False(session.SetRating("missing", 3));
-        Assert.False(session.SetRating("/clips/a.mp4", 3));
+        Assert.False(Assert.Single(session.SetItemsRating(["item-a"], null)).Changed);
+        Assert.Empty(session.SetItemsRating(["missing"], 3));
+        Assert.Empty(session.SetItemsRating(["/clips/a.mp4"], 3));
 
         // A rating is independent of favorite and blacklist.
-        Assert.True(session.SetRating("item-a", 1));
+        Assert.True(Assert.Single(session.SetItemsRating(["item-a"], 1)).Changed);
         var rated = session.ReadItemState("item-a")!;
         Assert.True(rated.IsFavorite);
         Assert.False(rated.IsBlacklisted);
-        Assert.True(session.SetBlacklist("item-a", true));
+        Assert.True(Assert.Single(session.SetItemsFlag(["item-a"], CatalogItemFlag.Blacklist, true)).Changed);
         Assert.Equal(1, session.ReadItemState("item-a")!.RatingHalfStars);
     }
 
@@ -641,7 +644,7 @@ public sealed class LibraryCatalogSessionTests
     [InlineData(0)]
     [InlineData(11)]
     [InlineData(-2)]
-    public void SetRating_RefusesAValueOutsideOneToTenHalfStars(int halfStars)
+    public void SetItemsRating_RefusesAValueOutsideOneToTenHalfStars(int halfStars)
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -653,7 +656,7 @@ public sealed class LibraryCatalogSessionTests
             RatingHalfStars = 6
         }));
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => session.SetRating("item-a", halfStars));
+        Assert.Throws<ArgumentOutOfRangeException>(() => session.SetItemsRating(["item-a"], halfStars));
         Assert.Equal(6, session.ReadItemState("item-a")!.RatingHalfStars);
     }
 
@@ -673,9 +676,9 @@ public sealed class LibraryCatalogSessionTests
         var session = CatalogOpen.Open(dir.Path).Session!;
 
         Assert.Equal(2, session.ReadLibraryStats().Global.Rated);
-        Assert.True(session.SetRating("unrated", 5));
+        Assert.True(Assert.Single(session.SetItemsRating(["unrated"], 5)).Changed);
         Assert.Equal(3, session.ReadLibraryStats().Global.Rated);
-        Assert.True(session.SetRating("video", null));
+        Assert.True(Assert.Single(session.SetItemsRating(["video"], null)).Changed);
         Assert.Equal(2, session.ReadLibraryStats().Global.Rated);
     }
 
@@ -699,8 +702,8 @@ public sealed class LibraryCatalogSessionTests
         Assert.Null(session.ReadItemState(path));
         Assert.Null(session.ReadPlaybackItem(path));
         Assert.Empty(Assert.Single(session.ReadTagEditor([path]).Items).Tags);
-        Assert.False(session.SetFavorite(path, true));
-        Assert.False(session.SetBlacklist(path, true));
+        Assert.Empty(session.SetItemsFlag([path], CatalogItemFlag.Favorite, true));
+        Assert.Empty(session.SetItemsFlag([path], CatalogItemFlag.Blacklist, true));
         Assert.Null(session.RecordPlayback(path));
         Assert.Equal(0, session.ClearPlaybackStats([path]));
         Assert.False(session.ApplyItemTagEdits([path], [], ["Night"], out _, out var resolved));

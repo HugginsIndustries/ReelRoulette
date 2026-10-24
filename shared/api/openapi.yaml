@@ -898,6 +898,98 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
+  /api/library/query-ids:
+    post:
+      summary: List the ids of every library item a query matches
+      description: |
+        The ids of every item that `POST /api/library/query` with the same `filterState` and `search` matches, for
+        selecting all of them: enabled sources, then the search, then the filter, with no paging, no page cap, and no
+        order. Each request writes one `last.log` line with the count and the elapsed time.
+      operationId: postLibraryQueryIds
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryIdsQueryRequest"
+      responses:
+        "200":
+          description: Every matching item's catalog id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryIdsQueryResponse"
+        "400":
+          description: Invalid filterState
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/library/delete-files:
+    post:
+      summary: Delete library items' files from disk and remove the items
+      description: |
+        Deletes the file of each named item from disk and then removes the item, with its tags, from the library.
+        An item whose file isn't on disk, or can't be deleted, stays in the library and is listed in
+        `failedItemIds`. An id no item has is skipped. It publishes one `itemsRemoved` event for the items it
+        removed, when it removed any. It writes one `last.log` line with the counts, and when some files stay, a
+        warning line with how many were missing and the errors' types, both with no paths.
+
+        It is an admin action, accepted as `/control` routes are: from the server machine, a direct request from
+        loopback or from the server's own address, and from another machine only with a control session from
+        `POST /control/pair` or the control token as a bearer header. A refused request writes a warning line with the
+        caller's address. The thumbnails of removed items are deleted by the next refresh's thumbnail stage.
+      operationId: postLibraryDeleteFiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteFilesRequest"
+      responses:
+        "200":
+          description: The files that could be deleted are gone, and their items removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteFilesResponse"
+        "400":
+          description: No item ids
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            The request came from another machine without a control session or the control token (code
+            control_token_required), or from another device while remote connections are off.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                controlTokenRequired:
+                  value:
+                    error: Deleting files is an admin action, which needs the server's control token.
+                    code: control_token_required
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/library/item:
     post:
       summary: Read one library item
@@ -1490,6 +1582,79 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
+  /api/bulk/item-state:
+    post:
+      summary: Set or clear favorite or blacklist on many items
+      description: |
+        Sets or clears `flag` on every named item in one write. Setting favorite clears blacklist, and setting
+        blacklist clears favorite, as `POST /api/favorite` and `POST /api/blacklist` do. An id no item has is
+        skipped. When any named item is in the library, it publishes one `bulkItemStateChanged` event in place of
+        one `itemStateChanged` per item.
+      operationId: postBulkItemState
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkItemStateRequest"
+      responses:
+        "200":
+          description: Every named item in the library has the requested state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkChangeResponse"
+        "400":
+          description: No item ids, or a flag that isn't favorite or blacklist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/bulk/rating:
+    post:
+      summary: Set or clear one rating on many items
+      description: |
+        Sets `rating`, in stars, on every named item in one write, or clears it with null. A rating is independent of
+        favorite and blacklist, so neither changes. An id no item has is skipped. When any named item is in the
+        library, it publishes one `bulkItemRatingChanged` event in place of one `itemRatingChanged` per item.
+      operationId: postBulkRating
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkRatingRequest"
+      responses:
+        "200":
+          description: Every named item in the library has the requested rating
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkChangeResponse"
+        "400":
+          description: No item ids, or a rating that isn't a multiple of 0.5 from 0.5 to 5
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/record-playback:
     post:
       summary: Record playback for an item
@@ -1567,6 +1732,10 @@ paths:
   /api/tag-editor/model:
     post:
       summary: Get tag editor model snapshot
+      description: |
+        The tag catalog, and the tags of the items in `itemIds`, each item's in `items`. With `countsOnly`, `items` is
+        empty and `tagCounts` counts how many of the items hold each tag, with `itemCount` the number of them in the
+        library, so editing many items' tags doesn't need each item's tags.
       operationId: postTagEditorModel
       requestBody:
         required: true
@@ -1912,6 +2081,13 @@ paths:
   /api/duplicates/apply:
     post:
       summary: Apply duplicate keep/delete selections
+      description: |
+        Deletes the files of each selection's items but the one it keeps, and removes those items, through the same
+        code as `POST /api/library/delete-files`. A selection whose kept item isn't in the library is skipped. It
+        publishes one `itemsRemoved` event for the items it removed, when it removed any. It writes the same `last.log`
+        lines as `POST /api/library/delete-files`, named `Duplicate apply`.
+
+        It is an admin action, accepted as `POST /api/library/delete-files` is, by the `/control` routes' check.
       operationId: postDuplicateApply
       requestBody:
         required: true
@@ -1932,6 +2108,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            The request came from another machine without a control session or the control token (code
+            control_token_required), or from another device while remote connections are off.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                controlTokenRequired:
+                  value:
+                    error: Deleting files is an admin action, which needs the server's control token.
+                    code: control_token_required
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
@@ -2879,6 +3074,30 @@ components:
           type: integer
           format: int32
 
+    LibraryIdsQueryRequest:
+      type: object
+      properties:
+        filterState:
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: As in `LibraryQueryRequest`.
+        search:
+          type: string
+          nullable: true
+          description: As in `LibraryQueryRequest`.
+
+    LibraryIdsQueryResponse:
+      type: object
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          description: The catalog id of every item the query matches.
+          items:
+            type: string
+
     LibraryQueryRequest:
       type: object
       properties:
@@ -3346,6 +3565,90 @@ components:
           nullable: true
           description: Last-played time after this play.
 
+    BulkItemStateRequest:
+      type: object
+      required:
+        - itemIds
+        - flag
+        - value
+      properties:
+        itemIds:
+          type: array
+          description: Catalog item ids. An id no item has is skipped.
+          items:
+            type: string
+        flag:
+          type: string
+          enum:
+            - favorite
+            - blacklist
+          description: Which flag to set or clear.
+        value:
+          type: boolean
+          description: True sets the flag, false clears it.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `bulkItemStateChanged` names.
+
+    BulkRatingRequest:
+      type: object
+      required:
+        - itemIds
+        - rating
+      properties:
+        itemIds:
+          type: array
+          description: Catalog item ids. An id no item has is skipped.
+          items:
+            type: string
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating in stars, a multiple of 0.5 from 0.5 to 5, or null to clear it. A request without it clears the rating too.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `bulkItemRatingChanged` names.
+
+    BulkChangeResponse:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int32
+          description: How many of the named items are in the library, each of which now has the requested state.
+
+    DeleteFilesRequest:
+      type: object
+      required:
+        - itemIds
+      properties:
+        itemIds:
+          type: array
+          description: Catalog item ids. An id no item has is skipped.
+          items:
+            type: string
+
+    DeleteFilesResponse:
+      type: object
+      required:
+        - deletedCount
+        - failedItemIds
+      properties:
+        deletedCount:
+          type: integer
+          format: int32
+          description: How many files were deleted, each of whose items was removed from the library.
+        failedItemIds:
+          type: array
+          description: The items whose file wasn't on disk or couldn't be deleted. They stay in the library.
+          items:
+            type: string
+
     ClearPlaybackStatsRequest:
       type: object
       description: Names either `allItems` or `itemIds`, never both.
@@ -3388,7 +3691,10 @@ components:
         payload:
           oneOf:
             - $ref: "#/components/schemas/ItemStateChangedPayload"
+            - $ref: "#/components/schemas/BulkItemStateChangedPayload"
             - $ref: "#/components/schemas/ItemRatingChangedPayload"
+            - $ref: "#/components/schemas/BulkItemRatingChangedPayload"
+            - $ref: "#/components/schemas/ItemsRemovedPayload"
             - $ref: "#/components/schemas/PlaybackRecordedPayload"
             - $ref: "#/components/schemas/ResyncRequiredPayload"
             - $ref: "#/components/schemas/ItemTagsChangedPayload"
@@ -3426,6 +3732,122 @@ components:
           type: string
           nullable: true
           description: The client that made the change, from its favorite or blacklist request, or null when the request named none.
+
+    BulkItemStateChangedPayload:
+      type: object
+      description: >
+        Published by `POST /api/bulk/item-state` when any named item is in the library, for all of them at once.
+      required:
+        - flag
+        - value
+        - count
+        - items
+      properties:
+        flag:
+          type: string
+          enum:
+            - favorite
+            - blacklist
+          description: The flag the request set or cleared.
+        value:
+          type: boolean
+          description: True when the request set the flag, false when it cleared it.
+        count:
+          type: integer
+          format: int32
+          description: How many of the named items are in the library, each of which now has the requested state.
+        items:
+          type: array
+          description: The items whose favorite or blacklist this change changed. The others already had the requested state.
+          items:
+            $ref: "#/components/schemas/BulkItemState"
+        clientId:
+          type: string
+          nullable: true
+          description: The client that made the change, from its request, or null when the request named none.
+
+    BulkItemState:
+      type: object
+      required:
+        - itemId
+        - isFavorite
+        - isBlacklisted
+        - previousIsFavorite
+        - previousIsBlacklisted
+      properties:
+        itemId:
+          type: string
+        isFavorite:
+          type: boolean
+        isBlacklisted:
+          type: boolean
+        previousIsFavorite:
+          type: boolean
+          description: Favorite before this change.
+        previousIsBlacklisted:
+          type: boolean
+          description: Blacklist before this change.
+
+    BulkItemRatingChangedPayload:
+      type: object
+      description: >
+        Published by `POST /api/bulk/rating` when any named item is in the library, for all of them at once.
+      required:
+        - rating
+        - count
+        - items
+      properties:
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating the request set, in stars, or null when it cleared the rating.
+        count:
+          type: integer
+          format: int32
+          description: How many of the named items are in the library, each of which now has the requested rating.
+        items:
+          type: array
+          description: The items whose rating this change changed. The others already had the requested rating.
+          items:
+            $ref: "#/components/schemas/BulkItemRating"
+        clientId:
+          type: string
+          nullable: true
+          description: The client that made the change, from its request, or null when the request named none.
+
+    BulkItemRating:
+      type: object
+      required:
+        - itemId
+        - rating
+        - previousRating
+      properties:
+        itemId:
+          type: string
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating in stars, or null for none.
+        previousRating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating before this change, in stars, or null for none.
+
+    ItemsRemovedPayload:
+      type: object
+      description: >
+        Published by `POST /api/library/delete-files` and `POST /api/duplicates/apply` for the items they removed from
+        the library.
+      required:
+        - itemIds
+      properties:
+        itemIds:
+          type: array
+          items:
+            type: string
 
     ItemRatingChangedPayload:
       type: object
@@ -3661,6 +4083,11 @@ components:
           type: array
           items:
             type: string
+        countsOnly:
+          type: boolean
+          description: >
+            True answers `tagCounts` and `itemCount` for the items in place of each item's tags, and `items` is empty.
+            Defaults to false.
 
     TagEditorModelResponse:
       type: object
@@ -3676,8 +4103,30 @@ components:
             $ref: "#/components/schemas/TagSnapshot"
         items:
           type: array
+          description: Each requested item's tags, empty with `countsOnly`.
           items:
             $ref: "#/components/schemas/ItemTagsSnapshot"
+        tagCounts:
+          type: array
+          description: With `countsOnly`, each tag the items hold and how many of them hold it.
+          items:
+            $ref: "#/components/schemas/TagItemCount"
+        itemCount:
+          type: integer
+          format: int32
+          description: With `countsOnly`, how many of the requested items are in the library.
+
+    TagItemCount:
+      type: object
+      required: [name, itemCount]
+      properties:
+        name:
+          type: string
+          description: The tag's name as the items hold it.
+        itemCount:
+          type: integer
+          format: int32
+          description: How many of the requested items hold the tag, compared ignoring case.
 
     ApplyItemTagsRequest:
       type: object

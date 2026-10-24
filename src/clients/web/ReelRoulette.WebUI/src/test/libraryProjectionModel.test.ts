@@ -1,20 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseLibraryProjection,
   parseLibraryQueryPage,
   parseMediaType,
   parseUtcMs
 } from "../library/libraryProjectionModel";
 
 describe("libraryProjectionModel", () => {
-  it("parses enabled-source items with filter and sort fields", () => {
-    const result = parseLibraryProjection({
-      sources: [
-        { id: "s1", isEnabled: true },
-        { id: "s2", isEnabled: false }
-      ],
-      categories: [{ id: "c1", name: "Genre" }],
-      tags: [{ name: "Action", categoryId: "c1" }],
+  it("parses items with filter and sort fields", () => {
+    const result = parseLibraryQueryPage({
       items: [
         {
           id: "i1",
@@ -33,12 +26,12 @@ describe("libraryProjectionModel", () => {
           hasAudio: true,
           integratedLoudness: -14,
           tags: ["Action"]
-        },
-        { id: "i2", sourceId: "s2", fileName: "skip.mp4" }
-      ]
+        }
+      ],
+      totalCount: 1,
+      searchBaselineCount: 1
     });
 
-    expect(result.summary.totalItems).toBe(1);
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({
       id: "i1",
@@ -50,8 +43,6 @@ describe("libraryProjectionModel", () => {
       dateCreatedUtcMs: Date.UTC(2023, 5, 1),
       tags: ["Action"]
     });
-    expect(result.catalog.categories).toHaveLength(1);
-    expect(result.catalog.tags[0]?.name).toBe("Action");
   });
 
   it("reads duration as seconds and does not parse the duration string", () => {
@@ -89,9 +80,8 @@ describe("libraryProjectionModel", () => {
     expect(parseMediaType("Photo")).toBe("photo");
   });
 
-  it("parses optional fullPath on projection items", () => {
-    const result = parseLibraryProjection({
-      sources: [{ id: "s1", isEnabled: true }],
+  it("parses optional fullPath on items", () => {
+    const result = parseLibraryQueryPage({
       items: [
         {
           id: "i1",
@@ -105,9 +95,8 @@ describe("libraryProjectionModel", () => {
     expect(result.items[0]?.fullPath).toBe("/data/videos/clip.mp4");
   });
 
-  it("parses projection thumbnail metadata fields", () => {
-    const result = parseLibraryProjection({
-      sources: [{ id: "s1", isEnabled: true }],
+  it("parses thumbnail metadata fields", () => {
+    const result = parseLibraryQueryPage({
       items: [
         {
           id: "i1",

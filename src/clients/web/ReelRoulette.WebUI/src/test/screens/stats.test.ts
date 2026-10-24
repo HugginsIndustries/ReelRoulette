@@ -529,6 +529,34 @@ describe("Stats tab", () => {
     expect(statsLoads()).toBe(4);
   });
 
+  it("loads again for a batch of favorites or ratings, and, with the baseline, for removed items", async () => {
+    const { page, server } = await mountStats();
+    const loads = () => server.requests("GET", "/api/library/stats").length;
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(loads()).toBe(BASELINE_LOADS + 1));
+
+    emit(page, "bulkItemStateChanged", {
+      flag: "favorite",
+      value: true,
+      count: 2,
+      items: [{ itemId: "item-other", isFavorite: true, isBlacklisted: false, previousIsFavorite: false, previousIsBlacklisted: false }],
+      clientId: "another-client"
+    });
+    await waitFor(() => expect(loads()).toBe(BASELINE_LOADS + 2));
+    emit(page, "bulkItemRatingChanged", {
+      rating: 4,
+      count: 1,
+      items: [{ itemId: "item-other", rating: 4, previousRating: null }],
+      clientId: "another-client"
+    });
+    await waitFor(() => expect(loads()).toBe(BASELINE_LOADS + 3));
+    // The tab's stats and the baseline loudness each load again.
+    emit(page, "itemsRemoved", { itemIds: ["item-other"] });
+    await waitFor(() => expect(loads()).toBe(BASELINE_LOADS + 5));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(loads()).toBe(BASELINE_LOADS + 5);
+  });
+
   it("loads nothing once the page closes, not even the load it was waiting to make", async () => {
     const { page, server } = await mountStats();
     fireEvent.click(document.getElementById("now-playing-name")!);

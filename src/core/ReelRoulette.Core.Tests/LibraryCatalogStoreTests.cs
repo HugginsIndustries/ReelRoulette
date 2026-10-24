@@ -298,7 +298,7 @@ public sealed class LibraryCatalogStoreTests
             dir.Path,
             items: [new SeedItem("item-1", "/clips/a.mp4")]);
         var opened = CatalogOpen.Open(dir.Path);
-        Assert.True(opened.Session!.SetFavorite("item-1", true));
+        Assert.True(Assert.Single(opened.Session!.SetItemsFlag(["item-1"], CatalogItemFlag.Favorite, true)).Changed);
 
         var checkpoint = Path.Combine(dir.Path, "checkpoint.db");
         LibraryCatalogStore.WriteCheckpoint(opened.Session.DatabasePath, checkpoint);

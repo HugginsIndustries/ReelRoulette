@@ -470,6 +470,24 @@ describe("tag save apply", () => {
     expect(own).toEqual({ skipPatch: true, reload: false });
   });
 
+  it("matches item ids exactly, so an id in another casing names no tile and its echo isn't the save's", () => {
+    const items = [item("item-a", ["Day"])];
+    applyTagSaveLocally(items, [{ kind: "apply-item-tags", itemIds: ["ITEM-A"], addTags: ["Night"], removeTags: [] }]);
+    expect(items[0]?.tags).toEqual(["Day"]);
+
+    const session = createTagSaveSession();
+    const steps: TagSaveStep[] = [{ kind: "apply-item-tags", itemIds: ["item-a"], addTags: ["Night"], removeTags: [] }];
+    session.begin([item("item-a", ["Day"])], steps, false);
+    expect(session.onEcho({ itemIds: ["ITEM-A"], addedTags: ["Night"], removedTags: [] }, false)).toEqual({
+      skipPatch: false,
+      reload: false
+    });
+    expect(session.onEcho({ itemIds: ["item-a"], addedTags: ["Night"], removedTags: [] }, false)).toEqual({
+      skipPatch: true,
+      reload: false
+    });
+  });
+
   it("copies a live empty tag list over the optimistic tags", () => {
     const loaded = [item("a", ["Day", "Night"])];
     replaceWithLiveTags(loaded, [item("a", [])]);

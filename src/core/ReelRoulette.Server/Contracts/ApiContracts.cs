@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ReelRoulette.Server.Contracts;
 
@@ -247,6 +248,49 @@ public sealed class LibraryStateResponse
     public long Revision { get; set; }
 }
 
+public sealed class BulkItemStateRequest
+{
+    public List<string>? ItemIds { get; set; }
+
+    /// <summary><c>favorite</c> or <c>blacklist</c>.</summary>
+    public string? Flag { get; set; }
+
+    /// <summary>True sets the flag, false clears it.</summary>
+    public bool Value { get; set; }
+
+    public string? ClientId { get; set; }
+}
+
+public sealed class BulkRatingRequest
+{
+    public List<string>? ItemIds { get; set; }
+
+    /// <summary>The rating in stars, a multiple of 0.5 from 0.5 to 5, or null to clear it.</summary>
+    public double? Rating { get; set; }
+
+    public string? ClientId { get; set; }
+}
+
+public sealed class BulkChangeResponse
+{
+    /// <summary>How many of the named items are in the library, each of which now has the requested state.</summary>
+    public int Count { get; set; }
+}
+
+public sealed class DeleteFilesRequest
+{
+    public List<string>? ItemIds { get; set; }
+}
+
+public sealed class DeleteFilesResponse
+{
+    /// <summary>How many files were deleted, each of whose items was removed from the library.</summary>
+    public int DeletedCount { get; set; }
+
+    /// <summary>The items whose file wasn't on disk or couldn't be deleted. They stay in the library.</summary>
+    public List<string> FailedItemIds { get; set; } = [];
+}
+
 public sealed class PairRequest
 {
     public string? Token { get; set; }
@@ -305,6 +349,9 @@ public sealed class ItemTagsSnapshot
 public sealed class TagEditorModelRequest
 {
     public List<string> ItemIds { get; set; } = [];
+
+    /// <summary>Answers how many of the items hold each tag in place of each item's tags.</summary>
+    public bool CountsOnly { get; set; }
 }
 
 public sealed class TagEditorModelResponse
@@ -312,6 +359,23 @@ public sealed class TagEditorModelResponse
     public List<TagCategorySnapshot> Categories { get; set; } = [];
     public List<TagSnapshot> Tags { get; set; } = [];
     public List<ItemTagsSnapshot> Items { get; set; } = [];
+
+    /// <summary>With counts only, each tag the items hold and how many of them hold it; left out otherwise.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<TagItemCount>? TagCounts { get; set; }
+
+    /// <summary>With counts only, how many of the requested items are in the library; left out otherwise.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ItemCount { get; set; }
+}
+
+public sealed class TagItemCount
+{
+    /// <summary>The tag's name as the items hold it.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>How many of the requested items hold the tag, compared ignoring case.</summary>
+    public int ItemCount { get; set; }
 }
 
 public sealed class ApplyItemTagsRequest
@@ -550,6 +614,64 @@ public sealed class ItemStateChangedPayload
     public string? ClientId { get; set; }
 }
 
+public sealed class BulkItemStateChangedPayload
+{
+    /// <summary><c>favorite</c> or <c>blacklist</c>, the flag the request set or cleared.</summary>
+    public string Flag { get; set; } = string.Empty;
+
+    /// <summary>True when the request set the flag, false when it cleared it.</summary>
+    public bool Value { get; set; }
+
+    /// <summary>How many of the named items are in the library, each of which now has the requested state.</summary>
+    public int Count { get; set; }
+
+    /// <summary>The items whose favorite or blacklist this change changed.</summary>
+    public List<BulkItemState> Items { get; set; } = [];
+
+    /// <summary>The client that made the change, when its request named one.</summary>
+    public string? ClientId { get; set; }
+}
+
+public sealed class BulkItemState
+{
+    public string ItemId { get; set; } = string.Empty;
+    public bool IsFavorite { get; set; }
+    public bool IsBlacklisted { get; set; }
+    public bool PreviousIsFavorite { get; set; }
+    public bool PreviousIsBlacklisted { get; set; }
+}
+
+public sealed class BulkItemRatingChangedPayload
+{
+    /// <summary>The rating the request set, in stars, or null when it cleared the rating.</summary>
+    public double? Rating { get; set; }
+
+    /// <summary>How many of the named items are in the library, each of which now has the requested rating.</summary>
+    public int Count { get; set; }
+
+    /// <summary>The items whose rating this change changed.</summary>
+    public List<BulkItemRating> Items { get; set; } = [];
+
+    /// <summary>The client that made the change, when its request named one.</summary>
+    public string? ClientId { get; set; }
+}
+
+public sealed class BulkItemRating
+{
+    public string ItemId { get; set; } = string.Empty;
+
+    /// <summary>The rating in stars, or null for none.</summary>
+    public double? Rating { get; set; }
+
+    /// <summary>The rating before this change, in stars, or null for none.</summary>
+    public double? PreviousRating { get; set; }
+}
+
+public sealed class ItemsRemovedPayload
+{
+    public List<string> ItemIds { get; set; } = [];
+}
+
 public sealed class ItemRatingChangedPayload
 {
     public string ItemId { get; set; } = string.Empty;
@@ -748,4 +870,16 @@ public sealed class LibraryQueryRequest
     public bool? SortDescending { get; set; }
     public int? Offset { get; set; }
     public int? Limit { get; set; }
+}
+
+public sealed class LibraryIdsQueryRequest
+{
+    public JsonElement? FilterState { get; set; }
+    public string? Search { get; set; }
+}
+
+public sealed class LibraryIdsQueryResponse
+{
+    /// <summary>The catalog id of every item the query matches.</summary>
+    public List<string> Ids { get; set; } = [];
 }

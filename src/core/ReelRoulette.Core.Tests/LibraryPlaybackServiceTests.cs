@@ -1167,7 +1167,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         InsertItem(host, "a", "on", "/media/one/a.mp4");
         InsertItem(host, "b", "on", "/media/one/b.mp4");
         InsertItem(host, "c", "on", "/media/one/c.mp4");
-        Assert.True(host.Session.SetFavorite("c", true));
+        Assert.True(Assert.Single(host.Session.SetItemsFlag(["c"], CatalogItemFlag.Favorite, true)).Changed);
         var playback = CreateService(host, new ScriptedRandom(0.1, 0.1));
         Assert.Equal("a", Pick(playback, """{"filterState":{},"clientId":"device"}""").Item!.ItemId);
         Assert.Equal("b", Pick(playback, """{"filterState":{},"clientId":"device"}""").Item!.ItemId);

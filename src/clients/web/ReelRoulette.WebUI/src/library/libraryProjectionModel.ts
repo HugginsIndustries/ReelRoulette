@@ -1,28 +1,6 @@
 import { parseRating } from "../rating/rating";
-import { parseLibraryProjectionSummary, type LibraryProjectionSummary } from "./libraryOverlayModel";
 
 export type LibraryMediaType = "video" | "photo";
-
-export interface LibraryProjectionSource {
-  id: string;
-  isEnabled: boolean;
-}
-
-export interface LibraryProjectionCategory {
-  id: string;
-  name: string;
-}
-
-export interface LibraryProjectionTag {
-  name: string;
-  categoryId: string;
-}
-
-export interface LibraryProjectionCatalog {
-  sources: LibraryProjectionSource[];
-  categories: LibraryProjectionCategory[];
-  tags: LibraryProjectionTag[];
-}
 
 export interface LibraryProjectionItem {
   id: string;
@@ -52,12 +30,6 @@ export interface LibraryProjectionItem {
   thumbnailVersion: string | null;
   thumbnailWidth: number | null;
   thumbnailHeight: number | null;
-}
-
-export interface ParsedLibraryProjection {
-  catalog: LibraryProjectionCatalog;
-  items: LibraryProjectionItem[];
-  summary: LibraryProjectionSummary;
 }
 
 export function parseUtcMs(value: unknown): number | null {
@@ -102,56 +74,6 @@ function parseStringArray(value: unknown): string[] {
     }
   }
   return out;
-}
-
-function parseCatalog(raw: Record<string, unknown>): LibraryProjectionCatalog {
-  const sources: LibraryProjectionSource[] = [];
-  for (const source of Array.isArray(raw.sources) ? raw.sources : []) {
-    if (!source || typeof source !== "object") {
-      continue;
-    }
-    const row = source as Record<string, unknown>;
-    if (row.id == null) {
-      continue;
-    }
-    sources.push({
-      id: String(row.id),
-      isEnabled: row.isEnabled !== false
-    });
-  }
-
-  const categories: LibraryProjectionCategory[] = [];
-  for (const category of Array.isArray(raw.categories) ? raw.categories : []) {
-    if (!category || typeof category !== "object") {
-      continue;
-    }
-    const row = category as Record<string, unknown>;
-    if (row.id == null) {
-      continue;
-    }
-    categories.push({
-      id: String(row.id),
-      name: row.name != null ? String(row.name) : String(row.id)
-    });
-  }
-
-  const tags: LibraryProjectionTag[] = [];
-  for (const tag of Array.isArray(raw.tags) ? raw.tags : []) {
-    if (!tag || typeof tag !== "object") {
-      continue;
-    }
-    const row = tag as Record<string, unknown>;
-    const name = row.name != null ? String(row.name).trim() : "";
-    if (!name) {
-      continue;
-    }
-    tags.push({
-      name,
-      categoryId: row.categoryId != null ? String(row.categoryId) : ""
-    });
-  }
-
-  return { sources, categories, tags };
 }
 
 function parseOptionalPositiveInt(value: unknown): number | null {
@@ -202,14 +124,6 @@ export function parseLibraryItem(raw: unknown): LibraryProjectionItem | null {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? parseQueryItem(raw as Record<string, unknown>) : null;
 }
 
-function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>): LibraryProjectionItem | null {
-  const sourceId = row.sourceId != null ? String(row.sourceId) : "";
-  if (!enabledSourceIds.has(sourceId)) {
-    return null;
-  }
-  return parseQueryItem(row);
-}
-
 export interface LibraryQueryPageParsed {
   items: LibraryProjectionItem[];
   totalCount: number;
@@ -237,27 +151,4 @@ function readCount(value: unknown): number {
     return Math.trunc(value);
   }
   return 0;
-}
-
-export function parseLibraryProjection(raw: unknown): ParsedLibraryProjection {
-  const proj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const catalog = parseCatalog(proj);
-  const enabledSourceIds = new Set(catalog.sources.filter((s) => s.isEnabled).map((s) => s.id));
-
-  const items: LibraryProjectionItem[] = [];
-  for (const item of Array.isArray(proj.items) ? proj.items : []) {
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-    const parsed = parseItem(item as Record<string, unknown>, enabledSourceIds);
-    if (parsed) {
-      items.push(parsed);
-    }
-  }
-
-  return {
-    catalog,
-    items,
-    summary: parseLibraryProjectionSummary(raw)
-  };
 }

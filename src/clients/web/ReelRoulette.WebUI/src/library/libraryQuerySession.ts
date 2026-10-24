@@ -11,7 +11,13 @@ import {
 } from "./libraryBrowseModel";
 import { DEFAULT_GRID_OVERSCAN_PX } from "./libraryGridVirtualizer";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
-import { applyItemRatingChanged, applyItemStateChanged, applyPlaybackRecorded, findProjectionItem } from "./libraryProjectionSync";
+import {
+  applyItemRatingChanged,
+  applyItemStateChanged,
+  applyPlaybackRecorded,
+  findProjectionItem,
+  indexProjectionItems
+} from "./libraryProjectionSync";
 import type { ItemStateChangedPayload, PlaybackRecordedPayload } from "./libraryProjectionSync";
 
 export const LIBRARY_QUERY_WINDOW_SIZE = 200;
@@ -118,10 +124,15 @@ export interface LibraryQuerySession {
   setOverlayVisible(visible: boolean): void;
   noteScroll(scrollTop: number): void;
   considerFill(extentHeight: number, viewportBottom: number, lastPageHeight: number): Promise<void>;
-  applyFavorite(payload: ItemStateChangedPayload): Promise<void>;
+  /**
+   * Applies one event's favorite and blacklist changes, one item's or a batch's: the window reloads once when any of
+   * them calls for it, and otherwise each loaded tile is patched.
+   */
+  applyFavorites(changes: readonly ItemStateChangedPayload[]): Promise<void>;
   applyPlayback(payload: PlaybackRecordedPayload): Promise<void>;
   applyTags(payload: ItemTagsChangedPayload): Promise<void>;
-  applyRating(payload: ItemRatingChangedPayload): Promise<void>;
+  /** Applies one event's rating changes, one item's or a batch's, as `applyFavorites` does. */
+  applyRatings(changes: readonly ItemRatingChangedPayload[]): Promise<void>;
   writeTags(updates: readonly { itemId: string; tags: readonly string[] }[]): void;
   reviseStoredFilter(revise: (selected: string[], excluded: string[]) => void): void;
   reloadLoaded(): Promise<void>;
@@ -378,6 +389,13 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
     listener(event);
   }
 
+  /** One event's changes reload the window, once, when any of them would alone. */
+  function batchEffect(changes: readonly LibraryTileChange[]): LibraryQueryTileEffect {
+    return changes.some((change) => libraryQueryTileEffect(change, filterState, controls.sortMode) === "reload")
+      ? "reload"
+      : "patch";
+  }
+
   function storeQuery(filter: FilterState, nextControls: LibraryBrowseControls): void {
     filterState = cloneFilterState(filter);
     controls = {
@@ -534,26 +552,34 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       await run("append");
     },
-    async applyFavorite(payload) {
-      if (!hasResult && !inFlight) {
+    async applyFavorites(changes) {
+      if (changes.length === 0 || (!hasResult && !inFlight)) {
         return;
       }
-      const loaded = findProjectionItem(items, payload.itemId);
-      const change: LibraryTileChange = {
-        kind: "favorite",
-        loaded: loaded != null,
-        before: loaded
-          ? { isFavorite: !!loaded.isFavorite, isBlacklisted: !!loaded.isBlacklisted }
-          : eventPreviousFlags(payload),
-        after: { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted }
-      };
-      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
+      const index = indexProjectionItems(items);
+      const effect = batchEffect(
+        changes.map((payload): LibraryTileChange => {
+          const loaded = findProjectionItem(index, payload.itemId);
+          return {
+            kind: "favorite",
+            loaded: loaded != null,
+            before: loaded
+              ? { isFavorite: !!loaded.isFavorite, isBlacklisted: !!loaded.isBlacklisted }
+              : eventPreviousFlags(payload),
+            after: { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted }
+          };
+        })
+      );
+      const replay = libraryQueryReplayKind(inFlight, effect);
       if (replay) {
         await run(replay);
         return;
       }
-      const result = applyItemStateChanged(items, payload);
-      if (result.changed) {
+      let changed = false;
+      for (const payload of changes) {
+        changed = applyItemStateChanged(index, payload) || changed;
+      }
+      if (changed) {
         notify({ scroll: "keep", statusMessage: null });
       }
     },
@@ -561,17 +587,17 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (!hasResult && !inFlight) {
         return;
       }
+      const index = indexProjectionItems(items);
       const change: LibraryTileChange = {
         kind: "playback",
-        loaded: findProjectionItem(items, payload.itemId) != null
+        loaded: findProjectionItem(index, payload.itemId) != null
       };
       const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
       if (replay) {
         await run(replay);
         return;
       }
-      const result = applyPlaybackRecorded(items, payload);
-      if (result.changed) {
+      if (applyPlaybackRecorded(index, payload)) {
         notify({ scroll: "keep", statusMessage: null });
       }
     },
@@ -579,9 +605,10 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       revise(filterState.selectedTags, filterState.excludedTags);
     },
     writeTags(updates) {
+      const index = indexProjectionItems(items);
       let changed = false;
       for (const update of updates) {
-        const item = findProjectionItem(items, update.itemId);
+        const item = findProjectionItem(index, update.itemId);
         if (!item) {
           continue;
         }
@@ -605,21 +632,19 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       const added = payload.addedTags ?? [];
       const removed = payload.removedTags ?? [];
+      const index = indexProjectionItems(items);
       // A catalog rename or delete also retargets the filter, so it keeps reloading under any tag filter.
-      let effect: LibraryQueryTileEffect = String(payload.catalogReplacedTag ?? "").trim()
-        ? libraryQueryTagSaveEffect(filterState)
-        : "patch";
-      for (const id of ids) {
-        const change: LibraryTileChange = {
-          kind: "tags",
-          loaded: findProjectionItem(items, id) != null,
-          addedTags: added,
-          removedTags: removed
-        };
-        if (libraryQueryTileEffect(change, filterState, controls.sortMode) === "reload") {
-          effect = "reload";
-        }
-      }
+      const effect: LibraryQueryTileEffect =
+        String(payload.catalogReplacedTag ?? "").trim() && libraryQueryTagSaveEffect(filterState) === "reload"
+          ? "reload"
+          : batchEffect(
+              ids.map((id): LibraryTileChange => ({
+                kind: "tags",
+                loaded: findProjectionItem(index, id) != null,
+                addedTags: added,
+                removedTags: removed
+              }))
+            );
       const replay = libraryQueryReplayKind(inFlight, effect);
       if (replay) {
         await run(replay);
@@ -627,7 +652,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       let changed = false;
       for (const id of ids) {
-        const item = findProjectionItem(items, id);
+        const item = findProjectionItem(index, id);
         if (!item) {
           continue;
         }
@@ -638,22 +663,29 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
         notify({ scroll: "keep", statusMessage: null });
       }
     },
-    async applyRating(payload) {
-      if (!hasResult && !inFlight) {
+    async applyRatings(changes) {
+      if (changes.length === 0 || (!hasResult && !inFlight)) {
         return;
       }
-      const change: LibraryTileChange = {
-        kind: "rating",
-        loaded: findProjectionItem(items, payload.itemId) != null,
-        rating: parseRating(payload.rating),
-        previousRating: parseRating(payload.previousRating)
-      };
-      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
+      const index = indexProjectionItems(items);
+      const effect = batchEffect(
+        changes.map((payload): LibraryTileChange => ({
+          kind: "rating",
+          loaded: findProjectionItem(index, payload.itemId) != null,
+          rating: parseRating(payload.rating),
+          previousRating: parseRating(payload.previousRating)
+        }))
+      );
+      const replay = libraryQueryReplayKind(inFlight, effect);
       if (replay) {
         await run(replay);
         return;
       }
-      if (applyItemRatingChanged(items, payload)) {
+      let changed = false;
+      for (const payload of changes) {
+        changed = applyItemRatingChanged(index, payload) || changed;
+      }
+      if (changed) {
         notify({ scroll: "keep", statusMessage: null });
       }
     },

@@ -15,7 +15,12 @@ import { createSseClient, type EventSourceLike, type SseClient } from "../events
 import type { Notifications } from "../notifications/notifications";
 import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import type { components } from "../types/openapi.generated";
-import type { RefreshKeptSource } from "../types/serverContracts";
+import type {
+  BulkItemRatingChangedPayload,
+  BulkItemStateChangedPayload,
+  ItemsRemovedPayload,
+  RefreshKeptSource
+} from "../types/serverContracts";
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type ApiPreset, type AppStore } from "./appStore";
 import { serverCapabilitiesOf, serverCompatibilityError, serverVersionOf } from "./serverCompatibility";
@@ -41,8 +46,14 @@ export interface ServerConnectionEvents {
    */
   serverReady: () => void;
   itemStateChanged: (payload: any) => void;
+  /** Several items were favorited, unfavorited, blacklisted, or unblacklisted at once, on this device or another. */
+  bulkItemStateChanged: (payload: BulkItemStateChangedPayload) => void;
   /** An item's rating changed, on this device or another. */
   itemRatingChanged: (payload: any) => void;
+  /** Several items were rated, or had their rating cleared, at once, on this device or another. */
+  bulkItemRatingChanged: (payload: BulkItemRatingChangedPayload) => void;
+  /** Items were removed from the library and their files deleted. */
+  itemsRemoved: (payload: ItemsRemovedPayload) => void;
   playbackRecorded: (payload: any) => void;
   itemTagsChanged: (payload: any) => void;
   /** The tag catalog changed, with its categories and tags as they now are. */
@@ -115,7 +126,10 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   const listeners: { [K in keyof ServerConnectionEvents]: ServerConnectionEvents[K][] } = {
     serverReady: [],
     itemStateChanged: [],
+    bulkItemStateChanged: [],
     itemRatingChanged: [],
+    bulkItemRatingChanged: [],
+    itemsRemoved: [],
     playbackRecorded: [],
     itemTagsChanged: [],
     tagCatalogChanged: [],
@@ -461,8 +475,17 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         itemStateChanged(payload) {
           emit("itemStateChanged", payload);
         },
+        bulkItemStateChanged(payload) {
+          emit("bulkItemStateChanged", payload);
+        },
         itemRatingChanged(payload) {
           emit("itemRatingChanged", payload);
+        },
+        bulkItemRatingChanged(payload) {
+          emit("bulkItemRatingChanged", payload);
+        },
+        itemsRemoved(payload) {
+          emit("itemsRemoved", payload);
         },
         playbackRecorded(payload) {
           emit("playbackRecorded", payload);

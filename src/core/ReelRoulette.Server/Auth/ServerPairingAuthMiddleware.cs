@@ -79,16 +79,7 @@ public sealed class ServerPairingAuthMiddleware
             return;
         }
 
-        if (LocalRequest.IsLocal(context))
-        {
-            await _next(context);
-            return;
-        }
-
-        // Every non-localhost control request needs the control token; there is no off switch for other devices.
-        var controlSettings = _settings.GetControlRuntimeSettings();
-        // The control token is never accepted in a query, so it stays out of URLs and request logs.
-        if (IsAuthorized(context, _options, _sessions, _options.ControlAdminCookieName, controlSettings.AdminSharedToken, ServerSessionStore.ControlScope, allowQueryToken: false))
+        if (IsControlRequestAuthorized(context, _options, _sessions, _settings))
         {
             await _next(context);
             return;
@@ -96,6 +87,27 @@ public sealed class ServerPairingAuthMiddleware
 
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
+    }
+
+    /// <summary>
+    /// Whether a request may do what a <c>/control</c> route does: it comes straight from this machine, or it carries
+    /// a control session or the control token as a bearer header.
+    /// </summary>
+    public static bool IsControlRequestAuthorized(
+        HttpContext context,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions,
+        CoreSettingsService settings)
+    {
+        if (LocalRequest.IsLocal(context))
+        {
+            return true;
+        }
+
+        // Every non-localhost control request needs the control token; there is no off switch for other devices.
+        var controlSettings = settings.GetControlRuntimeSettings();
+        // The control token is never accepted in a query, so it stays out of URLs and request logs.
+        return IsAuthorized(context, options, sessions, options.ControlAdminCookieName, controlSettings.AdminSharedToken, ServerSessionStore.ControlScope, allowQueryToken: false);
     }
 
     private static bool HasValidSession(HttpContext context, ServerSessionStore sessions, string cookieName, string scope)

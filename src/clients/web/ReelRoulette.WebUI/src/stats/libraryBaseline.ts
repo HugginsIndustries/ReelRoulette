@@ -11,7 +11,8 @@ export const BASELINE_RETRY_MS = 5_000;
 
 /**
  * The library's baseline loudness, which loudness normalization's Automatic target is: the library stats'
- * `baselineLoudnessLufs`, loaded once the server is ready and again after each refresh and resync, which can change it.
+ * `baselineLoudnessLufs`, loaded once the server is ready and again after each refresh, removal of items, and resync,
+ * which can change it.
  * Nothing loads while the server fails the compatibility check, runs without a library, or asks for pairing. A load
  * that fails keeps the baseline as it was, relays why, and is tried again every few seconds, quietly, until one
  * succeeds, the server holds back or asks for pairing, or the connection stops.
@@ -81,6 +82,7 @@ export function createLibraryBaseline(options: LibraryBaselineOptions): LibraryB
   const request = () => void refresh.request();
   connection.on("serverReady", request);
   connection.on("refreshCompleted", request);
+  connection.on("itemsRemoved", request);
   connection.on("resyncRequired", request);
   connection.on("stopped", () => {
     stopped = true;

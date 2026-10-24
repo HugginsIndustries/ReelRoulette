@@ -19,6 +19,8 @@ import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
 import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
+import { countText } from "../text/countText";
+import type { BulkItemStateChangedPayload } from "../types/serverContracts";
 import type { AudioStage } from "./audioStage";
 import { createFrameClock, type FramedVideo } from "./frameStep";
 import { mediaFailureMessage, probeMedia, SKIP_LIMIT, skipText, type MediaFailure } from "./mediaFailure";
@@ -271,6 +273,19 @@ interface ArmedAttempt {
 
 /** The time shown while no video's or photo timer's time is known, so the controls keep their look. */
 const NO_TIME = "0:00 / 0:00";
+
+/** The Other devices popup for a favorite or blacklist set or cleared on several items at once. */
+function bulkItemStateText(payload: BulkItemStateChangedPayload): string {
+  const items = countText(payload.count, "item");
+  if (payload.flag === "favorite") {
+    return payload.value
+      ? `Added ${items} to favorites on another device`
+      : `Removed ${items} from favorites on another device`;
+  }
+  return payload.value
+    ? `Blacklisted ${items} on another device`
+    : `Removed ${items} from the blacklist on another device`;
+}
 
 function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
   if (!mediaUrl) {
@@ -1297,13 +1312,25 @@ export function createPlayer(options: PlayerOptions): Player {
           ? "Removed from blacklist on another device"
           : "Removed from favorites on another device";
     // The log leaves the file name out.
-    notifications.notify({
-      kind: "devices",
-      text,
-      detail: basenameFromPath(payload.path || ""),
-      key: `sync:${itemId}`,
-      logText: text
-    });
+    notifications.notify({ kind: "devices", text, detail: basenameFromPath(payload.path || ""), key: `sync:${itemId}` });
+  });
+
+  connection.on("bulkItemStateChanged", (payload) => {
+    if (!payload) return;
+    const current = store.current.peek();
+    let currentChanged = false;
+    for (const item of payload.items ?? []) {
+      store.itemStates.remember(item.itemId, { isFavorite: item.isFavorite, isBlacklisted: item.isBlacklisted });
+      currentChanged = applyItemStateToCurrent(current, item) || currentChanged;
+    }
+    if (currentChanged) {
+      showToggles();
+    }
+    // As for one item's change, this device's own batch already said so, and one without a client id is another's.
+    if (payload.clientId && payload.clientId === store.identity.clientId) {
+      return;
+    }
+    notifications.notify({ kind: "devices", text: bulkItemStateText(payload), key: "sync-bulk" });
   });
 
   // A showing photo's timer, and a video's, takes the new length, keeping the time it has run and whether it runs or

@@ -1397,11 +1397,32 @@ describe("createPlayer", () => {
 
     // An event without an item changes nothing and says nothing.
     page.emit("itemStateChanged", { path: "/media/clip.mp4", isFavorite: true });
-    // The file name shows on the second line, and the log leaves it out.
+    // The file name shows on the second line, which the log leaves out, as it does every popup's.
     expect(page.notified).toEqual([
-      { kind: "devices", text: "Added to favorites on another device", detail: "clip.mp4", key: "sync:item-video", logText: "Added to favorites on another device" },
-      { kind: "devices", text: "Blacklisted on another device", detail: "clip.mp4", key: "sync:item-video", logText: "Blacklisted on another device" }
+      { kind: "devices", text: "Added to favorites on another device", detail: "clip.mp4", key: "sync:item-video" },
+      { kind: "devices", text: "Blacklisted on another device", detail: "clip.mp4", key: "sync:item-video" }
     ]);
+  });
+
+  it("applies a batch's item states to the playing item and its cache, and pops up another device's batch once with no second line", () => {
+    const page = setup();
+    page.play(VIDEO);
+    const batch = (clientId: string | null) => ({
+      flag: "blacklist",
+      value: true,
+      count: 2,
+      items: [
+        { itemId: "item-video", isFavorite: false, isBlacklisted: true, previousIsFavorite: true, previousIsBlacklisted: false },
+        { itemId: "item-other", isFavorite: false, isBlacklisted: true, previousIsFavorite: false, previousIsBlacklisted: false }
+      ],
+      clientId
+    });
+    page.emit("bulkItemStateChanged", batch("client-1"));
+    expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, true]);
+    expect(page.notified).toEqual([]);
+
+    page.emit("bulkItemStateChanged", batch("another-client"));
+    expect(page.notified).toEqual([{ kind: "devices", text: "Blacklisted 2 items on another device", key: "sync-bulk" }]);
   });
 
   it("tells an item leaving the blacklist from one leaving the favorites, by its state before the change", () => {

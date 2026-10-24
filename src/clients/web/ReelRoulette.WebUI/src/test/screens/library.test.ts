@@ -964,6 +964,105 @@ describe("live updates", () => {
     expect(tileNames()).toEqual(["clip 2.mp4", "clip 3.mp4"]);
   });
 
+  it("under Favorites only, a batch unfavoriting several loaded tiles reloads the loaded window in one request", async () => {
+    const { page, library } = await mountLibrary(libraryItems(5, { isFavorite: true }), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await pickPreset("preset-favorites");
+    await openLibrary();
+    expect(library.queries()).toHaveLength(2);
+
+    library.items = library.items.slice(3);
+    const unfavorited = (itemId: string) => ({
+      itemId,
+      isFavorite: false,
+      isBlacklisted: false,
+      previousIsFavorite: true,
+      previousIsBlacklisted: false
+    });
+    page.stream().emit("bulkItemStateChanged", 2, {
+      flag: "favorite",
+      value: false,
+      count: 3,
+      items: [unfavorited("item-1"), unfavorited("item-2"), unfavorited("item-3")],
+      clientId: "another-client"
+    });
+    await flush();
+
+    expect(library.queries()).toHaveLength(3);
+    expect(library.queries()[2]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 5 });
+    expect(tileNames()).toEqual(["clip 4.mp4", "clip 5.mp4"]);
+    expect(countLine()).toBe("2 / 2");
+  });
+
+  it("a batch favoriting several loaded tiles updates each badge without reloading", async () => {
+    const { page, library } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+
+    const favorited = (itemId: string) => ({
+      itemId,
+      isFavorite: true,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: false
+    });
+    page.stream().emit("bulkItemStateChanged", 2, {
+      flag: "favorite",
+      value: true,
+      count: 3,
+      items: [favorited("item-1"), favorited("item-3"), favorited("item-outside")],
+      clientId: page.clientId()
+    });
+    await flush();
+
+    expect(library.queries()).toHaveLength(1);
+    expect(["item-1", "item-2", "item-3"].map((id) => tile(id)?.querySelector(".library-grid-tile-badge")?.textContent ?? null)).toEqual([
+      "favorite",
+      null,
+      "favorite"
+    ]);
+  });
+
+  it("under Only unrated, a batch rating several loaded tiles reloads the loaded window in one request", async () => {
+    const { page, library } = await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([UNRATED_PRESET]));
+    });
+    await pickPreset("preset-unrated");
+    await openLibrary();
+    expect(library.queries()).toHaveLength(2);
+
+    library.items = library.items.slice(2);
+    page.stream().emit("bulkItemRatingChanged", 2, {
+      rating: 3,
+      count: 2,
+      items: [
+        { itemId: "item-1", rating: 3, previousRating: null },
+        { itemId: "item-2", rating: 3, previousRating: null }
+      ],
+      clientId: "another-client"
+    });
+    await flush();
+
+    expect(library.queries()).toHaveLength(3);
+    expect(library.queries()[2]).toMatchObject({ filterState: { onlyUnrated: true }, offset: 0, limit: 3 });
+    expect(tileNames()).toEqual(["clip 3.mp4"]);
+  });
+
+  it("removed items reload the loaded window in one request", async () => {
+    const { page, library } = await mountLibrary(libraryItems(4));
+    await openLibrary();
+    expect(library.queries()).toHaveLength(1);
+
+    library.items = [library.items[1]!, library.items[3]!];
+    page.stream().emit("itemsRemoved", 2, { itemIds: ["item-1", "item-3"] });
+    await flush();
+
+    expect(library.queries()).toHaveLength(2);
+    expect(library.queries()[1]).toMatchObject({ offset: 0, limit: 4 });
+    expect(tileNames()).toEqual(["clip 2.mp4", "clip 4.mp4"]);
+    expect(countLine()).toBe("2 / 2");
+  });
+
   it("a tag event on a loaded tile reloads the window under a tag filter", async () => {
     const { page, library } = await mountLibrary(libraryItems(3, { tags: ["Beach"] }), (server) => {
       server.on("GET", "/api/presets", () => json([BEACH_PRESET]));

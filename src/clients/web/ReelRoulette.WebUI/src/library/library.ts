@@ -508,7 +508,11 @@ export function createLibrary(options: LibraryOptions): Library {
   // The player updates the playing item and its buttons first.
   connection.on("itemStateChanged", (payload) => {
     if (!payload?.itemId) return;
-    void session.applyFavorite(payload);
+    void session.applyFavorites([payload]);
+  });
+  // A batch reloads the window at most once, and otherwise patches each loaded tile it names.
+  connection.on("bulkItemStateChanged", (payload) => {
+    void session.applyFavorites(payload?.items ?? []);
   });
   connection.on("playbackRecorded", (payload) => {
     void session.applyPlayback(payload);
@@ -517,10 +521,17 @@ export function createLibrary(options: LibraryOptions): Library {
   // move one.
   connection.on("itemRatingChanged", (payload) => {
     if (!payload?.itemId) return;
-    void session.applyRating(payload);
+    void session.applyRatings([payload]);
+  });
+  connection.on("bulkItemRatingChanged", (payload) => {
+    void session.applyRatings(payload?.items ?? []);
   });
   // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
   connection.on("refreshCompleted", () => {
+    void session.reloadLoaded();
+  });
+  // Removed items leave the window, which reloads once for them.
+  connection.on("itemsRemoved", () => {
     void session.reloadLoaded();
   });
   connection.on("resyncRequired", () => {

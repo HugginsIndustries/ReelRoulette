@@ -1328,7 +1328,7 @@ public sealed class RefreshPipelineServiceTests
         service.HoldNextFingerprintWrite(hold.Task);
         Assert.True(service.TryStartManual().Accepted);
         await service.FingerprintWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
-        Assert.True(host.Session.SetFavorite("hold-1", true));
+        Assert.True(Assert.Single(host.Session.SetItemsFlag(["hold-1"], CatalogItemFlag.Favorite, true)).Changed);
         Assert.True(host.Session.ApplyItemTagEdits(["hold-1"], ["Night"], [], out _));
         hold.TrySetResult();
 
@@ -1544,10 +1544,10 @@ public sealed class RefreshPipelineServiceTests
         service.HoldNextThumbnailWrite(hold.Task);
         var run = service.RunThumbnailStageAsync(CancellationToken.None);
         await service.ThumbnailWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
-        Assert.True(host.Session.SetFavorite("hold-a", true));
+        Assert.True(Assert.Single(host.Session.SetItemsFlag(["hold-a"], CatalogItemFlag.Favorite, true)).Changed);
         Assert.True(host.Session.ApplyItemTagEdits(["hold-a"], ["Night"], [], out _));
         Assert.NotNull(host.Session.RecordPlayback("hold-a"));
-        Assert.True(host.Session.SetBlacklist("hold-b", true));
+        Assert.True(Assert.Single(host.Session.SetItemsFlag(["hold-b"], CatalogItemFlag.Blacklist, true)).Changed);
         hold.TrySetResult();
         await run.WaitAsync(TimeSpan.FromSeconds(15));
 

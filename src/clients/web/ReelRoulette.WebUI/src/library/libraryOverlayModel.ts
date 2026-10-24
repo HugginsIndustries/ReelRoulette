@@ -1,11 +1,5 @@
 export type LibraryOverlayMessagePhase = "loading" | "empty" | "error";
 
-export interface LibraryProjectionSummary {
-  totalItems: number;
-  enabledSourceCount: number;
-  hasItems: boolean;
-}
-
 /** What the grid says when the library has media but none matches the search or the applied filter. */
 export const LIBRARY_NO_MATCH_MESSAGE = "Nothing matches the search or filters.";
 
@@ -18,40 +12,6 @@ export const LIBRARY_LOAD_TIMEOUT_MESSAGE =
 
 /** The statuses that mean a load timed out on its way: the server's own 408 or a proxy's 504. */
 const TIMEOUT_STATUSES: readonly number[] = [408, 504];
-
-export function parseLibraryProjectionSummary(raw: unknown): LibraryProjectionSummary {
-  const proj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const sources = Array.isArray(proj.sources) ? proj.sources : [];
-  const enabled = new Set<string>();
-  for (const source of sources) {
-    if (!source || typeof source !== "object") {
-      continue;
-    }
-    const row = source as Record<string, unknown>;
-    if (row.id != null && row.isEnabled !== false) {
-      enabled.add(String(row.id));
-    }
-  }
-
-  const items = Array.isArray(proj.items) ? proj.items : [];
-  let totalItems = 0;
-  for (const item of items) {
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-    const row = item as Record<string, unknown>;
-    const sourceId = row.sourceId != null ? String(row.sourceId) : "";
-    if (enabled.has(sourceId)) {
-      totalItems++;
-    }
-  }
-
-  return {
-    totalItems,
-    enabledSourceCount: enabled.size,
-    hasItems: totalItems > 0
-  };
-}
 
 /** What the overlay's body says while it has no tiles to show. */
 export interface LibraryOverlayMessage {

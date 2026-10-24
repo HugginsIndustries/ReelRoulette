@@ -1,4 +1,5 @@
 import { sourceLabel, type FilterSource } from "../filter/filterDialogModel";
+import { countText } from "../text/countText";
 
 /** A source a refresh kept the library's items from, because its folder listed no media files. */
 export interface KeptSourceFolder {
@@ -24,7 +25,7 @@ function joinNames(names: readonly string[]): string {
 export function keptSourcesMessage(kept: readonly KeptSourceFolder[]): string {
   const sources = joinNames(kept.map((entry) => sourceLabel(entry.source)));
   const total = kept.reduce((sum, entry) => sum + entry.itemCount, 0);
-  const items = `${total.toLocaleString()} ${total === 1 ? "item" : "items"}`;
+  const items = countText(total, "item");
   if (kept.length === 1) {
     return `Library refresh found no media files in ${sources}, so it kept the library's ${items} from there. If the folder is on a drive or share, check that it's connected.`;
   }

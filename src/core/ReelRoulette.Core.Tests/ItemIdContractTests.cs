@@ -398,7 +398,7 @@ public sealed class ItemIdContractTests : IDisposable
                 new SeedItem("item-2", Path.Combine(_tempDir, "second.mp4"))
             ]);
         var state = new ServerStateService();
-        var request = new ApplyItemTagsRequest { ItemIds = ["ITEM-1", "item-2", "missing"], AddTags = ["Night"] };
+        var request = new ApplyItemTagsRequest { ItemIds = ["item-1", "item-2", "missing"], AddTags = ["Night"] };
 
         ServerHostComposition.ApplyItemTags(request, state, CreateOperations(CatalogOpen.Host(_tempDir)));
 
@@ -458,7 +458,7 @@ public sealed class ItemIdContractTests : IDisposable
         var response = operations.ApplyDuplicateSelection(new DuplicateApplyRequest
         {
             Selections = [new DuplicateApplySelection { KeepItemId = "item-keep", ItemIds = ["item-keep", "item-gone"] }]
-        });
+        }, out _);
 
         var failure = Assert.Single(response.Failures);
         Assert.Equal("item-gone", failure.ItemId);

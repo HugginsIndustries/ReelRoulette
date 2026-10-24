@@ -494,6 +494,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/query-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List the ids of every library item a query matches
+         * @description The ids of every item that `POST /api/library/query` with the same `filterState` and `search` matches, for
+         *     selecting all of them: enabled sources, then the search, then the filter, with no paging, no page cap, and no
+         *     order. Each request writes one `last.log` line with the count and the elapsed time.
+         */
+        post: operations["postLibraryQueryIds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/delete-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete library items' files from disk and remove the items
+         * @description Deletes the file of each named item from disk and then removes the item, with its tags, from the library.
+         *     An item whose file isn't on disk, or can't be deleted, stays in the library and is listed in
+         *     `failedItemIds`. An id no item has is skipped. It publishes one `itemsRemoved` event for the items it
+         *     removed, when it removed any. It writes one `last.log` line with the counts, and when some files stay, a
+         *     warning line with how many were missing and the errors' types, both with no paths.
+         *
+         *     It is an admin action, accepted as `/control` routes are: from the server machine, a direct request from
+         *     loopback or from the server's own address, and from another machine only with a control session from
+         *     `POST /control/pair` or the control token as a bearer header. A refused request writes a warning line with the
+         *     caller's address. The thumbnails of removed items are deleted by the next refresh's thumbnail stage.
+         */
+        post: operations["postLibraryDeleteFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library/item": {
         parameters: {
             query?: never;
@@ -766,6 +817,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bulk/item-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set or clear favorite or blacklist on many items
+         * @description Sets or clears `flag` on every named item in one write. Setting favorite clears blacklist, and setting
+         *     blacklist clears favorite, as `POST /api/favorite` and `POST /api/blacklist` do. An id no item has is
+         *     skipped. When any named item is in the library, it publishes one `bulkItemStateChanged` event in place of
+         *     one `itemStateChanged` per item.
+         */
+        post: operations["postBulkItemState"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set or clear one rating on many items
+         * @description Sets `rating`, in stars, on every named item in one write, or clears it with null. A rating is independent of
+         *     favorite and blacklist, so neither changes. An id no item has is skipped. When any named item is in the
+         *     library, it publishes one `bulkItemRatingChanged` event in place of one `itemRatingChanged` per item.
+         */
+        post: operations["postBulkRating"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/record-playback": {
         parameters: {
             query?: never;
@@ -814,7 +910,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Get tag editor model snapshot */
+        /**
+         * Get tag editor model snapshot
+         * @description The tag catalog, and the tags of the items in `itemIds`, each item's in `items`. With `countsOnly`, `items` is
+         *     empty and `tagCounts` counts how many of the items hold each tag, with `itemCount` the number of them in the
+         *     library, so editing many items' tags doesn't need each item's tags.
+         */
         post: operations["postTagEditorModel"];
         delete?: never;
         options?: never;
@@ -1024,7 +1125,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply duplicate keep/delete selections */
+        /**
+         * Apply duplicate keep/delete selections
+         * @description Deletes the files of each selection's items but the one it keeps, and removes those items, through the same
+         *     code as `POST /api/library/delete-files`. A selection whose kept item isn't in the library is skipped. It
+         *     publishes one `itemsRemoved` event for the items it removed, when it removed any. It writes the same `last.log`
+         *     lines as `POST /api/library/delete-files`, named `Duplicate apply`.
+         *
+         *     It is an admin action, accepted as `POST /api/library/delete-files` is, by the `/control` routes' check.
+         */
         post: operations["postDuplicateApply"];
         delete?: never;
         options?: never;
@@ -1489,6 +1598,16 @@ export interface components {
             /** Format: int32 */
             updatedCount: number;
         };
+        LibraryIdsQueryRequest: {
+            /** @description As in `LibraryQueryRequest`. */
+            filterState?: components["schemas"]["FilterState"] | null;
+            /** @description As in `LibraryQueryRequest`. */
+            search?: string | null;
+        };
+        LibraryIdsQueryResponse: {
+            /** @description The catalog id of every item the query matches. */
+            ids: string[];
+        };
         LibraryQueryRequest: {
             /**
              * @description Omitted or null applies no filter predicates, so blacklisted items are listed. A present object uses
@@ -1807,6 +1926,50 @@ export interface components {
              */
             lastPlayedUtc?: string | null;
         };
+        BulkItemStateRequest: {
+            /** @description Catalog item ids. An id no item has is skipped. */
+            itemIds: string[];
+            /**
+             * @description Which flag to set or clear.
+             * @enum {string}
+             */
+            flag: "favorite" | "blacklist";
+            /** @description True sets the flag, false clears it. */
+            value: boolean;
+            /** @description The client making the change, which `bulkItemStateChanged` names. */
+            clientId?: string | null;
+        };
+        BulkRatingRequest: {
+            /** @description Catalog item ids. An id no item has is skipped. */
+            itemIds: string[];
+            /**
+             * Format: double
+             * @description The rating in stars, a multiple of 0.5 from 0.5 to 5, or null to clear it. A request without it clears the rating too.
+             */
+            rating: number | null;
+            /** @description The client making the change, which `bulkItemRatingChanged` names. */
+            clientId?: string | null;
+        };
+        BulkChangeResponse: {
+            /**
+             * Format: int32
+             * @description How many of the named items are in the library, each of which now has the requested state.
+             */
+            count: number;
+        };
+        DeleteFilesRequest: {
+            /** @description Catalog item ids. An id no item has is skipped. */
+            itemIds: string[];
+        };
+        DeleteFilesResponse: {
+            /**
+             * Format: int32
+             * @description How many files were deleted, each of whose items was removed from the library.
+             */
+            deletedCount: number;
+            /** @description The items whose file wasn't on disk or couldn't be deleted. They stay in the library. */
+            failedItemIds: string[];
+        };
         /** @description Names either `allItems` or `itemIds`, never both. */
         ClearPlaybackStatsRequest: {
             /** @description True clears every item's playback stats. Defaults to false. */
@@ -1824,7 +1987,7 @@ export interface components {
             eventType: string;
             /** Format: date-time */
             timestamp: string;
-            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["ItemRatingChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
+            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["BulkItemStateChangedPayload"] | components["schemas"]["ItemRatingChangedPayload"] | components["schemas"]["BulkItemRatingChangedPayload"] | components["schemas"]["ItemsRemovedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
         };
         ItemStateChangedPayload: {
             itemId: string;
@@ -1837,6 +2000,68 @@ export interface components {
             previousIsBlacklisted: boolean;
             /** @description The client that made the change, from its favorite or blacklist request, or null when the request named none. */
             clientId?: string | null;
+        };
+        /** @description Published by `POST /api/bulk/item-state` when any named item is in the library, for all of them at once. */
+        BulkItemStateChangedPayload: {
+            /**
+             * @description The flag the request set or cleared.
+             * @enum {string}
+             */
+            flag: "favorite" | "blacklist";
+            /** @description True when the request set the flag, false when it cleared it. */
+            value: boolean;
+            /**
+             * Format: int32
+             * @description How many of the named items are in the library, each of which now has the requested state.
+             */
+            count: number;
+            /** @description The items whose favorite or blacklist this change changed. The others already had the requested state. */
+            items: components["schemas"]["BulkItemState"][];
+            /** @description The client that made the change, from its request, or null when the request named none. */
+            clientId?: string | null;
+        };
+        BulkItemState: {
+            itemId: string;
+            isFavorite: boolean;
+            isBlacklisted: boolean;
+            /** @description Favorite before this change. */
+            previousIsFavorite: boolean;
+            /** @description Blacklist before this change. */
+            previousIsBlacklisted: boolean;
+        };
+        /** @description Published by `POST /api/bulk/rating` when any named item is in the library, for all of them at once. */
+        BulkItemRatingChangedPayload: {
+            /**
+             * Format: double
+             * @description The rating the request set, in stars, or null when it cleared the rating.
+             */
+            rating: number | null;
+            /**
+             * Format: int32
+             * @description How many of the named items are in the library, each of which now has the requested rating.
+             */
+            count: number;
+            /** @description The items whose rating this change changed. The others already had the requested rating. */
+            items: components["schemas"]["BulkItemRating"][];
+            /** @description The client that made the change, from its request, or null when the request named none. */
+            clientId?: string | null;
+        };
+        BulkItemRating: {
+            itemId: string;
+            /**
+             * Format: double
+             * @description The rating in stars, or null for none.
+             */
+            rating: number | null;
+            /**
+             * Format: double
+             * @description The rating before this change, in stars, or null for none.
+             */
+            previousRating: number | null;
+        };
+        /** @description Published by `POST /api/library/delete-files` and `POST /api/duplicates/apply` for the items they removed from the library. */
+        ItemsRemovedPayload: {
+            itemIds: string[];
         };
         /** @description Published by `POST /api/rating` only when the rating changed. */
         ItemRatingChangedPayload: {
@@ -1956,11 +2181,30 @@ export interface components {
         };
         TagEditorModelRequest: {
             itemIds?: string[];
+            /** @description True answers `tagCounts` and `itemCount` for the items in place of each item's tags, and `items` is empty. Defaults to false. */
+            countsOnly?: boolean;
         };
         TagEditorModelResponse: {
             categories: components["schemas"]["TagCategorySnapshot"][];
             tags: components["schemas"]["TagSnapshot"][];
+            /** @description Each requested item's tags, empty with `countsOnly`. */
             items: components["schemas"]["ItemTagsSnapshot"][];
+            /** @description With `countsOnly`, each tag the items hold and how many of them hold it. */
+            tagCounts?: components["schemas"]["TagItemCount"][];
+            /**
+             * Format: int32
+             * @description With `countsOnly`, how many of the requested items are in the library.
+             */
+            itemCount?: number;
+        };
+        TagItemCount: {
+            /** @description The tag's name as the items hold it. */
+            name: string;
+            /**
+             * Format: int32
+             * @description How many of the requested items hold the tag, compared ignoring case.
+             */
+            itemCount: number;
         };
         ApplyItemTagsRequest: {
             itemIds: string[];
@@ -3502,6 +3746,101 @@ export interface operations {
             503: components["responses"]["LibraryUnavailable"];
         };
     };
+    postLibraryQueryIds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LibraryIdsQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Every matching item's catalog id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryIdsQueryResponse"];
+                };
+            };
+            /** @description Invalid filterState */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postLibraryDeleteFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description The files that could be deleted are gone, and their items removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteFilesResponse"];
+                };
+            };
+            /** @description No item ids */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request came from another machine without a control session or the control token (code control_token_required), or from another device while remote connections are off. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
     postLibraryItem: {
         parameters: {
             query?: never;
@@ -4145,6 +4484,92 @@ export interface operations {
             503: components["responses"]["LibraryUnavailable"];
         };
     };
+    postBulkItemState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkItemStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Every named item in the library has the requested state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkChangeResponse"];
+                };
+            };
+            /** @description No item ids, or a flag that isn't favorite or blacklist */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postBulkRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRatingRequest"];
+            };
+        };
+        responses: {
+            /** @description Every named item in the library has the requested rating */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkChangeResponse"];
+                };
+            };
+            /** @description No item ids, or a rating that isn't a multiple of 0.5 from 0.5 to 5 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
     postRecordPlayback: {
         parameters: {
             query?: never;
@@ -4721,6 +5146,24 @@ export interface operations {
             };
             /** @description Invalid duplicate apply request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request came from another machine without a control session or the control token (code control_token_required), or from another device while remote connections are off. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
