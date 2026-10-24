@@ -379,11 +379,6 @@ async function dragCategory(title: string, places: number): Promise<void> {
   await pointerUp();
 }
 
-/** What screen readers last heard about a category moving. */
-function reorderAnnouncement(): string {
-  return editor().querySelector(".visually-hidden[aria-live]")?.textContent ?? "";
-}
-
 function categoryGrid(title: string): HTMLElement {
   return category(title).querySelector(".tag-grid") as HTMLElement;
 }
@@ -465,19 +460,16 @@ function dialogButton(dialog: HTMLElement, label: string): HTMLButtonElement {
   return within(dialog).getByRole("button", { name: label }) as HTMLButtonElement;
 }
 
-/** The field shows its problem: marked invalid and described by the problem's tooltip. */
+/** What the field's tooltip says while it shows its red icon, or null while it shows none, as while it fades out. */
 function fieldProblem(field: HTMLInputElement): string | null {
-  if (field.getAttribute("aria-invalid") !== "true") {
-    return null;
-  }
-  return document.getElementById(field.getAttribute("aria-describedby")!)?.textContent ?? "";
+  const wrapper = field.closest(".vfield")!;
+  return wrapper.querySelector(".vfield-icon:not(.is-fading-out)") ? (wrapper.querySelector(".vfield-tip")?.textContent ?? "") : null;
 }
 
 /** Disabled without the icon a held action shows. */
 function disabledWithoutIcon(button: HTMLButtonElement): boolean {
   return (
     button.disabled &&
-    !button.hasAttribute("aria-disabled") &&
     !button.classList.contains("shows-problem") &&
     button.querySelector(".btn-problem") === null
   );
@@ -959,7 +951,6 @@ describe("following the playing item", () => {
     expect(targetLine().textContent).toBe("Editing tags for holiday clip.mp4");
     expect(targetLine().querySelector("b")?.textContent).toBe("holiday clip.mp4");
     expect(targetLine().title).toBe("holiday clip.mp4");
-    expect(targetLine().getAttribute("aria-live")).toBe("polite");
     expect(chipState("Beach").has).toBe("all");
     expect(chipState("Calm").pending).toBe("add");
 
@@ -1093,15 +1084,12 @@ describe("Edit Tags", () => {
     await openEditor();
     for (const title of categoryTitles()) {
       expect(categoryGrid(title).hidden, title).toBe(true);
-      expect(categoryToggle(title).getAttribute("aria-expanded"), title).toBe("false");
+      expect(categoryToggle(title).title, title).toBe("Expand category");
     }
-    expect(categoryToggle("Places").getAttribute("aria-controls")).toBe(categoryGrid("Places").id);
-    expect(categoryToggle("Places").title).toBe("Expand category");
     expect(body().querySelector(".tag-category-toggle .material-symbol-icon")).toBeNull();
 
     await click(categoryToggle("Places"));
     expect(categoryGrid("Places").hidden).toBe(false);
-    expect(categoryToggle("Places").getAttribute("aria-expanded")).toBe("true");
     expect(categoryToggle("Places").title).toBe("Collapse category");
     expect(savePending()).toBe(false);
     await click(category("Places").querySelector(".tag-category-header")!);
@@ -1229,12 +1217,10 @@ describe("Edit Tags", () => {
     expect(places.getAttribute("aria-label")).toBe("Reorder Places");
     expect(places.textContent).toBe("drag_indicator");
     expect(places.disabled).toBe(false);
-    expect(byId(places.getAttribute("aria-describedby") ?? "").textContent).toBe("Drag to reorder.");
     expect(within(category("Places")).getByRole("button", { name: "Edit category Places" }).textContent).toBe("edit_note");
     expect(titles(header("Uncategorized"))).toEqual(["Uncategorized stays last", "Expand category"]);
     expect(handle("Uncategorized").disabled).toBe(true);
     expect(handle("Uncategorized").getAttribute("aria-label")).toBe("Uncategorized stays last");
-    expect(handle("Uncategorized").hasAttribute("aria-describedby")).toBe(false);
     for (const title of ["Move category up", "Move category down", "Delete category", "Rename category"]) {
       expect(within(editor()).queryByTitle(title), title).toBeNull();
     }
@@ -1290,7 +1276,6 @@ describe("Edit Tags", () => {
       expect(transforms()).toEqual(["", "", "", ""]);
       expect(category("Places").classList.contains("is-dragging")).toBe(false);
       expect(getComputedStyle(categoryGrid("Places")).display).toBe("flex");
-      expect(reorderAnnouncement()).toBe("Places moved to position 2 of 3.");
       expect(optionLabels(footerCategory())).toEqual(["Mood", "Places", "People", "Uncategorized"]);
       expect(savePending()).toBe(true);
 
@@ -1310,7 +1295,6 @@ describe("Edit Tags", () => {
       expect(transforms()).toEqual(["translateY(224px)", "translateY(-52px)", "translateY(-52px)", ""]);
       await pointerUp();
       expect(categoryTitles()).toEqual(["Mood", "People", "Places", "Uncategorized"]);
-      expect(reorderAnnouncement()).toBe("Places moved to position 3 of 3.");
     });
 
     it("keeps the list where it was scrolled after a drop", async () => {
@@ -1347,7 +1331,6 @@ describe("Edit Tags", () => {
       await pointerUp();
       expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
       expect(transforms()).toEqual(["", "", "", ""]);
-      expect(reorderAnnouncement()).toBe("");
       expect(savePending()).toBe(false);
     });
 

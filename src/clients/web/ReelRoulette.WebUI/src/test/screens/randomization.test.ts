@@ -474,14 +474,12 @@ describe("Spread by tags", () => {
     await click(radio("By category"));
     await waitFor(() => expect(categoryLabels()).toEqual(["People", "Places"]));
     expect(byCategoryIcon()).not.toBeNull();
-    expect(radio("By category").getAttribute("aria-invalid")).toBe("true");
     fireEvent.focus(radio("By category"));
     await settle();
     expect(document.body.textContent).toContain("Choose at least one category.");
 
     await click(categoryBox("Places"));
     await waitFor(() => expect(byCategoryIcon()).toBeNull());
-    expect(radio("By category").getAttribute("aria-invalid")).toBeNull();
   });
 
   it("says when there are no tags yet, and what failed when the tags can't load", async () => {

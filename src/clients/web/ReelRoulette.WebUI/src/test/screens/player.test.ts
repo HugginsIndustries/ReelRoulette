@@ -30,7 +30,6 @@ import {
   resetPage,
   setViewport,
   settle,
-  sliderValue,
   starsShown,
   status,
   stubStarLayout,
@@ -236,14 +235,9 @@ function relayedLines(server: FakeServer, text: string): string[] {
   return server.logLines().filter((line) => line.startsWith(`status=${text} hasCurrent=`));
 }
 
-/** The player's indicator: its live region, which always stays in the page. */
-function indicatorRegion(): HTMLElement {
-  return document.getElementById("player-indicator") as HTMLElement;
-}
-
 /** The state the player's indicator shows, by its id, or null while it shows none. */
 function indicatorState(): string | null {
-  return indicatorRegion().querySelector<HTMLElement>(".player-indicator")?.dataset.state ?? null;
+  return document.getElementById("player-indicator")?.dataset.state ?? null;
 }
 
 function controlsShown(): boolean {
@@ -1596,7 +1590,6 @@ describe("volume gestures", () => {
     const box = volumeIndicator();
     expect(box.parentElement).toBe(mediaArea());
     expect(document.getElementById("overlay-controls")!.contains(box)).toBe(false);
-    expect(box.getAttribute("aria-hidden")).toBe("true");
     await click(video());
     expect(controlsShown()).toBe(false);
     const style = currentStyle(box);
@@ -2109,7 +2102,6 @@ describe("ambient mode", () => {
     useStylesheet();
     await mountAndPlay(serverPicking(VIDEO_ITEM));
     expect(mediaArea().firstElementChild).toBe(ambientLayer());
-    expect(ambientLayer().getAttribute("aria-hidden")).toBe("true");
     expect(currentStyle(ambientLayer()).zIndex).toBe("0");
     expect([currentStyle(video()).position, currentStyle(photo()).position]).toEqual(["relative", "relative"]);
     expect([ambientCanvas().width, ambientCanvas().height]).toEqual([32, 18]);
@@ -2748,7 +2740,6 @@ describe("double-tap seeking and the seek indicator", () => {
     const box = document.getElementById("seek-indicator-forward")!;
     expect(box.parentElement).toBe(mediaArea());
     expect(document.getElementById("overlay-controls")!.contains(box)).toBe(false);
-    expect(box.getAttribute("aria-hidden")).toBe("true");
     await vi.advanceTimersByTimeAsync(SEEK_INDICATOR_MS - 1);
     expect(seekIndicatorShows()).toBe("+ 10 chevron_right");
     await vi.advanceTimersByTimeAsync(1);
@@ -3018,7 +3009,7 @@ describe("page structure", () => {
 
 describe("the player's indicator", () => {
   function indicatorBox(): HTMLElement {
-    const box = indicatorRegion().querySelector<HTMLElement>(".player-indicator");
+    const box = document.getElementById("player-indicator");
     if (!box) {
       throw new Error("The indicator shows no state.");
     }
@@ -3033,30 +3024,22 @@ describe("the player's indicator", () => {
     return indicatorBox().querySelector<HTMLElement>(".player-indicator-text")!;
   }
 
-  it("is a polite live region that stays in the page, holding the state's box only while one shows", async () => {
+  it("shows the state's box in the media area only while a state shows, with its icon and its text", async () => {
     const { store } = await mountWithServices();
-    const region = indicatorRegion();
-    expect(mediaArea().contains(region)).toBe(true);
-    expect(region.getAttribute("role")).toBe("status");
-    expect(region.getAttribute("aria-live")).toBe("polite");
-    expect(region.hasAttribute("hidden")).toBe(false);
-    expect(region.childElementCount).toBe(0);
+    expect(document.getElementById("player-indicator")).toBeNull();
 
     store.reconnecting.value = true;
     await flush();
+    expect(mediaArea().contains(indicatorBox())).toBe(true);
     expect(indicatorState()).toBe("reconnecting");
     expect(indicatorIcon().textContent).toBe("sync");
-    expect(indicatorIcon().getAttribute("aria-hidden")).toBe("true");
     expect(indicatorIcon().classList.contains("spins")).toBe(true);
     expect(indicatorText().textContent).toBe("Reconnecting…");
-    // The icon's ligature is its only other text, which screen readers skip.
-    expect(within(mediaArea()).getByRole("status").textContent).toBe("syncReconnecting…");
+    expect(indicatorBox().textContent).toBe("syncReconnecting…");
 
     store.reconnecting.value = false;
     await flush();
-    expect(indicatorRegion()).toBe(region);
-    expect(region.hasAttribute("hidden")).toBe(false);
-    expect(region.childElementCount).toBe(0);
+    expect(document.getElementById("player-indicator")).toBeNull();
   });
 
   it("shows the first active lasting state in the precedence order, alone and together, so it never alternates", async () => {
@@ -3119,7 +3102,7 @@ describe("the player's indicator", () => {
     }
   });
 
-  it("hides a refresh's percentage from screen readers, outside the text that ends in an ellipsis", async () => {
+  it("shows a refresh's percentage after the text that ends in an ellipsis, outside it", async () => {
     const { store } = await mountWithServices();
     store.refreshProgress.value = { stage: "Generating thumbnails", percent: 7 };
     await flush();
@@ -3128,7 +3111,6 @@ describe("the player's indicator", () => {
     expect(box.textContent).toBe("autorenewLibrary refresh: Generating thumbnails (7%)");
     expect(indicatorText().textContent).toBe("Library refresh: Generating thumbnails");
     const percent = Array.from(box.querySelectorAll("span")).find((span) => span.textContent === "(7%)")!;
-    expect(percent.getAttribute("aria-hidden")).toBe("true");
     expect(indicatorText().contains(percent)).toBe(false);
   });
 
@@ -3138,7 +3120,6 @@ describe("the player's indicator", () => {
     store.pairingRequired.value = true;
     await flush();
     expect(indicatorState()).toBeNull();
-    expect(indicatorRegion().getAttribute("role")).toBe("status");
 
     store.pairingRequired.value = false;
     await flush();
@@ -3185,7 +3166,6 @@ describe("the player's indicator", () => {
     expect([text.overflow, text.whiteSpace, text.textOverflow, text.minWidth]).toEqual(["hidden", "nowrap", "ellipsis", "0"]);
     // Its clip box reaches past the line box, so a descender isn't cut off, and the pill's height stays as it was.
     expect([text.getPropertyValue("padding-block"), text.getPropertyValue("margin-block")]).toEqual(["0.15em", "-0.15em"]);
-    expect(currentStyle(indicatorRegion()).pointerEvents).toBe("none");
 
     store.compatibilityBlocked.value = true;
     await flush();
@@ -3267,14 +3247,9 @@ describe("the player's rating", () => {
     expect(star.previousElementSibling?.id).toBe("panel-btn");
     expect(star.nextElementSibling).toBe(ratingPopover());
     expect(ratingPopover().nextElementSibling?.id).toBe("favorite-btn");
-    expect([star.type, star.title, star.getAttribute("aria-controls"), star.getAttribute("aria-expanded")]).toEqual([
-      "button",
-      "Rating, 3.5 stars",
-      "rating-popover",
-      "false"
-    ]);
+    expect([star.type, star.title]).toEqual(["button", "Rating, 3.5 stars"]);
+    expect(ratingPopover().hidden).toBe(true);
     expect(star.querySelector(".material-symbol-icon")!.textContent).toBe("star");
-    expect(ratingBadge().getAttribute("aria-hidden")).toBe("true");
     expect(starShows()).toEqual(["Rating, 3.5 stars", true, "3.5"]);
     expect(currentStyle(star).color).toBe(orange());
     const right = (id: string) => currentStyle(document.getElementById(id)!).right;
@@ -3307,7 +3282,6 @@ describe("the player's rating", () => {
 
     await pressStar();
     expect(ratingPopover().hidden).toBe(true);
-    expect(ratingButton().getAttribute("aria-expanded")).toBe("false");
 
     await click(emptyState());
     await waitFor(() => expect(video().src).toBe(VIDEO_URL));
@@ -3320,7 +3294,6 @@ describe("the player's rating", () => {
     await flush();
     await pressStar();
     expect(ratingPopover().hidden).toBe(false);
-    expect(ratingButton().getAttribute("aria-expanded")).toBe("true");
   });
 
   it("opens the Stats tab's stars at the player's center, which set a rating by a click, a tap, or a drag and close as they set it, with the popup and the request", async () => {
@@ -3330,17 +3303,15 @@ describe("the player's rating", () => {
 
     await pressStar();
     expect(ratingPopover().hidden).toBe(false);
-    expect(screen.getByRole("slider", { name: "Rating" })).toBe(popoverStars());
-    expect(sliderValue(popoverStars())).toEqual(["0", "Not rated"]);
+    expect(starsShown(popoverStars())).toBe(0);
 
     await tapStars(popoverStars(), xFor(3), "mouse");
     expect(ratingPopover().hidden).toBe(true);
-    expect(ratingButton().getAttribute("aria-expanded")).toBe("false");
     expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
     await waitFor(() => expect(popups()).toEqual([{ text: "Rated 3 stars", detail: "holiday clip.mp4" }]));
 
     await pressStar();
-    expect(sliderValue(popoverStars())).toEqual(["3", "3 stars"]);
+    expect(starsShown(popoverStars())).toBe(3);
     await tapStars(popoverStars(), xFor(1.5), "touch");
     expect(ratingPopover().hidden).toBe(true);
     expect(starShows()).toEqual(["Rating, 1.5 stars", true, "1.5"]);
@@ -3528,13 +3499,13 @@ describe("the player's rating", () => {
     services.playerRating.step(1);
     await flush();
     expect(starShows()).toEqual(["Rating, 2.5 stars", true, "2.5"]);
-    expect(sliderValue(popoverStars())).toEqual(["2.5", "2.5 stars"]);
+    expect(starsShown(popoverStars())).toBe(2.5);
     expect(ratingPopover().hidden).toBe(false);
 
     services.playerRating.set(null, { byKey: true });
     await flush();
     expect(starShows()).toEqual(["Rating", false, null]);
-    expect(sliderValue(popoverStars())).toEqual(["0", "Not rated"]);
+    expect(starsShown(popoverStars())).toBe(0);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([null]);
   });
@@ -3546,7 +3517,7 @@ describe("the player's rating", () => {
     page.stream().emit("itemRatingChanged", 2, { itemId: "item-video", path: VIDEO_ITEM.id, rating: 4.5, previousRating: 2, clientId: "another-client" });
     await flush();
     expect(starShows()).toEqual(["Rating, 4.5 stars", true, "4.5"]);
-    expect(sliderValue(popoverStars())).toEqual(["4.5", "4.5 stars"]);
+    expect(starsShown(popoverStars())).toBe(4.5);
 
     await tapStars(popoverStars(), xFor(3), "mouse");
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));

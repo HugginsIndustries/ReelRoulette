@@ -239,7 +239,6 @@ describe("panel button", () => {
   it("shows the panel's side and whether it is open, and is orange while it is open", async () => {
     await mount();
     expect(icon(panelButton())).toBe("right_panel_open");
-    expect(panelButton().getAttribute("aria-expanded")).toBe("false");
     expect(panelButton().classList.contains("active")).toBe(false);
 
     await click(panelButton());
@@ -247,7 +246,6 @@ describe("panel button", () => {
     expect(icon(panelButton())).toBe("right_panel_close");
     expect(panelButton().getAttribute("aria-label")).toBe("Close panel");
     expect(panelButton().title).toBe("Close panel");
-    expect(panelButton().getAttribute("aria-expanded")).toBe("true");
     expect(panelButton().classList.contains("active")).toBe(true);
   });
 
@@ -422,8 +420,9 @@ async function mountWideStage(): Promise<MountedPage> {
   return page;
 }
 
+/** The panel's width as the stage lays it out, in px. */
 function shownWidth(): number {
-  return Number(handle().getAttribute("aria-valuenow"));
+  return parseFloat(stage().style.getPropertyValue("--panel-width"));
 }
 
 /** Presses the handle at `fromX` and drags it to `toX`, without letting go. */
@@ -443,12 +442,9 @@ describe("width", () => {
     await mountWideStage();
     await click(panelButton());
     expect(shownWidth()).toBe(420);
-    expect(handle().getAttribute("aria-valuemin")).toBe("360");
-    expect(handle().getAttribute("aria-valuemax")).toBe("788");
 
     await drag(780, 700);
     expect(shownWidth()).toBe(500);
-    expect(stage().style.getPropertyValue("--panel-width")).toBe("500px");
     expect(localStorage.getItem("rr_device.panel.width")).toBeNull();
     await drag(700, 100);
     expect(shownWidth()).toBe(788);
@@ -800,7 +796,7 @@ describe("compatibility failure", () => {
     await click(panelButton());
     expect(isOpen()).toBe(true);
     const library = document.getElementById("panel-page-library")!;
-    expect(within(library).getByRole("alert").textContent).toBe(
+    expect(library.querySelector(".library-overlay-status-error")?.textContent).toBe(
       `Server missing required capabilities: ${COMPATIBLE_VERSION.capabilities.join(", ")}.`
     );
     // The controls stay, but search and sort have nothing to load.
@@ -835,7 +831,7 @@ describe("compatibility failure", () => {
 
     expect(shownPages()).toEqual(["Library"]);
     const library = document.getElementById("panel-page-library")!;
-    expect(within(library).getByRole("alert").textContent).toBe(
+    expect(library.querySelector(".library-overlay-status-error")?.textContent).toBe(
       `Server missing required capabilities: ${COMPATIBLE_VERSION.capabilities.join(", ")}.`
     );
   });

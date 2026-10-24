@@ -1,9 +1,6 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 
-/**
- * What is wrong with a field's value. Its message is the tooltip, which says what the field expects, and the
- * field's accessible description.
- */
+/** What is wrong with a field's value. Its message is the tooltip, which says what the field expects. */
 export interface FieldProblem {
   message: string;
   /**

@@ -217,10 +217,10 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   align-items: center;
   justify-content: center;
 }
-.held-action[aria-disabled="true"] {
+.held-action.shows-problem {
   cursor: not-allowed;
 }
-.held-action[aria-disabled="true"] .btn-label {
+.held-action.shows-problem .btn-label {
   opacity: 0.5;
 }
 .btn-problem,
@@ -297,18 +297,6 @@ input, progress, meter { accent-color: var(--huggins-orange); }
     animation: none;
     transition: none;
   }
-}
-/* Read by screen readers, not shown. */
-.visually-hidden {
-  position: absolute !important;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
 }
 /* An action that a field which may sit empty, while it is empty, or a problem in a field right next to it, disables. */
 .held-action:disabled {
@@ -822,16 +810,11 @@ html.theme-light .ambient canvas {
 /* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, the row's gap from
    the bar, so that width may change between items with different time formats. */
 #time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); font-variant-numeric: tabular-nums; }
-/* The player's indicator: one lasting state at a time, such as Reconnecting…, at the top center. Its live region
-   always stays in the page and covers the media area without catching clicks; the state's box inside it is the pill.
-   At the top, centered, it stays clear of the corner buttons on both sides, which take the last 212 px at the right,
-   or 160 px while the panel is on the left, and a long state ends in an ellipsis instead. On a narrow player it sits
-   below the corner buttons. A library refresh's progress shows only while the player's controls do. */
-.player-indicator-region {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
+/* The player's indicator: one lasting state at a time, such as Reconnecting…, at the top center, a pill shown only
+   while a state does, which doesn't catch clicks. At the top, centered, it stays clear of the corner buttons on both
+   sides, which take the last 212 px at the right, or 160 px while the panel is on the left, and a long state ends in
+   an ellipsis instead. On a narrow player it sits below the corner buttons. A library refresh's progress shows only
+   while the player's controls do. */
 .player-indicator {
   position: absolute;
   top: 14px;
@@ -920,7 +903,7 @@ html.theme-light .ambient canvas {
 }
 /* Notifications: the player's bell, the list of recent messages under it, and the popups beside the player. The bell is
    orange while its list is open, and while it has unread messages, as its badge is. */
-.notify-btn[aria-expanded="true"], .notify-btn.has-unread { color: var(--huggins-orange); }
+.notify-btn.is-open, .notify-btn.has-unread { color: var(--huggins-orange); }
 /* The bell's badge, which the player's rating star shares. It overlays its button, so it never moves an icon. Its ring
    ends 2 px inside the button's right edge, since Chrome on Android clips a ring that reaches the edge. */
 .notify-badge, .rating-badge {

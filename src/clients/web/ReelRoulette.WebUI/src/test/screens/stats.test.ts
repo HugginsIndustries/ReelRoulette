@@ -22,7 +22,6 @@ import {
   REQUIRED_CAPABILITIES,
   resetPage,
   settle,
-  sliderValue,
   STARS_LEFT,
   starsShown,
   status,
@@ -546,8 +545,8 @@ describe("Stats tab", () => {
     const { server } = await mountStats({ setup: (fake) => fake.on("GET", "/api/library/stats", () => status(500)) });
     fireEvent.click(document.getElementById("now-playing-name")!);
 
-    await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe("Stats load failed."));
-    expect(statsBody().querySelectorAll('[role="alert"]')).toHaveLength(1);
+    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe("Stats load failed."));
+    expect(statsBody().querySelectorAll(".filter-hint.is-error")).toHaveLength(1);
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
     expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
@@ -565,7 +564,7 @@ describe("Stats tab", () => {
     await settle();
     expect(cards()).toHaveLength(12);
     expect(rows().Plays).toBe("1");
-    expect(statsBody().querySelector('[role="alert"]')).toBeNull();
+    expect(statsBody().querySelector(".filter-hint.is-error")).toBeNull();
   });
 
   it("loads the library's cards and shows only the name and path for a playing item no longer in the catalog", async () => {
@@ -579,7 +578,7 @@ describe("Stats tab", () => {
     expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(ratingStars()).toBeNull();
-    expect(statsBody().querySelector('[role="alert"]')).toBeNull();
+    expect(statsBody().querySelector(".filter-hint.is-error")).toBeNull();
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed"))).toBe(false);
   });
 
@@ -593,7 +592,7 @@ describe("Stats tab", () => {
     await settle();
     await openStatsTab();
 
-    await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe(`Running without a library. ${message}`));
+    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe(`Running without a library. ${message}`));
     expect(sections()[0]!.textContent).toBe("Current fileNothing is playing yet.");
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(server.requests("GET", "/api/library/stats")).toHaveLength(0);
@@ -609,7 +608,7 @@ describe("Stats tab", () => {
     await settle();
     await openStatsTab();
 
-    await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe("Server requires client API version 3 or newer."));
+    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe("Server requires client API version 3 or newer."));
     expect(sections()[0]!.textContent).toBe("Current fileNothing is playing yet.");
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(server.requests("GET", "/api/library/stats")).toHaveLength(0);
@@ -631,7 +630,7 @@ describe("Stats tab", () => {
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(ratingStars()).toBeNull();
     expect(cards()).toHaveLength(0);
-    expect(statsBody().querySelector('[role="alert"]')).toBeNull();
+    expect(statsBody().querySelector(".filter-hint.is-error")).toBeNull();
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
     expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed"))).toBe(false);
@@ -646,7 +645,7 @@ describe("Stats tab", () => {
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, libraryState: "newer", libraryMessage: message }));
     // The stream failing checks the version again.
     page.stream().fail();
-    await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe(`Running without a library. ${message}`));
+    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe(`Running without a library. ${message}`));
 
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(ratingStars()).toBeNull();
@@ -898,14 +897,11 @@ describe("Stats tab's rating", () => {
     resetPage();
   });
 
-  it("shows the file's rating under its path, as a slider named Rating from 0 to 5 whose value text reads it", async () => {
+  it("shows the file's rating in stars under its path, after its Rating label", async () => {
     await openRated(3.5);
 
-    const stars = screen.getByRole("slider", { name: "Rating" });
-    expect(stars).toBe(ratingStars());
-    expect([stars.getAttribute("aria-valuemin"), stars.getAttribute("aria-valuemax")]).toEqual(["0", "5"]);
-    expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
-    expect(starsShown(ratingStars()!)).toBe(3.5);
+    const stars = ratingStars()!;
+    expect(starsShown(stars)).toBe(3.5);
     const line = stars.closest(".stats-rating")!;
     expect(line.previousElementSibling?.classList.contains("stats-path")).toBe(true);
     expect(line.nextElementSibling?.matches("dl.stats-table")).toBe(true);
@@ -913,7 +909,6 @@ describe("Stats tab's rating", () => {
 
     resetPage();
     await openRated(null);
-    expect(sliderValue(ratingStars()!)).toEqual(["0", "Not rated"]);
     expect(starsShown(ratingStars()!)).toBe(0);
   });
 
@@ -921,16 +916,16 @@ describe("Stats tab's rating", () => {
     const { page, server } = await openRated(null);
 
     await tapStars(ratingStars()!, xFor(3), "mouse");
-    expect(sliderValue(ratingStars()!)).toEqual(["3", "3 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(3);
     await waitFor(() => expect(popupsShown()).toEqual(["Rated 3 stars | holiday clip.mp4"]));
 
     // A second rating's popup replaces the first.
     await tapStars(ratingStars()!, xFor(1.5), "touch");
-    expect(sliderValue(ratingStars()!)).toEqual(["1.5", "1.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(1.5);
     await waitFor(() => expect(popupsShown()).toEqual(["Rated 1.5 stars | holiday clip.mp4"]));
 
     await tapStars(ratingStars()!, CLEAR_EDGE_X, "touch");
-    expect(sliderValue(ratingStars()!)).toEqual(["0", "Not rated"]);
+    expect(starsShown(ratingStars()!)).toBe(0);
     await waitFor(() => expect(popupsShown()).toEqual(["Rating cleared | holiday clip.mp4"]));
 
     expect(ratingRequests(server)).toEqual([
@@ -954,27 +949,26 @@ describe("Stats tab's rating", () => {
     await wait(600);
 
     expect(ratingRequests(server)).toEqual([]);
-    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2);
   });
 
-  it("shows a press's value as it drags, without changing the slider's value, and sets it on release, 5 stars past the right end", async () => {
+  it("shows a press's value as it drags, without setting it, and sets it on release, 5 stars past the right end", async () => {
     const { server } = await openRated(2);
 
     await pressStars(ratingStars()!, xFor(1), "touch");
     expect(starsShown(ratingStars()!)).toBe(1);
     await movePointer(ratingStars()!, xFor(4.5), "touch");
     expect(starsShown(ratingStars()!)).toBe(4.5);
-    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
     expect(ratingRequests(server)).toEqual([]);
     await releasePointer(ratingStars()!, xFor(4), "touch");
-    expect(sliderValue(ratingStars()!)).toEqual(["4", "4 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(4);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
 
     await pressStars(ratingStars()!, xFor(2), "mouse");
     await movePointer(ratingStars()!, PAST_RIGHT_X, "mouse");
     expect(starsShown(ratingStars()!)).toBe(5);
     await releasePointer(ratingStars()!, PAST_RIGHT_X, "mouse");
-    expect(sliderValue(ratingStars()!)).toEqual(["5", "5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(5);
     await waitFor(() => expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([4, 5]));
   });
 
@@ -989,7 +983,7 @@ describe("Stats tab's rating", () => {
     expect(starsShown(ratingStars()!)).toBe(0);
     await releasePointer(ratingStars()!, x, "touch");
 
-    expect(sliderValue(ratingStars()!)).toEqual(["0", "Not rated"]);
+    expect(starsShown(ratingStars()!)).toBe(0);
     await waitFor(() => expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([null]));
   });
 
@@ -1006,7 +1000,7 @@ describe("Stats tab's rating", () => {
     expect(ratingRequests(server)).toEqual([]);
   });
 
-  it("previews the value under a mouse, none on the first star's left edge, without changing the slider's value, and shows the rating set once it leaves", async () => {
+  it("previews the value under a mouse, none on the first star's left edge, without setting it, and shows the rating set once it leaves", async () => {
     const { server } = await openRated(2);
 
     await movePointer(ratingStars()!, xFor(4), "mouse");
@@ -1015,7 +1009,6 @@ describe("Stats tab's rating", () => {
     expect(starsShown(ratingStars()!)).toBe(3.5);
     await movePointer(ratingStars()!, CLEAR_EDGE_X, "mouse");
     expect(starsShown(ratingStars()!)).toBe(0);
-    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
     fireEvent.pointerLeave(ratingStars()!, { pointerId: 1, pointerType: "mouse" });
     await settle();
     expect(starsShown(ratingStars()!)).toBe(2);
@@ -1033,7 +1026,7 @@ describe("Stats tab's rating", () => {
       await pressShortcut("=");
     }
     await pressShortcut("-");
-    expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(3.5);
     expect(ratingRequests(server)).toEqual([]);
     await wait(600);
     expect(ratingRequests(server)).toEqual([{ itemId: "item-video", rating: 3.5, clientId: page.clientId() }]);
@@ -1044,7 +1037,7 @@ describe("Stats tab's rating", () => {
     // The next change steps from the rating sent.
     await pressShortcut("=");
     await pressShortcut("=");
-    expect(sliderValue(ratingStars()!)).toEqual(["4.5", "4.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(4.5);
     await wait(600);
     expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([3.5, 4.5]);
   });
@@ -1052,7 +1045,7 @@ describe("Stats tab's rating", () => {
   it("sends nothing once the page closes, not even a rating the keys were waiting to send", async () => {
     const { page, server } = await openRated(2);
     await pressShortcut("=");
-    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2.5);
 
     page.unmount();
     await wait(600);
@@ -1066,19 +1059,19 @@ describe("Stats tab's rating", () => {
     await tapStars(ratingStars()!, xFor(3), "mouse");
     await tapStars(ratingStars()!, xFor(3), "touch");
     await pressShortcut("=");
-    expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(3.5);
     await pressShortcut("-");
     await wait(600);
 
     expect(ratingRequests(server)).toEqual([]);
     expect(popupsShown()).toEqual([]);
-    expect(sliderValue(ratingStars()!)).toEqual(["3", "3 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(3);
   });
 
   it("sends a rating to the file it was set on as soon as another file plays", async () => {
     const { page, server } = await openRated(2, { items: [itemRow(VIDEO, { rating: 2 }), itemRow(OTHER_VIDEO)], picks: [VIDEO, OTHER_VIDEO] });
     await pressShortcut("=");
-    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2.5);
 
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
@@ -1095,11 +1088,11 @@ describe("Stats tab's rating", () => {
     const { server } = await openRated(2, { reply: () => new Promise<Response>((resolve) => (answer = resolve)) });
 
     await tapStars(ratingStars()!, xFor(4), "touch");
-    expect(sliderValue(ratingStars()!)).toEqual(["4", "4 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(4);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     answer(status(500));
     await waitFor(() => expect(openNotices()).toEqual(["Rating update failed."]));
-    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2);
     fireEvent.click(document.querySelector("dialog.app-dialog .dialog-actions button")!);
     await settle();
 
@@ -1108,7 +1101,7 @@ describe("Stats tab's rating", () => {
     });
     await tapStars(ratingStars()!, xFor(3), "mouse");
     await waitFor(() => expect(openNotices()).toEqual(["Rating update failed: Couldn't reach the server."]));
-    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2);
     expect(popupsShown()).toEqual([]);
     expect(server.logLines().some((line) => line.startsWith("status=Rating update failed (HTTP 500)."))).toBe(true);
   });
@@ -1123,11 +1116,11 @@ describe("Stats tab's rating", () => {
     server.on("GET", "/api/library/stats", () => json({ ...STATS, global: { ...STATS.global, rated: 13 } }));
     emit(page, "itemRatingChanged", { itemId: "item-video", path: VIDEO.id, rating: 4.5, previousRating: 2, clientId: "another-client" });
     await settle();
-    expect(sliderValue(ratingStars()!)).toEqual(["4.5", "4.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(4.5);
     expect(statsLoads()).toBe(loads);
 
     await waitFor(() => expect(cards()).toContainEqual(["Rated", "13"]));
-    expect(sliderValue(ratingStars()!)).toEqual(["4.5", "4.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(4.5);
   });
 
   it("keeps a rating the keys set until it is sent, through another device's change", async () => {
@@ -1136,11 +1129,11 @@ describe("Stats tab's rating", () => {
 
     emit(page, "itemRatingChanged", { itemId: "item-video", path: VIDEO.id, rating: 4, previousRating: 2, clientId: "another-client" });
     await settle();
-    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2.5);
 
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     await settle();
-    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(2.5);
   });
 
   it("draws empty stars in the panel's text color, white in the Dark theme and dark in the Light theme", async () => {
@@ -1174,9 +1167,9 @@ describe("Stats tab's rating", () => {
     fireEvent.click(star);
     await settle();
     const popoverStars = document.querySelector<HTMLElement>("#rating-popover .rating")!;
-    expect(sliderValue(popoverStars)).toEqual(["3.5", "3.5 stars"]);
+    expect(starsShown(popoverStars)).toBe(3.5);
     await tapStars(popoverStars, xFor(1), "mouse");
-    expect(sliderValue(ratingStars()!)).toEqual(["1", "1 star"]);
+    expect(starsShown(ratingStars()!)).toBe(1);
     await waitFor(() => expect(popupsShown()).toEqual(["Rated 1 star | holiday clip.mp4"]));
     expect(ratingRequests(server)).toEqual([
       { itemId: "item-video", rating: 3, clientId: page.clientId() },

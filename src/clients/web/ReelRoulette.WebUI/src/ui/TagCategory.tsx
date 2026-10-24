@@ -3,8 +3,6 @@ import { useRef } from "preact/hooks";
 
 export interface TagCategoryProps {
   name: string;
-  /** The id of its tags' grid, which its toggle controls. */
-  gridId: string;
   collapsed: boolean;
   /** How many of its tags are in use, shown while above 0. */
   inUse: number;
@@ -56,14 +54,14 @@ export function TagCategory(props: TagCategoryProps) {
         }}
       >
         {props.handle}
-        <button type="button" class="tag-category-toggle" aria-expanded={collapsed ? "false" : "true"} aria-controls={props.gridId} aria-label={label} title={collapsed ? "Expand category" : "Collapse category"} onClick={props.onToggle}>
+        <button type="button" class="tag-category-toggle" aria-label={label} title={collapsed ? "Expand category" : "Collapse category"} onClick={props.onToggle}>
           <span class="tag-category-name">{props.name}</span>
           <span class="category-count" title={props.inUseTitle} hidden={!showCount}>{inUse}</span>
           <span class="unsaved-dot category-dot" title="Unsaved changes" hidden={!showDot}></span>
         </button>
         {props.controls}
       </div>
-      <div id={props.gridId} class="tag-grid" hidden={collapsed}>
+      <div class="tag-grid" hidden={collapsed}>
         {props.children}
       </div>
     </section>

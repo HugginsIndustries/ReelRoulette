@@ -135,7 +135,7 @@ function list(): HTMLElement {
 }
 
 function listTitle(): HTMLElement {
-  return document.getElementById("notify-title")!;
+  return list().querySelector("h2")!;
 }
 
 function listButton(name: "Clear" | "Close"): HTMLButtonElement {
@@ -229,13 +229,10 @@ describe("popups", () => {
     expect(toast).toBeDefined();
     const icon = toast!.querySelector(".material-symbol-icon")!;
     expect(icon.textContent).toBe("check_circle");
-    expect(icon.getAttribute("aria-hidden")).toBe("true");
     expect(toast!.querySelector(".toast-text > div")!.textContent).toBe("Added to favorites");
     expect(toast!.querySelector(".toast-detail")!.textContent).toBe("holiday clip.mp4");
     expect(toast!.classList.contains("is-warning")).toBe(false);
     expect(document.activeElement).toBe(play);
-    expect(host().getAttribute("role")).toBe("status");
-    expect(host().getAttribute("aria-live")).toBe("polite");
     // Beside the player, which clips what it holds, in the player column.
     expect(host().parentElement).toBe(playerColumn());
     expect(mediaArea().parentElement).toBe(playerColumn());
@@ -527,8 +524,7 @@ describe("the bell", () => {
     expect(bell().querySelector(".material-symbol-icon")!.textContent).toBe("notifications");
     expect(bell().getAttribute("aria-label")).toBe("Notifications");
     expect(bell().title).toBe("Notifications");
-    expect(bell().getAttribute("aria-controls")).toBe("notify-list");
-    expect(bell().getAttribute("aria-expanded")).toBe("false");
+    expect(bell().classList.contains("is-open")).toBe(false);
     expect(badge().hidden).toBe(true);
 
     await notify(services, { kind: "actions", text: "Paired." });
@@ -561,12 +557,12 @@ describe("the bell", () => {
 
     await click(bell());
     expect(list().hidden).toBe(false);
-    expect(bell().getAttribute("aria-expanded")).toBe("true");
+    expect(bell().classList.contains("is-open")).toBe(true);
     expect(currentStyle(bell()).color).toBe(orange());
 
     await click(bell());
     expect(list().hidden).toBe(true);
-    expect(bell().getAttribute("aria-expanded")).toBe("false");
+    expect(bell().classList.contains("is-open")).toBe(false);
     expect(currentStyle(bell()).color).not.toBe(orange());
     expect(server.requests("POST", "/api/random")).toEqual([]);
   });
@@ -717,8 +713,6 @@ describe("the list", () => {
 
   it("closes on its Close, the bell, and Escape, which it keeps from the browser, leaving focus on the page", async () => {
     await mountWithServices();
-    expect(list().getAttribute("role")).toBe("dialog");
-    expect(list().getAttribute("aria-labelledby")).toBe("notify-title");
     expect(listTitle().textContent).toBe("Notifications");
     expect(list().hidden).toBe(true);
 
@@ -801,7 +795,7 @@ describe("the list", () => {
     await click(bell());
     await click(document.getElementById("panel-btn")!);
     expect(list().hidden).toBe(true);
-    expect(bell().getAttribute("aria-expanded")).toBe("false");
+    expect(bell().classList.contains("is-open")).toBe(false);
     expect(document.activeElement).toBe(play);
   });
 

@@ -44,10 +44,10 @@ export function renderGridTileHtml(tile: GridTileRenderInput, thumbnailUrl: stri
       : "";
 
   const favoriteBadge = tile.isFavorite
-    ? `<span class="material-symbol-icon is-filled library-grid-tile-badge-icon" aria-hidden="true">favorite</span>`
+    ? `<span class="material-symbol-icon is-filled library-grid-tile-badge-icon">favorite</span>`
     : "";
   const blacklistBadge = tile.isBlacklisted
-    ? `<span class="material-symbol-icon is-filled library-grid-tile-badge-icon" aria-hidden="true">thumb_down</span>`
+    ? `<span class="material-symbol-icon is-filled library-grid-tile-badge-icon">thumb_down</span>`
     : "";
   const badgeHtml = hasGridStateIndicator(tile.isFavorite, tile.isBlacklisted)
     ? `<div class="library-grid-tile-badge">${favoriteBadge}${blacklistBadge}</div>`
@@ -57,11 +57,11 @@ export function renderGridTileHtml(tile: GridTileRenderInput, thumbnailUrl: stri
 
   // Every tile has the playing icon, which the stylesheet shows only on the playing tile, so the grid can move it
   // without rendering the tiles again. The name is the whole tile's tooltip.
-  return `<div class="${tileClass}" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" title="${name}" role="button">
+  return `<div class="${tileClass}" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" title="${name}">
   <div class="library-grid-tile-media">
     <div class="library-grid-tile-scrim">${imgHtml}</div>
     ${badgeHtml}
-    <div class="library-grid-tile-playing" aria-hidden="true"><span class="material-symbol-icon is-filled">play_circle</span></div>
+    <div class="library-grid-tile-playing"><span class="material-symbol-icon is-filled">play_circle</span></div>
     <div class="library-grid-tile-filename">${name}</div>
   </div>
 </div>`;

@@ -622,11 +622,6 @@ export function starsShown(stars: HTMLElement): number {
   );
 }
 
-/** The stars' slider value and value text, which stay the rating set through a preview. */
-export function sliderValue(stars: HTMLElement): [string | null, string | null] {
-  return [stars.getAttribute("aria-valuenow"), stars.getAttribute("aria-valuetext")];
-}
-
 /**
  * Where on the stars `stubStarLayout` lays out `stars` is set: a star's right half for a whole star, and its left half
  * for a half.

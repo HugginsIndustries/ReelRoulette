@@ -59,7 +59,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 - **Desktop app:** The desktop app is no longer built or released, and its installers and update feeds stop. ReelRoulette in the browser, installed as an app or not, is the only client on every device.
 - **Desktop-only API:** The routes and fields only the desktop used are gone, and requests name files only by catalog id, except auto-tag apply, which still takes full paths. Clearing every file's playback stats must be asked for explicitly. Filters no longer carry the older `favoritesOnly` and `excludeBlacklisted` fields, though presets saved with them still read. The server's API version is now 2, so an installed desktop app no longer connects to it.
-- **WebUI keyboard navigation:** The WebUI's keyboard is for its shortcuts, so focus rings no longer show, the browser's own included, library tiles no longer play with Enter or Space, and outside text fields and dropdowns a key does only what a shortcut binds it to: Space and the arrow keys no longer press or move the control last used, and Tab, Enter, and the page keys do nothing.
+- **WebUI keyboard navigation and screen reader support:** The WebUI's keyboard is for its shortcuts, so focus rings no longer show, the browser's own included, library tiles no longer play with Enter or Space, and outside text fields and dropdowns a key does only what a shortcut binds it to: Space and the arrow keys no longer press or move the control last used, and Tab, Enter, and the page keys do nothing. Screen readers no longer get announcements, descriptions, states, or roles, such as the library's loading and error messages and library tiles as buttons, though controls keep their names.
 
 ### Fixed
 

@@ -72,7 +72,6 @@ function copyFromField(text: string, button: HTMLElement): boolean {
   const field = document.createElement("textarea");
   field.readOnly = true;
   field.value = text;
-  field.setAttribute("aria-hidden", "true");
   // 16px, so iOS doesn't zoom in when it takes focus.
   Object.assign(field.style, {
     position: "fixed",

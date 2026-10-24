@@ -46,7 +46,6 @@ function NowPlaying() {
       <span
         id="now-playing-name"
         class="is-link"
-        role="button"
         title={view ? `${view.title}\nShow stats` : undefined}
         onClick={showStats}
       >

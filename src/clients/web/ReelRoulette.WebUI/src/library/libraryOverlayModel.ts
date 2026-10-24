@@ -56,10 +56,8 @@ export function parseLibraryProjectionSummary(raw: unknown): LibraryProjectionSu
 /** What the overlay's body says while it has no tiles to show. */
 export interface LibraryOverlayMessage {
   text: string;
-  /** An error, shown as an alert. */
+  /** An error, which shows in the error color. */
   error: boolean;
-  /** Read out by screen readers when it changes. */
-  live: boolean;
 }
 
 /**
@@ -73,16 +71,16 @@ export function libraryOverlayMessage(
   errorStatus: number | null = null
 ): LibraryOverlayMessage {
   if (phase === "loading") {
-    return { text: "Loading library…", error: false, live: true };
+    return { text: "Loading library…", error: false };
   }
   if (phase === "error") {
     if (errorStatus === 401) {
-      return { text: "", error: false, live: false };
+      return { text: "", error: false };
     }
     if (errorStatus !== null && TIMEOUT_STATUSES.includes(errorStatus)) {
-      return { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true, live: false };
+      return { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true };
     }
-    return { text: failureText || "Library load failed.", error: true, live: false };
+    return { text: failureText || "Library load failed.", error: true };
   }
-  return { text: "No media in library.", error: false, live: false };
+  return { text: "No media in library.", error: false };
 }

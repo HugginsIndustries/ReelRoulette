@@ -16,45 +16,44 @@ exports[`page structure > keeps the starting markup 1`] = `
         <span class="btn-label">
           "Pair"
     <div class="now-playing" id="now-playing" style="display: none">
-      <span class="is-link" id="now-playing-name" role="button">
+      <span class="is-link" id="now-playing-name">
       <span class="muted" id="now-playing-duration">
   <div class="fullscreen-stage" data-panel-mode="side" data-side="right" id="fullscreen-stage" style="--panel-width: 420px">
     <main class="player-col">
       <div class="media-container controls-visible" id="media-container">
-        <div aria-hidden="true" class="ambient" hidden="" id="ambient" style="--ambient-blur: 64px; --ambient-dark: 0.5; --ambient-light: 0.75; --ambient-saturation: 1">
+        <div class="ambient" hidden="" id="ambient" style="--ambient-blur: 64px; --ambient-dark: 0.5; --ambient-light: 0.75; --ambient-saturation: 1">
           <canvas height="18" width="32">
         <video disablepictureinpicture="" disableremoteplayback="" id="video" playsinline="" preload="auto" style="display: none" webkit-playsinline="">
         <img alt="Photo" id="photo" style="display: none">
         <div class="empty-state" id="empty-state">
           "Tap to play, or open the panel to choose a preset or filter."
-        <div aria-live="polite" class="player-indicator-region" id="player-indicator" role="status">
-        <div aria-hidden="true" class="volume-indicator" id="volume-indicator">
+        <div class="volume-indicator" id="volume-indicator">
           <span class="material-symbol-icon">
             "volume_up"
           <span id="volume-indicator-text">
             "100%"
-        <div aria-hidden="true" class="seek-indicator is-back" id="seek-indicator-back">
+        <div class="seek-indicator is-back" id="seek-indicator-back">
           <span class="material-symbol-icon">
             "chevron_left"
           <span class="seek-indicator-text">
-        <div aria-hidden="true" class="seek-indicator is-forward" id="seek-indicator-forward">
+        <div class="seek-indicator is-forward" id="seek-indicator-forward">
           <span class="seek-indicator-text">
           <span class="material-symbol-icon">
             "chevron_right"
         <div class="overlay-controls" id="overlay-controls">
-          <button aria-controls="notify-list" aria-expanded="false" aria-label="Notifications" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn" id="notify-btn" title="Notifications" type="button">
+          <button aria-label="Notifications" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn" id="notify-btn" title="Notifications" type="button">
             <span class="material-symbol-icon">
               "notifications"
             <span class="notify-badge" hidden="">
               "0"
-          <button aria-controls="panel" aria-expanded="false" aria-label="Open panel" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="panel-btn" title="Open panel">
+          <button aria-label="Open panel" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="panel-btn" title="Open panel">
             <span class="material-symbol-icon">
               "right_panel_open"
             <span class="unsaved-dot" hidden="">
-          <button aria-controls="rating-popover" aria-expanded="false" aria-label="Rating" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="rating-btn" title="Rating" type="button">
+          <button aria-label="Rating" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="rating-btn" title="Rating" type="button">
             <span class="material-symbol-icon">
               "star"
-            <span aria-hidden="true" class="rating-badge" hidden="">
+            <span class="rating-badge" hidden="">
           <div class="rating-popover" hidden="" id="rating-popover">
           <button aria-label="Favorite" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="favorite-btn" title="Favorite">
             <span class="material-symbol-icon">
@@ -86,7 +85,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                 "fullscreen"
           <div class="overlay-seek-row" id="seek-row">
             <span class="seek-wrap" id="seek-wrap">
-              <span aria-hidden="true" class="seek-loop" hidden="" id="seek-loop">
+              <span class="seek-loop" hidden="" id="seek-loop">
               <input aria-label="Seek" disabled="" id="seek-slider" max="100" min="0" step="any" type="range" value="0">
             <span id="time-display">
               "0:00 / 0:00"
@@ -95,30 +94,30 @@ exports[`page structure > keeps the starting markup 1`] = `
                 "volume_up"
             <span class="volume" id="volume-wrap">
               <input aria-label="Volume" id="volume-slider" max="100" min="0" step="1" title="Volume" type="range">
-      <div aria-live="polite" class="toasts" data-pos="bottom-center" id="toasts" role="status">
-    <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator">
+      <div class="toasts" data-pos="bottom-center" id="toasts">
+    <div class="panel-handle" hidden="" id="panel-handle">
       <span class="handle-grip">
     <aside aria-label="Panel" class="panel" hidden="" id="panel">
       <div class="panel-tabs">
         <div aria-label="Panel tabs" class="panel-tablist" role="tablist">
-          <button aria-controls="panel-page-library" aria-label="Library" aria-selected="true" class="tab panel-tab" id="panel-tab-library" role="tab" title="Library" type="button">
+          <button aria-label="Library" aria-selected="true" class="tab panel-tab" id="panel-tab-library" role="tab" title="Library" type="button">
             <span class="material-symbol-icon">
               "browse"
-          <button aria-controls="panel-page-tags" aria-label="Tags" aria-selected="false" class="tab panel-tab" id="panel-tab-tags" role="tab" title="Tags" type="button">
+          <button aria-label="Tags" aria-selected="false" class="tab panel-tab" id="panel-tab-tags" role="tab" title="Tags" type="button">
             <span class="material-symbol-icon">
               "tag"
             <span class="unsaved-dot" hidden="">
-          <button aria-controls="panel-page-stats" aria-label="Stats" aria-selected="false" class="tab panel-tab" id="panel-tab-stats" role="tab" title="Stats" type="button">
+          <button aria-label="Stats" aria-selected="false" class="tab panel-tab" id="panel-tab-stats" role="tab" title="Stats" type="button">
             <span class="material-symbol-icon">
               "bar_chart"
-          <button aria-controls="panel-page-filter" aria-label="Filter" aria-selected="false" class="tab panel-tab" id="panel-tab-filter" role="tab" title="Filter" type="button">
+          <button aria-label="Filter" aria-selected="false" class="tab panel-tab" id="panel-tab-filter" role="tab" title="Filter" type="button">
             <span class="material-symbol-icon">
               "filter_alt"
             <span class="unsaved-dot" hidden="">
-          <button aria-controls="panel-page-randomization" aria-label="Randomization" aria-selected="false" class="tab panel-tab" id="panel-tab-randomization" role="tab" title="Randomization" type="button">
+          <button aria-label="Randomization" aria-selected="false" class="tab panel-tab" id="panel-tab-randomization" role="tab" title="Randomization" type="button">
             <span class="material-symbol-icon">
               "casino"
-          <button aria-controls="panel-page-settings" aria-label="Settings" aria-selected="false" class="tab panel-tab" id="panel-tab-settings" role="tab" title="Settings" type="button">
+          <button aria-label="Settings" aria-selected="false" class="tab panel-tab" id="panel-tab-settings" role="tab" title="Settings" type="button">
             <span class="material-symbol-icon">
               "settings"
         <span class="panel-tabs-spacer">
@@ -130,10 +129,8 @@ exports[`page structure > keeps the starting markup 1`] = `
           <div class="library-overlay-header">
             <h2>
               "Library"
-            <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
-              <span aria-hidden="true">
-              <span class="visually-hidden">
-            <button aria-controls="library-filter-summary library-random-line library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
+            <p class="library-overlay-summary" hidden="" id="library-overlay-summary">
+            <button aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
               <span aria-hidden="true" class="material-symbol-icon">
                 "unfold_less"
           <button class="library-line" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
@@ -176,7 +173,7 @@ exports[`page structure > keeps the starting markup 1`] = `
             <button aria-label="Auto Tag" class="icon-btn" id="tag-editor-autotag-btn" title="Auto Tag" type="button">
               <span class="material-symbol-icon">
                 "auto_awesome"
-          <p aria-live="polite" class="tags-target" hidden="" id="tag-editor-target">
+          <p class="tags-target" hidden="" id="tag-editor-target">
           <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
           <div class="tag-editor-footer">
             <div class="tag-editor-footer-row">
@@ -206,13 +203,13 @@ exports[`page structure > keeps the starting markup 1`] = `
               <span aria-hidden="true" class="material-symbol-icon">
                 "calendar_clock"
           <div class="stats-body themed-scrollbar" id="stats-body">
-            <section aria-labelledby="stats-file-heading" class="stats-section">
-              <h3 id="stats-file-heading">
+            <section class="stats-section">
+              <h3>
                 "Current file"
               <p class="filter-hint">
                 "Nothing is playing yet."
-            <section aria-labelledby="stats-library-heading" class="stats-section">
-              <h3 id="stats-library-heading">
+            <section class="stats-section">
+              <h3>
                 "Library"
       <section aria-labelledby="panel-tab-filter" class="panel-page" hidden="" id="panel-page-filter" role="tabpanel">
         <div class="filter-dialog" id="filter-dialog">
@@ -248,23 +245,23 @@ exports[`page structure > keeps the starting markup 1`] = `
             <h2>
               "Randomization"
           <div class="settings-body themed-scrollbar" id="randomization-body">
-            <section aria-labelledby="randomization-cycle-heading" class="stats-section">
+            <section class="stats-section">
               <details class="setting-more shortcuts-more" id="randomization-cycle" open="">
                 <summary>
                   <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
                     "chevron_right"
-                  <h3 id="randomization-cycle-heading">
+                  <h3>
                     "Shuffle cycle"
                 <div class="cycle-body" id="randomization-cycle-body">
-            <section aria-labelledby="randomization-shuffle-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="randomization-shuffle-heading">
                 "Shuffle"
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="randomization-shuffle-on-hint" id="randomization-shuffle-on" type="checkbox">
+                    <input id="randomization-shuffle-on" type="checkbox">
                     "Shuffle"
-                <p class="setting-hint" id="randomization-shuffle-on-hint">
+                <p class="setting-hint">
                   "Nothing repeats until everything has played, or until Remember plays for has passed."
               <div class="setting">
                 <label class="setting-label" for="randomization-window">
@@ -285,22 +282,22 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "Reset now"
                 <p class="setting-hint">
                   "Forgets this device's picks and starts a new cycle."
-            <section aria-labelledby="randomization-spread-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="randomization-spread-heading">
                 "Spread"
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="randomization-spread-folder-hint" id="randomization-spread-folder" type="checkbox">
+                    <input id="randomization-spread-folder" type="checkbox">
                     "Spread by folder"
-                <p class="setting-hint" id="randomization-spread-folder-hint">
+                <p class="setting-hint">
                   "Skips the folders of recent picks."
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="randomization-spread-tags-hint" id="randomization-spread-tags" type="checkbox">
+                    <input id="randomization-spread-tags" type="checkbox">
                     "Spread by tags"
-                <p class="setting-hint" id="randomization-spread-tags-hint">
+                <p class="setting-hint">
                   "Files that share tags with recent picks come up less, rarer tags more so."
                 <fieldset class="setting-fields setting-sub" disabled="" id="randomization-tag-fields">
                   <div class="choice-stack">
@@ -314,58 +311,58 @@ exports[`page structure > keeps the starting markup 1`] = `
                         <span>
                           "By category"
                     <div class="setting-sub" hidden="" id="randomization-categories">
-            <section aria-labelledby="randomization-favor-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="randomization-favor-heading">
                 "Favor"
               <div aria-labelledby="randomization-favor-heading" class="choice-stack" role="group">
                 <label>
-                  <input aria-describedby="randomization-favor-favorLessPlayed-description" aria-labelledby="randomization-favor-favorLessPlayed" name="randomization-favor" type="checkbox" value="favorLessPlayed">
+                  <input aria-labelledby="randomization-favor-favorLessPlayed" name="randomization-favor" type="checkbox" value="favorLessPlayed">
                   <span>
                     <span id="randomization-favor-favorLessPlayed">
                       "Less played"
-                    <small id="randomization-favor-favorLessPlayed-description">
+                    <small>
                       "Files played less, or not lately, come up more often."
                 <label>
-                  <input aria-describedby="randomization-favor-favorNewlyAdded-description" aria-labelledby="randomization-favor-favorNewlyAdded" name="randomization-favor" type="checkbox" value="favorNewlyAdded">
+                  <input aria-labelledby="randomization-favor-favorNewlyAdded" name="randomization-favor" type="checkbox" value="favorNewlyAdded">
                   <span>
                     <span id="randomization-favor-favorNewlyAdded">
                       "Newly added"
-                    <small id="randomization-favor-favorNewlyAdded-description">
+                    <small>
                       "Recently added files get a share of the picks, newer ones more often."
                 <label>
-                  <input aria-describedby="randomization-favor-favorNewlyCreated-description" aria-labelledby="randomization-favor-favorNewlyCreated" name="randomization-favor" type="checkbox" value="favorNewlyCreated">
+                  <input aria-labelledby="randomization-favor-favorNewlyCreated" name="randomization-favor" type="checkbox" value="favorNewlyCreated">
                   <span>
                     <span id="randomization-favor-favorNewlyCreated">
                       "Newly created"
-                    <small id="randomization-favor-favorNewlyCreated-description">
+                    <small>
                       "Recently created files get a share of the picks, newer ones more often."
                 <label>
-                  <input aria-describedby="randomization-favor-favorHigherRated-description" aria-labelledby="randomization-favor-favorHigherRated" name="randomization-favor" type="checkbox" value="favorHigherRated">
+                  <input aria-labelledby="randomization-favor-favorHigherRated" name="randomization-favor" type="checkbox" value="favorHigherRated">
                   <span>
                     <span id="randomization-favor-favorHigherRated">
                       "Higher rated"
-                    <small id="randomization-favor-favorHigherRated-description">
+                    <small>
                       "Higher-rated files come up more often. An unrated file counts as 2.5 stars."
-            <section aria-labelledby="randomization-behavior-section-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="randomization-behavior-section-heading">
                 "Random behavior"
               <div class="setting">
-                <div aria-describedby="randomization-behavior-hint" aria-labelledby="randomization-behavior-section-heading" class="choice-stack" role="radiogroup">
+                <div aria-labelledby="randomization-behavior-section-heading" class="choice-stack" role="radiogroup">
                   <label>
-                    <input aria-describedby="randomization-behavior-jump-description" aria-labelledby="randomization-behavior-jump" name="randomization-behavior" type="radio" value="jump">
+                    <input aria-labelledby="randomization-behavior-jump" name="randomization-behavior" type="radio" value="jump">
                     <span>
                       <span id="randomization-behavior-jump">
                         "Jump"
-                      <small id="randomization-behavior-jump-description">
+                      <small>
                         "Adds the pick at the end of the history."
                   <label>
-                    <input aria-describedby="randomization-behavior-insert-description" aria-labelledby="randomization-behavior-insert" name="randomization-behavior" type="radio" value="insert">
+                    <input aria-labelledby="randomization-behavior-insert" name="randomization-behavior" type="radio" value="insert">
                     <span>
                       <span id="randomization-behavior-insert">
                         "Insert"
-                      <small id="randomization-behavior-insert-description">
+                      <small>
                         "Puts the pick right after the current item, keeping the plays ahead after it."
-                <p class="setting-hint" id="randomization-behavior-hint">
+                <p class="setting-hint">
                   "For the player's Random button and R."
             <p class="setting-hint">
               "Options apply at once and are kept on this device."
@@ -375,28 +372,28 @@ exports[`page structure > keeps the starting markup 1`] = `
             <h2>
               "Settings"
           <div class="settings-body themed-scrollbar" id="settings-body">
-            <section aria-labelledby="settings-playback-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-playback-heading">
                 "Playback"
               <div class="setting">
                 <span class="setting-label" id="settings-autoplay-mode-label">
                   "Autoplay mode"
-                <div aria-describedby="settings-autoplay-mode-hint" aria-labelledby="settings-autoplay-mode-label" class="choice-stack" role="radiogroup">
+                <div aria-labelledby="settings-autoplay-mode-label" class="choice-stack" role="radiogroup">
                   <label>
-                    <input aria-describedby="settings-autoplay-mode-normal-description" aria-labelledby="settings-autoplay-mode-normal" name="settings-autoplay-mode" type="radio" value="normal">
+                    <input aria-labelledby="settings-autoplay-mode-normal" name="settings-autoplay-mode" type="radio" value="normal">
                     <span>
                       <span id="settings-autoplay-mode-normal">
                         "Normal"
-                      <small id="settings-autoplay-mode-normal-description">
+                      <small>
                         "Photos advance after the timer; videos play to the end."
                   <label>
-                    <input aria-describedby="settings-autoplay-mode-timer-description" aria-labelledby="settings-autoplay-mode-timer" name="settings-autoplay-mode" type="radio" value="timer">
+                    <input aria-labelledby="settings-autoplay-mode-timer" name="settings-autoplay-mode" type="radio" value="timer">
                     <span>
                       <span id="settings-autoplay-mode-timer">
                         "Timer"
-                      <small id="settings-autoplay-mode-timer-description">
+                      <small>
                         "Every item advances after the timer. Pausing a video holds it."
-                <p class="setting-hint" id="settings-autoplay-mode-hint">
+                <p class="setting-hint">
                   "The player's autoplay button turns it on and off."
               <div class="setting">
                 <label class="setting-label" for="settings-advance-after">
@@ -404,15 +401,14 @@ exports[`page structure > keeps the starting markup 1`] = `
                 <div class="filter-row">
                   <span class="vfield number-field">
                     <input autocomplete="off" class="ctl" id="settings-advance-after" inputmode="numeric" type="text">
-                    <span aria-live="polite" class="visually-hidden">
                   <span>
                     "seconds"
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-loop-stops-autoplay-hint" id="settings-loop-stops-autoplay" type="checkbox">
+                    <input id="settings-loop-stops-autoplay" type="checkbox">
                     "Loop stops autoplay"
-                <p class="setting-hint" id="settings-loop-stops-autoplay-hint">
+                <p class="setting-hint">
                   "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
               <div class="setting">
                 <span class="setting-label" id="settings-seek-step-label">
@@ -433,13 +429,13 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span>
                       <span id="settings-seek-step-10">
                         "10 seconds"
-            <section aria-labelledby="settings-audio-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-audio-heading">
                 "Audio"
               <div class="setting">
                 <span class="setting-label" id="settings-volume-step-label">
                   "Volume step"
-                <div aria-describedby="settings-volume-step-hint" aria-labelledby="settings-volume-step-label" class="choice-row" role="radiogroup">
+                <div aria-labelledby="settings-volume-step-label" class="choice-row" role="radiogroup">
                   <label>
                     <input aria-labelledby="settings-volume-step-1" name="settings-volume-step" type="radio" value="1">
                     <span>
@@ -460,21 +456,21 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span>
                       <span id="settings-volume-step-10">
                         "10%"
-                <p class="setting-hint" id="settings-volume-step-hint">
+                <p class="setting-hint">
                   "Also for the scroll wheel and a two-finger drag over the player."
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-enhanced-audio-hint" id="settings-enhanced-audio" type="checkbox">
+                    <input id="settings-enhanced-audio" type="checkbox">
                     "Enhanced audio"
-                <p class="setting-hint" id="settings-enhanced-audio-hint">
+                <p class="setting-hint">
                   "Processes audio in the app, for loudness normalization and compression."
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-loudness-hint" id="settings-loudness" type="checkbox">
+                    <input id="settings-loudness" type="checkbox">
                     "Loudness normalization"
-                <p class="setting-hint" id="settings-loudness-hint">
+                <p class="setting-hint">
                   "Evens out loudness between videos."
                 <details class="setting-more" id="settings-loudness-more">
                   <summary>
@@ -486,32 +482,32 @@ exports[`page structure > keeps the starting markup 1`] = `
                       "Target loudness"
                     <div aria-labelledby="settings-loudness-target-label" class="choice-stack" role="radiogroup">
                       <label>
-                        <input aria-describedby="settings-loudness-target-automatic-description" aria-labelledby="settings-loudness-target-automatic" name="settings-loudness-target" type="radio" value="automatic">
+                        <input aria-labelledby="settings-loudness-target-automatic" name="settings-loudness-target" type="radio" value="automatic">
                         <span>
                           <span id="settings-loudness-target-automatic">
                             "Automatic"
-                          <small id="settings-loudness-target-automatic-description">
+                          <small>
                             "The library's baseline, -18.0 LUFS."
                       <label>
-                        <input aria-describedby="settings-loudness-target-quieter-description" aria-labelledby="settings-loudness-target-quieter" name="settings-loudness-target" type="radio" value="quieter">
+                        <input aria-labelledby="settings-loudness-target-quieter" name="settings-loudness-target" type="radio" value="quieter">
                         <span>
                           <span id="settings-loudness-target-quieter">
                             "Quieter"
-                          <small id="settings-loudness-target-quieter-description">
+                          <small>
                             "-23 LUFS"
                       <label>
-                        <input aria-describedby="settings-loudness-target-standard-description" aria-labelledby="settings-loudness-target-standard" name="settings-loudness-target" type="radio" value="standard">
+                        <input aria-labelledby="settings-loudness-target-standard" name="settings-loudness-target" type="radio" value="standard">
                         <span>
                           <span id="settings-loudness-target-standard">
                             "Standard"
-                          <small id="settings-loudness-target-standard-description">
+                          <small>
                             "-18 LUFS"
                       <label>
-                        <input aria-describedby="settings-loudness-target-louder-description" aria-labelledby="settings-loudness-target-louder" name="settings-loudness-target" type="radio" value="louder">
+                        <input aria-labelledby="settings-loudness-target-louder" name="settings-loudness-target" type="radio" value="louder">
                         <span>
                           <span id="settings-loudness-target-louder">
                             "Louder"
-                          <small id="settings-loudness-target-louder-description">
+                          <small>
                             "-14 LUFS"
                       <label>
                         <input aria-labelledby="settings-loudness-target-manual" name="settings-loudness-target" type="radio" value="manual">
@@ -524,7 +520,6 @@ exports[`page structure > keeps the starting markup 1`] = `
                         <div class="filter-row">
                           <span class="vfield number-field">
                             <input autocomplete="off" class="ctl" id="settings-loudness-manual-target" type="text">
-                            <span aria-live="polite" class="visually-hidden">
                           <span>
                             "LUFS"
                     <label class="setting-label" for="settings-loudness-boost">
@@ -532,25 +527,24 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <div class="filter-row">
                       <span class="vfield number-field">
                         <input autocomplete="off" class="ctl" id="settings-loudness-boost" inputmode="numeric" type="text">
-                        <span aria-live="polite" class="visually-hidden">
                       <span>
                         "dB"
                     <div class="choice-stack">
                       <label>
-                        <input aria-describedby="settings-loudness-limiting-description" aria-labelledby="settings-loudness-limiting-label" id="settings-loudness-limiting" type="checkbox">
+                        <input aria-labelledby="settings-loudness-limiting-label" id="settings-loudness-limiting" type="checkbox">
                         <span>
                           <span id="settings-loudness-limiting-label">
                             "Allow limiting"
-                          <small id="settings-loudness-limiting-description">
+                          <small>
                             "Lets quiet videos with loud moments get louder by limiting those moments."
                     <button class="btn" id="settings-loudness-reset" type="button">
                       "Reset to defaults"
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-compression-hint" id="settings-compression" type="checkbox">
+                    <input id="settings-compression" type="checkbox">
                     "Compression"
-                <p class="setting-hint" id="settings-compression-hint">
+                <p class="setting-hint">
                   "Evens out loudness within a video."
                 <details class="setting-more" id="settings-compression-more">
                   <summary>
@@ -562,97 +556,91 @@ exports[`page structure > keeps the starting markup 1`] = `
                       "Strength"
                     <div aria-labelledby="settings-compression-strength-label" class="choice-stack" role="radiogroup">
                       <label>
-                        <input aria-describedby="settings-compression-strength-light-description" aria-labelledby="settings-compression-strength-light" name="settings-compression-strength" type="radio" value="light">
+                        <input aria-labelledby="settings-compression-strength-light" name="settings-compression-strength" type="radio" value="light">
                         <span>
                           <span id="settings-compression-strength-light">
                             "Light"
-                          <small id="settings-compression-strength-light-description">
+                          <small>
                             "Evens out the loudest moments a little."
                       <label>
-                        <input aria-describedby="settings-compression-strength-medium-description" aria-labelledby="settings-compression-strength-medium" name="settings-compression-strength" type="radio" value="medium">
+                        <input aria-labelledby="settings-compression-strength-medium" name="settings-compression-strength" type="radio" value="medium">
                         <span>
                           <span id="settings-compression-strength-medium">
                             "Medium"
-                          <small id="settings-compression-strength-medium-description">
+                          <small>
                             "Brings loud and quiet moments closer."
                       <label>
-                        <input aria-describedby="settings-compression-strength-strong-description" aria-labelledby="settings-compression-strength-strong" name="settings-compression-strength" type="radio" value="strong">
+                        <input aria-labelledby="settings-compression-strength-strong" name="settings-compression-strength" type="radio" value="strong">
                         <span>
                           <span id="settings-compression-strength-strong">
                             "Strong"
-                          <small id="settings-compression-strength-strong-description">
+                          <small>
                             "Keeps loud and quiet moments close, for quiet listening."
                       <label>
-                        <input aria-describedby="settings-compression-strength-custom-description" aria-labelledby="settings-compression-strength-custom" name="settings-compression-strength" type="radio" value="custom">
+                        <input aria-labelledby="settings-compression-strength-custom" name="settings-compression-strength" type="radio" value="custom">
                         <span>
                           <span id="settings-compression-strength-custom">
                             "Custom"
-                          <small id="settings-compression-strength-custom-description">
+                          <small>
                             "Set each value yourself."
                       <div class="setting-sub" hidden="" id="settings-compression-custom">
                         <label class="setting-label" for="settings-compression-thresholdDb">
                           "Threshold"
                         <div class="filter-row">
                           <span class="vfield number-field">
-                            <input aria-describedby="settings-compression-thresholdDb-hint" autocomplete="off" class="ctl" id="settings-compression-thresholdDb" type="text">
-                            <span aria-live="polite" class="visually-hidden">
+                            <input autocomplete="off" class="ctl" id="settings-compression-thresholdDb" type="text">
                           <span>
                             "dB"
-                        <p class="setting-hint" id="settings-compression-thresholdDb-hint">
+                        <p class="setting-hint">
                           "Lower turns down more of the sound; higher, only the loudest moments."
                         <label class="setting-label" for="settings-compression-ratio">
                           "Ratio"
                         <div class="filter-row">
                           <span class="vfield number-field">
-                            <input aria-describedby="settings-compression-ratio-hint" autocomplete="off" class="ctl" id="settings-compression-ratio" inputmode="decimal" type="text">
-                            <span aria-live="polite" class="visually-hidden">
+                            <input autocomplete="off" class="ctl" id="settings-compression-ratio" inputmode="decimal" type="text">
                           <span>
                             "to 1"
-                        <p class="setting-hint" id="settings-compression-ratio-hint">
+                        <p class="setting-hint">
                           "Higher turns loud moments down harder."
                         <label class="setting-label" for="settings-compression-kneeDb">
                           "Knee"
                         <div class="filter-row">
                           <span class="vfield number-field">
-                            <input aria-describedby="settings-compression-kneeDb-hint" autocomplete="off" class="ctl" id="settings-compression-kneeDb" inputmode="decimal" type="text">
-                            <span aria-live="polite" class="visually-hidden">
+                            <input autocomplete="off" class="ctl" id="settings-compression-kneeDb" inputmode="decimal" type="text">
                           <span>
                             "dB"
-                        <p class="setting-hint" id="settings-compression-kneeDb-hint">
+                        <p class="setting-hint">
                           "Higher starts turning down more gradually, for a softer effect."
                         <label class="setting-label" for="settings-compression-attackSeconds">
                           "Attack"
                         <div class="filter-row">
                           <span class="vfield number-field">
-                            <input aria-describedby="settings-compression-attackSeconds-hint" autocomplete="off" class="ctl" id="settings-compression-attackSeconds" inputmode="numeric" type="text">
-                            <span aria-live="polite" class="visually-hidden">
+                            <input autocomplete="off" class="ctl" id="settings-compression-attackSeconds" inputmode="numeric" type="text">
                           <span>
                             "ms"
-                        <p class="setting-hint" id="settings-compression-attackSeconds-hint">
+                        <p class="setting-hint">
                           "Lower catches sudden loud sounds faster; higher lets their first moment through."
                         <label class="setting-label" for="settings-compression-releaseSeconds">
                           "Release"
                         <div class="filter-row">
                           <span class="vfield number-field">
-                            <input aria-describedby="settings-compression-releaseSeconds-hint" autocomplete="off" class="ctl" id="settings-compression-releaseSeconds" inputmode="numeric" type="text">
-                            <span aria-live="polite" class="visually-hidden">
+                            <input autocomplete="off" class="ctl" id="settings-compression-releaseSeconds" inputmode="numeric" type="text">
                           <span>
                             "ms"
-                        <p class="setting-hint" id="settings-compression-releaseSeconds-hint">
+                        <p class="setting-hint">
                           "Lower brings the sound back up faster; higher sounds smoother."
                         <label class="setting-label" for="settings-compression-makeupDb">
                           "Makeup gain"
                         <div class="filter-row">
                           <span class="vfield number-field">
-                            <input aria-describedby="settings-compression-makeupDb-hint" autocomplete="off" class="ctl" id="settings-compression-makeupDb" inputmode="decimal" type="text">
-                            <span aria-live="polite" class="visually-hidden">
+                            <input autocomplete="off" class="ctl" id="settings-compression-makeupDb" inputmode="decimal" type="text">
                           <span>
                             "dB"
-                        <p class="setting-hint" id="settings-compression-makeupDb-hint">
+                        <p class="setting-hint">
                           "Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down."
                         <button class="btn" id="settings-compression-reset" type="button">
                           "Reset to Medium"
-            <section aria-labelledby="settings-player-controls-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-player-controls-heading">
                 "Player controls"
               <div class="setting">
@@ -660,11 +648,11 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "Hide player controls"
                 <div aria-labelledby="settings-hide-controls-label" class="choice-stack" role="radiogroup">
                   <label>
-                    <input aria-describedby="settings-hide-controls-timeout-description" aria-labelledby="settings-hide-controls-timeout" name="settings-hide-controls" type="radio" value="timeout">
+                    <input aria-labelledby="settings-hide-controls-timeout" name="settings-hide-controls" type="radio" value="timeout">
                     <span>
                       <span id="settings-hide-controls-timeout">
                         "Timeout"
-                      <small id="settings-hide-controls-timeout-description">
+                      <small>
                         "They hide after a time with no activity."
                   <div class="setting-sub" id="settings-hide-timeout">
                     <label class="setting-label" for="settings-hide-after">
@@ -672,7 +660,6 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <div class="filter-row">
                       <span class="vfield number-field">
                         <input autocomplete="off" class="ctl" id="settings-hide-after" inputmode="numeric" type="text">
-                        <span aria-live="polite" class="visually-hidden">
                       <span>
                         "seconds"
                     <div class="choice-row">
@@ -680,18 +667,18 @@ exports[`page structure > keeps the starting markup 1`] = `
                         <input id="settings-keep-while-paused" type="checkbox">
                         "Keep visible while paused"
                   <label>
-                    <input aria-describedby="settings-hide-controls-click-description" aria-labelledby="settings-hide-controls-click" name="settings-hide-controls" type="radio" value="click">
+                    <input aria-labelledby="settings-hide-controls-click" name="settings-hide-controls" type="radio" value="click">
                     <span>
                       <span id="settings-hide-controls-click">
                         "On click/tap"
-                      <small id="settings-hide-controls-click-description">
+                      <small>
                         "A click or tap on the player shows or hides them."
                   <label>
                     <input aria-labelledby="settings-hide-controls-never" name="settings-hide-controls" type="radio" value="never">
                     <span>
                       <span id="settings-hide-controls-never">
                         "Never"
-            <section aria-labelledby="settings-appearance-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-appearance-heading">
                 "Appearance"
               <div class="setting">
@@ -716,9 +703,9 @@ exports[`page structure > keeps the starting markup 1`] = `
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-ambient-hint" id="settings-ambient" type="checkbox">
+                    <input id="settings-ambient" type="checkbox">
                     "Ambient mode"
-                <p class="setting-hint" id="settings-ambient-hint">
+                <p class="setting-hint">
                   "A soft glow of the picture's colors fills the black space around it."
                 <details class="setting-more" id="settings-ambient-more">
                   <summary>
@@ -731,55 +718,55 @@ exports[`page structure > keeps the starting markup 1`] = `
                         "Update rate"
                       <output for="settings-ambient-rate">
                         "1 per second"
-                    <input aria-labelledby="settings-ambient-rate-label" aria-valuetext="1 per second" id="settings-ambient-rate" max="4" min="0.25" step="0.25" type="range">
+                    <input aria-labelledby="settings-ambient-rate-label" id="settings-ambient-rate" max="4" min="0.25" step="0.25" type="range">
                     <label for="settings-ambient-fade">
                       <span id="settings-ambient-fade-label">
                         "Fade time"
                       <output for="settings-ambient-fade">
                         "2 s"
-                    <input aria-labelledby="settings-ambient-fade-label" aria-valuetext="2 s" id="settings-ambient-fade" max="4" min="0.25" step="0.25" type="range">
+                    <input aria-labelledby="settings-ambient-fade-label" id="settings-ambient-fade" max="4" min="0.25" step="0.25" type="range">
                     <label for="settings-ambient-blur">
                       <span id="settings-ambient-blur-label">
                         "Blur"
                       <output for="settings-ambient-blur">
                         "64 px"
-                    <input aria-labelledby="settings-ambient-blur-label" aria-valuetext="64 px" id="settings-ambient-blur" max="80" min="10" step="1" type="range">
+                    <input aria-labelledby="settings-ambient-blur-label" id="settings-ambient-blur" max="80" min="10" step="1" type="range">
                     <label for="settings-ambient-dark">
                       <span id="settings-ambient-dark-label">
                         "Strength in the dark theme"
                       <output for="settings-ambient-dark">
                         "50%"
-                    <input aria-labelledby="settings-ambient-dark-label" aria-valuetext="50%" id="settings-ambient-dark" max="100" min="0" step="1" type="range">
+                    <input aria-labelledby="settings-ambient-dark-label" id="settings-ambient-dark" max="100" min="0" step="1" type="range">
                     <label for="settings-ambient-light">
                       <span id="settings-ambient-light-label">
                         "Strength in the light theme"
                       <output for="settings-ambient-light">
                         "75%"
-                    <input aria-labelledby="settings-ambient-light-label" aria-valuetext="75%" id="settings-ambient-light" max="100" min="0" step="1" type="range">
+                    <input aria-labelledby="settings-ambient-light-label" id="settings-ambient-light" max="100" min="0" step="1" type="range">
                     <label for="settings-ambient-saturation">
                       <span id="settings-ambient-saturation-label">
                         "Saturation"
                       <output for="settings-ambient-saturation">
                         "100%"
-                    <input aria-labelledby="settings-ambient-saturation-label" aria-valuetext="100%" id="settings-ambient-saturation" max="200" min="0" step="5" type="range">
+                    <input aria-labelledby="settings-ambient-saturation-label" id="settings-ambient-saturation" max="200" min="0" step="5" type="range">
                     <button class="btn" id="settings-ambient-reset" type="button">
                       "Reset to defaults"
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-tile-names-hint" id="settings-tile-names" type="checkbox">
+                    <input id="settings-tile-names" type="checkbox">
                     "Show file names on tiles"
-                <p class="setting-hint" id="settings-tile-names-hint">
+                <p class="setting-hint">
                   "Hovering a tile shows its name either way."
-            <section aria-labelledby="settings-notifications-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-notifications-heading">
                 "Notifications"
               <div class="setting">
                 <div class="choice-row">
                   <label>
-                    <input aria-describedby="settings-popups-hint" id="settings-popups" type="checkbox">
+                    <input id="settings-popups" type="checkbox">
                     "Show popups"
-                <p class="setting-hint" id="settings-popups-hint">
+                <p class="setting-hint">
                   "Short messages over the player. The bell on the player lists them either way."
                 <details class="setting-more" id="settings-popups-more">
                   <summary>
@@ -791,39 +778,39 @@ exports[`page structure > keeps the starting markup 1`] = `
                       "Show popups for"
                     <div aria-labelledby="settings-popup-kinds-label" class="choice-stack" role="group">
                       <label>
-                        <input aria-describedby="settings-popup-kinds-actions-description" aria-labelledby="settings-popup-kinds-actions" name="settings-popup-kinds" type="checkbox" value="actions">
+                        <input aria-labelledby="settings-popup-kinds-actions" name="settings-popup-kinds" type="checkbox" value="actions">
                         <span>
                           <span id="settings-popup-kinds-actions">
                             "Your actions"
-                          <small id="settings-popup-kinds-actions-description">
+                          <small>
                             "Such as Added to favorites, Filters applied, and Path copied."
                       <label>
-                        <input aria-describedby="settings-popup-kinds-devices-description" aria-labelledby="settings-popup-kinds-devices" name="settings-popup-kinds" type="checkbox" value="devices">
+                        <input aria-labelledby="settings-popup-kinds-devices" name="settings-popup-kinds" type="checkbox" value="devices">
                         <span>
                           <span id="settings-popup-kinds-devices">
                             "Other devices"
-                          <small id="settings-popup-kinds-devices-description">
+                          <small>
                             "Favorites, blacklist, rating, and preset changes made on another device."
                       <label>
-                        <input aria-describedby="settings-popup-kinds-refresh-description" aria-labelledby="settings-popup-kinds-refresh" name="settings-popup-kinds" type="checkbox" value="refresh">
+                        <input aria-labelledby="settings-popup-kinds-refresh" name="settings-popup-kinds" type="checkbox" value="refresh">
                         <span>
                           <span id="settings-popup-kinds-refresh">
                             "Library refresh"
-                          <small id="settings-popup-kinds-refresh-description">
+                          <small>
                             "When a refresh finishes or fails."
                       <label>
-                        <input aria-describedby="settings-popup-kinds-skips-description" aria-labelledby="settings-popup-kinds-skips" name="settings-popup-kinds" type="checkbox" value="skips">
+                        <input aria-labelledby="settings-popup-kinds-skips" name="settings-popup-kinds" type="checkbox" value="skips">
                         <span>
                           <span id="settings-popup-kinds-skips">
                             "Skipped files"
-                          <small id="settings-popup-kinds-skips-description">
+                          <small>
                             "When playback skips a missing file or one this browser can't play."
                       <label>
-                        <input aria-describedby="settings-popup-kinds-connection-description" aria-labelledby="settings-popup-kinds-connection" name="settings-popup-kinds" type="checkbox" value="connection">
+                        <input aria-labelledby="settings-popup-kinds-connection" name="settings-popup-kinds" type="checkbox" value="connection">
                         <span>
                           <span id="settings-popup-kinds-connection">
                             "Connection"
-                          <small id="settings-popup-kinds-connection-description">
+                          <small>
                             "When the connection to the server comes back, or the library can't load more."
                     <label class="setting-label" for="settings-popup-position">
                       "Position"
@@ -864,7 +851,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                             "10 seconds"
                     <p class="setting-hint">
                       "Pointing at a popup keeps it. A warning stays until you close it."
-            <section aria-labelledby="settings-panel-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-panel-heading">
                 "Panel"
               <div class="setting">
@@ -886,30 +873,30 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "Auto-Pause"
                 <div aria-labelledby="settings-auto-pause-label" class="choice-stack" role="radiogroup">
                   <label>
-                    <input aria-describedby="settings-auto-pause-responsive-description" aria-labelledby="settings-auto-pause-responsive" name="settings-auto-pause" type="radio" value="responsive">
+                    <input aria-labelledby="settings-auto-pause-responsive" name="settings-auto-pause" type="radio" value="responsive">
                     <span>
                       <span id="settings-auto-pause-responsive">
                         "Responsive"
-                      <small id="settings-auto-pause-responsive-description">
+                      <small>
                         "Pauses only while the panel or the admin view covers the player."
                   <label>
-                    <input aria-describedby="settings-auto-pause-always-description" aria-labelledby="settings-auto-pause-always" name="settings-auto-pause" type="radio" value="always">
+                    <input aria-labelledby="settings-auto-pause-always" name="settings-auto-pause" type="radio" value="always">
                     <span>
                       <span id="settings-auto-pause-always">
                         "Always"
-                      <small id="settings-auto-pause-always-description">
+                      <small>
                         "Pauses whenever the panel opens."
                   <label>
                     <input aria-labelledby="settings-auto-pause-never" name="settings-auto-pause" type="radio" value="never">
                     <span>
                       <span id="settings-auto-pause-never">
                         "Never"
-            <section aria-labelledby="settings-shortcuts-heading" class="settings-section">
+            <section class="settings-section">
               <details class="setting-more shortcuts-more" id="settings-shortcuts">
                 <summary>
                   <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
                     "chevron_right"
-                  <h3 id="settings-shortcuts-heading">
+                  <h3>
                     "Keyboard shortcuts"
                 <dl class="shortcut-list">
                   <dt>
@@ -1038,7 +1025,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                     "Close the top dialog, the notifications list, the rating stars, or the panel, or leave fullscreen"
                 <p class="setting-hint">
                   "Shortcuts do nothing while you type in a text field."
-            <section aria-labelledby="settings-diagnostics-heading" class="settings-section">
+            <section class="settings-section">
               <h3 id="settings-diagnostics-heading">
                 "Diagnostics"
               <dl class="diag">
@@ -1068,9 +1055,9 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "…"
             <p class="setting-hint">
               "Settings apply at once and are kept on this device."
-    <section aria-labelledby="notify-title" class="notify-list" hidden="" id="notify-list" role="dialog">
+    <section class="notify-list" hidden="" id="notify-list">
       <div class="notify-head">
-        <h2 id="notify-title">
+        <h2>
           "Notifications"
         <button class="btn" data-act="clear" disabled="" type="button">
           "Clear"

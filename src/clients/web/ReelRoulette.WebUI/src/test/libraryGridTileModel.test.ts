@@ -58,7 +58,7 @@ describe("libraryGridTileModel", () => {
     expect(other).toContain('class="library-grid-tile"');
     for (const html of [playing, other]) {
       expect(html).toContain(
-        '<div class="library-grid-tile-playing" aria-hidden="true"><span class="material-symbol-icon is-filled">play_circle</span></div>'
+        '<div class="library-grid-tile-playing"><span class="material-symbol-icon is-filled">play_circle</span></div>'
       );
     }
   });
@@ -84,10 +84,9 @@ describe("libraryGridTileModel", () => {
     expect(html).toContain('<div class="library-grid-tile-filename">clip.mp4</div>');
   });
 
-  it("includes data-item-id and the button role", () => {
+  it("includes data-item-id", () => {
     const html = renderGridTileHtml(baseTile, buildThumbnailUrl("http://localhost:51301", "item-1"));
     expect(html).toContain('data-item-id="item-1"');
-    expect(html).toContain('role="button"');
   });
 
   it("hasGridStateIndicator is true when favorite or blacklisted", () => {

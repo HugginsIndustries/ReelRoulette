@@ -200,15 +200,14 @@ describe("the dialog component", () => {
 
     await type(name, "  ");
     expect(save.disabled).toBe(true);
-    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(name.closest(".vfield")!.querySelector(".vfield-icon")).toBeNull();
     fireEvent.keyDown(name, { key: "Enter" });
     await settle();
 
     await type(name, "BOB");
-    expect(name.getAttribute("aria-invalid")).toBe("true");
-    expect(document.getElementById(name.getAttribute("aria-describedby")!)?.textContent).toBe("Use a name no other tag has.");
+    expect(name.closest(".vfield")!.querySelector(".vfield-icon")).not.toBeNull();
+    expect(name.closest(".vfield")!.querySelector(".vfield-tip")?.textContent).toBe("Use a name no other tag has.");
     expect(save.disabled).toBe(true);
-    expect(save.hasAttribute("aria-disabled")).toBe(false);
     expect(save.classList.contains("shows-problem")).toBe(false);
     fireEvent.keyDown(name, { key: "Enter" });
     await settle();

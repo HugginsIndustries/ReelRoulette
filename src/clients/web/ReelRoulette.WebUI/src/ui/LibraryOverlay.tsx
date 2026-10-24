@@ -40,16 +40,13 @@ export function LibraryOverlay() {
     <div id="library-overlay" class={settings.tileNames.value ? "library-overlay show-tile-names" : "library-overlay"}>
       <div class="library-overlay-header">
         <h2>Library</h2>
-        <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden={summary === null}>
-          <span aria-hidden="true">{summary?.shown}</span>
-          <span class="visually-hidden">{summary?.spoken}</span>
+        <p id="library-overlay-summary" class="library-overlay-summary" hidden={summary === null}>
+          {summary}
         </p>
         <button
           id="library-controls-toggle"
           class="icon-glyph-base icon-glyph-button library-controls-toggle"
           type="button"
-          aria-expanded={!collapsed}
-          aria-controls="library-filter-summary library-random-line library-controls"
           aria-label={collapsed ? "Show library controls and filters" : "Hide library controls and filters"}
           title={collapsed ? "Show controls & filters" : "Hide controls & filters"}
           onClick={library.toggleControls}
@@ -165,12 +162,6 @@ function LibraryGrid() {
 
 function LibraryMessage({ message }: { message: LibraryOverlayMessage }) {
   return (
-    <p
-      class={message.error ? "library-overlay-status library-overlay-status-error" : "library-overlay-status"}
-      role={message.error ? "alert" : undefined}
-      aria-live={message.live ? "polite" : undefined}
-    >
-      {message.text}
-    </p>
+    <p class={message.error ? "library-overlay-status library-overlay-status-error" : "library-overlay-status"}>{message.text}</p>
   );
 }

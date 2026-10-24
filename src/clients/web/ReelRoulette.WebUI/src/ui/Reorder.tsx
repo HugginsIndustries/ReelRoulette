@@ -1,14 +1,6 @@
 import type { RefObject } from "preact";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
-import {
-  autoScrollStep,
-  draggedRowTop,
-  dragStarts,
-  dropIndex,
-  movedAnnouncement,
-  rowShifts,
-  type RowBox
-} from "../reorder/reorder";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { autoScrollStep, draggedRowTop, dragStarts, dropIndex, rowShifts, type RowBox } from "../reorder/reorder";
 
 // Reordering by drag handle. A row moves only by its handle, so a drag anywhere else on the row still scrolls on a
 // touch screen. The rows stay where they are in the page while one is dragged: the dragged row follows the pointer,
@@ -18,7 +10,7 @@ import {
 export interface ReorderOptions {
   /** The keys of the rows that can move, in order. */
   keys: readonly string[];
-  /** A row's name, as screen readers hear it. */
+  /** A row's name, which its handle's name says. */
   nameOf: (key: string) => string;
   /** Moves the row at `from` to `to`, counted among the rows that can move. */
   onMove: (from: number, to: number) => void;
@@ -27,7 +19,6 @@ export interface ReorderOptions {
 /** What a movable row's handle takes. */
 export interface DragHandleControl {
   name: string;
-  helpId: string;
   onPointerDown: (event: PointerEvent) => void;
 }
 
@@ -38,10 +29,6 @@ export interface Reorder {
   row: (key: string) => (element: HTMLElement | null) => void;
   /** What the handle of the row with this key takes. */
   handle: (key: string) => DragHandleControl;
-  /** The help line's id, which each handle's description reads. */
-  helpId: string;
-  /** What screen readers last heard about a move. */
-  announcement: string;
 }
 
 interface Drag {
@@ -97,21 +84,12 @@ function refsByKey<T extends HTMLElement>(elements: Map<string, T>): (key: strin
   };
 }
 
-function createReorder(
-  latest: RefObject<ReorderOptions>,
-  setDragging: (key: string | null) => void,
-  setAnnouncement: (text: string) => void
-) {
+function createReorder(latest: RefObject<ReorderOptions>, setDragging: (key: string | null) => void) {
   const rows = new Map<string, HTMLElement>();
   let drag: Drag | null = null;
   // After a drop, where its list was scrolled to, which it keeps once the rows render in their new order, however the
   // browser scrolled it as the rows moved.
   let dropScroll: { scroller: HTMLElement | null; top: number } | null = null;
-
-  function move(key: string, from: number, to: number, count: number): void {
-    latest.current.onMove(from, to);
-    setAnnouncement(movedAnnouncement(latest.current.nameOf(key), to, count));
-  }
 
   function measure(current: Drag): boolean {
     const row = rows.get(current.key);
@@ -228,7 +206,7 @@ function createReorder(
       return;
     }
     if (current.boxes && current.to !== current.from) {
-      move(current.key, current.from, current.to, current.keys.length);
+      latest.current.onMove(current.from, current.to);
     }
     if (!current.started) {
       return;
@@ -297,17 +275,12 @@ function createReorder(
   };
 }
 
-/**
- * Reorders a list's rows by their drag handles. Each move goes to `onMove`, then screen readers hear the moved row's
- * new position.
- */
+/** Reorders a list's rows by their drag handles. Each move goes to `onMove`. */
 export function useReorder(options: ReorderOptions): Reorder {
   const latest = useRef(options);
   latest.current = options;
-  const helpId = useId();
   const [dragging, setDragging] = useState<string | null>(null);
-  const [announcement, setAnnouncement] = useState("");
-  const [controller] = useState(() => createReorder(latest, setDragging, setAnnouncement));
+  const [controller] = useState(() => createReorder(latest, setDragging));
   useLayoutEffect(() => {
     controller.afterRender(dragging);
   });
@@ -317,11 +290,8 @@ export function useReorder(options: ReorderOptions): Reorder {
     row: controller.rowRef,
     handle: (key) => ({
       name: options.nameOf(key),
-      helpId,
       onPointerDown: (event) => controller.pointerDown(key, event)
-    }),
-    helpId,
-    announcement
+    })
   };
 }
 
@@ -337,27 +307,10 @@ export function DragHandle(props: { control: DragHandleControl } | { fixed: stri
       </button>
     );
   }
-  const { name, helpId, onPointerDown } = props.control;
+  const { name, onPointerDown } = props.control;
   return (
-    <button
-      type="button"
-      class={HANDLE}
-      title="Drag to reorder"
-      aria-label={`Reorder ${name}`}
-      aria-describedby={helpId}
-      onPointerDown={onPointerDown}
-    >
+    <button type="button" class={HANDLE} title="Drag to reorder" aria-label={`Reorder ${name}`} onPointerDown={onPointerDown}>
       {icon}
     </button>
-  );
-}
-
-/** The list's help line, which each handle's description reads, and where screen readers hear each move. */
-export function ReorderStatus({ reorder }: { reorder: Reorder }) {
-  return (
-    <>
-      <p id={reorder.helpId} class="visually-hidden">Drag to reorder.</p>
-      <div class="visually-hidden" aria-live="polite">{reorder.announcement}</div>
-    </>
   );
 }

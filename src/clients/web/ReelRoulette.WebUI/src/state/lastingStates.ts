@@ -44,7 +44,7 @@ export interface LastingState {
   icon: string;
   /** The text, which ends in an ellipsis when the indicator is too narrow for it. */
   title: string;
-  /** A percentage after the text, hidden from screen readers so each step isn't announced, or null. */
+  /** A percentage after the text, or null. */
   progress: string | null;
   /** A state the server is in that keeps the page from working, whose icon is orange. */
   warning: boolean;

@@ -37,7 +37,7 @@ export function NotifyButton() {
   }
 
   return (
-    <button id="notify-btn" type="button" class={unread > 0 ? `${BELL_CLASS} has-unread` : BELL_CLASS} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="notify-list" onClick={onClick}>
+    <button id="notify-btn" type="button" class={[BELL_CLASS, open ? "is-open" : null, unread > 0 ? "has-unread" : null].filter(Boolean).join(" ")} aria-label={label} title={label} onClick={onClick}>
       <span class="material-symbol-icon">notifications</span>
       <span class="notify-badge" hidden={unread === 0}>{unread > 9 ? "9+" : String(unread)}</span>
     </button>
@@ -53,7 +53,7 @@ export function Popups() {
   const { notifications } = useApp();
   const popups = notifications.popups.value;
   return (
-    <div id="toasts" class="toasts" role="status" aria-live="polite" data-pos={notifications.settings.value.position}>
+    <div id="toasts" class="toasts" data-pos={notifications.settings.value.position}>
       {popups.map((popup) => (
         <Toast key={popup.id} popup={popup} />
       ))}
@@ -132,7 +132,7 @@ function Toast({ popup }: { popup: Popup }) {
   const className = ["toast", entry.warning ? "is-warning" : "", popup.leaving ? "is-leaving" : ""].filter(Boolean).join(" ");
   return (
     <div class={className} data-key={popup.key} ref={box}>
-      <span class="material-symbol-icon" aria-hidden="true">{entry.icon}</span>
+      <span class="material-symbol-icon">{entry.icon}</span>
       <div class="toast-text">
         <div>{entry.text}</div>
         {entry.detail ? <div class="toast-detail">{entry.detail}</div> : null}
@@ -156,7 +156,7 @@ interface ListRow {
 function EntryRow({ row }: { row: ListRow }) {
   return (
     <li class={row.className}>
-      <span class="material-symbol-icon" aria-hidden="true">{row.icon}</span>
+      <span class="material-symbol-icon">{row.icon}</span>
       <span class="notify-text">{row.text}</span>
       <span class="notify-time">{row.time}</span>
       {row.detail ? <span class="notify-detail">{row.detail}</span> : null}
@@ -249,9 +249,9 @@ export function NotificationList() {
     : [];
 
   return (
-    <section id="notify-list" class="notify-list" role="dialog" aria-labelledby="notify-title" hidden={!open} ref={list}>
+    <section id="notify-list" class="notify-list" hidden={!open} ref={list}>
       <div class="notify-head">
-        <h2 id="notify-title">Notifications</h2>
+        <h2>Notifications</h2>
         <button type="button" class="btn" data-act="clear" disabled={entries.length === 0} onClick={() => notifications.clear()}>Clear</button>
         <button type="button" class="icon-btn" data-act="close" aria-label="Close" title="Close" onClick={() => notifications.closeList()}>
           <span class="material-symbol-icon">close</span>

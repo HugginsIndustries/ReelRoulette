@@ -1,5 +1,5 @@
 import type { ComponentChildren, JSX, RefObject } from "preact";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
   createSettingField,
   isFlagged,
@@ -50,10 +50,8 @@ function fadeClasses(classes: string, leaving: boolean): string {
   return leaving ? `${classes} is-fading-out` : classes;
 }
 
-/** What a validated control takes: its invalid state and description while flagged, and focus for the tooltip. */
+/** What a validated control takes: focus, which shows the tooltip. */
 export interface ValidatedControlProps {
-  "aria-invalid"?: "true";
-  "aria-describedby"?: string;
   onFocus: () => void;
   onBlur: () => void;
 }
@@ -74,7 +72,7 @@ export interface FieldValidationOptions<F extends string = string, T extends HTM
 export interface FieldValidation<T extends HTMLElement> {
   /** For the field's control, which a reveal or a tap on the icon focuses. */
   control: ValidatedControlProps & { ref: RefObject<T | null> };
-  /** For another control checked with it, such as the other dropdown of a pair: marked and described with it. */
+  /** For another control checked with it, such as the other dropdown of a pair, whose focus also shows the tooltip. */
   partner: ValidatedControlProps;
   /**
    * The red icon and its tooltip while the field is flagged, and while they fade out once it isn't, for the caller to
@@ -134,7 +132,6 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
   options: FieldValidationOptions<F, T>
 ): FieldValidation<T> {
   const { problem, flagged, reveal } = options;
-  const tipId = useId();
   const ownControl = useRef<T>(null);
   const control = options.controlRef ?? ownControl;
   const icon = useRef<HTMLSpanElement>(null);
@@ -187,7 +184,6 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
   }, [shown, problem?.message]);
 
   const partner: ValidatedControlProps = {
-    ...(flagged ? { "aria-invalid": "true", "aria-describedby": tipId } : {}),
     onFocus: () => setFocused(true),
     onBlur: () => setFocused(false)
   };
@@ -198,7 +194,6 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
         <span
           ref={icon}
           class={fadeClasses("vfield-icon material-symbol-icon", iconFade.leaving)}
-          aria-hidden="true"
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") {
               setHover(true);
@@ -216,8 +211,6 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
         </span>
         <span
           ref={tip}
-          id={tipId}
-          role="tooltip"
           class={fadeClasses(tipFade.rendered ? "vfield-tip is-shown" : "vfield-tip", tipFade.leaving || iconFade.leaving)}
         >
           {marked.message}
@@ -261,18 +254,15 @@ export interface SettingTextFieldProps extends SettingFieldOptions {
    * the value saved again.
    */
   revision?: number;
-  /** The id of the field's hint, which describes it while it isn't flagged; flagged, its problem does. */
-  describedBy?: string;
 }
 
 /**
  * The text field of a setting that applies without Save and must always hold a value, with the pattern's icon:
  * `createSettingField`'s rule, saving on Enter or when the field loses focus or hides, and showing the value saved
- * again once it does. A save that changes the value shows a green check in the red icon's place while it says so, and
- * a polite live region says "Saved".
+ * again once it does. A save that changes the value shows a green check in the red icon's place while it says so.
  */
 export function SettingTextField(props: SettingTextFieldProps) {
-  const { id, class: extraClass, inputMode, shown, revision, describedBy } = props;
+  const { id, class: extraClass, inputMode, shown, revision } = props;
   // The latest render's callbacks, so the field reads what the page holds now.
   const latest = useRef(props);
   latest.current = props;
@@ -304,22 +294,12 @@ export function SettingTextField(props: SettingTextFieldProps) {
       problem={problem}
       flagged={isFlagged(problem)}
       trailing={
-        <>
-          {check.rendered ? (
-            <span class={fadeClasses("vfield-saved material-symbol-icon", check.leaving)} aria-hidden="true">
-              check_circle
-            </span>
-          ) : null}
-          <span class="visually-hidden" aria-live="polite">
-            {saved ? "Saved" : ""}
-          </span>
-        </>
+        check.rendered ? <span class={fadeClasses("vfield-saved material-symbol-icon", check.leaving)}>check_circle</span> : null
       }
     >
       {(control) => (
         <input
           {...control}
-          aria-describedby={control["aria-describedby"] ?? describedBy}
           type="text"
           inputMode={inputMode}
           id={id}
@@ -362,14 +342,14 @@ export interface HeldButtonProps {
    * from `actionBlock`. The field says why, so the button shows nothing more, unless `disabledReason` does.
    */
   disabled: boolean;
-  /** Why a flagged field elsewhere holds the action, its title and accessible description, or null while none does. */
+  /** Why a flagged field elsewhere holds the action, its title, or null while none does. */
   heldReason: string | null;
-  /** Why the action is disabled when no field says why, its title and accessible description while it is disabled. */
+  /** Why the action is disabled when no field says why, its title while it is disabled. */
   disabledReason?: string | null;
   /**
    * Why the action is blocked, for one whose reason has to be seen on a phone or tablet, which shows no tooltip, such as
    * Apply while presets would take each other's names. It shows as a held action does, ahead of any field that holds it,
-   * with this reason as its title and accessible description, and its press still goes to `onClick`, which shows why.
+   * with this reason as its title, and its press still goes to `onClick`, which shows why.
    */
   blockedReason?: string | null;
   onClick: () => void;
@@ -378,50 +358,32 @@ export interface HeldButtonProps {
 
 /**
  * An action that uses fields of the pattern. While it is disabled, it dims and pressing it does nothing. While a
- * field elsewhere holds it, its label, or an icon button's icon, dims, it reads as unavailable, the red icon shows as a
+ * field elsewhere holds it, its label, or an icon button's icon, dims, the red icon shows as a
  * badge on its top-right corner, out of its flow, or its unsaved-changes dot turns red when it has one, or a red dot
  * shows with `heldDot`, and its click handler moves to that field instead of acting. A blocked action looks the same,
  * and its click handler shows why.
  */
 export function HeldButton({ id, class: extraClass, label, dot, heldDot, disabled, heldReason, disabledReason, blockedReason, onClick, children }: HeldButtonProps) {
-  const describedId = useId();
   const blocked = !disabled && !!blockedReason;
   const held = !disabled && !blocked && heldReason !== null;
   const showsProblem = held || blocked;
   const reason = blocked ? blockedReason! : held ? heldReason : disabled ? (disabledReason ?? null) : null;
-  // Only the icon fades out; the button's state and its description change at once. A button with a dot shows none.
+  // Only the icon fades out; the button's look and its title change at once. A button with a dot shows none.
   const iconFade = useFadeOut(showsProblem);
   const classes = ["held-action", extraClass, showsProblem ? "shows-problem" : null].filter(Boolean).join(" ");
   return (
-    <>
-      <button
-        id={id}
-        type="button"
-        class={classes}
-        disabled={disabled}
-        aria-disabled={showsProblem ? "true" : undefined}
-        aria-describedby={reason !== null ? describedId : undefined}
-        aria-label={label}
-        title={reason ?? label}
-        onClick={onClick}
-      >
-        <span class="btn-label">{children}</span>
-        {dot !== undefined ? (
-          <span class="unsaved-dot" hidden={!dot}></span>
-        ) : !iconFade.rendered ? null : heldDot ? (
-          <span class={fadeClasses("held-dot", iconFade.leaving)} aria-hidden="true"></span>
-        ) : (
-          <span class={fadeClasses("btn-problem material-symbol-icon", iconFade.leaving)} aria-hidden="true">
-            error
-          </span>
-        )}
-      </button>
-      {reason !== null ? (
-        <span id={describedId} class="visually-hidden">
-          {reason}
+    <button id={id} type="button" class={classes} disabled={disabled} aria-label={label} title={reason ?? label} onClick={onClick}>
+      <span class="btn-label">{children}</span>
+      {dot !== undefined ? (
+        <span class="unsaved-dot" hidden={!dot}></span>
+      ) : !iconFade.rendered ? null : heldDot ? (
+        <span class={fadeClasses("held-dot", iconFade.leaving)}></span>
+      ) : (
+        <span class={fadeClasses("btn-problem material-symbol-icon", iconFade.leaving)} aria-hidden="true">
+          error
         </span>
-      ) : null}
-    </>
+      )}
+    </button>
   );
 }
 

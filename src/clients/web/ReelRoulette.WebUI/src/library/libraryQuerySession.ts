@@ -6,7 +6,6 @@ import type { ItemRatingChangedPayload } from "../types/serverContracts";
 import {
   createDefaultBrowseControls,
   formatBrowseResultSummary,
-  type BrowseResultSummary,
   type LibraryBrowseControls,
   type LibrarySortMode
 } from "./libraryBrowseModel";
@@ -51,7 +50,7 @@ export interface LibraryQuerySessionSnapshot {
   /** The failed load's HTTP status, when the error carried one, such as 408 from a server stalled on its storage. */
   errorStatus: number | null;
   /** The count line, while the window is ready. */
-  summary: BrowseResultSummary | null;
+  summary: string | null;
   searchQuery: string;
   overlayVisible: boolean;
   scrollTop: number;

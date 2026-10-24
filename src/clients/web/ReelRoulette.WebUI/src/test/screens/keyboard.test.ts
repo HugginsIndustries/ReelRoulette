@@ -14,6 +14,7 @@ import {
   settle,
   STAR_WIDTH,
   STARS_LEFT,
+  starsShown,
   status,
   stubFullscreenApi,
   stubStarLayout,
@@ -838,7 +839,7 @@ describe("the Stats tab's rating", () => {
       fireEvent.click(stars, { button: 0, clientX: x });
       await settle();
 
-      expect(stars.getAttribute("aria-valuetext")).toBe("3 stars");
+      expect(starsShown(stars)).toBe(3);
       await waitFor(() => expect(server.requests("POST", "/api/rating").map((call) => call.body?.rating)).toEqual([3]));
       expect(document.activeElement).toBe(focused);
 

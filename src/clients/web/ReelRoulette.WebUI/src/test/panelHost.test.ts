@@ -172,11 +172,10 @@ describe("panel host", () => {
     it("starts at 420 px, and stays between 360 px and the width that leaves the player 400 px", () => {
       const { panel } = setup({ width: 1200 });
       expect(panel.width.value).toBe(420);
-      // The stage, less the 12 px handle and the player's 400 px.
-      expect(panel.maxWidth.value).toBe(788);
 
       panel.setWidth(200, true);
       expect(panel.width.value).toBe(360);
+      // The stage, less the 12 px handle and the player's 400 px.
       panel.setWidth(2000, true);
       expect(panel.width.value).toBe(788);
       panel.setWidth(533.4, true);
@@ -184,27 +183,31 @@ describe("panel host", () => {
     });
 
     it("leaves room for the wider handle on a touch screen", () => {
-      expect(setup({ width: 1200, coarse: true }).panel.maxWidth.value).toBe(780);
+      const { panel } = setup({ width: 1200, coarse: true });
+      panel.setWidth(2000, true);
+      expect(panel.width.value).toBe(780);
     });
 
     it("leaves room for the handle as wide as it shows, and as the stylesheet sets it while hidden", async () => {
       const { panel, elements, viewport } = setup({ width: 1200 });
       elements.handle.width = 16;
-      expect(panel.maxWidth.value).toBe(788);
+      panel.setWidth(2000, true);
+      expect(panel.width.value).toBe(788);
       await panel.toggle();
-      expect(panel.maxWidth.value).toBe(784);
+      expect(panel.width.value).toBe(784);
       viewport.set({ width: 1000 });
-      expect(panel.maxWidth.value).toBe(584);
+      expect(panel.width.value).toBe(584);
     });
 
     it("goes by the stage's width once it renders, and is never narrower than 360 px", () => {
       const { panel, stage, viewport } = setup({ width: 1200 });
+      panel.setWidth(2000, true);
       stage.width = 1176;
       viewport.set({});
-      expect(panel.maxWidth.value).toBe(764);
+      expect(panel.width.value).toBe(764);
       stage.width = 772;
       viewport.set({});
-      expect(panel.maxWidth.value).toBe(360);
+      expect(panel.width.value).toBe(360);
     });
 
     it("remembers the width only when asked, and keeps it while a narrower window holds the panel narrower", () => {

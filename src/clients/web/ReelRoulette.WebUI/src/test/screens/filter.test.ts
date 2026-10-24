@@ -27,7 +27,7 @@ import {
   selectedPresetLabel,
   setViewport,
   settle,
-  sliderValue,
+  starsShown,
   status,
   stubStarLayout,
   stubRowLayout,
@@ -244,10 +244,14 @@ function fieldIcon(field: HTMLElement): HTMLElement | null {
   return field.closest(".vfield")?.querySelector<HTMLElement>(".vfield-icon:not(.is-fading-out)") ?? null;
 }
 
-/** The tooltip that describes a flagged field. */
+/** Whether a field shows its red icon, not counting one that is fading out. */
+function flagged(field: HTMLElement): boolean {
+  return fieldIcon(field) !== null;
+}
+
+/** The tooltip beside a flagged field's red icon, which says what the field expects. */
 function tooltipOf(field: HTMLElement): HTMLElement | null {
-  const id = field.getAttribute("aria-describedby");
-  return id ? document.getElementById(id) : null;
+  return field.closest(".vfield")?.querySelector<HTMLElement>(".vfield-tip") ?? null;
 }
 
 /** Whether a flagged field's tooltip shows, not counting one that is fading out. */
@@ -262,7 +266,7 @@ function tooltipShown(field: HTMLElement): boolean {
  * dot turned red.
  */
 function heldState(button: HTMLButtonElement): { held: boolean; marked: boolean } {
-  const held = button.getAttribute("aria-disabled") === "true";
+  const held = button.classList.contains("shows-problem");
   const dot = button.querySelector<HTMLElement>(".unsaved-dot");
   if (dot) {
     expect(button.querySelector(".btn-problem")).toBeNull();
@@ -438,11 +442,6 @@ async function dragPreset(name: string, places: number): Promise<void> {
   await pointerMove(start + past);
   await pointerMove((from + places) * 40 + 20 + past);
   await pointerUp();
-}
-
-/** What screen readers last heard about a preset moving. */
-function presetAnnouncement(): string {
-  return byId("filter-panel-presets").querySelector("[aria-live]")?.textContent ?? "";
 }
 
 /** The in-app dialogs open, in document order: Edit Preset, inside the filter dialog, comes before a confirmation. */
@@ -968,7 +967,7 @@ describe("General tab", () => {
     }
 
     await type(min, "");
-    expect(min.hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(min)).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
     expect(applyShowsChanges()).toBe(true);
     const applied = await applyAndWait(server);
@@ -982,20 +981,17 @@ describe("General tab", () => {
     expect((await applyAndWait(server)).maxDuration).toBe("00:02:00");
   });
 
-  it("flags a duration that is not valid as it is typed, with its tooltip as the field's description", async () => {
+  it("flags a duration that is not valid as it is typed, with its red icon and its tooltip in the field", async () => {
     await mountFilter();
     await openDialog();
     const min = byId<HTMLInputElement>("filter-min-dur-text");
-    expect(min.hasAttribute("aria-invalid")).toBe(false);
     expect(fieldIcon(min)).toBeNull();
 
     for (const text of ["1:7x", "12abc", "1:75"]) {
       fireEvent.input(min, { target: { value: text } });
       await settle();
-      expect(min.getAttribute("aria-invalid"), text).toBe("true");
+      expect(flagged(min), text).toBe(true);
       expect(tooltipOf(min)?.textContent, text).toBe("Use MM:SS, HH:MM:SS, or seconds.");
-      expect(tooltipOf(min)?.getAttribute("role")).toBe("tooltip");
-      expect(fieldIcon(min)?.getAttribute("aria-hidden")).toBe("true");
     }
     expect(min.closest(".vfield")?.contains(tooltipOf(min))).toBe(true);
     expect(within(dialog()).getAllByText("Use MM:SS, HH:MM:SS, or seconds.")).toHaveLength(1);
@@ -1003,8 +999,6 @@ describe("General tab", () => {
 
     fireEvent.input(min, { target: { value: "1:07" } });
     await settle();
-    expect(min.hasAttribute("aria-invalid")).toBe(false);
-    expect(min.hasAttribute("aria-describedby")).toBe(false);
     expect(fieldIcon(min)).toBeNull();
     expect(tabMarked("General")).toBe(false);
   });
@@ -1032,10 +1026,10 @@ describe("General tab", () => {
     await type(min, "abc");
     expect(minimumMarks(min)).toEqual(["shown", "shown", "shown", "shown"]);
 
-    // Only the look lingers: the field and Apply change at once, and the tooltip keeps the problem it said.
+    // Only the look lingers: Add Preset and the tab's title change at once, and the tooltip keeps the problem it said.
     await type(min, "1:07");
     expect(minimumMarks(min)).toEqual(["fading", "fading", "fading", "fading"]);
-    expect([min.hasAttribute("aria-invalid"), min.hasAttribute("aria-describedby"), heldState(byId<HTMLButtonElement>("filter-add-preset-btn")).held, tabMarked("General")]).toEqual([false, false, false, false]);
+    expect([heldState(byId<HTMLButtonElement>("filter-add-preset-btn")).held, tabMarked("General")]).toEqual([false, false]);
     expect(min.closest(".vfield")!.querySelector(".vfield-tip")!.textContent).toBe("Use MM:SS, HH:MM:SS, or seconds.");
 
     // Flagged again while they fade, they show again.
@@ -1099,7 +1093,6 @@ describe("General tab", () => {
     expect(applyShowsChanges()).toBe(true);
     expect(heldState(applyButton())).toEqual({ held: true, marked: true });
     expect(applyButton().title).toBe("Correct the minimum duration to apply.");
-    expect(document.getElementById(applyButton().getAttribute("aria-describedby")!)?.textContent).toBe("Correct the minimum duration to apply.");
     await showTab("Tags");
     await apply();
     expect(selectedTab()).toBe("General");
@@ -1122,13 +1115,12 @@ describe("General tab", () => {
     await type(max, "");
     expect(heldState(applyButton())).toEqual({ held: false, marked: false });
     expect(applyButton().title).toBe("Apply");
-    expect(applyButton().hasAttribute("aria-describedby")).toBe(false);
     const applied = await applyAndWait(server);
     expect(applied.minDuration).toBe("00:01:30");
     expect(applied.maxDuration).toBeUndefined();
   });
 
-  it("a held Apply shows its dot red, with no badge, and its reason as its tooltip and description", async () => {
+  it("a held Apply shows its dot red, with no badge, and its reason as its tooltip", async () => {
     await mountFilter();
     await openDialog();
     useStylesheet();
@@ -1208,7 +1200,7 @@ describe("General tab", () => {
     await openDialog();
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("01:30");
     expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("01:00:00");
-    expect(byId("filter-min-dur-text").hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(byId("filter-min-dur-text"))).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
     expect(heading()).toBe("Preset: Fraction");
 
@@ -1387,7 +1379,7 @@ describe("Favorites and Blacklisted filters", () => {
 });
 
 describe("Favorites only with Blacklisted only", () => {
-  it("is flagged on both dropdowns, with one icon after Blacklisted, and holds Apply, Add Preset, and Update", async () => {
+  it("is flagged with one icon after Blacklisted, and holds Apply, Add Preset, and Update", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1398,16 +1390,14 @@ describe("Favorites only with Blacklisted only", () => {
     const logsBefore = server.logLines().length;
 
     expect(flagRow("Favorites")).toMatchObject({ checked: true, choice: "only" });
-    expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(flagSelect("Blacklisted"))).toBe(false);
     flagSelect("Blacklisted").focus();
     await chooseFlag("Blacklisted", "only");
-    for (const name of ["Favorites", "Blacklisted"] as const) {
-      expect(flagSelect(name).getAttribute("aria-invalid"), name).toBe("true");
-      expect(tooltipOf(flagSelect(name))?.textContent, name).toBe("Nothing is both a favorite and blacklisted. Use excluded for one of them.");
-    }
+    expect(flagged(flagSelect("Blacklisted"))).toBe(true);
+    expect(tooltipOf(flagSelect("Blacklisted"))?.textContent).toBe("Nothing is both a favorite and blacklisted. Use excluded for one of them.");
     // The pick gave up focus, so only the red icon shows, and the tooltip waits for the pointer or a held action.
     expect(document.activeElement).toBe(document.body);
-    expect([tooltipShown(flagSelect("Favorites")), tooltipShown(flagSelect("Blacklisted"))]).toEqual([false, false]);
+    expect(tooltipShown(flagSelect("Blacklisted"))).toBe(false);
     expect(flagSelect("Blacklisted").nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);
@@ -1442,8 +1432,7 @@ describe("Favorites only with Blacklisted only", () => {
     expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     await chooseFlag("Favorites", "excluded");
-    expect(flagSelect("Favorites").hasAttribute("aria-invalid")).toBe(false);
-    expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(flagSelect("Blacklisted"))).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
     expect(await applyAndWait(server)).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
   });
@@ -1453,21 +1442,20 @@ describe("Favorites only with Blacklisted only", () => {
     await openDialog();
     await setFlag("Favorites", "only");
     await chooseFlag("Blacklisted", "only");
-    expect(flagSelect("Blacklisted").getAttribute("aria-invalid")).toBe("true");
+    expect(flagged(flagSelect("Blacklisted"))).toBe(true);
     await setFlag("Blacklisted", "off");
-    expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
-    expect(flagSelect("Favorites").hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(flagSelect("Blacklisted"))).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
   });
 });
 
 /** Min Rating's stars, found while their tab is hidden too, as `box` finds checkboxes. */
 function minRatingStars(): HTMLElement {
-  return within(dialog()).getByRole("slider", { name: "Min Rating", hidden: true });
+  return dialog().querySelector<HTMLElement>(".min-rating-row .rating")!;
 }
 
 describe("Only unrated and Min Rating", () => {
-  it("sit at the end of Basic Filters, Only unrated after the other options and Min Rating's stars below it, saying No minimum for none", async () => {
+  it("sit at the end of Basic Filters, Only unrated after the other options and Min Rating's stars below it, empty for none", async () => {
     await mountFilter();
     await openDialog();
     const stack = box("Only never played").closest(".filter-stack")!;
@@ -1479,7 +1467,7 @@ describe("Only unrated and Min Rating", () => {
     expect(row.firstElementChild!.textContent).toBe("Min Rating");
     expect(row.lastElementChild).toBe(minRatingStars());
     expect(box("Only unrated").checked).toBe(false);
-    expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
+    expect(starsShown(minRatingStars())).toBe(0);
   });
 
   it("the stars change only the tab's filter until Apply, never a rating, and a tap on the first star's left edge clears them", async () => {
@@ -1488,22 +1476,22 @@ describe("Only unrated and Min Rating", () => {
     await openDialog();
 
     await tapStars(minRatingStars(), xFor(3.5));
-    expect(sliderValue(minRatingStars())).toEqual(["3.5", "3.5 stars"]);
+    expect(starsShown(minRatingStars())).toBe(3.5);
     expect(applyShowsChanges()).toBe(true);
     expect((await nextPick(server)).filterState).not.toHaveProperty("minRating");
 
     await tapStars(minRatingStars(), xFor(3), "touch");
-    expect(sliderValue(minRatingStars())).toEqual(["3", "3 stars"]);
+    expect(starsShown(minRatingStars())).toBe(3);
     expect(await applyAndWait(server)).toMatchObject({ minRating: 3, onlyUnrated: false });
     expect((await nextPick(server)).filterState).toMatchObject({ minRating: 3 });
 
     await tapStars(minRatingStars(), CLEAR_EDGE_X);
-    expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
+    expect(starsShown(minRatingStars())).toBe(0);
     expect(await applyAndWait(server)).not.toHaveProperty("minRating");
     expect(ratingRequests(server)).toEqual([]);
   });
 
-  it("are flagged together on Only unrated with a minimum, marking the stars, and hold Apply, Add Preset, and Update", async () => {
+  it("are flagged together on Only unrated with a minimum, with one icon after Only unrated, and hold Apply, Add Preset, and Update", async () => {
     stubStarLayout();
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
@@ -1515,14 +1503,12 @@ describe("Only unrated and Min Rating", () => {
     const unrated = box("Only unrated");
 
     await click(unrated);
-    expect(unrated.hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(unrated)).toBe(false);
     await tapStars(minRatingStars(), xFor(5));
     // After the first press, which starts the audio stage and logs it.
     const logsBefore = server.logLines().length;
-    for (const field of [unrated, minRatingStars()]) {
-      expect(field.getAttribute("aria-invalid"), field.id).toBe("true");
-      expect(tooltipOf(field)?.textContent, field.id).toBe("Nothing unrated has a minimum rating. Clear one of them.");
-    }
+    expect(flagged(unrated)).toBe(true);
+    expect(tooltipOf(unrated)?.textContent).toBe("Nothing unrated has a minimum rating. Clear one of them.");
     expect(unrated.closest("label")!.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);
@@ -1551,8 +1537,7 @@ describe("Only unrated and Min Rating", () => {
     expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     await tapStars(minRatingStars(), CLEAR_EDGE_X, "touch");
-    expect(unrated.hasAttribute("aria-invalid")).toBe(false);
-    expect(minRatingStars().hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(unrated)).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
     const applied = await applyAndWait(server);
     expect(applied).toMatchObject({ onlyUnrated: true, favoritesMode: "only" });
@@ -1571,11 +1556,11 @@ describe("Only unrated and Min Rating", () => {
 
     await click(clearAllButton());
     await showTab("General");
-    expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
+    expect(starsShown(minRatingStars())).toBe(0);
     await showTab("Presets");
     await loadInDialog("Good ones");
     await showTab("General");
-    expect(sliderValue(minRatingStars())).toEqual(["2.5", "2.5 stars"]);
+    expect(starsShown(minRatingStars())).toBe(2.5);
     expect(heading()).toBe("Preset: Good ones");
   });
 });
@@ -1925,15 +1910,12 @@ describe("Tags tab", () => {
     await showTab("Tags");
     for (const title of categoryTitles()) {
       expect(categoryGrid(title).hidden, title).toBe(true);
-      expect(categoryToggle(title).getAttribute("aria-expanded"), title).toBe("false");
+      expect(categoryToggle(title).title, title).toBe("Expand category");
     }
-    expect(categoryToggle("Places").getAttribute("aria-controls")).toBe(categoryGrid("Places").id);
-    expect(categoryToggle("Places").title).toBe("Expand category");
     expect(dialog().querySelector(".tag-category-header .material-symbol-icon")).toBeNull();
 
     await click(categoryToggle("Places"));
     expect(categoryGrid("Places").hidden).toBe(false);
-    expect(categoryToggle("Places").getAttribute("aria-expanded")).toBe("true");
     expect(categoryToggle("Places").title).toBe("Collapse category");
     await click(category("Places").querySelector(".tag-category-header")!);
     expect(categoryGrid("Places").hidden).toBe(true);
@@ -2122,7 +2104,7 @@ describe("Presets tab", () => {
       expect(addButton().title).toBe("Add preset");
     };
 
-    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(name)).toBe(false);
     disabledWithoutIcon();
     await click(addButton());
     expect(document.activeElement).not.toBe(name);
@@ -2132,12 +2114,12 @@ describe("Presets tab", () => {
     fireEvent.input(name, { target: { value: "x" } });
     fireEvent.input(name, { target: { value: "" } });
     await settle();
-    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(name)).toBe(false);
     disabledWithoutIcon();
     expect(tabMarked("Presets")).toBe(false);
 
     await addPreset("FAVORITES");
-    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(flagged(name)).toBe(true);
     expect(tooltipOf(name)?.textContent).toBe("Use a name no other preset has.");
     disabledWithoutIcon();
     expect(tabMarked("Presets")).toBe(true);
@@ -2163,7 +2145,7 @@ describe("Presets tab", () => {
     await showTab("Presets");
 
     await click(addButton());
-    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(name)).toBe(false);
     expect(presetRows()).toEqual(["Favorites", "Beach days", "Unplayed"]);
     expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toContain("Unplayed");
     expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("");
@@ -2244,8 +2226,6 @@ describe("Presets tab", () => {
       expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual([`Reorder ${name}`, `Edit preset ${name}`]);
       expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder", "Edit preset"]);
     }
-    const help = byId(presetHandle("Favorites").getAttribute("aria-describedby") ?? "");
-    expect(help.textContent).toBe("Drag to reorder.");
   });
 
   describe("dragging a preset", () => {
@@ -2280,7 +2260,6 @@ describe("Presets tab", () => {
       expect(presetRows()).toEqual(["Recent", "Favorites", "Beach days"]);
       expect(transforms()).toEqual(["", "", ""]);
       expect(presetRow("Recent").classList.contains("is-dragging")).toBe(false);
-      expect(presetAnnouncement()).toBe("Recent moved to position 1 of 3.");
       expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toEqual([
         "None",
         "Recent",
@@ -2311,7 +2290,6 @@ describe("Presets tab", () => {
 
       await pointerUp();
       expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
-      expect(presetAnnouncement()).toBe("Favorites moved to position 2 of 3.");
     });
 
     it("keeps the list where it was scrolled after a drop", async () => {
@@ -2351,7 +2329,6 @@ describe("Presets tab", () => {
       await pointerUp();
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
       expect(transforms()).toEqual(["", "", ""]);
-      expect(presetAnnouncement()).toBe("");
       expect(applyShowsChanges()).toBe(false);
     });
   });
@@ -2426,10 +2403,9 @@ describe("Presets tab", () => {
 
     fireEvent.input(name, { target: { value: "favorites " } });
     await settle();
-    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(flagged(name)).toBe(true);
     expect(tooltipOf(name)?.textContent).toBe("Use a name no other preset has.");
     expect(save.disabled).toBe(true);
-    expect(save.hasAttribute("aria-disabled")).toBe(false);
     expect(save.classList.contains("shows-problem")).toBe(false);
     await press(save);
     fireEvent.keyDown(name, { key: "Enter" });
@@ -2440,7 +2416,7 @@ describe("Presets tab", () => {
 
     fireEvent.input(name, { target: { value: "   " } });
     await settle();
-    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(flagged(name)).toBe(false);
     expect(save.disabled).toBe(true);
     await press(save);
     expect(appDialogs()).toEqual([edit]);
@@ -2496,13 +2472,12 @@ describe("presets that would take each other's names or filters", () => {
     await press(byId("filter-preset-edit-save-btn"));
   }
 
-  /** Apply shows as unavailable, as a held Apply does, with its dot red, and `reason` as its tooltip and description. */
+  /** Apply shows as unavailable, as a held Apply does, with its dot red, and `reason` as its tooltip. */
   function blockedSaying(reason: string): void {
     const button = applyButton();
     expect(button.disabled).toBe(false);
     expect(heldState(button)).toEqual({ held: true, marked: true });
     expect(button.title).toBe(reason);
-    expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")?.textContent).toBe(reason);
   }
 
   /** Pressing Apply shows `reason` in a notice, whose log line is `logText`, and saves and applies nothing. */
@@ -2540,7 +2515,7 @@ describe("presets that would take each other's names or filters", () => {
     await renamePreset("Recent", "Latest");
     await renamePreset("Beach days", "Recent");
     await renamePreset("Favorites", "Beach days");
-    expect(applyButton().hasAttribute("aria-disabled")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
     expect(applyShowsChanges()).toBe(true);
     await applyAndWait(server);
     expect(presets.summaries()).toEqual(["rename preset-recent Latest", "rename preset-beach Recent", "rename preset-favorites Beach days"]);
@@ -2996,19 +2971,17 @@ describe("presets need a filter of their own", () => {
   const updateButton = () => byId<HTMLButtonElement>("filter-update-preset-btn");
   const shared = (name: string) => `Preset "${name}" already has this filter.`;
 
-  /** The button is disabled, with `reason` as its tooltip and description, and no field holds it. */
+  /** The button is disabled, with `reason` as its tooltip, and no field holds it. */
   function expectReason(button: HTMLButtonElement, reason: string): void {
     expect(button.disabled, button.id).toBe(true);
     expect(button.title, button.id).toBe(reason);
-    expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent, button.id).toBe(reason);
     expect(heldState(button), button.id).toEqual({ held: false, marked: false });
   }
 
-  /** The button can be pressed, with its own tooltip and no description. */
+  /** The button can be pressed, with its own tooltip. */
   function expectAvailable(button: HTMLButtonElement, title: string): void {
     expect(button.disabled, button.id).toBe(false);
     expect(button.title, button.id).toBe(title);
-    expect(button.hasAttribute("aria-describedby"), button.id).toBe(false);
   }
 
   it("Add Preset and Update are unavailable while the filter is the default, with why as their tooltip, and Update on None says it needs a preset", async () => {

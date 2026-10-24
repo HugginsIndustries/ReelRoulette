@@ -96,8 +96,6 @@ export interface PanelHost {
   readonly shortScreen: ReadonlySignal<boolean>;
   /** The panel's width beside the player: the remembered width, within what the stage allows now. */
   readonly width: ReadonlySignal<number>;
-  /** The widest the panel can be while leaving the player its minimum width. */
-  readonly maxWidth: ReadonlySignal<number>;
   /** The player column is narrower than 600 px, so the player's indicator sits below its corner buttons. */
   readonly playerNarrow: ReadonlySignal<boolean>;
 
@@ -189,6 +187,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   const handleWidth = signal(0);
   const playerNarrow = signal(false);
 
+  /** The widest the panel can be while leaving the player its minimum width. */
   const maxWidth = computed(() => {
     const handle = handleWidth.value || (coarse.value ? HANDLE_WIDTH.coarse : HANDLE_WIDTH.fine);
     return Math.max(PANEL_MIN_WIDTH, stageWidth.value - handle - PLAYER_MIN_WIDTH);
@@ -308,7 +307,6 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     mode,
     shortScreen,
     width,
-    maxWidth,
     playerNarrow,
 
     connectTabs(connected) {

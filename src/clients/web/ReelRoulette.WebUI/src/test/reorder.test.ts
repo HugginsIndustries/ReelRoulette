@@ -5,7 +5,6 @@ import {
   dragStarts,
   dropIndex,
   moveEntry,
-  movedAnnouncement,
   rowShifts,
   type RowBox
 } from "../reorder/reorder";
@@ -107,16 +106,12 @@ describe("starting a drag and scrolling", () => {
   });
 });
 
-describe("moving an entry and announcing it", () => {
+describe("moving an entry", () => {
   it("moves an entry to its new place and leaves the list it came from", () => {
     const list = ["a", "b", "c", "d"];
     expect(moveEntry(list, 0, 2)).toEqual(["b", "c", "a", "d"]);
     expect(moveEntry(list, 3, 1)).toEqual(["a", "d", "b", "c"]);
     expect(moveEntry(list, 1, 1)).toEqual(list);
     expect(list).toEqual(["a", "b", "c", "d"]);
-  });
-
-  it("says the row's new position, counting from one", () => {
-    expect(movedAnnouncement("People", 1, 3)).toBe("People moved to position 2 of 3.");
   });
 });

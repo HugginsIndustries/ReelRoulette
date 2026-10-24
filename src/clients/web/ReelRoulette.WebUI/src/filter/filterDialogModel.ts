@@ -485,7 +485,7 @@ export function presetLoopReason(loop: PresetLoop, presets: readonly PresetRow[]
 }
 
 /**
- * Why a General field holds an action, which the action's title and accessible description say. The new preset name
+ * Why a General field holds an action, which the action's title says. The new preset name
  * never holds Add Preset: it sits beside it, so it disables it.
  */
 export function filterHeldReason(action: FilterAction, field: GeneralField): string {

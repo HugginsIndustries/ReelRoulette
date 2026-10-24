@@ -214,7 +214,7 @@ export function Player() {
   const seekBar = player.seekBar.value;
   return (
     <div id="media-container" class={controls.shown.value ? "media-container controls-visible" : "media-container"} ref={container} onClick={onAreaClick}>
-      <div id="ambient" class="ambient" aria-hidden="true" ref={ambientLayer}>
+      <div id="ambient" class="ambient" ref={ambientLayer}>
         <canvas width="32" height="18" ref={ambientCanvas}></canvas>
       </div>
       <video
@@ -254,7 +254,7 @@ export function Player() {
         </div>
         <div id="seek-row" class="overlay-seek-row">
           <span id="seek-wrap" class="seek-wrap">
-            <span id="seek-loop" class="seek-loop" aria-hidden="true" hidden ref={seekStretch}></span>
+            <span id="seek-loop" class="seek-loop" hidden ref={seekStretch}></span>
             <input type="range" id="seek-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onPointerDown={pressBar} onInput={(event) => player.seek(event.currentTarget.value)} />
           </span>
           <span id="time-display">{player.timeText}</span>
@@ -282,44 +282,40 @@ export function Player() {
 /**
  * The player's indicator: one lasting state at a time, the first active one in the precedence order (Reconnecting…,
  * Server not compatible, Running without a library, Loading…, then a library refresh), at the player's top center, or
- * below the corner buttons on a narrow player. Nothing shows while the server asks for pairing. The live region always
- * stays in the page, so its announcements aren't lost, and the state's box renders inside it only while one shows. A
- * long state ends in an ellipsis, and a refresh's percentage, outside the text, is hidden from screen readers, so each
- * step isn't announced. A refresh shows only while the player's controls do.
+ * below the corner buttons on a narrow player. Nothing shows while the server asks for pairing. It renders only while
+ * a state shows. A long state ends in an ellipsis, and a refresh's percentage sits outside the text, so it always
+ * shows. A refresh shows only while the player's controls do.
  */
 function PlayerIndicator() {
   const { indicator } = useApp();
   const state = indicator.value;
-  return (
-    <div id="player-indicator" class="player-indicator-region" role="status" aria-live="polite">
-      {state ? (
-        <div
-          class={["player-indicator", state.warning ? "is-warning" : "", state.followsControls ? "follows-controls" : ""].filter(Boolean).join(" ")}
-          data-state={state.id}
-        >
-          <span class={state.spins ? "material-symbol-icon spins" : "material-symbol-icon"} aria-hidden="true">{state.icon}</span>
-          <span class="player-indicator-text">{state.title}</span>
-          {state.progress ? (
-            <>
-              {" "}
-              <span aria-hidden="true">{state.progress}</span>
-            </>
-          ) : null}
-        </div>
+  return state ? (
+    <div
+      id="player-indicator"
+      class={["player-indicator", state.warning ? "is-warning" : "", state.followsControls ? "follows-controls" : ""].filter(Boolean).join(" ")}
+      data-state={state.id}
+    >
+      <span class={state.spins ? "material-symbol-icon spins" : "material-symbol-icon"}>{state.icon}</span>
+      <span class="player-indicator-text">{state.title}</span>
+      {state.progress ? (
+        <>
+          {" "}
+          <span>{state.progress}</span>
+        </>
       ) : null}
     </div>
-  );
+  ) : null;
 }
 
 /**
  * The volume indicator: the volume as a percentage, or Muted while muted, with Mute's icon, centered over the player
  * while the scroll wheel, a two-finger drag, [ and ], or M change it, on a photo too. It sits outside the controls, so
- * it shows while they're hidden, and is hidden from screen readers, since the slider carries the value.
+ * it shows while they're hidden.
  */
 function VolumeIndicator() {
   const { audio } = useApp();
   return (
-    <div id="volume-indicator" class={audio.indicatorShown.value ? "volume-indicator is-shown" : "volume-indicator"} aria-hidden="true">
+    <div id="volume-indicator" class={audio.indicatorShown.value ? "volume-indicator is-shown" : "volume-indicator"}>
       <span class="material-symbol-icon">{audio.muted.value ? "volume_off" : "volume_up"}</span>
       <span id="volume-indicator-text">{audio.muted.value ? "Muted" : `${audio.shownVolume.value}%`}</span>
     </div>
@@ -329,8 +325,7 @@ function VolumeIndicator() {
 /**
  * The seek indicator, for J, L, and double-taps: the seek's total in white with a chevron toward the screen's edge, "+ 5"
  * on the player's right for a forward seek and "− 5" on its left for a back seek. Each side keeps its total as it fades
- * out. It sits outside the controls, so it shows while they're hidden, and is hidden from screen readers, since the
- * scrub bar carries the position.
+ * out. It sits outside the controls, so it shows while they're hidden.
  */
 function SeekIndicator() {
   const { player } = useApp();
@@ -338,11 +333,11 @@ function SeekIndicator() {
   const forward = player.seekIndicator.forward.value;
   return (
     <>
-      <div id="seek-indicator-back" class={back.shown ? "seek-indicator is-back is-shown" : "seek-indicator is-back"} aria-hidden="true">
+      <div id="seek-indicator-back" class={back.shown ? "seek-indicator is-back is-shown" : "seek-indicator is-back"}>
         <span class="material-symbol-icon">chevron_left</span>
         <span class="seek-indicator-text">{back.seconds ? `− ${back.seconds}` : ""}</span>
       </div>
-      <div id="seek-indicator-forward" class={forward.shown ? "seek-indicator is-forward is-shown" : "seek-indicator is-forward"} aria-hidden="true">
+      <div id="seek-indicator-forward" class={forward.shown ? "seek-indicator is-forward is-shown" : "seek-indicator is-forward"}>
         <span class="seek-indicator-text">{forward.seconds ? `+ ${forward.seconds}` : ""}</span>
         <span class="material-symbol-icon">chevron_right</span>
       </div>
@@ -385,9 +380,9 @@ function RatingButton() {
   const label = rated ? `Rating, ${ratingText(rating)}` : "Rating";
   return (
     <>
-      <button id="rating-btn" type="button" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, rated)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="rating-popover" ref={button} onClick={onClick}>
+      <button id="rating-btn" type="button" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, rated)} aria-label={label} title={label} ref={button} onClick={onClick}>
         <span class="material-symbol-icon">star</span>
-        <span class="rating-badge" aria-hidden="true" hidden={!rated}>{rated ? String(rating) : ""}</span>
+        <span class="rating-badge" hidden={!rated}>{rated ? String(rating) : ""}</span>
       </button>
       {/* A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch would land on
           the video under it; a touch on the stars sends no click. */}
@@ -395,7 +390,6 @@ function RatingButton() {
         {open ? (
           <RatingStars
             rating={rating}
-            label="Rating"
             onSet={(next) => {
               playerRating.set(next, { byKey: false });
               playerRating.closePopover();
@@ -418,7 +412,7 @@ function PanelButton() {
   const held = unsaved.value.filter || unsaved.value.tags;
   const label = (open ? "Close panel" : "Open panel") + (held ? ", unsaved changes" : "");
   return (
-    <button id="panel-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, open)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="panel" onClick={press(panel.toggle)}>
+    <button id="panel-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, open)} aria-label={label} title={label} onClick={press(panel.toggle)}>
       <span class="material-symbol-icon">{`${panel.side.value}_panel_${open ? "close" : "open"}`}</span>
       <span class="unsaved-dot" hidden={!held}></span>
     </button>

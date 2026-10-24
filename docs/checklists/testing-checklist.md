@@ -127,6 +127,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] In the WebUI, Only unrated and a Min Rating each limit browse and random play, the rating sort orders the library, and a preset saved with a Min Rating keeps it.
 - [ ] In the WebUI, Added and Created limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
 - [ ] On a desktop browser, the iPad, and an Android phone, the Randomization tab's options change the picks at once, the Random line names them and opens the tab, and they're kept after a page refresh.
+- [ ] In Firefox on the Linux desktop, after a click on Next, Space pauses instead of pressing Next again, after a click on the seek bar, → plays the next item, after a preset is picked, → plays the next item, and Tab and Page Down do nothing.
+- [ ] On the iPad and an Android phone, picking from a dropdown, such as the preset, still picks, now that a dropdown gives up focus after a pick.
 
 ## Release Flow
 

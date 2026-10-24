@@ -50,8 +50,8 @@ function AutoTagDialog({ view }: { view: TagEditorView | null }) {
         <button class="btn" type="button" id="autotag-deselect-all" onClick={() => tagEditor.deselectAll()}>Deselect all</button>
         <button class="btn autotag-scan" type="button" id="autotag-scan" disabled={scanning} onClick={() => void tagEditor.scan()}>Scan Files</button>
       </div>
-      <div class="autotag-progress" id="autotag-progress" role="progressbar" aria-label="Scan in progress" hidden={!scanning}></div>
-      <div class="autotag-status" id="autotag-status" aria-live="polite">{autoTag?.status ?? ""}</div>
+      <div class="autotag-progress" id="autotag-progress" hidden={!scanning}></div>
+      <div class="autotag-status" id="autotag-status">{autoTag?.status ?? ""}</div>
       <div class="autotag-results themed-scrollbar" id="autotag-results">
         {view ? <Results results={view.results} /> : null}
       </div>
@@ -87,7 +87,7 @@ function ResultRow({ entry }: { entry: AutoTagRowView }) {
   return (
     <div class="autotag-result">
       <div class="autotag-row-main">
-        <button type="button" class="icon-btn" aria-label={row.expanded ? "Collapse" : "Expand"} aria-expanded={row.expanded ? "true" : "false"} onClick={() => tagEditor.toggleRowExpanded(row.rowId)}><Icon name={row.expanded ? "expand_more" : "chevron_right"} /></button>
+        <button type="button" class="icon-btn" aria-label={row.expanded ? "Collapse" : "Expand"} onClick={() => tagEditor.toggleRowExpanded(row.rowId)}><Icon name={row.expanded ? "expand_more" : "chevron_right"} /></button>
         <input type="checkbox" aria-label={`Apply ${row.tagName}`} checked={entry.checked} indeterminate={entry.indeterminate} disabled={entry.disabled} onChange={(event) => tagEditor.checkRow(row.rowId, event.currentTarget.checked)} />
         <span class="autotag-tag">{row.tagName || ""}</span>
         <span class="autotag-count">{row.totalMatchedCount}</span>

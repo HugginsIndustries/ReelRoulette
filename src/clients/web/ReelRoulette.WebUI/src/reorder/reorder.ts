@@ -92,8 +92,3 @@ export function moveEntry<T>(list: readonly T[], from: number, to: number): T[] 
   next.splice(to, 0, entry!);
   return next;
 }
-
-/** What screen readers hear after a row moves. */
-export function movedAnnouncement(name: string, to: number, count: number): string {
-  return `${name} moved to position ${to + 1} of ${count}.`;
-}

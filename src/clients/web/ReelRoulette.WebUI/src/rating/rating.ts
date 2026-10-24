@@ -14,7 +14,7 @@ export const RATING_KEY_PAUSE_MS = 500;
 /** A star's width, in px, when the browser hasn't laid the stars out. */
 const STAR_WIDTH_PX = 36;
 
-/** How a rating reads, to screen readers and in its popups: "3.5 stars", "1 star", or "Not rated". */
+/** How a rating reads, as in its popups: "3.5 stars", "1 star", or "Not rated". */
 export function ratingText(rating: number | null): string {
   if (!rating) {
     return "Not rated";

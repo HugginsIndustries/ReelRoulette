@@ -28,12 +28,12 @@ export function StatsTab() {
         </button>
       </div>
       <div id="stats-body" class="stats-body themed-scrollbar">
-        <section class="stats-section" aria-labelledby="stats-file-heading">
-          <h3 id="stats-file-heading">Current file</h3>
+        <section class="stats-section">
+          <h3>Current file</h3>
           {view.file ? <FileStats file={view.file} /> : <p class="filter-hint">Nothing is playing yet.</p>}
         </section>
-        <section class="stats-section" aria-labelledby="stats-library-heading">
-          <h3 id="stats-library-heading">Library</h3>
+        <section class="stats-section">
+          <h3>Library</h3>
           <LibraryStats library={view.library} />
         </section>
       </div>
@@ -66,8 +66,8 @@ function FileStats({ file }: { file: StatsFileView }) {
       {file.rows ? (
         <>
           <div class="stats-rating">
-            <span id="stats-rating-label" class="stats-rating-label">Rating</span>
-            <RatingStars rating={file.rating} labelledBy="stats-rating-label" onSet={statsTab.setRating} />
+            <span class="stats-rating-label">Rating</span>
+            <RatingStars rating={file.rating} onSet={statsTab.setRating} />
           </div>
           <dl class="stats-table">
             {file.rows.map((row) => (

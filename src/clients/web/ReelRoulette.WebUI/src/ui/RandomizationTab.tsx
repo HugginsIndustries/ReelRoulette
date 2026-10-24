@@ -40,7 +40,7 @@ export function RandomizationTab() {
         <h2>Randomization</h2>
       </div>
       <div id="randomization-body" class="settings-body themed-scrollbar">
-        <section class="stats-section" aria-labelledby="randomization-cycle-heading">
+        <section class="stats-section">
           <details
             class="setting-more shortcuts-more"
             id="randomization-cycle"
@@ -49,7 +49,7 @@ export function RandomizationTab() {
           >
             <summary>
               <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
-              <h3 id="randomization-cycle-heading">Shuffle cycle</h3>
+              <h3>Shuffle cycle</h3>
             </summary>
             <div id="randomization-cycle-body" class="cycle-body">
               <CycleCard cycle={view.cycle} />

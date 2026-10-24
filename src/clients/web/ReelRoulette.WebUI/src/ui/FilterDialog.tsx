@@ -33,7 +33,7 @@ import {
   type ValidatedControlProps
 } from "./FieldValidation";
 import { RatingStars } from "./RatingStars";
-import { DragHandle, ReorderStatus, useReorder } from "./Reorder";
+import { DragHandle, useReorder } from "./Reorder";
 import { TagCategory as Category, tagsInUse } from "./TagCategory";
 
 // The `data-*` attributes keep the markup as it was before the dialog moved to a component; nothing reads them.
@@ -314,7 +314,7 @@ function DateRow({ filter, end, view }: { filter: (typeof DATE_FILTERS)[number];
 
 /**
  * The Favorites and Blacklisted filters, checked as a pair: Favorites only with Blacklisted only matches nothing.
- * Both dropdowns are marked and described while it is flagged, and its icon sits just after the Blacklisted one.
+ * Its icon sits just after the Blacklisted dropdown, and its tooltip shows while either dropdown has focus.
  */
 function FlagFilterRows({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
@@ -386,8 +386,8 @@ function FlagFilterRow({
 
 /**
  * Only unrated and Min Rating, checked as a pair: a minimum rating leaves unrated files out, so with Only unrated it
- * matches nothing. The icon sits just after the Only unrated label, which a held action moves to, and the stars are
- * marked and described with it. The stars change only the tab's filter, never a rating.
+ * matches nothing. The icon sits just after the Only unrated label, which a held action moves to. The stars change
+ * only the tab's filter, never a rating.
  */
 function RatingFilterRows({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
@@ -404,8 +404,8 @@ function RatingFilterRows({ view }: { view: FilterDialogView }) {
         {pair.mark}
       </span>
       <div class="mode-row min-rating-row">
-        <span id="filter-min-rating-label">{MIN_RATING_LABEL}</span>
-        <RatingStars aria-invalid={pair.partner["aria-invalid"]} aria-describedby={pair.partner["aria-describedby"]} rating={draft.minRating} labelledBy="filter-min-rating-label" noneText="No minimum" onSet={(minRating) => filterDialog.changeGeneral({ minRating })} />
+        <span>{MIN_RATING_LABEL}</span>
+        <RatingStars rating={draft.minRating} onSet={(minRating) => filterDialog.changeGeneral({ minRating })} />
       </div>
     </>
   );
@@ -483,7 +483,6 @@ function TagCategory({ category }: { category: FilterTagCategory }) {
   return (
     <Category
       name={category.name}
-      gridId={`filter-tag-grid-${category.collapseKey}`}
       collapsed={category.collapsed}
       inUse={category.inUse}
       inUseTitle={tagsInUse(category.inUse, "in the filter")}
@@ -569,7 +568,6 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
             <span class="filter-hint">No presets</span>
           )}
         </div>
-        <ReorderStatus reorder={reorder} />
       </div>
     </>
   );

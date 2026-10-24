@@ -263,7 +263,7 @@ describe("library window", () => {
     t.showTab();
     expect(t.library.isOpen()).toBe(true);
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.summary.peek()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
+    expect(t.library.summary.peek()).toBe("3 / 3");
     const grid = t.mountGrid();
     expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], resetScroll: false }]);
     expect(t.queries()).toHaveLength(1);
@@ -279,14 +279,14 @@ describe("library window", () => {
     t.showTab();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "Loading library…", error: false, live: true }
+      message: { text: "Loading library…", error: false }
     });
     expect(t.queries()).toHaveLength(1);
 
     await settle();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "Library load failed.", error: true, live: false }
+      message: { text: "Library load failed.", error: true }
     });
     // The body shows it, so it only relays, with the status in place of the text.
     expect(t.statuses).toEqual(["Library load failed (HTTP 500)."]);
@@ -296,7 +296,7 @@ describe("library window", () => {
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: `Library load failed: ${REMOTE_CONNECTIONS_OFF}`, error: true, live: false }
+      message: { text: `Library load failed: ${REMOTE_CONNECTIONS_OFF}`, error: true }
     });
     expect(t.statuses).toEqual(["Library load failed (HTTP 500).", "Library load failed (HTTP 403)."]);
     t.replies.delete("/api/library/query");
@@ -305,7 +305,7 @@ describe("library window", () => {
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "No media in library.", error: false, live: false }
+      message: { text: "No media in library.", error: false }
     });
     expect(t.grids).toHaveLength(0);
   });
@@ -319,7 +319,7 @@ describe("library window", () => {
 
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true, live: false }
+      message: { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true }
     });
     expect(t.statuses).toEqual([`Library load failed (HTTP ${failure}).`]);
     expect(t.notified).toEqual([]);
@@ -332,7 +332,7 @@ describe("library window", () => {
     t.showTab();
     await settle();
 
-    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "", error: false, live: false } });
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "", error: false } });
     expect(t.notified).toEqual([]);
     expect(t.store.pairingRequired.peek()).toBe(true);
     // One line, the request's, which names its route.
@@ -397,7 +397,7 @@ describe("library window", () => {
     t.fakeLibrary.failures.push(503);
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.summary.peek()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
+    expect(t.library.summary.peek()).toBe("3 / 3");
     expect(t.statuses).toEqual(["Library load failed (HTTP 503)."]);
 
     t.showTab();
@@ -419,7 +419,7 @@ describe("library window", () => {
     t.emit("refreshCompleted");
     await settle();
     expect(grid.contents.at(-1)).toEqual({ ids: ["item-1", "item-2"], resetScroll: false });
-    expect(t.library.summary.peek()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
+    expect(t.library.summary.peek()).toBe("2 / 2");
 
     t.showTab();
     expect(grid.flushes).toEqual(["shown"]);
@@ -552,7 +552,7 @@ describe("fill", () => {
     expect(t.queries()).toHaveLength(0);
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "Loading library…", error: false, live: true }
+      message: { text: "Loading library…", error: false }
     });
 
     t.emit("serverReady");
@@ -779,7 +779,7 @@ describe("play", () => {
     expect(t.library.isOpen()).toBe(true);
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "Server API version 0 is not supported.", error: true, live: false }
+      message: { text: "Server API version 0 is not supported.", error: true }
     });
     expect(t.library.summary.peek()).toBeNull();
     expect(t.panel.closeIfOverlay).not.toHaveBeenCalled();
@@ -806,7 +806,7 @@ describe("without a library", () => {
     t.store.pickHeaderPreset("fav");
     await settle();
 
-    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: noLibraryText(MESSAGE), error: true, live: false } });
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: noLibraryText(MESSAGE), error: true } });
     expect(t.library.summary.peek()).toBeNull();
     expect(t.notices).toEqual([NO_LIBRARY_PLAY_NOTICE]);
     expect(t.requests("/api/play/item-1")).toHaveLength(0);
@@ -831,13 +831,13 @@ describe("without a library", () => {
     const t = setup();
     t.showTab();
     t.store.libraryState.value = "missing";
-    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "Running without a library.", error: true, live: false } });
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "Running without a library.", error: true } });
     t.store.libraryMessage.value = MESSAGE;
     expect(t.library.body.peek()).toMatchObject({ message: { text: noLibraryText(MESSAGE) } });
 
     t.store.libraryState.value = "ready";
     t.store.libraryMessage.value = null;
-    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "Loading library…", error: false, live: true } });
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "Loading library…", error: false } });
     t.emit("serverReady");
     await settle();
     expect(t.queries()).toHaveLength(1);

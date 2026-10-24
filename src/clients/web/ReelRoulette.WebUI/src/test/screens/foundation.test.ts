@@ -50,17 +50,6 @@ const VIDEO_ITEM = {
   isBlacklisted: false
 };
 
-const PHOTO_ITEM = {
-  id: "C:\\media\\beach.jpg",
-  itemId: "item-photo",
-  displayName: "beach.jpg",
-  mediaType: "photo",
-  durationSeconds: null,
-  mediaUrl: "/api/media/item-photo?token=t",
-  isFavorite: false,
-  isBlacklisted: false
-};
-
 function optionLabels(select: HTMLSelectElement): string[] {
   return Array.from(select.options).map((option) => option.textContent ?? "");
 }
@@ -71,7 +60,7 @@ function selectedLabel(select: HTMLSelectElement): string {
 
 /** The lasting state the player's indicator shows, or null. */
 function indicatorState(): string | null {
-  return document.querySelector<HTMLElement>("#player-indicator .player-indicator")?.dataset.state ?? null;
+  return document.querySelector<HTMLElement>("#player-indicator")?.dataset.state ?? null;
 }
 
 function indicatorTitle(): string {
@@ -243,7 +232,7 @@ describe("startup and connection", () => {
     mountPage({ server });
     await waitFor(() => expect(indicatorState()).toBe("incompatible"));
     expect(indicatorTitle()).toBe("Server not compatible");
-    expect(document.querySelector("#player-indicator .player-indicator")!.classList.contains("is-warning")).toBe(true);
+    expect(document.querySelector("#player-indicator")!.classList.contains("is-warning")).toBe(true);
   });
 
   it("reconnects the event stream when the page becomes visible, gains focus, is shown, or comes online", async () => {
@@ -548,7 +537,6 @@ describe("pairing", () => {
     expect(pairButton.disabled).toBe(false);
     fireEvent.input(token, { target: { value: "   " } });
     expect(pairButton.disabled).toBe(true);
-    expect(token.hasAttribute("aria-invalid")).toBe(false);
 
     fireEvent.input(token, { target: { value: "wrong" } });
     fireEvent.click(pairButton);

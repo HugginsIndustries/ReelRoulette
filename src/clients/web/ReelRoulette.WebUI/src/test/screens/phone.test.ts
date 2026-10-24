@@ -65,14 +65,9 @@ function controls(): HTMLElement {
   return document.getElementById("overlay-controls")!;
 }
 
-/** The player's indicator: its live region, which always stays in the page. */
-function indicator(): HTMLElement {
-  return document.getElementById("player-indicator")!;
-}
-
-/** The state's box in the player's indicator, or null while it shows none. */
+/** The player's indicator, or null while it shows no state. */
 function indicatorBox(): HTMLElement | null {
-  return indicator().querySelector<HTMLElement>(".player-indicator");
+  return document.getElementById("player-indicator");
 }
 
 function shows(element: Element): boolean {
@@ -399,14 +394,13 @@ describe("player's indicator", () => {
     await settle();
     expect(indicatorBox()?.dataset.state).toBe("reconnecting");
     expect(shows(indicatorBox()!)).toBe(true);
-    expect(within(document.getElementById("media-container")!).getByRole("status").querySelector(".player-indicator-text")?.textContent).toBe("Reconnecting…");
+    expect(document.getElementById("media-container")!.contains(indicatorBox())).toBe(true);
+    expect(indicatorBox()!.querySelector(".player-indicator-text")?.textContent).toBe("Reconnecting…");
 
     window.dispatchEvent(new Event("focus"));
     page.stream().open();
     await settle();
     expect(indicatorBox()).toBeNull();
-    // The live region stays, so its announcements aren't lost.
-    expect(indicator().getAttribute("role")).toBe("status");
   });
 
   it("shows on the player at every width, and doesn't pop up", async () => {

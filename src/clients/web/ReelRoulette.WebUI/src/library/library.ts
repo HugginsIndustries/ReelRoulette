@@ -23,7 +23,6 @@ import {
   createDefaultBrowseControls,
   getSortDirectionLabel,
   isDefaultDescendingForSortMode,
-  type BrowseResultSummary,
   type LibraryBrowseControls,
   type LibrarySortMode
 } from "./libraryBrowseModel";
@@ -96,7 +95,7 @@ export interface Library {
   /** The random pick options as the Random line names them after its label, such as "Shuffle · Spread by folder". */
   readonly randomLine: ReadonlySignal<string>;
   /** The tab's count line, "{matching} / {total}", or null while it is hidden. */
-  readonly summary: ReadonlySignal<BrowseResultSummary | null>;
+  readonly summary: ReadonlySignal<string | null>;
   /** The sort direction button's label. It changes when a page in the new order arrives. */
   readonly directionLabel: ReadonlySignal<string>;
   readonly body: ReadonlySignal<LibraryBody>;
@@ -178,7 +177,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const controlsCollapsed = signal(device.read(CONTROLS_COLLAPSED_KEY, false, isBoolean));
   const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
   const randomLine = computed(() => randomLineText(store.randomOptions.value, spreadCategories(tagCatalog.catalog.value)));
-  const summary = signal<BrowseResultSummary | null>(null);
+  const summary = signal<string | null>(null);
   const directionLabel = signal(getSortDirectionLabel(initialControls.sortMode, initialControls.sortDescending));
   const body = signal<LibraryBody>({ kind: "blank" });
 
@@ -279,7 +278,7 @@ export function createLibrary(options: LibraryOptions): Library {
     const blockedBy = untracked(() => heldBackText(store));
     if (blockedBy !== null) {
       summary.value = null;
-      body.value = { kind: "message", message: { text: blockedBy, error: true, live: false } };
+      body.value = { kind: "message", message: { text: blockedBy, error: true } };
       return;
     }
 

@@ -54,33 +54,33 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               <input checked="false" id="filter-unrated" type="checkbox">
               "Only unrated"
           <div class="mode-row min-rating-row">
-            <span id="filter-min-rating-label">
+            <span>
               "Min Rating"
-            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider">
+            <div class="rating">
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
-                  "star"
-              <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
-                  "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
-                  "star"
-              <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
-                  "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
+                  "star"
+              <span class="rating-star">
+                <span class="material-symbol-icon rating-outline">
+                  "star"
+                <span class="material-symbol-icon is-filled rating-fill">
+                  "star"
+              <span class="rating-star">
+                <span class="material-symbol-icon rating-outline">
+                  "star"
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
       <div class="filter-section">
         <h3>
@@ -191,7 +191,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           "Tags Filter"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Places"
               <span class="category-count" title="1 tag in the filter">
@@ -202,7 +202,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-cat-places">
+          <div class="tag-grid">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "alps"
@@ -223,7 +223,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                   "remove"
         <section class="tag-category is-collapsed">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-mood" aria-expanded="false" aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
+            <button aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
               <span class="tag-category-name">
                 "Mood"
               <span class="category-count" hidden="" title="0 tags in the filter">
@@ -234,7 +234,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" hidden="" id="filter-tag-grid-cat-mood">
+          <div class="tag-grid" hidden="">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "Calm"
@@ -246,7 +246,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "People"
               <span class="category-count" title="1 tag in the filter">
@@ -257,7 +257,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                 "ALL (AND)"
               <option selected="true" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-cat-people">
+          <div class="tag-grid">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "Alice"
@@ -278,7 +278,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Uncategorized"
               <span class="category-count" title="1 tag in the filter">
@@ -289,7 +289,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-__filter_uncategorized__">
+          <div class="tag-grid">
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Ghost"
@@ -314,30 +314,26 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
               "sync"
-          <button aria-describedby="P0-20" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "save"
-          <span class="visually-hidden" id="P0-20">
-            "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-22" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "add"
-          <span class="visually-hidden" id="P0-22">
-            "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-19" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -346,7 +342,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-19" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -354,9 +350,6 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-19">
-          "Drag to reorder."
-        <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
       <span class="material-symbol-icon">
@@ -426,33 +419,33 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               <input checked="false" id="filter-unrated" type="checkbox">
               "Only unrated"
           <div class="mode-row min-rating-row">
-            <span id="filter-min-rating-label">
+            <span>
               "Min Rating"
-            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider">
+            <div class="rating">
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
-                  "star"
-              <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
-                  "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
-                  "star"
-              <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
-                  "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
+                  "star"
+              <span class="rating-star">
+                <span class="material-symbol-icon rating-outline">
+                  "star"
+                <span class="material-symbol-icon is-filled rating-fill">
+                  "star"
+              <span class="rating-star">
+                <span class="material-symbol-icon rating-outline">
+                  "star"
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
       <div class="filter-section">
         <h3>
@@ -563,7 +556,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           "Tags Filter"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Places"
               <span class="category-count" title="1 tag in the filter">
@@ -574,7 +567,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-cat-places">
+          <div class="tag-grid">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "alps"
@@ -595,7 +588,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                   "remove"
         <section class="tag-category is-collapsed">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-mood" aria-expanded="false" aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
+            <button aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
               <span class="tag-category-name">
                 "Mood"
               <span class="category-count" hidden="" title="0 tags in the filter">
@@ -606,7 +599,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" hidden="" id="filter-tag-grid-cat-mood">
+          <div class="tag-grid" hidden="">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "Calm"
@@ -618,7 +611,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "People"
               <span class="category-count" title="1 tag in the filter">
@@ -629,7 +622,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                 "ALL (AND)"
               <option selected="true" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-cat-people">
+          <div class="tag-grid">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "Alice"
@@ -650,7 +643,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Uncategorized"
               <span class="category-count" title="1 tag in the filter">
@@ -661,7 +654,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-__filter_uncategorized__">
+          <div class="tag-grid">
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Ghost"
@@ -686,30 +679,26 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
               "sync"
-          <button aria-describedby="P0-20" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "save"
-          <span class="visually-hidden" id="P0-20">
-            "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-22" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "add"
-          <span class="visually-hidden" id="P0-22">
-            "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-19" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -718,7 +707,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-19" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -726,9 +715,6 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-19">
-          "Drag to reorder."
-        <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
       <span class="material-symbol-icon">
@@ -798,33 +784,33 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               <input checked="false" id="filter-unrated" type="checkbox">
               "Only unrated"
           <div class="mode-row min-rating-row">
-            <span id="filter-min-rating-label">
+            <span>
               "Min Rating"
-            <div aria-labelledby="filter-min-rating-label" aria-valuemax="5" aria-valuemin="0" aria-valuenow="0" aria-valuetext="No minimum" class="rating" role="slider">
+            <div class="rating">
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
-                  "star"
-              <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
-                  "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
-                  "star"
-              <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
-                  "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
               <span class="rating-star">
-                <span aria-hidden="true" class="material-symbol-icon rating-outline">
+                <span class="material-symbol-icon rating-outline">
                   "star"
-                <span aria-hidden="true" class="material-symbol-icon is-filled rating-fill">
+                <span class="material-symbol-icon is-filled rating-fill">
+                  "star"
+              <span class="rating-star">
+                <span class="material-symbol-icon rating-outline">
+                  "star"
+                <span class="material-symbol-icon is-filled rating-fill">
+                  "star"
+              <span class="rating-star">
+                <span class="material-symbol-icon rating-outline">
+                  "star"
+                <span class="material-symbol-icon is-filled rating-fill">
                   "star"
       <div class="filter-section">
         <h3>
@@ -935,7 +921,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           "Tags Filter"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Places"
               <span class="category-count" title="1 tag in the filter">
@@ -946,7 +932,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-cat-places">
+          <div class="tag-grid">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "alps"
@@ -967,7 +953,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                   "remove"
         <section class="tag-category is-collapsed">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-mood" aria-expanded="false" aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
+            <button aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
               <span class="tag-category-name">
                 "Mood"
               <span class="category-count" hidden="" title="0 tags in the filter">
@@ -978,7 +964,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" hidden="" id="filter-tag-grid-cat-mood">
+          <div class="tag-grid" hidden="">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "Calm"
@@ -990,7 +976,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "People"
               <span class="category-count" title="1 tag in the filter">
@@ -1001,7 +987,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                 "ALL (AND)"
               <option selected="true" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-cat-people">
+          <div class="tag-grid">
             <div class="tag-chip">
               <span class="tag-chip-label">
                 "Alice"
@@ -1022,7 +1008,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Uncategorized"
               <span class="category-count" title="1 tag in the filter">
@@ -1033,7 +1019,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                 "ALL (AND)"
               <option selected="false" value="1">
                 "ANY (OR)"
-          <div class="tag-grid" id="filter-tag-grid-__filter_uncategorized__">
+          <div class="tag-grid">
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Ghost"
@@ -1058,30 +1044,26 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
               "sync"
-          <button aria-describedby="P0-20" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "save"
-          <span class="visually-hidden" id="P0-20">
-            "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-22" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
+          <button aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
               <span class="material-symbol-icon">
                 "add"
-          <span class="visually-hidden" id="P0-22">
-            "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-19" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -1090,7 +1072,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-19" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -1098,9 +1080,6 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-19">
-          "Drag to reorder."
-        <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
       <span class="material-symbol-icon">

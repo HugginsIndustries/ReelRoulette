@@ -17,8 +17,6 @@ export function StatCards({ cards }: { cards: readonly StatsCard[] }) {
 /** A message in place of the cards, such as why they couldn't load. */
 export function StatCardsMessage({ text }: { text: string }) {
   return (
-    <p class="filter-hint is-error" role="alert">
-      {text}
-    </p>
+    <p class="filter-hint is-error">{text}</p>
   );
 }

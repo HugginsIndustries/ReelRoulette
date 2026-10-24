@@ -226,12 +226,9 @@ function summary(): HTMLElement {
   return document.getElementById("library-overlay-summary") as HTMLElement;
 }
 
-/** The count line as it shows, hidden from screen readers, and the words they hear in its place. */
-function countLine(): { shown: string; spoken: string } {
-  const [shown, spoken] = Array.from(summary().children);
-  expect(shown?.getAttribute("aria-hidden")).toBe("true");
-  expect(spoken?.classList.contains("visually-hidden")).toBe(true);
-  return { shown: shown?.textContent ?? "", spoken: spoken?.textContent ?? "" };
+/** The count line as it shows, such as "3 / 3". */
+function countLine(): string {
+  return summary().textContent ?? "";
 }
 
 /** The controls show, not collapsed. They show while the library loads, is empty, or fails too. */
@@ -281,7 +278,7 @@ async function expectRelayed(server: FakeServer, text: string): Promise<void> {
 
 /** The state the player's indicator shows, by its id, or null while it shows none. */
 function indicatorState(): string | null {
-  return document.querySelector<HTMLElement>("#player-indicator .player-indicator")?.dataset.state ?? null;
+  return document.querySelector<HTMLElement>("#player-indicator")?.dataset.state ?? null;
 }
 
 function video(): HTMLVideoElement {
@@ -331,7 +328,7 @@ describe("overlay", () => {
 
     await openLibrary();
     expect(isOpen()).toBe(true);
-    expect(within(overlay()).getByRole("alert").textContent).toBe("Server missing required capabilities: api.presets.byId.");
+    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe("Server missing required capabilities: api.presets.byId.");
     expect(controlsShown()).toBe(true);
     // Nothing loads, so search and sort have nothing to change, and the preset dropdown says why.
     expect([searchBox().disabled, sortSelect().disabled, directionButton().disabled]).toEqual([true, true, true]);
@@ -379,7 +376,7 @@ describe("without a library", () => {
     await flush();
 
     await openLibrary();
-    expect(within(overlay()).getByRole("alert").textContent).toBe(`Running without a library. ${NO_LIBRARY_MESSAGE}`);
+    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe(`Running without a library. ${NO_LIBRARY_MESSAGE}`);
     expect([searchBox().disabled, sortSelect().disabled, directionButton().disabled]).toEqual([true, true, true]);
     expect(summary().hidden).toBe(true);
     fireEvent.input(searchBox(), { target: { value: "clip" } });
@@ -414,7 +411,7 @@ describe("first page", () => {
 
     await openLibrary();
     expect(summary().hidden).toBe(false);
-    expect(countLine()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
+    expect(countLine()).toBe("3 / 3");
     expect(controlsShown()).toBe(true);
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4", "clip 3.mp4"]);
     expect(library.queries()).toHaveLength(1);
@@ -433,11 +430,11 @@ describe("first page", () => {
     await library.release();
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]);
-    expect(countLine()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
+    expect(countLine()).toBe("2 / 2");
     expect(controlsShown()).toBe(true);
   });
 
-  it("shows a first page that fails as an alert, relaying its status, and opening again loads it", async () => {
+  it("says a first page failed, in the error color, relaying its status, and opening again loads it", async () => {
     const { server, library } = await mountLibrary(libraryItems(2), (_, lib) => {
       lib.failures.push(500);
     });
@@ -449,7 +446,7 @@ describe("first page", () => {
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]);
   });
 
-  it("shows the load error as an alert, keeping the controls", async () => {
+  it("shows the load error in the error color, keeping the controls", async () => {
     const { server, library } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
@@ -457,7 +454,7 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed.");
+    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe("Library load failed.");
     // It shows in place, so it only relays, with the status in place of the text.
     await expectRelayed(server, "Library load failed (HTTP 503).");
     expect(controlsShown()).toBe(true);
@@ -477,7 +474,7 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe(message);
+    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe(message);
     await expectRelayed(server, `Library load failed (HTTP ${failure}).`);
   });
 
@@ -490,7 +487,7 @@ describe("first page", () => {
     await flush();
 
     await waitFor(() => expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex"));
-    expect(within(overlay()).queryByRole("alert")).toBeNull();
+    expect(overlay().querySelector(".library-overlay-status-error")).toBeNull();
     expect(overlay().textContent).not.toContain("Library load failed");
     // One line, the request's, which names its route.
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/library/query")));
@@ -555,7 +552,7 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: The server sent an unexpected response.");
+    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe("Library load failed: The server sent an unexpected response.");
     await expectRelayed(server, "Library load failed: The server sent an unexpected response (text/html).");
   });
 
@@ -567,7 +564,7 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe(`Library load failed: ${REMOTE_CONNECTIONS_OFF}`);
+    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe(`Library load failed: ${REMOTE_CONNECTIONS_OFF}`);
     await expectRelayed(server, "Library load failed (HTTP 403).");
   });
 
@@ -587,7 +584,7 @@ describe("first page", () => {
     await openLibrary();
 
     expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
-    expect(countLine()).toEqual({ shown: "0 / 5", spoken: "0 of 5 items" });
+    expect(countLine()).toBe("0 / 5");
     expect(controlsShown()).toBe(true);
   });
 });
@@ -611,7 +608,7 @@ describe("search and sort", () => {
     expect(library.queries()).toHaveLength(2);
     expect(library.queries()[1]).toMatchObject({ search: "hol", sortMode: "Name", offset: 0, limit: 200 });
     expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
-    expect(countLine()).toEqual({ shown: "0 / 3", spoken: "0 of 3 items" });
+    expect(countLine()).toBe("0 / 3");
     expect(searchBox().value).toBe("hol");
   });
 
@@ -722,7 +719,7 @@ describe("fill on scroll", () => {
     await waitFor(() => expect(library.queries()).toHaveLength(2));
     expect(library.queries()[1]).toMatchObject({ offset: 200, limit: 200 });
     await flush();
-    expect(countLine()).toEqual({ shown: "450 / 450", spoken: "450 of 450 items" });
+    expect(countLine()).toBe("450 / 450");
 
     await scrollGridTo(600);
     expect(library.queries()).toHaveLength(2);
@@ -768,7 +765,7 @@ describe("fill on scroll", () => {
     await scrollGridTo(1_000_100);
     await flush();
     expect(library.queries().slice(3).map((query) => query.offset)).toEqual([400, 600]);
-    expect(countLine()).toEqual({ shown: "650 / 650", spoken: "650 of 650 items" });
+    expect(countLine()).toBe("650 / 650");
   });
 
   it("hiding and showing keeps the tiles and the scroll position without querying", async () => {
@@ -850,7 +847,7 @@ describe("fill on scroll", () => {
     expect(body()).toBe(host);
     expect(gridScroll()).toBe(scroller);
     expect(gridScroll().scrollTop).toBe(600);
-    expect(countLine()).toEqual({ shown: "449 / 449", spoken: "449 of 449 items" });
+    expect(countLine()).toBe("449 / 449");
   });
 });
 
@@ -860,13 +857,13 @@ describe("starting over", () => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
     await openLibrary();
-    expect(countLine()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
+    expect(countLine()).toBe("3 / 3");
 
     library.items = [libraryItem(2, { isFavorite: true })];
     library.searchBaselineCount = 3;
     await pickPreset("preset-favorites");
     expect(library.queries()[1]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 200 });
-    expect(countLine()).toEqual({ shown: "1 / 3", spoken: "1 of 3 items" });
+    expect(countLine()).toBe("1 / 3");
     expect(tileNames()).toEqual(["clip 2.mp4"]);
   });
 
@@ -926,7 +923,7 @@ describe("live updates", () => {
     expect(library.queries()).toHaveLength(3);
     expect(library.queries()[2]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 3 });
     expect(tileNames()).toEqual(["clip 2.mp4", "clip 3.mp4"]);
-    expect(countLine()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
+    expect(countLine()).toBe("2 / 2");
   });
 
   it("a playback event patches the tiles under Name and reloads them under Play count", async () => {
@@ -1283,10 +1280,8 @@ describe("controls", () => {
     await pickPreset("preset-favorites");
     expect(currentStyle(filtersLine()).display).toBe("block");
     expect(currentStyle(randomLine()).display).toBe("block");
-    expect(collapseButton().getAttribute("aria-controls")).toBe("library-filter-summary library-random-line library-controls");
     expect(collapseButton().title).toBe("Hide controls & filters");
     expect(collapseButton().getAttribute("aria-label")).toBe("Hide library controls and filters");
-    expect(collapseButton().getAttribute("aria-expanded")).toBe("true");
     expect(collapseButton().textContent).toBe("unfold_less");
 
     await click(collapseButton());
@@ -1295,7 +1290,6 @@ describe("controls", () => {
     expect(currentStyle(randomLine()).display).toBe("none");
     expect(collapseButton().title).toBe("Show controls & filters");
     expect(collapseButton().getAttribute("aria-label")).toBe("Show library controls and filters");
-    expect(collapseButton().getAttribute("aria-expanded")).toBe("false");
     expect(collapseButton().textContent).toBe("unfold_more");
 
     await refresh(page, libraryItems(3), (server) => {
@@ -1310,7 +1304,7 @@ describe("controls", () => {
     expect(currentStyle(controls()).display).not.toBe("none");
     expect(currentStyle(filtersLine()).display).toBe("block");
     expect(currentStyle(randomLine()).display).toBe("block");
-    expect(collapseButton().getAttribute("aria-expanded")).toBe("true");
+    expect(collapseButton().title).toBe("Hide controls & filters");
   });
 });
 

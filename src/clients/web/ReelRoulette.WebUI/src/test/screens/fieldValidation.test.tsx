@@ -25,14 +25,8 @@ function token(name: string): string {
   return currentStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-/** The text of the element that describes `element`, or null when nothing does. */
-function description(element: HTMLElement): string | null {
-  const id = element.getAttribute("aria-describedby");
-  return id ? (document.getElementById(id)?.textContent ?? null) : null;
-}
-
 describe("a held action", () => {
-  it("shows the red badge over its top-right corner, out of its flow, with its reason as its title and description", () => {
+  it("shows the red badge over its top-right corner, out of its flow, with its label dimmed and its reason as its title", () => {
     useStylesheet();
     render(
       <HeldButton id="add" class="btn" disabled={false} heldReason={REASON} onClick={() => {}}>
@@ -50,10 +44,8 @@ describe("a held action", () => {
     expect(badge.textContent).toBe("error");
     expect(badge.getAttribute("aria-hidden")).toBe("true");
     expect(button.classList.contains("shows-problem")).toBe(true);
-    expect(button.getAttribute("aria-disabled")).toBe("true");
     expect(currentStyle(button.querySelector(".btn-label")!).opacity).toBe("0.5");
     expect(button.title).toBe(REASON);
-    expect(description(button)).toBe(REASON);
     // A text button keeps its own label as its name.
     expect(button.hasAttribute("aria-label")).toBe(false);
   });
@@ -70,7 +62,6 @@ describe("a held action", () => {
     const dot = () => button.querySelector<HTMLElement>(".unsaved-dot")!;
     expect(button.getAttribute("aria-label")).toBe("Apply");
     expect(button.title).toBe("Apply");
-    expect(button.hasAttribute("aria-describedby")).toBe(false);
     expect(dot().hidden).toBe(false);
     expect(button.classList.contains("shows-problem")).toBe(false);
     expect(currentStyle(dot()).backgroundColor).toBe(token("--huggins-orange"));
@@ -83,7 +74,6 @@ describe("a held action", () => {
     expect(currentStyle(button.querySelector(".btn-label")!).opacity).toBe("0.5");
     expect(button.getAttribute("aria-label")).toBe("Apply");
     expect(button.title).toBe(REASON);
-    expect(description(button)).toBe(REASON);
 
     rerender(apply({ dot: false, disabled: true, heldReason: null }));
     expect(dot().hidden).toBe(true);

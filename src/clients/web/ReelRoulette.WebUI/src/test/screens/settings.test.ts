@@ -115,12 +115,24 @@ function type(input: HTMLInputElement, text: string): void {
   fireEvent.input(input, { target: { value: text } });
 }
 
-/** What a flagged field's tooltip says, or null while the field isn't flagged. */
+/** What a flagged field's tooltip says, or null while the field shows no red icon, as while it fades out. */
 function problemOf(input: HTMLInputElement): string | null {
-  if (input.getAttribute("aria-invalid") !== "true") {
-    return null;
+  const field = input.closest(".vfield")!;
+  return field.querySelector(".vfield-icon:not(.is-fading-out)") ? field.querySelector(".vfield-tip")!.textContent : null;
+}
+
+/**
+ * The hint a setting's control shows: the line under a choice's title, or the hint right under a checkbox's row, a
+ * group of choices, or a field's row. Null while it shows none.
+ */
+function hintOf(control: HTMLElement): string | null {
+  const line = control.closest("label")?.querySelector("small");
+  if (line) {
+    return line.textContent;
   }
-  return document.getElementById(input.getAttribute("aria-describedby")!)!.textContent;
+  const row = control.matches('input[type="checkbox"]') ? control.closest(".choice-row") : control.matches('input[type="text"]') ? control.closest(".filter-row") : control;
+  const hint = row?.nextElementSibling;
+  return hint?.matches(".setting-hint") ? hint.textContent : null;
 }
 
 /** The player's volume slider, at the end of the seek row. */
@@ -219,7 +231,7 @@ describe("the Settings tab", () => {
 });
 
 describe("Enhanced audio", () => {
-  it("sits in Audio, right after Playback, on until turned off, with its description", async () => {
+  it("sits in Audio, right after Playback, on until turned off, with its hint", async () => {
     await mount();
     await openSettings();
     const box = checkbox("Enhanced audio");
@@ -227,7 +239,7 @@ describe("Enhanced audio", () => {
     expect(section.querySelector("h3")!.textContent).toBe("Audio");
     expect(section.previousElementSibling?.querySelector("h3")?.textContent).toBe("Playback");
     expect(box.checked).toBe(true);
-    expect(document.getElementById(box.getAttribute("aria-describedby")!)!.textContent).toBe(
+    expect(hintOf(box)).toBe(
       "Processes audio in the app, for loudness normalization and compression."
     );
   });
@@ -260,7 +272,7 @@ describe("Volume step", () => {
     const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
     expect(names).toEqual(["1%", "2%", "5%", "10%"]);
     expect(names.map((name) => radio(name!).checked)).toEqual([false, false, true, false]);
-    expect(document.getElementById(group.getAttribute("aria-describedby")!)!.textContent).toBe("Also for the scroll wheel and a two-finger drag over the player.");
+    expect(hintOf(group)).toBe("Also for the scroll wheel and a two-finger drag over the player.");
   });
 
   it("sets the step the scroll wheel takes, and is kept after a page refresh", async () => {
@@ -293,10 +305,6 @@ describe("Loudness normalization", () => {
 
   function loudnessBox(): HTMLInputElement {
     return checkbox("Loudness normalization");
-  }
-
-  function hintOf(input: HTMLInputElement): string {
-    return document.getElementById(input.getAttribute("aria-describedby")!)!.textContent!;
   }
 
   function loudnessSettings(): HTMLDetailsElement {
@@ -340,11 +348,7 @@ describe("Loudness normalization", () => {
   it("offers Automatic, the library's baseline, by default, Quieter, Standard, Louder, and Manual, a 15 dB boost limit, and Allow limiting on", async () => {
     await mount(serverWith());
     await openSettings();
-    const choices = ["Automatic", "Quieter", "Standard", "Louder", "Manual"].map((name) => {
-      const choice = radio(name);
-      const description = choice.getAttribute("aria-describedby");
-      return [name, choice.checked, description ? document.getElementById(description)!.textContent : null];
-    });
+    const choices = ["Automatic", "Quieter", "Standard", "Louder", "Manual"].map((name) => [name, radio(name).checked, hintOf(radio(name))]);
     expect(choices).toEqual([
       ["Automatic", true, "The library's baseline, -27.8 LUFS."],
       ["Quieter", false, "-23 LUFS"],
@@ -366,7 +370,7 @@ describe("Loudness normalization", () => {
     server.on("GET", "/api/library/stats", () => json({}, 500));
     await mount(server);
     await openSettings();
-    expect(document.getElementById(radio("Automatic").getAttribute("aria-describedby")!)!.textContent).toBe("The library's baseline.");
+    expect(hintOf(radio("Automatic"))).toBe("The library's baseline.");
   });
 
   it("shows Manual's target only while Manual is chosen, starting at -18 LUFS, with the full keyboard, since its values are negative", async () => {
@@ -441,9 +445,8 @@ describe("Loudness normalization", () => {
     expect(document.getElementById("settings-loudness-manual")!.hidden).toBe(true);
     expect([manualTarget().value, problemOf(manualTarget()), boostLimit().value]).toEqual(["-18", null, "15"]);
     expect(checkbox("Allow limiting").checked).toBe(true);
-    // No field says it saved: a check left from an earlier save fades out.
+    // No field shows it saved: a check left from an earlier save fades out.
     expect(settingsPage().querySelector("#settings-loudness-more .vfield-saved:not(.is-fading-out)")).toBeNull();
-    expect([...settingsPage().querySelectorAll('#settings-loudness-more [aria-live="polite"]')].map((region) => region.textContent)).toEqual(["", ""]);
     expect(keptSettings()).toEqual({ target: "automatic", manualTarget: -18, boostLimit: 15, allowLimiting: true });
     expect(loudnessBox().checked).toBe(false);
   });
@@ -506,10 +509,6 @@ describe("Compression", () => {
 
   function compressionBox(): HTMLInputElement {
     return checkbox("Compression");
-  }
-
-  function hintOf(input: HTMLInputElement): string {
-    return document.getElementById(input.getAttribute("aria-describedby")!)!.textContent!;
   }
 
   function compressionSettings(): HTMLDetailsElement {
@@ -711,12 +710,11 @@ describe("Autoplay mode and Loop stops autoplay", () => {
     expect(within(settings[3] as HTMLElement).getByRole("radiogroup", { name: "Seek step", hidden: true })).toBeTruthy();
 
     expect([radio("Normal").checked, radio("Timer").checked]).toEqual([true, false]);
-    const description = (input: HTMLElement) => document.getElementById(input.getAttribute("aria-describedby")!)!.textContent;
-    expect(description(radio("Normal"))).toBe("Photos advance after the timer; videos play to the end.");
-    expect(description(radio("Timer"))).toBe("Every item advances after the timer. Pausing a video holds it.");
-    expect(description(within(settings[0] as HTMLElement).getByRole("radiogroup", { hidden: true }))).toBe("The player's autoplay button turns it on and off.");
+    expect(hintOf(radio("Normal"))).toBe("Photos advance after the timer; videos play to the end.");
+    expect(hintOf(radio("Timer"))).toBe("Every item advances after the timer. Pausing a video holds it.");
+    expect(hintOf(within(settings[0] as HTMLElement).getByRole("radiogroup", { hidden: true }))).toBe("The player's autoplay button turns it on and off.");
     expect(checkbox("Loop stops autoplay").checked).toBe(true);
-    expect(description(checkbox("Loop stops autoplay"))).toBe(
+    expect(hintOf(checkbox("Loop stops autoplay"))).toBe(
       "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
     );
   });
@@ -1042,7 +1040,7 @@ describe("Player controls", () => {
     expect(
       within(choices)
         .getAllByRole("radio", { hidden: true })
-        .map((choice) => [choice.getAttribute("value"), (choice as HTMLInputElement).checked, document.getElementById(choice.getAttribute("aria-describedby") ?? "")?.textContent ?? null])
+        .map((choice) => [choice.getAttribute("value"), (choice as HTMLInputElement).checked, hintOf(choice)])
     ).toEqual([
       ["timeout", true, "They hide after a time with no activity."],
       ["click", false, "A click or tap on the player shows or hides them."],
@@ -1097,12 +1095,7 @@ describe("Advance after's saved check", () => {
     return settingsPage().querySelector(".vfield-saved");
   }
 
-  /** What the field's polite live region says. */
-  function said(): string {
-    return advanceAfter().closest(".vfield")!.querySelector('[aria-live="polite"]')!.textContent ?? "";
-  }
-
-  it("shows a green check and says Saved when Enter or leaving the field saves a new value, then fades the check out", async () => {
+  it("shows a green check when Enter or leaving the field saves a new value, then fades the check out", async () => {
     await mount();
     await openSettings();
     fakeTimers();
@@ -1110,22 +1103,22 @@ describe("Advance after's saved check", () => {
     input.focus();
 
     type(input, "42");
-    expect([fade(check()), said()]).toEqual(["gone", ""]);
+    expect(fade(check())).toBe("gone");
     fireEvent.keyDown(input, { key: "Enter" });
     await flush();
-    expect([fade(check()), said()]).toEqual(["shown", "Saved"]);
-    expect([check()!.textContent, check()!.getAttribute("aria-hidden"), check()!.parentElement]).toEqual(["check_circle", "true", input.closest(".vfield")]);
+    expect(fade(check())).toBe("shown");
+    expect([check()!.textContent, check()!.parentElement]).toEqual(["check_circle", input.closest(".vfield")]);
     await vi.advanceTimersByTimeAsync(SETTING_SAVED_MS - 1);
     expect(fade(check())).toBe("shown");
     await vi.advanceTimersByTimeAsync(1);
-    expect([fade(check()), said()]).toEqual(["fading", ""]);
+    expect(fade(check())).toBe("fading");
     await vi.advanceTimersByTimeAsync(FADE_MS);
     expect(fade(check())).toBe("gone");
 
     type(input, "43");
     fireEvent.blur(input);
     await flush();
-    expect([kept(), fade(check()), said()]).toEqual(["43", "shown", "Saved"]);
+    expect([kept(), fade(check())]).toEqual(["43", "shown"]);
   });
 
   it("shows none when the value stays as it was or a value that is not valid goes back, and typing again fades it out", async () => {
@@ -1138,11 +1131,11 @@ describe("Advance after's saved check", () => {
     type(input, " 010 ");
     fireEvent.keyDown(input, { key: "Enter" });
     await flush();
-    expect([fade(check()), said()]).toEqual(["gone", ""]);
+    expect(fade(check())).toBe("gone");
     type(input, "abc");
     fireEvent.blur(input);
     await flush();
-    expect([input.value, fade(check()), said()]).toEqual(["10", "gone", ""]);
+    expect([input.value, fade(check())]).toEqual(["10", "gone"]);
 
     // Typing over a saved value fades the check out as the red icon fades in.
     input.focus();
@@ -1151,7 +1144,7 @@ describe("Advance after's saved check", () => {
     await flush();
     type(input, "2x");
     await flush();
-    expect([fade(check()), said(), fade(input.closest(".vfield")!.querySelector(".vfield-icon"))]).toEqual(["fading", "", "shown"]);
+    expect([fade(check()), fade(input.closest(".vfield")!.querySelector(".vfield-icon"))]).toEqual(["fading", "shown"]);
     await vi.advanceTimersByTimeAsync(FADE_MS);
     expect(fade(check())).toBe("gone");
   });
@@ -1489,23 +1482,23 @@ function keptAmbientSettings(): unknown {
   return raw === null ? null : JSON.parse(raw);
 }
 
-/** Ambient mode's sliders: each one's name, with its range, step, value, value text, and the value shown. */
+/** Ambient mode's sliders: each one's name, with its range, step, value, and the value shown. */
 const AMBIENT_SLIDERS = ["Update rate", "Fade time", "Blur", "Strength in the dark theme", "Strength in the light theme", "Saturation"];
 
 function ambientSliders(): string[][] {
   return AMBIENT_SLIDERS.map((name) => {
     const input = slider(name);
-    return [name, input.min, input.max, input.step, input.value, input.getAttribute("aria-valuetext") ?? "", shownValue(input)];
+    return [name, input.min, input.max, input.step, input.value, shownValue(input)];
   });
 }
 
 const DEFAULT_AMBIENT_SLIDERS = [
-  ["Update rate", "0.25", "4", "0.25", "1", "1 per second", "1 per second"],
-  ["Fade time", "0.25", "4", "0.25", "2", "2 s", "2 s"],
-  ["Blur", "10", "80", "1", "64", "64 px", "64 px"],
-  ["Strength in the dark theme", "0", "100", "1", "50", "50%", "50%"],
-  ["Strength in the light theme", "0", "100", "1", "75", "75%", "75%"],
-  ["Saturation", "0", "200", "5", "100", "100%", "100%"]
+  ["Update rate", "0.25", "4", "0.25", "1", "1 per second"],
+  ["Fade time", "0.25", "4", "0.25", "2", "2 s"],
+  ["Blur", "10", "80", "1", "64", "64 px"],
+  ["Strength in the dark theme", "0", "100", "1", "50", "50%"],
+  ["Strength in the light theme", "0", "100", "1", "75", "75%"],
+  ["Saturation", "0", "200", "5", "100", "100%"]
 ];
 
 const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
@@ -1515,7 +1508,7 @@ describe("Ambient mode", () => {
     await mount();
     await openSettings();
     expect(ambientBox().checked).toBe(true);
-    expect(document.getElementById(ambientBox().getAttribute("aria-describedby")!)!.textContent).toBe(
+    expect(hintOf(ambientBox())).toBe(
       "A soft glow of the picture's colors fills the black space around it."
     );
     const appearance = document.getElementById("settings-appearance-heading")!.closest("section")!;
@@ -1593,12 +1586,12 @@ describe("Ambient mode", () => {
     moveSlider(slider("Saturation"), 150);
     await flush();
     expect(ambientSliders()).toEqual([
-      ["Update rate", "0.25", "4", "0.25", "4", "4 per second", "4 per second"],
-      ["Fade time", "0.25", "4", "0.25", "3", "3 s", "3 s"],
-      ["Blur", "10", "80", "1", "40", "40 px", "40 px"],
-      ["Strength in the dark theme", "0", "100", "1", "30", "30%", "30%"],
-      ["Strength in the light theme", "0", "100", "1", "60", "60%", "60%"],
-      ["Saturation", "0", "200", "5", "150", "150%", "150%"]
+      ["Update rate", "0.25", "4", "0.25", "4", "4 per second"],
+      ["Fade time", "0.25", "4", "0.25", "3", "3 s"],
+      ["Blur", "10", "80", "1", "40", "40 px"],
+      ["Strength in the dark theme", "0", "100", "1", "30", "30%"],
+      ["Strength in the light theme", "0", "100", "1", "60", "60%"],
+      ["Saturation", "0", "200", "5", "150", "150%"]
     ]);
     expect(ambientFilters()).toEqual(["blur(40px) brightness(0.3) saturate(1.5)", "blur(40px) brightness(0.6) saturate(1.5)"]);
     expect(keptAmbientSettings()).toEqual({ rate: 4, fade: 3, blur: 40, dark: 30, light: 60, saturation: 150 });
@@ -1644,7 +1637,7 @@ describe("Show file names on tiles", () => {
 
     await openSettings();
     expect(tileNamesBox().checked).toBe(false);
-    expect(document.getElementById(tileNamesBox().getAttribute("aria-describedby")!)!.textContent).toBe("Hovering a tile shows its name either way.");
+    expect(hintOf(tileNamesBox())).toBe("Hovering a tile shows its name either way.");
     await click(tileNamesBox());
     expect(localStorage.getItem("rr_device.appearance.tileNames")).toBe("true");
     await click(tab("Library"));
@@ -1692,7 +1685,7 @@ describe("Notifications", () => {
     await mount();
     await openSettings();
     expect(checkbox("Show popups").checked).toBe(true);
-    expect(document.getElementById(checkbox("Show popups").getAttribute("aria-describedby")!)!.textContent).toBe(
+    expect(hintOf(checkbox("Show popups"))).toBe(
       "Short messages over the player. The bell on the player lists them either way."
     );
     expect(popupSettings().open).toBe(false);
@@ -1707,7 +1700,7 @@ describe("Notifications", () => {
       ["skips", true],
       ["connection", true]
     ]);
-    expect(document.getElementById(checkbox("Other devices").getAttribute("aria-describedby")!)!.textContent).toBe(
+    expect(hintOf(checkbox("Other devices"))).toBe(
       "Favorites, blacklist, rating, and preset changes made on another device."
     );
     expect(Array.from(positionSelect().options).map((option) => [option.value, option.textContent])).toEqual([
@@ -1884,7 +1877,7 @@ describe("kept on this device", () => {
     expect(ambientFilters()).toEqual(["blur(20px) brightness(0.35) saturate(0.5)", "blur(20px) brightness(0.9) saturate(0.5)"]);
     await openSettings();
     expect(ambientBox().checked).toBe(false);
-    expect(ambientSliders().map((row) => [row[0], row[6]])).toEqual([
+    expect(ambientSliders().map((row) => [row[0], row[5]])).toEqual([
       ["Update rate", "2.5 per second"],
       ["Fade time", "0.5 s"],
       ["Blur", "20 px"],

@@ -110,7 +110,7 @@ describe("libraryQuerySession", () => {
     });
     expect(calls[0]?.filterState.blacklistedMode).toBe("excluded");
     const snap = session.snapshot();
-    expect(snap.summary).toEqual({ shown: "10 / 25", spoken: "10 of 25 items" });
+    expect(snap.summary).toBe("10 / 25");
     expect(snap.items).toHaveLength(1);
     expect(snap.phase).toBe("ready");
   });

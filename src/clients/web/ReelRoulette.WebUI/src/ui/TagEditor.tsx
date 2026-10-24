@@ -3,7 +3,7 @@ import type { TagCategory as CatalogCategory, TagCategoryRow, TagChipRow } from 
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import { ValidatedField } from "./FieldValidation";
-import { DragHandle, ReorderStatus, useReorder, type Reorder } from "./Reorder";
+import { DragHandle, useReorder, type Reorder } from "./Reorder";
 import { TagCategory, tagsInUse } from "./TagCategory";
 
 function Icon({ name }: { name: string }) {
@@ -33,13 +33,12 @@ export function TagEditor() {
           <h2>Tag Editor</h2>
           <button id="tag-editor-autotag-btn" class="icon-btn" type="button" title="Auto Tag" aria-label="Auto Tag" onClick={() => tagEditor.openAutoTag()}><Icon name="auto_awesome" /></button>
         </div>
-        <p id="tag-editor-target" class="tags-target" aria-live="polite" title={view?.heldName ?? undefined} hidden={!view?.heldName}>
+        <p id="tag-editor-target" class="tags-target" title={view?.heldName ?? undefined} hidden={!view?.heldName}>
           {view?.heldName ? <>Editing tags for <b>{view.heldName}</b></> : null}
         </p>
         <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
           {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} reorder={reorder} />) : view?.noModel ? "No tag model available." : null}
         </div>
-        {view ? <ReorderStatus reorder={reorder} /> : null}
         <div class="tag-editor-footer">
           <div class="tag-editor-footer-row">
             <button id="tag-editor-add-category-btn" class="icon-btn" type="button" title="Add category" aria-label="Add category" onClick={() => tagEditor.addCategory()}><Icon name="add" /></button>
@@ -102,7 +101,6 @@ function Category({ category, reorder }: { category: TagCategoryRow; reorder: Re
   return (
     <TagCategory
       name={category.name}
-      gridId={`tag-grid-${category.id}`}
       collapsed={category.collapsed}
       inUse={category.inUse}
       inUseTitle={tagsInUse(category.inUse, "on this item")}

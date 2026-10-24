@@ -289,13 +289,12 @@ function CompressionSetting() {
             id="settings-compression"
             checked={compression.enabled.value}
             disabled={off}
-            aria-describedby="settings-compression-hint"
             onChange={(event) => compression.setEnabled(event.currentTarget.checked)}
           />
           Compression
         </label>
       </div>
-      <p class="setting-hint" id="settings-compression-hint">
+      <p class="setting-hint">
         {off ? "Needs Enhanced audio." : "Evens out loudness within a video."}
       </p>
       <details class="setting-more" id="settings-compression-more">
@@ -328,16 +327,13 @@ function CompressionSetting() {
                           inputMode={field.inputMode}
                           shown={shown && custom}
                           revision={resets}
-                          describedBy={`settings-compression-${field.key}-hint`}
                           saved={() => customText(compression.settings.peek().custom, field)}
                           problemOf={(text) => customProblem(text, field)}
                           save={(text) => compression.updateCustom({ [field.key]: Number(text.trim()) / field.scale })}
                         />
                         <span>{field.unit}</span>
                       </div>
-                      <p class="setting-hint" id={`settings-compression-${field.key}-hint`}>
-                        {field.hint}
-                      </p>
+                      <p class="setting-hint">{field.hint}</p>
                     </Fragment>
                   ))}
                   <button
@@ -385,13 +381,12 @@ function LoudnessNormalization() {
             id="settings-loudness"
             checked={normalization.enabled.value}
             disabled={off}
-            aria-describedby="settings-loudness-hint"
             onChange={(event) => normalization.setEnabled(event.currentTarget.checked)}
           />
           Loudness normalization
         </label>
       </div>
-      <p class="setting-hint" id="settings-loudness-hint">
+      <p class="setting-hint">
         {off ? "Needs Enhanced audio." : "Evens out loudness between videos."}
       </p>
       <details class="setting-more" id="settings-loudness-more">
@@ -451,12 +446,11 @@ function LoudnessNormalization() {
                 checked={settings.allowLimiting}
                 disabled={off}
                 aria-labelledby="settings-loudness-limiting-label"
-                aria-describedby="settings-loudness-limiting-description"
                 onChange={(event) => normalization.updateSettings({ allowLimiting: event.currentTarget.checked })}
               />
               <span>
                 <span id="settings-loudness-limiting-label">Allow limiting</span>
-                <small id="settings-loudness-limiting-description">Lets quiet videos with loud moments get louder by limiting those moments.</small>
+                <small>Lets quiet videos with loud moments get louder by limiting those moments.</small>
               </span>
             </label>
           </div>
@@ -575,7 +569,7 @@ function AppearanceSettings() {
 /**
  * Ambient mode, and its Ambient mode settings, which start closed. Each setting's slider shows its value, applies as it
  * moves, whether ambient mode is on or off, and is kept on this device; Reset to defaults puts them all back. A slider
- * is named by its label alone, and its value, as shown, is its value text.
+ * is named by its label alone.
  */
 function AmbientMode() {
   const { settings } = useApp();
@@ -584,11 +578,11 @@ function AmbientMode() {
     <div class="setting">
       <div class="choice-row">
         <label>
-          <input type="checkbox" id="settings-ambient" checked={settings.ambient.value} aria-describedby="settings-ambient-hint" onChange={(event) => settings.setAmbient(event.currentTarget.checked)} />
+          <input type="checkbox" id="settings-ambient" checked={settings.ambient.value} onChange={(event) => settings.setAmbient(event.currentTarget.checked)} />
           Ambient mode
         </label>
       </div>
-      <p class="setting-hint" id="settings-ambient-hint">
+      <p class="setting-hint">
         A soft glow of the picture's colors fills the black space around it.
       </p>
       <details class="setting-more" id="settings-ambient-more">
@@ -615,7 +609,6 @@ function AmbientMode() {
                   step={step}
                   value={tuning[setting]}
                   aria-labelledby={`${id}-label`}
-                  aria-valuetext={shown}
                   onInput={(event) => settings.setAmbientTuning({ [setting]: Number(event.currentTarget.value) })}
                 />
               </Fragment>
@@ -658,11 +651,11 @@ function NotificationSettings() {
     <div class="setting">
       <div class="choice-row">
         <label>
-          <input type="checkbox" id="settings-popups" ref={showPopups} checked={current.popups} aria-describedby="settings-popups-hint" onChange={(event) => notifications.updateSettings({ popups: event.currentTarget.checked })} />
+          <input type="checkbox" id="settings-popups" ref={showPopups} checked={current.popups} onChange={(event) => notifications.updateSettings({ popups: event.currentTarget.checked })} />
           Show popups
         </label>
       </div>
-      <p class="setting-hint" id="settings-popups-hint">
+      <p class="setting-hint">
         Short messages over the player. The bell on the player lists them either way.
       </p>
       <details class="setting-more" id="settings-popups-more" ref={more}>
@@ -752,11 +745,11 @@ function KeyboardShortcuts() {
   }, [request]);
 
   return (
-    <section class="settings-section" aria-labelledby="settings-shortcuts-heading">
+    <section class="settings-section">
       <details class="setting-more shortcuts-more" id="settings-shortcuts" ref={more}>
         <summary>
           <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
-          <h3 id="settings-shortcuts-heading">Keyboard shortcuts</h3>
+          <h3>Keyboard shortcuts</h3>
         </summary>
         <dl class="shortcut-list">
           {SHORTCUT_LINES.map((line) => (

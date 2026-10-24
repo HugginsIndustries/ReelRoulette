@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { RATING_CLEAR_EDGE_PX, ratingAt, ratingText, starFill, stepRating } from "../rating/rating";
 
 describe("rating", () => {
-  it("reads as its value text says it: in stars, 1 star in the singular, or Not rated", () => {
+  it("reads in stars, 1 star in the singular, or Not rated", () => {
     expect([0.5, 1, 1.5, 3, 5, null].map(ratingText)).toEqual(["0.5 stars", "1 star", "1.5 stars", "3 stars", "5 stars", "Not rated"]);
   });
 

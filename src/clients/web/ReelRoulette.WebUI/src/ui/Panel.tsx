@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { PANEL_MIN_WIDTH, PANEL_TABS, type PanelTab } from "../panel/panelHost";
+import { PANEL_TABS, type PanelTab } from "../panel/panelHost";
 import { useApp } from "./appContext";
 import { FilterDialog } from "./FilterDialog";
 import { LibraryOverlay } from "./LibraryOverlay";
@@ -109,7 +109,7 @@ function PanelTabs() {
           const { label, icon } = TABS[name];
           const held = dots[name];
           return (
-            <button key={name} type="button" id={`panel-tab-${name}`} class="tab panel-tab" role="tab" aria-selected={name === shown ? "true" : "false"} aria-controls={`panel-page-${name}`} aria-label={held ? `${label}, unsaved changes` : label} title={held ? `${label} (unsaved changes)` : label} onClick={() => void panel.showTab(name)}>
+            <button key={name} type="button" id={`panel-tab-${name}`} class="tab panel-tab" role="tab" aria-selected={name === shown ? "true" : "false"} aria-label={held ? `${label}, unsaved changes` : label} title={held ? `${label} (unsaved changes)` : label} onClick={() => void panel.showTab(name)}>
               <span class="material-symbol-icon">{icon}</span>
               {held === null ? null : <span class="unsaved-dot" hidden={!held}></span>}
             </button>
@@ -166,23 +166,8 @@ function PanelHandle({ element }: { element: { current: HTMLDivElement | null } 
     setDragging(true);
   }
 
-  const width = panel.width.value;
   return (
-    <div
-      id="panel-handle"
-      class={dragging ? "panel-handle is-dragging" : "panel-handle"}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      aria-controls="panel"
-      aria-valuemin={PANEL_MIN_WIDTH}
-      aria-valuemax={panel.maxWidth.value}
-      aria-valuenow={width}
-      aria-valuetext={`${width} pixels`}
-      hidden
-      ref={element}
-      onPointerDown={onPointerDown}
-    >
+    <div id="panel-handle" class={dragging ? "panel-handle is-dragging" : "panel-handle"} hidden ref={element} onPointerDown={onPointerDown}>
       <span class="handle-grip"></span>
     </div>
   );
