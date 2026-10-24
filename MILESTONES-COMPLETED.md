@@ -6,6 +6,225 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12l - WebUI Grid Row Reuse and Zoom
+
+- **Status**: ✅ Complete
+- **Goal**: The WebUI library grid updates only the rows and tiles that change, so it no longer flickers on an iPad or after a hard refresh, and Ctrl+scroll or a pinch over it zooms its row height smoothly.
+- **Depends on**: WebUI Library Tab, so it is built in the Preact Library tab, whose width changes whenever the side panel is resized.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Ctrl+scroll over the library grid, which a laptop trackpad pinch also sends, and a two-finger pinch on touch screens zoom the grid's target row height between 100 and 300 px, 160 by default.
+- While a zoom gesture lasts, the grid scales as one picture around the pointer or the pinch's center on every frame, without reflowing its rows, and moving the pinch's center pans it.
+- When the gesture settles, as the fingers lift or the wheel pauses, the rows reflow once to the new row height, and each tile in view animates from its scaled place to its new one.
+- The row height after a zoom is any whole number of pixels in the range rather than a step, so the settle adds no second jump.
+- The tile under the pointer, or under the pinch's center, keeps its vertical place on screen through the reflow, and across it moves to wherever its new row places it, since justified rows decide each tile's place across.
+- With the system's reduced-motion setting, the tiles take their new places at once, while the scaling during the gesture still follows the wheel or the fingers.
+- A reflow keeps each tile's element by item and moves it into its new row, so the zoom's animation moves the tiles themselves and no thumbnail loads again.
+- The row height is kept per device.
+- The rows' minimum and maximum heights scale with the target row height.
+- Tiles are spaced evenly, 1 px apart across a row and between rows, at every row height.
+- Ctrl+scroll never zooms the page anywhere in the app; Ctrl with + and - still zoom it.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | Ctrl+scroll and a pinch scaling the library grid smoothly and settling into one animated reflow at the new row height, with tiles evenly 1 px apart, approved by the user. |
+| Row reuse | ✅ Complete | Grid rows and tiles kept and updated in place instead of rebuilt through `innerHTML`, and tiles kept through a reflow, so the grid no longer flickers on an iPad or after a hard refresh. |
+| Grid zoom | ✅ Complete | Ctrl+scroll, a trackpad pinch, and a touch pinch scaling the grid and settling into one animated reflow at the new row height, kept per device, tiles evenly 1 px apart, and Ctrl+scroll never zooming the page. |
+
+#### Mockup slice
+
+**Scope**
+
+- Ctrl+scroll and a pinch over the library grid scale it around the pointer or the pinch's center, then reflow it once at the new row height with the tiles animating to their new places, in `docs/mockups/reelroulette/` (`build/layout.src.html`).
+- The tile under the pointer, or under the pinch's center, keeps its vertical place through the reflow.
+- Tiles sit 1 px apart across a row and between rows at every row height.
+- The row height is kept on the device with the mockup's other settings.
+- The grid follows filter changes made while the Library tab is hidden, as the app's grid does.
+- Ctrl+scroll never zooms the mockup's page, and a pinch over the grid doesn't zoom it.
+- The design table's Library tiles line gives the new range and the gestures (`build/index.src.html`).
+- How far a wheel notch zooms, how a trackpad pinch maps to the scale, how soon a gesture counts as settled, how long the tiles' move takes, and how tiles coming into view appear are settled in the mockup.
+- The user approves the design on a desktop browser, the iPad, and an Android phone before the app is built.
+
+**Traps**
+
+- The mockup's grid aims for rows of 160 px, from 100 to 240 (`TILE_SIZE` in `build/layout.src.html`).
+- The mockup's design table says "Rows 100–240 px, aiming for 160." (`build/index.src.html`).
+- The mockup's grid rebuilds every tile on each layout and shows all 72 items without virtualization (`layoutGrid` and `ITEMS` in `build/layout.src.html`), so its animation can read each tile's old place from the old elements before the rebuild.
+- The mockup keeps its per-device settings in browser storage through `store` (`build/common.js`).
+- Tiles in a row sat 2 px apart and rows 1 px apart (`buildRows` and `.lib-row` in `build/layout.src.html`).
+- A layout asked for while the Library tab was hidden, as applying a filter from the Filter tab asks for one, was skipped, and showing the tab again kept the old tiles, since the grid lays out again only when its width changes (`layoutGrid` in `build/layout.src.html`) (measured).
+- A long press on a tile starts selection on touch screens in the mockup, and only a move of 8 px cancels it.
+- The mockup's grid sets no `touch-action`, so a pinch over it zooms the page (inferred).
+- A layer scaled up inside the grid's scroll container adds to its scrollable area, which can show a horizontal scrollbar or resize the grid during the gesture (inferred).
+- Chrome treats wheel listeners on the window and document as passive unless they pass `passive: false`, so a page-wide Ctrl+wheel guard must pass it (inferred).
+- Chrome and Firefox send a trackpad pinch as wheel events with `ctrlKey` set, while Safari on a Mac sends `gesturestart` and `gesturechange` instead (inferred).
+
+**Acceptance**
+
+- The mockup shows Ctrl+scroll and a pinch over the grid scaling it around the pointer or the pinch's center, then reflowing it once at a row height from 100 to 300 px, kept on the device, with the tiles animating to their new places and the tile under the pointer keeping its vertical place, tiles 1 px apart across a row and between rows, and the grid following filter changes, as the user approved it in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- The user approved the mockup after two review rounds, keeping its starting feel: a wheel notch zooms 15%, eased over a few frames, a trackpad pinch zooms about 1% per pixel of scroll, a gesture settles 200 ms after the wheel stops or as the fingers lift, and tiles move to their new places over 220 ms while tiles new to view fade in over the same time.
+- The review round added even 1 px spacing across a row and between rows, kept the row height on the device, and made the grid follow a filter applied from the Filter tab, which it had missed since before this slice.
+- A clipping layer around the scaled rows keeps a gesture from adding a scrollbar or resizing the grid (`.lib-zoom` in `build/layout.src.html`).
+- The mockup and the player share one test for a mouse wheel's notch (`isWheelNotch` in `build/layout.src.html`).
+- In one-off happy-dom runs, three Ctrl+wheel notches took the row height from 160 to 243 px, a trackpad-style zoom-out stopped at 100, a pinch-out stopped at 300 with its center held, Ctrl+wheel was cancelled across the page while a plain wheel was not, and no script errors occurred (measured).
+- In a one-off happy-dom run that treats hidden elements as a browser does, the last commit's mockup kept 62 of 72 tiles after Favorites only was applied from the Filter tab, and the fixed mockup showed 15 of 72 (measured).
+- The row height was kept after a pinch and restored on reload, and a kept value outside 100 to 300 px fell back to 160 (measured).
+- The index's Library notes and design table describe the zoom, the even spacing, and the starting feel (`build/index.src.html`).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, `node docs/mockups/reelroulette/build/check.mjs` passes, and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+
+#### Row reuse slice
+
+**Scope**
+
+- Keep row elements that stay visible, add and remove only the rows that enter or leave, and update a patched tile in place.
+- Keep tile elements by item through a reflow, such as a width change, moving the tiles that stay in view into their new rows instead of recreating them.
+- Grid rows stop going through `innerHTML`.
+- Apart from that, grid layout, scrolling, and tile behavior stay as they are.
+
+**Traps**
+
+- Each change of visible rows replaces the rows' HTML through `innerHTML`, which recreates every tile image.
+- The WebUI Preact Migration's library overlay keeps the grid controller's row HTML.
+- Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
+- In Node 24 on the development machine with the layout and virtualizer modules alone (no DOM), one full rebuild takes 0.5 ms for 10,000 items at 1,400 px wide and 1.2 ms at 390 px, and 2.7 to 7.8 ms for 49,000 (measured).
+- Loading 10,000 items in 200-item pages spends 13 to 32 ms in total on rebuilds, and 49,000 spends 355 to 953 ms over 245 pages, about 1.5 to 4 ms per page. The growth is real but small (measured).
+- Replacing the rows' HTML is the likely cause of the iPad flicker, and was not measured (inferred).
+- On an iPad with the WebUI installed as an app, the grid flickers dark each time it re-renders its visible rows while scrolling, about seven times for a screen-height drag in landscape with three to four rows on screen. Desktop browsers and Firefox on Android are fine. Each re-render rebuilds every visible row's HTML, including images that were already showing (measured before promotion).
+- In desktop browsers, before and after the WebUI Preact Migration, after a hard refresh (Ctrl+F5), which bypasses the image cache, the grid flickers when it opens and on every scroll, because each row rebuild requests its thumbnails again. Desktop browsers are fine only while the thumbnails are cached (measured).
+
+**Acceptance**
+
+- Scrolling keeps the image elements of rows that stay visible, in WebUI tests for row reuse.
+- A reflow at a new width keeps the tile and image elements of the items that stay in view, in WebUI tests for row reuse.
+- A favorite, blacklist, playback, or tag patch updates only the affected tile, in WebUI tests for tile patching.
+- No grid row is rendered through `innerHTML`, in WebUI tests for row reuse.
+- Layout results match the current layout for the same items and width, in WebUI tests.
+- Scrolling keeps the rows and image elements that stay visible instead of rebuilding them, which stands in for the flicker on an iPad and after a hard refresh, in WebUI tests for row reuse.
+- Before-and-after timings for rendering a large window in a browser are recorded.
+- `npm run verify` passes, and a spot check on the user's own iPad and desktop browser, without the VM: on the iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker, and in the desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
+
+**Evidence**
+
+- The grid keeps its rows in view by their place in the layout and its tiles by item id, moves a tile into whichever row holds it, and changes a tile only where it differs (`src/library/libraryGridRows.ts` and `src/library/libraryGridTile.ts`, which replace `libraryGridRowModel.ts` and `libraryGridTileModel.ts`).
+- No grid row or tile is built from HTML text; tiles are built as elements with the same markup as before.
+- An item loaded twice, as when the library changes between two pages, gets a tile in each place.
+- A thumbnail that fails to load stays blank until its tile leaves the view and comes back or its thumbnail changes, since a kept image is never requested again; the user chose no retry.
+- The controller tests run in happy-dom, with stubs for the box size, a hidden scroller ignoring scrolling, and ResizeObserver, whose happy-dom version never calls back (`src/test/libraryGridController.test.ts`).
+- Row reuse tests show that scrolling keeps the rows and images that stay visible and creates images only for tiles coming into view, that scrolling down adds and removes only the rows coming into and leaving view and moves none of the rows that stay, that a reflow at a new width keeps the tile and image elements of the items in view and moves them into their new rows, that no grid element's `innerHTML` is set while loading, scrolling, reflowing, adding a page, or patching, and that an item loaded twice keeps both tiles.
+- After a scroll, a reflow that narrows the grid, an added page, a patch, and a reflow that widens it, which moves tiles into earlier rows still shown, the kept grid's markup equals that of a new grid for the same items, width, and scroll position, in the row reuse tests, and the layout and Library rows tests pass unchanged apart from the removed fields.
+- A tile patching test in the Library screen tests shows that a favorite or blacklist event changes only that tile and that playback, tag, and rating events change no tile, without a query.
+- The tile tests check the built markup, that an update with nothing changed writes nothing, and that a new thumbnail version changes the kept image's `src` (`src/test/libraryGridTile.test.ts`).
+- Each kind of break failed its tests and passed once restored: building every row and tile again on each render, emptying rows through `innerHTML`, a kept tile never taking its new width, two copies of an item sharing one tile, rewriting the tooltip on every update, and moving every row that stays when the top row leaves while scrolling down (measured).
+- The Library markup snapshot changed only in tile widths, which the grid now sets through the element's style and happy-dom keeps to six decimals, such as 284.444444px for 284.44444444444446px (measured).
+- Unused layout code is removed: `getFallbackThumbnailDimensions`, `FALLBACK_HEIGHT`, the rows' `rowWidth`, `aspectRatioUsed`, `itemCount`, and `maxColumns`, `countVisibleRows`, and the controller's `getVisibleRowCountForFixture`.
+- In headless Firefox 157 with a throwaway profile and no network, with 10,000 items in a 420 × 800 px panel, as medians of 15 runs including style and layout, in two passes in opposite orders, before and after in ms (measured):
+  - Opening: 1.68 and 1.66 before, 1.64 and 1.68 after.
+  - Scrolling a screen height in 20 scroll events: 17.68 and 16.34 before, 7.28 and 8.36 after, the slowest event 2.10 and 2.00 before, 1.10 and 1.46 after.
+  - A favorite patch: 2.48 and 2.32 before, 0.84 and 1.14 after.
+  - A width change: 2.16 and 2.06 before, 2.02 and 2.00 after.
+  - An added page of 200: 2.08 and 2.12 before, 0.86 and 0.86 after.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the kept rows and tiles and the fixed flicker.
+- `npm run verify` passes, with 2,133 tests in 88 files.
+- In the user's spot check, scrolling the library grid a screen height in landscape on the iPad with the WebUI installed as an app showed no flicker, and neither did opening the library and scrolling the grid in the desktop browser after a hard refresh (Ctrl+F5).
+
+#### Grid zoom slice
+
+**Scope**
+
+- Ctrl+scroll, a trackpad pinch, and a two-finger pinch over the library grid scale it around the pointer or the pinch's center on every frame, then reflow it once at the new row height with the tiles animating from their scaled places to their new ones, as the approved mockup shows, in the grid's layout, virtualizer, and controller (`src/library/libraryGridLayout.ts`, `src/library/libraryGridVirtualizer.ts`, `src/library/libraryGridController.ts`).
+- The layout takes the target row height as an input in place of its module constants.
+- When a gesture starts, the grid renders the rows needed to fill the view at the smallest scale the gesture can reach.
+- With reduced motion, the tiles take their new places at once.
+- The row height is kept in the per-device store (`src/state/deviceStore.ts`).
+- Tiles sit 1 px apart across a row and between rows at every row height, as the approved mockup shows (`HORIZONTAL_GAP` and `VERTICAL_ROW_GAP` in `src/library/libraryGridLayout.ts`, and `.library-grid-row` in `src/styles.css`).
+- The player's test for a mouse wheel's notch (`src/playback/mediaGestures.ts`) is shared with the grid rather than copied.
+- Ctrl+wheel is cancelled everywhere in the app, so neither Ctrl+scroll nor a trackpad pinch zooms the page, and Ctrl with + and - is left to the browser.
+
+**Traps**
+
+- The target, minimum, and maximum row heights are module constants (`TARGET_ROW_HEIGHT`, `MIN_ROW_HEIGHT`, and `MAX_ROW_HEIGHT` in `src/library/libraryGridLayout.ts`).
+- Tiles in a row are 2 px apart and rows 1 px apart (`HORIZONTAL_GAP` and `VERTICAL_ROW_GAP` in `src/library/libraryGridLayout.ts`, and the `gap` and `margin-bottom` of `.library-grid-row` in `src/styles.css`).
+- Every row except the last comes out at or below the target height, since a row closes once its tiles reach the grid's width at the target height and is then scaled down to fit, so the maximum never applies to those rows, and the last row sits at the target (`buildRows` in `src/library/libraryGridLayout.ts`).
+- The grid has no wheel or touch handlers and sets no `touch-action`, and the viewport meta in `index.html` allows zoom.
+- A pinch over the grid zooms the page (inferred).
+- The grid's scroll container scrolls both ways (`overflow: auto` on `.library-grid-scroll` in `src/styles.css`), so a layer scaled up inside it can add a horizontal scrollbar (inferred).
+- The player cancels every wheel event over the media area, Ctrl+wheel included, and turns away Safari's pinch by cancelling `gesturestart` (`src/ui/Player.tsx`).
+- Chrome and Firefox send a trackpad pinch as wheel events with `ctrlKey` set, while Safari on a Mac sends `gesturestart` and `gesturechange` instead (inferred).
+- Chrome treats wheel listeners on the window and document as passive unless they pass `passive: false` (inferred).
+- Once the browser starts scrolling for a first finger, a second finger's moves can no longer be cancelled (inferred).
+- A row height change rebuilds the layout for every loaded item, which takes 2.7 to 7.8 ms for 49,000 items in Node 24 with the layout and virtualizer modules alone (measured).
+- On an iPad the settle's reflow likely takes longer than in Node, which makes it the gesture's one heavy frame (inferred).
+- A browser draws a layer scaled up during a gesture from its old pixels, so tiles look soft until the reflow (inferred).
+- happy-dom implements `Element.animate` and `getAnimations`, so tests can read each tile's keyframes.
+- happy-dom's `WheelEvent` drops `ctrlKey` from its init, so tests set it on the event themselves (measured).
+- The WebUI reads the reduced-motion setting through `matchMedia` (`src/ui/FieldValidation.tsx`), and the screen-test harness can make it match (`src/test/screens/pageHarness.ts`).
+- Before the WebUI Library Tab set rows of 160 px, from 100 to 240, the grid aimed at 300 px rows, from 200 to 400.
+- The server's thumbnails are at most 480 px on their long edge (`ThumbnailMaxEdge` in `RefreshPipelineService.cs`).
+- On an iPad at 300 px rows, 8 to 27% of tiles, across the library panel's widths, stretch their 480 px thumbnail more than 1.3× and look soft (measured).
+
+**Acceptance**
+
+- Ctrl+wheel over the grid scales it around the pointer while the wheel turns and, once it settles, sets the target row height between 100 and 300 px, from 160 by default, with the minimum and maximum scaling with it, in WebUI tests of grid zoom.
+- A two-finger pinch over the grid scales it around the pinch's center, pans it as the center moves, and sets the row height when the fingers lift, in WebUI tests of grid zoom with touch events.
+- A gesture reflows the rows once, when it settles, in WebUI tests of grid zoom.
+- At the reflow, the tiles in view animate from their scaled places to their new ones, and with reduced motion they take their places at once, in WebUI tests of grid zoom.
+- The tile under the pointer, or under the pinch's center, keeps its vertical place through the reflow, in WebUI tests of grid zoom.
+- The reflow keeps the tile and image elements of the items that stay in view, in WebUI tests of grid zoom.
+- The row height is kept per device and restored on reload, in WebUI tests of grid zoom with the per-device store.
+- Ctrl+wheel is cancelled everywhere in the app, and Ctrl with + and - is not, in WebUI tests of the page zoom guard.
+- Tiles are 1 px apart across a row and between rows at every row height, in layout tests.
+- At 160 px the layout matches the one before this slice for the same items and width, apart from the 1 px gap across a row, in layout tests.
+- The time of the settle's reflow for a large window in a browser is recorded.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check in the desktop browser with Ctrl+scroll and on the iPad with a pinch.
+
+**Evidence**
+
+- The gesture lives in `src/library/libraryGridZoom.ts`, with the mockup's feel: a wheel notch zooms 15% eased over a few frames, a trackpad's deltas about 1% a pixel, a gesture settles 200 ms after the wheel stops or as a finger lifts, and tiles move over 220 ms while tiles new to the view fade in.
+- The controller listens for the wheel and touches on the grid's scroller, which scrolls with one finger and claims pinches (`touch-action: pan-y`), turns away Safari's `gesturestart`, and scales the rows inside a clipping layer (`.library-grid-zoom`, `overflow: clip`) so a gesture adds no scrollbar.
+- The rows are laid out to the scroller's own width, which leaves out its scrollbar, and the scroller always keeps the scrollbar's room (`scrollbar-gutter: stable`), so in a browser whose scrollbar takes up room, such as Chrome, the clipping layer cuts off no tile. Since the first WebUI grid they were laid out to the width around the scroller, so there they ran under the scrollbar with a sideways scrollbar below (inferred from the code, not seen in a browser).
+- A gesture starts by rendering the rows that fill the view at its smallest scale, at least the 900 px scrolling renders (`zoomOverscanPx`).
+- Scrolling, content, and width changes that come during a gesture wait for its settle, which shows them in its one reflow, since a row coming or going under the scaled layer would move the picture and every play's event reaches the grid. The user chose to have the mockup do the same.
+- The tiles' places for the animation and the tile under the pointer are worked out from the layout and the gesture's scale, not measured from the page, and the controller keeps the animations it starts and finishes them when a new gesture starts, since happy-dom's `getAnimations` ignores `subtree` (measured).
+- The layout takes the target row height (`buildRows`, `createVirtualizerState`), with `DEFAULT_TARGET_ROW_HEIGHT`, `MIN_TARGET_ROW_HEIGHT`, `MAX_TARGET_ROW_HEIGHT`, `SHORTEST_ROW_RATIO`, `TALLEST_ROW_RATIO`, and one `TILE_GAP` in place of the old row height and gap constants, and gains `getTileLeftOffsets` and `findRowIndexForItem`.
+- The Library tab keeps the row height under `library.rowHeight` in the per-device store, reads it once when the tab is created, falling back to 160 for anything but a whole number from 100 to 300, and starts each new grid from it.
+- `src/ui/wheel.ts` holds the wheel notch test the player and the grid share and the page-wide Ctrl+wheel guard, installed in `Stage.tsx`, `src/ui/touch.ts` the touch point type they share, and `src/ui/reducedMotion.ts` the reduced-motion check `FieldValidation.tsx` had to itself.
+- Gesture tests (`src/test/libraryGridZoom.test.ts`), grid zoom tests in the controller tests, row height tests in the Library tests and the Library screen tests, page zoom tests (`src/test/wheel.test.ts` and the keyboard screen tests), and layout tests at 100, 160, and 300 px cover the acceptance criteria.
+- Each kind of break failed its tests and passed once restored: removing the anchoring, applying content during a gesture, rows following a scroll or a resize during a gesture, ignoring reduced motion, starting no tile moves, not finishing them before a new gesture, rendering no extra rows at a gesture's start, leaving a pinch's moves to the browser, skipping the device write, not installing the page zoom guard, a guard that lets Ctrl+wheel through, the gap back at 2 px, a settle reporting the grid's coverage before it scrolls, laying the rows out to the width around the scroller, dropping the scroller's kept scrollbar room, and a gesture keeping its timer and frame after the grid goes (measured).
+- No row breaks changed in any test fixture with the gap at 1 px, in a one-off Node comparison of the layout at both gaps (measured).
+- The Library markup snapshot gained only the clipping layer around the rows (measured).
+- The Library rows screen test checks each row's width to 5 decimals instead of 6, since happy-dom keeps six decimals of each tile's width and a row then came out 0.000001 px short (measured).
+- In headless Firefox 157.0.1 with a throwaway profile, run in a network namespace with no network, with a 420 × 800 px panel scrolled halfway, trackpad-style zooms between 160 and 203 px rows, as medians of 15 settles including style and layout, in two passes in opposite orders, in ms (measured):
+  - 10,000 items: zooming in 2.98 and 2.56, zooming out 3.10 and 2.50, the slowest 4.36.
+  - 49,000 items: zooming in 5.96 and 5.98, zooming out 6.02 and 6.02, the slowest 10.16.
+  - A gesture's start, which renders the extra rows: 0.38 to 0.45, the slowest 0.86.
+- The mockup lays the grid out after a gesture settles instead of during it (`layoutGrid` in `build/layout.src.html`), which the index's Library notes say, and its grid keeps its scrollbar's room as the app's does (`.lib-grid`); `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the zoom, the kept row height, the even gap, the rows beside the scrollbar, and the page zoom guard.
+- `npm run verify` passes, with 2,182 tests in 90 files, and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- In the user's spot check, Ctrl+scroll over the library grid in the desktop browser scaled it smoothly around the pointer and settled with the tiles moving to their places and the tile under the pointer keeping its vertical place, without zooming the page, and the row height stayed after a reload; on the iPad with the WebUI installed as an app, a pinch over the grid scaled it smoothly and settled into the new row height without zooming the page.
+
+#### Release checks
+
+- Manual: On an iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker.
+- Manual: In a desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
+- Manual: In a desktop browser, Ctrl+scroll over the library grid scales it smoothly, then settles into the new row height with the tiles moving to their places and the tile under the pointer keeping its vertical place, without zooming the page.
+- Manual: On the iPad and an Android phone, a pinch over the library grid scales it smoothly and settles into the new row height without zooming the page.
+
+#### Not included
+
+- Extending the layout for appended pages instead of rebuilding it, since a rebuild measured a few milliseconds per page.
+- Placeholder tiles and loading the page at the scroll position, which is WebUI Grid Scrollbar Seek.
+- Zooming into the playing photo or video, which is Player Zoom and Pan.
+- Thumbnails larger than 480 px, a sharper photo resize, and a rebuild of every thumbnail, which is Sharper Thumbnails.
+- A trackpad pinch in Safari on a Mac, which sends gesture events instead of Ctrl+wheel, since no Mac is among the devices the app is checked on.
+
 ### M12k7 - WebUI Keyboard Navigation and Screen Reader Code Removal
 
 - **Status**: ✅ Complete

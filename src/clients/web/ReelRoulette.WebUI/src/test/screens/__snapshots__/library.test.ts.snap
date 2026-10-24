@@ -138,38 +138,39 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
       <p class="library-overlay-status" hidden="">
       <div class="library-grid-scroll themed-scrollbar">
         <div class="library-grid-spacer library-grid-spacer-top" style="height: 0px">
-        <div class="library-grid-rows">
-          <div class="library-grid-row" style="height: 160px">
-            <div class="library-grid-tile" data-item-id="item-1" style="height: 160px; width: 284.444444px" title="clip 1.mp4">
-              <div class="library-grid-tile-media">
-                <div class="library-grid-tile-scrim">
-                <div class="library-grid-tile-playing">
-                  <span class="material-symbol-icon is-filled">
-                    "play_circle"
-                <div class="library-grid-tile-filename">
-                  "clip 1.mp4"
-            <div class="library-grid-tile" data-item-id="item-2" style="height: 160px; width: 284.444444px" title="clip 2.mp4">
-              <div class="library-grid-tile-media">
-                <div class="library-grid-tile-scrim">
-                  <img alt="" class="library-grid-tile-image" decoding="async" loading="lazy" src="http://localhost:51301/api/thumbnail/item-2?v=v7">
-                <div class="library-grid-tile-playing">
-                  <span class="material-symbol-icon is-filled">
-                    "play_circle"
-                <div class="library-grid-tile-filename">
-                  "clip 2.mp4"
-            <div class="library-grid-tile" data-item-id="item-3" style="height: 160px; width: 213.333333px" title="clip 3.mp4">
-              <div class="library-grid-tile-media">
-                <div class="library-grid-tile-scrim">
-                <div class="library-grid-tile-badge">
-                  <span class="material-symbol-icon is-filled library-grid-tile-badge-icon">
-                    "favorite"
-                  <span class="material-symbol-icon is-filled library-grid-tile-badge-icon">
-                    "thumb_down"
-                <div class="library-grid-tile-playing">
-                  <span class="material-symbol-icon is-filled">
-                    "play_circle"
-                <div class="library-grid-tile-filename">
-                  "clip 3.mp4"
+        <div class="library-grid-zoom">
+          <div class="library-grid-rows">
+            <div class="library-grid-row" style="height: 160px">
+              <div class="library-grid-tile" data-item-id="item-1" style="height: 160px; width: 284.444444px" title="clip 1.mp4">
+                <div class="library-grid-tile-media">
+                  <div class="library-grid-tile-scrim">
+                  <div class="library-grid-tile-playing">
+                    <span class="material-symbol-icon is-filled">
+                      "play_circle"
+                  <div class="library-grid-tile-filename">
+                    "clip 1.mp4"
+              <div class="library-grid-tile" data-item-id="item-2" style="height: 160px; width: 284.444444px" title="clip 2.mp4">
+                <div class="library-grid-tile-media">
+                  <div class="library-grid-tile-scrim">
+                    <img alt="" class="library-grid-tile-image" decoding="async" loading="lazy" src="http://localhost:51301/api/thumbnail/item-2?v=v7">
+                  <div class="library-grid-tile-playing">
+                    <span class="material-symbol-icon is-filled">
+                      "play_circle"
+                  <div class="library-grid-tile-filename">
+                    "clip 2.mp4"
+              <div class="library-grid-tile" data-item-id="item-3" style="height: 160px; width: 213.333333px" title="clip 3.mp4">
+                <div class="library-grid-tile-media">
+                  <div class="library-grid-tile-scrim">
+                  <div class="library-grid-tile-badge">
+                    <span class="material-symbol-icon is-filled library-grid-tile-badge-icon">
+                      "favorite"
+                    <span class="material-symbol-icon is-filled library-grid-tile-badge-icon">
+                      "thumb_down"
+                  <div class="library-grid-tile-playing">
+                    <span class="material-symbol-icon is-filled">
+                      "play_circle"
+                  <div class="library-grid-tile-filename">
+                    "clip 3.mp4"
         <div class="library-grid-spacer library-grid-spacer-bottom" style="height: 0px">
 "
 `;

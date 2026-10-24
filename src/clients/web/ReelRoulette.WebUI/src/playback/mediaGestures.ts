@@ -1,24 +1,15 @@
+import type { TouchPoint } from "../ui/touch";
+import { isWheelNotch, type WheelDelta } from "../ui/wheel";
+
 /** A horizontal move longer than this, and longer than the vertical move, is a swipe. */
 const SWIPE_THRESHOLD_PX = 50;
 /** A tap on a video within this long of the last one seeks, and a single tap waits this long to rule one out. */
 export const DOUBLE_TAP_MS = 300;
 /** A two-finger drag changes the volume a step for each this far up or down. */
 const DRAG_STEP_PX = 30;
-/** A mouse wheel's notch is a line- or page-unit event, or a pixel delta at least this large. */
-const WHEEL_NOTCH_MIN_PX = 50;
 /** A trackpad's small pixel deltas add up to a notch every this many pixels, and start over after a pause this long. */
 const WHEEL_NOTCH_PX = 100;
 const WHEEL_PAUSE_MS = 300;
-
-export interface TouchPoint {
-  clientX: number;
-  clientY: number;
-}
-
-export interface WheelDelta {
-  deltaY: number;
-  deltaMode: number;
-}
 
 export interface MediaGestureActions {
   previous(): void;
@@ -177,7 +168,7 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
       if (!actions.volumeAdjustable()) {
         return;
       }
-      if (delta.deltaMode !== 0 || Math.abs(delta.deltaY) >= WHEEL_NOTCH_MIN_PX) {
+      if (isWheelNotch(delta)) {
         step(-Math.sign(delta.deltaY));
         return;
       }

@@ -7,6 +7,7 @@ import {
   type FieldReveal,
   type SettingFieldOptions
 } from "../validation/fieldValidation";
+import { prefersReducedMotion } from "./reducedMotion";
 
 // The field validation pattern: a field that holds a value that is not valid shows a red icon, whose tooltip says what
 // the field expects, and the actions that use it are disabled or held until it is corrected. A field that may sit
@@ -17,10 +18,6 @@ import {
 
 /** How long the pattern's icons, its tooltip, and a setting's saved check take to fade in or out. */
 export const FADE_MS = 250;
-
-function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 /**
  * Keeps something that fades out rendered for `FADE_MS` once `shown` turns false, as `leaving`, so the stylesheet's

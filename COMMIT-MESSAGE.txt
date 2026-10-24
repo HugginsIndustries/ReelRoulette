@@ -20,10 +20,13 @@ Instructions:
 
 Commit Message:
 
-M12l: Keep the library grid's rows and tiles instead of rebuilding them
+M12l: Zoom the library grid with Ctrl+scroll and a pinch
 
-- WebUI: The library grid keeps the rows and tiles in view instead of rebuilding every visible row through innerHTML, so it no longer flickers while scrolling on an iPad or after a hard refresh. Scrolling adds and removes only the rows that come into or leave view, and a patch, a further page, a reload, or a width change keeps each tile and its image by item, moving it into its new row and changing it only where it differs.
-- WebUI: New libraryGridRows.ts and libraryGridTile.ts build rows and tiles as elements, replacing the HTML-text row and tile models, and unused layout fields and helpers are removed.
-- Tests: Row reuse tests in the controller tests, now on happy-dom, a tile patching screen test, and element-based tile tests. The grid markup snapshot changes only in how many decimals the tile widths show.
-- Docs: CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md describe the kept rows and tiles and the fixed flicker.
-- MILESTONES.md: The Row reuse slice of WebUI Grid Row Reuse and Zoom is complete, with its evidence, including before-and-after timings in headless Firefox and the user's spot check on the iPad and a desktop browser.
+- WebUI: Ctrl+scroll, a laptop trackpad pinch, and a two-finger pinch over the library grid scale it around the pointer or the pinch's center, then reflow it once at a row height from 100 to 300 px, with the tile under the pointer keeping its vertical place and the tiles in view moving to their new places, or at once with reduced motion. Each device keeps the row height, and changes that come during a gesture show when it settles.
+- WebUI: Tiles sit 1 px apart across a row and between rows, the layout takes the row height to aim for, and Ctrl+scroll never zooms the page anywhere, while Ctrl with + and - still do.
+- WebUI: The grid lays its rows out to the scroller's own width and always keeps its scrollbar's room, so in a browser whose scrollbar takes up room, such as Chrome, the rows no longer run under the scrollbar with a sideways scrollbar below.
+- WebUI: New libraryGridZoom.ts holds the gesture, wheel.ts the new page zoom guard and the wheel notch test the player had to itself, touch.ts the player's touch point type, and reducedMotion.ts the reduced-motion check the field validation pattern had to itself.
+- Tests: Gesture, controller, Library, page zoom, and layout tests for the zoom, the kept row height, the 1 px gap, and the rows' width beside the scrollbar. The grid markup snapshot gains the zoom's clipping layer.
+- Mockup: A change that comes during a zoom gesture, such as a filter, shows when the gesture settles, and the grid keeps its scrollbar's room, as in the app.
+- Docs: CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md describe the zoom, the kept row height, the even gap, the rows beside the scrollbar, and the page zoom guard.
+- MILESTONES.md: The Grid zoom slice is complete with its evidence, including settle timings in headless Firefox and the user's spot check in a desktop browser and on the iPad, so WebUI Grid Row Reuse and Zoom moves to MILESTONES-COMPLETED.md and its release checks join the testing checklist. WebUI Multi-Select and Bulk Actions notes that a pinch's second finger has to cancel a tile's long press.

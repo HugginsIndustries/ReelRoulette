@@ -28,13 +28,14 @@ export interface LibraryGridVirtualizerState {
 
 export function buildGridRowsFromItems(
   items: readonly LibraryProjectionItem[],
-  layoutWidth: number
+  layoutWidth: number,
+  targetRowHeight: number
 ): LibraryGridRowLayout[] {
   if (items.length === 0) {
     return [];
   }
   const aspects = buildItemAspectRatios(items);
-  return buildRows(aspects, 0, aspects.length, layoutWidth);
+  return buildRows(aspects, 0, aspects.length, layoutWidth, targetRowHeight);
 }
 
 export function rebuildOffsetIndex(rows: readonly LibraryGridRowLayout[]): GridOffsetIndex {
@@ -144,13 +145,32 @@ export function findVisibleRowRange(
 
 export function createVirtualizerState(
   items: readonly LibraryProjectionItem[],
-  layoutWidth: number
+  layoutWidth: number,
+  targetRowHeight: number
 ): LibraryGridVirtualizerState {
-  const rows = buildGridRowsFromItems(items, layoutWidth);
+  const rows = buildGridRowsFromItems(items, layoutWidth, targetRowHeight);
   return {
     rows,
     offsetIndex: rebuildOffsetIndex(rows)
   };
+}
+
+/** The index of the row holding the item at `itemIndex`, or -1 when no row holds it. */
+export function findRowIndexForItem(rows: readonly LibraryGridRowLayout[], itemIndex: number): number {
+  let low = 0;
+  let high = rows.length - 1;
+  while (low <= high) {
+    const mid = low + Math.floor((high - low) / 2);
+    const row = rows[mid]!;
+    if (itemIndex < row.startItemIndex) {
+      high = mid - 1;
+    } else if (itemIndex >= row.endItemIndexExclusive) {
+      low = mid + 1;
+    } else {
+      return mid;
+    }
+  }
+  return -1;
 }
 
 /** Height from the top of the row holding the first of the last `itemCount` items to the end of the grid. */

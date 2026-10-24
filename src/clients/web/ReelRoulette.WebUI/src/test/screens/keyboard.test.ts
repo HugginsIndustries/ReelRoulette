@@ -341,6 +341,24 @@ describe("keyboard shortcuts", () => {
     expect([playIcon(), randomPicks(server)]).toEqual(["pause", 1]);
   });
 
+  it("leave Ctrl with + and - to the browser's page zoom, while Ctrl+scroll never zooms the page", async () => {
+    const page = await mount(serverPicking(VIDEO_ITEM));
+    const zoomKeys = [press("=", { ctrlKey: true }), press("+", { ctrlKey: true, shiftKey: true }), press("-", { ctrlKey: true }), press("0", { ctrlKey: true })];
+    expect(await Promise.all(zoomKeys)).toEqual([true, true, true, true]);
+
+    // happy-dom's wheel event drops `ctrlKey` from its init, so it is set on the event.
+    const wheel = (ctrlKey: boolean, target: Element) => {
+      const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
+      Object.defineProperty(event, "ctrlKey", { value: ctrlKey });
+      return target.dispatchEvent(event);
+    };
+    const header = document.querySelector("header")!;
+    expect([wheel(true, header), wheel(false, header)]).toEqual([false, true]);
+
+    page.unmount();
+    expect(wheel(true, document.body)).toBe(true);
+  });
+
   it("J and L seek by the seek step, 5 seconds until Settings changes it, and keep a paused video paused", async () => {
     await mount(serverPicking(VIDEO_ITEM));
     await press("k");

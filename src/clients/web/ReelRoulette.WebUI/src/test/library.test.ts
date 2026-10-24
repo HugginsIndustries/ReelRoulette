@@ -3,11 +3,11 @@ import { unauthorizedLogText } from "../api/serverRequest";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createLibrary } from "../library/library";
 import { LIBRARY_LOAD_TIMEOUT_MESSAGE } from "../library/libraryOverlayModel";
-import type { LibraryGridController, LibraryGridCoverage } from "../library/libraryGridController";
+import type { LibraryGridController, LibraryGridCoverage, LibraryGridOptions } from "../library/libraryGridController";
 import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
-import { createDeviceStore } from "../state/deviceStore";
+import { createDeviceStore, type DeviceStorage } from "../state/deviceStore";
 import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 import { createTagCatalog } from "../tags/tagCatalog";
@@ -46,9 +46,13 @@ interface FakePage {
 }
 
 /** A stand-in for the grid controller that records what the library asks of it. */
-function fakeGrid(onCoverage: (coverage: LibraryGridCoverage) => void, page: FakePage) {
+function fakeGrid(options: Required<LibraryGridOptions>, page: FakePage) {
   const grid = {
-    onCoverage,
+    onCoverage: options.onCoverage,
+    /** The row height the grid was created to aim for. */
+    rowHeight: options.rowHeight,
+    /** As a zoom over the grid settling at a new row height does. */
+    zoomTo: options.onRowHeightChange,
     contents: [] as Array<{ ids: string[]; resetScroll: boolean | undefined }>,
     /** Each playing item id the library marked, the first when the grid was created. */
     playing: [] as Array<string | null>,
@@ -75,7 +79,8 @@ function fakeGrid(onCoverage: (coverage: LibraryGridCoverage) => void, page: Fak
 
 const NEEDS_FILL: LibraryGridCoverage = { scrollTop: 0, viewportBottom: 600, extentHeight: 1000, lastPageHeight: 1000 };
 
-function setup() {
+/** `storage` is the device's browser storage, which the Library tab remembers its settings in. */
+function setup(options: { storage?: DeviceStorage } = {}) {
   const requests: Array<{ path: string; body: any }> = [];
   const replies = new Map<string, () => Response | Promise<Response>>();
   const library = {
@@ -174,10 +179,10 @@ function setup() {
     dialogs,
     notifications,
     panel,
-    device: createDeviceStore(null),
+    device: createDeviceStore(options.storage ?? null),
     tagCatalog: createTagCatalog({ api, connection }),
-    createGrid(_host, onCoverage) {
-      const grid = fakeGrid(onCoverage, page);
+    createGrid(_host, gridOptions) {
+      const grid = fakeGrid(gridOptions, page);
       grids.push(grid);
       return grid;
     },
@@ -473,6 +478,44 @@ describe("library window", () => {
     t.showTab();
     expect(t.grids[0]!.flushes).toEqual([]);
   });
+});
+
+describe("row height", () => {
+  /** Browser storage for one device, kept across the libraries a test creates, as across a page refresh. */
+  function deviceStorage(kept: Record<string, string> = {}): DeviceStorage & { entries: Map<string, string> } {
+    const entries = new Map(Object.entries(kept));
+    return { entries, getItem: (key) => entries.get(key) ?? null, setItem: (key, value) => void entries.set(key, value) };
+  }
+
+  async function shownGrid(t: ReturnType<typeof setup>) {
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    return t.mountGrid();
+  }
+
+  it("creates the grid at 160 px rows until a zoom sets this device's own", async () => {
+    expect((await shownGrid(setup({ storage: deviceStorage() }))).rowHeight).toBe(160);
+  });
+
+  it("keeps the row height a zoom settles at, for the next grid and after a page refresh", async () => {
+    const storage = deviceStorage();
+    const t = setup({ storage });
+    const grid = await shownGrid(t);
+
+    grid.zoomTo(243);
+
+    expect(storage.entries.get("rr_device.library.rowHeight")).toBe("243");
+    expect(t.mountGrid().rowHeight).toBe(243);
+    expect((await shownGrid(setup({ storage }))).rowHeight).toBe(243);
+  });
+
+  for (const kept of ["99", "301", "160.5", "\"200\"", "null", "{"]) {
+    it(`creates the grid at 160 px rows when the kept row height is ${kept}`, async () => {
+      const storage = deviceStorage({ "rr_device.library.rowHeight": kept });
+      expect((await shownGrid(setup({ storage }))).rowHeight).toBe(160);
+    });
+  }
 });
 
 describe("fill", () => {

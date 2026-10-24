@@ -12,7 +12,16 @@ export interface LibraryGridRows {
   show(rows: readonly LibraryGridRowLayout[], first: number, end: number, items: readonly LibraryProjectionItem[]): void;
   /** Marks the playing item's tile, or none, on the tiles shown and on those created later. */
   setPlayingItemId(itemId: string | null): void;
+  /** The tiles shown, in layout order. */
+  shownTiles(): readonly ShownTile[];
   clear(): void;
+}
+
+/** A tile shown, with its row's index in the layout and its place in that row. */
+export interface ShownTile {
+  element: HTMLElement;
+  row: number;
+  slot: number;
 }
 
 /**
@@ -47,6 +56,7 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
    * shows in.
    */
   let shownTiles = new Map<string, GridTile[]>();
+  let shownList: ShownTile[] = [];
   let playingItemId: string | null = null;
 
   function tileView(item: LibraryProjectionItem, tileWidth: number, tileHeight: number): GridTileView {
@@ -68,6 +78,7 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
   ): void {
     const nextRows = new Map<number, ShownRow>();
     const nextTiles = new Map<string, GridTile[]>();
+    const nextList: ShownTile[] = [];
     const rowElements: HTMLElement[] = [];
 
     for (let index = first; index < end; index++) {
@@ -87,10 +98,10 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
       }
 
       const tileElements: HTMLElement[] = [];
-      for (const tileLayout of layout.tiles) {
+      layout.tiles.forEach((tileLayout, slot) => {
         const item = items[tileLayout.itemIndex];
         if (!item) {
-          continue;
+          return;
         }
         const view = tileView(item, tileLayout.tileWidth, tileLayout.tileHeight);
         let tile = shownTiles.get(item.id)?.shift();
@@ -106,7 +117,8 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
           nextTiles.set(item.id, [tile]);
         }
         tileElements.push(tile.element);
-      }
+        nextList.push({ element: tile.element, row: index, slot });
+      });
       placeChildren(row.element, tileElements);
       nextRows.set(index, row);
       rowElements.push(row.element);
@@ -115,6 +127,7 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     placeChildren(container, rowElements);
     shownRows = nextRows;
     shownTiles = nextTiles;
+    shownList = nextList;
   }
 
   function markPlaying(itemId: string | null, playing: boolean): void {
@@ -140,7 +153,8 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     container.replaceChildren();
     shownRows = new Map();
     shownTiles = new Map();
+    shownList = [];
   }
 
-  return { show, setPlayingItemId, clear };
+  return { show, setPlayingItemId, shownTiles: () => shownList, clear };
 }

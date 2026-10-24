@@ -968,6 +968,9 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   overscroll-behavior: contain;
   /* The grid scrolls with one finger and claims pinches, which zoom its rows rather than the page. */
   touch-action: pan-y;
+  /* It always keeps its scrollbar's room, so the width its rows are laid out to stays the same as the scrollbar comes
+     and goes. */
+  scrollbar-gutter: stable;
 }
 html.theme-light .lib-grid { background: #fff; }
 /* While a zoom gesture lasts, the rows scale as one picture. The layer around them clips what scales past the grid, so
@@ -4992,7 +4995,8 @@ function buildRows(aspects, width, size) {
 
 let lastGridWidth = 0;
 // A layout asked for while the grid is hidden, as a filter applied from the Filter tab asks for one, waits until the grid
-// shows again.
+// shows again, and one asked for during a zoom gesture, by a change or a resize, waits until the gesture settles, which
+// shows it in its one reflow, as the app does.
 let gridStale = false;
 function gridMessage(grid, text, error) {
   const empty = document.createElement("p");
@@ -5004,6 +5008,10 @@ function layoutGrid(force) {
   const grid = $("lib-grid");
   if (grid.offsetParent === null) {
     if (force) gridStale = true;
+    return;
+  }
+  if (gridZoom) {
+    gridStale = true;
     return;
   }
   const width = Math.max(280, grid.clientWidth);
@@ -5073,11 +5081,6 @@ function layoutGrid(force) {
   clip.append(layer);
   grid.append(clip);
   grid.scrollTop = scrollTop;
-  // A layout during a zoom gesture keeps the gesture's scale on the new rows.
-  if (gridZoom) {
-    gridZoom.layer = layer;
-    showZoom(gridZoom);
-  }
 }
 new ResizeObserver(() => layoutGrid()).observe($("lib-grid"));
 

@@ -8,6 +8,7 @@ import { unauthorizedLogText } from "../../api/serverRequest";
 import { statusLogLine, type RelayLogCurrentItem } from "../../logging/relayLogLines";
 import { renderApp } from "../../shell";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
+import { stubMatchingMediaQuery, stubProperty, type Restores } from "../stubs";
 export { randomAnswer } from "../randomAnswer";
 
 /**
@@ -218,19 +219,7 @@ let createdSources: FakeEventSource[] = [];
  */
 let mounted: Array<() => void> = [];
 /** Undoes what tests stubbed on shared prototypes and the document, newest first. */
-let restores: Array<() => void> = [];
-
-function stubProperty(target: object, name: string, descriptor: PropertyDescriptor): void {
-  const original = Object.getOwnPropertyDescriptor(target, name);
-  Object.defineProperty(target, name, { configurable: true, ...descriptor });
-  restores.push(() => {
-    if (original) {
-      Object.defineProperty(target, name, original);
-    } else {
-      delete (target as Record<string, unknown>)[name];
-    }
-  });
-}
+let restores: Restores = [];
 
 export interface FakeVideoFrames {
   /** Shows a frame that starts `mediaTime` seconds into the video, running the callbacks waiting for the next frame. */
@@ -243,13 +232,13 @@ export function stubVideoFrames(): FakeVideoFrames {
   const waiting = new Map<number, FrameCallback>();
   let nextHandle = 1;
   let presentedFrames = 0;
-  stubProperty(HTMLVideoElement.prototype, "requestVideoFrameCallback", {
+  stubProperty(restores, HTMLVideoElement.prototype, "requestVideoFrameCallback", {
     value(callback: FrameCallback) {
       waiting.set(nextHandle, callback);
       return nextHandle++;
     }
   });
-  stubProperty(HTMLVideoElement.prototype, "cancelVideoFrameCallback", {
+  stubProperty(restores, HTMLVideoElement.prototype, "cancelVideoFrameCallback", {
     value(handle: number) {
       waiting.delete(handle);
     }
@@ -278,7 +267,7 @@ export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFulls
   let fullscreenElement: Element | null = null;
   let exits = 0;
   const requests: Element[] = [];
-  stubProperty(HTMLElement.prototype, "requestFullscreen", {
+  stubProperty(restores, HTMLElement.prototype, "requestFullscreen", {
     value(this: Element) {
       requests.push(this);
       if (options.refuse) {
@@ -289,8 +278,8 @@ export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFulls
       return Promise.resolve();
     }
   });
-  stubProperty(document, "fullscreenElement", { get: () => fullscreenElement });
-  stubProperty(document, "exitFullscreen", {
+  stubProperty(restores, document, "fullscreenElement", { get: () => fullscreenElement });
+  stubProperty(restores, document, "exitFullscreen", {
     value() {
       exits += 1;
       fullscreenElement = null;
@@ -313,7 +302,7 @@ export interface FakeCanvases {
 export function stubCanvas(): FakeCanvases {
   const drawn: object[] = [];
   const contexts = new Map<HTMLCanvasElement, object>();
-  stubProperty(HTMLCanvasElement.prototype, "getContext", {
+  stubProperty(restores, HTMLCanvasElement.prototype, "getContext", {
     value(this: HTMLCanvasElement) {
       let context = contexts.get(this);
       if (!context) {
@@ -511,7 +500,7 @@ export function stubWebAudio(webAudio = new FakeWebAudio()): FakeWebAudio {
 
 /** Makes a media element's volume read-only, as on iOS, where setting it changes nothing and it always reads 1. */
 export function stubReadOnlyVolume(): void {
-  stubProperty(HTMLMediaElement.prototype, "volume", { get: () => 1, set() {} });
+  stubProperty(restores, HTMLMediaElement.prototype, "volume", { get: () => 1, set() {} });
 }
 
 /**
@@ -530,7 +519,7 @@ export async function tapPage(): Promise<void> {
 /** Makes the page's tab read as hidden or shown, as `document.hidden` says. Returns a function that changes it. */
 export function stubTabHidden(hidden: boolean): (hidden: boolean) => void {
   let value = hidden;
-  stubProperty(document, "hidden", { get: () => value });
+  stubProperty(restores, document, "hidden", { get: () => value });
   return (next) => {
     value = next;
   };
@@ -558,12 +547,12 @@ export function stubLayoutSize(width = 800, height = 600): void {
     }
     return true;
   };
-  stubProperty(HTMLElement.prototype, "clientWidth", {
+  stubProperty(restores, HTMLElement.prototype, "clientWidth", {
     get(this: HTMLElement) {
       return rendered(this) ? width : 0;
     }
   });
-  stubProperty(HTMLElement.prototype, "clientHeight", {
+  stubProperty(restores, HTMLElement.prototype, "clientHeight", {
     get(this: HTMLElement) {
       return rendered(this) ? height : 0;
     }
@@ -576,7 +565,7 @@ export function stubLayoutSize(width = 800, height = 600): void {
  */
 export function stubRowLayout(selector: string, height: (row: HTMLElement) => number, gap = 0): void {
   const original = Element.prototype.getBoundingClientRect;
-  stubProperty(HTMLElement.prototype, "getBoundingClientRect", {
+  stubProperty(restores, HTMLElement.prototype, "getBoundingClientRect", {
     value(this: HTMLElement) {
       if (!this.matches(selector)) {
         return original.call(this);
@@ -603,7 +592,7 @@ export const STAR_WIDTH = 36;
  */
 export function stubStarLayout(): void {
   const original = Element.prototype.getBoundingClientRect;
-  stubProperty(HTMLElement.prototype, "getBoundingClientRect", {
+  stubProperty(restores, HTMLElement.prototype, "getBoundingClientRect", {
     value(this: HTMLElement) {
       if (!this.matches(".rating-star")) {
         return original.call(this);
@@ -709,9 +698,9 @@ export function ratingAnswer(call: FetchCall): Response {
 export function stubScroller(element: HTMLElement, top: number, height: number, content: number): void {
   element.style.overflowY = "auto";
   restores.push(() => element.style.removeProperty("overflow-y"));
-  stubProperty(element, "clientHeight", { get: () => height });
-  stubProperty(element, "scrollHeight", { get: () => content });
-  stubProperty(element, "getBoundingClientRect", { value: () => new DOMRect(0, top, 300, height) });
+  stubProperty(restores, element, "clientHeight", { get: () => height });
+  stubProperty(restores, element, "scrollHeight", { get: () => content });
+  stubProperty(restores, element, "getBoundingClientRect", { value: () => new DOMRect(0, top, 300, height) });
 }
 
 /** happy-dom's window size, which each test starts from. */
@@ -730,15 +719,7 @@ export function setViewport(viewport: { width: number; height: number }): void {
  * stylesheet's own pointer rules still see a fine pointer.
  */
 export function stubCoarsePointer(): void {
-  const real = window.matchMedia.bind(window);
-  stubProperty(window, "matchMedia", {
-    value(query: string) {
-      if (!query.includes("pointer: coarse")) {
-        return real(query);
-      }
-      return { matches: true, media: query, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList;
-    }
-  });
+  stubMatchingMediaQuery(restores, "pointer: coarse");
 }
 
 /**
@@ -754,7 +735,7 @@ export function stubColorScheme(dark: boolean): (dark: boolean) => void {
     addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
     removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener)
   };
-  stubProperty(window, "matchMedia", {
+  stubProperty(restores, window, "matchMedia", {
     value(text: string) {
       return text.includes("prefers-color-scheme: dark") ? (query as unknown as MediaQueryList) : real(text);
     }
@@ -770,15 +751,7 @@ export function stubColorScheme(dark: boolean): (dark: boolean) => void {
  * never reports it. The stylesheet's own reduced-motion rules still don't apply.
  */
 export function stubReducedMotion(): void {
-  const real = window.matchMedia.bind(window);
-  stubProperty(window, "matchMedia", {
-    value(query: string) {
-      if (!query.includes("prefers-reduced-motion: reduce")) {
-        return real(query);
-      }
-      return { matches: true, media: query, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList;
-    }
-  });
+  stubMatchingMediaQuery(restores, "prefers-reduced-motion: reduce");
 }
 
 /**

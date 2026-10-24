@@ -129,6 +129,10 @@ These need a person, real devices, or the Windows VM.
 - [ ] On a desktop browser, the iPad, and an Android phone, the Randomization tab's options change the picks at once, the Random line names them and opens the tab, and they're kept after a page refresh.
 - [ ] In Firefox on the Linux desktop, after a click on Next, Space pauses instead of pressing Next again, after a click on the seek bar, → plays the next item, after a preset is picked, → plays the next item, and Tab and Page Down do nothing.
 - [ ] On the iPad and an Android phone, picking from a dropdown, such as the preset, still picks, now that a dropdown gives up focus after a pick.
+- [ ] On an iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker.
+- [ ] In a desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
+- [ ] In a desktop browser, Ctrl+scroll over the library grid scales it smoothly, then settles into the new row height with the tiles moving to their places and the tile under the pointer keeping its vertical place, without zooming the page.
+- [ ] On the iPad and an Android phone, a pinch over the library grid scales it smoothly and settles into the new row height without zooming the page.
 
 ## Release Flow
 

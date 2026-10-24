@@ -1459,25 +1459,37 @@ body.sorting * {
   display: flex;
   flex-direction: column;
 }
+/* The grid scrolls with one finger and claims pinches, which zoom its rows rather than the page. It always keeps its
+   scrollbar's room, so the width its rows are laid out to stays the same as the scrollbar comes and goes. */
 .library-grid-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
 }
 .library-grid-spacer {
   flex-shrink: 0;
   width: 100%;
 }
+/* While a zoom gesture lasts, the rows scale as one picture. The layer around them clips what scales past the grid, so
+   the gesture never adds a scrollbar or resizes the grid. */
+.library-grid-zoom {
+  overflow: clip;
+  min-height: 100%;
+}
 .library-grid-rows {
   display: flex;
   flex-direction: column;
+  transform-origin: 0 0;
 }
+/* Tiles sit one fixed gap apart, across a row and between rows (TILE_GAP in libraryGridLayout.ts). */
 .library-grid-row {
   display: flex;
   flex-direction: row;
-  gap: 2px;
+  gap: 1px;
   flex-shrink: 0;
   margin-bottom: 1px;
 }

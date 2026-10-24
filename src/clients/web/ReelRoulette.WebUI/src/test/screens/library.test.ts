@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TILE_GAP } from "../../library/libraryGridLayout";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
@@ -1255,7 +1256,7 @@ function collapseButton(): HTMLButtonElement {
 function rowLayout(): Array<{ height: number; width: number }> {
   return Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-row")).map((row) => {
     const tiles = Array.from(row.querySelectorAll<HTMLElement>(".library-grid-tile"));
-    const width = tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + 2 * (tiles.length - 1);
+    const width = tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + TILE_GAP * (tiles.length - 1);
     return { height: Number.parseFloat(row.style.height), width };
   });
 }
@@ -1540,9 +1541,10 @@ describe("rows", () => {
         expect(row.height).toBeGreaterThanOrEqual(100);
         expect(row.height).toBeLessThanOrEqual(240);
       }
-      // Every row but the last fills the width; the last keeps its tiles' shapes at 160 px.
+      // Every row but the last fills the width; the last keeps its tiles' shapes at 160 px. happy-dom keeps six decimals
+      // of each tile's width, so a row's adds up to within a few millionths.
       for (const row of rows.slice(0, -1)) {
-        expect(row.width).toBeCloseTo(width, 6);
+        expect(row.width).toBeCloseTo(width, 5);
       }
       expect(rows.some((row) => Math.abs(row.height - 160) > 1)).toBe(true);
     });
@@ -1640,6 +1642,33 @@ describe("memory", () => {
     await click(screen.getByRole("button", { name: "Play/Pause" }));
     const pick = server.requests("POST", "/api/random")[0]!.body;
     expect(pick).toMatchObject({ presetId: "preset-favorites", filterState: { favoritesMode: "only" } });
+  });
+
+  it("keeps the row height Ctrl+scroll over the grid zooms to after a page refresh", async () => {
+    // Tiles three to a row at 160 px and two at 243, and one more in a last row at the height the rows aim for, all in
+    // view.
+    const { page } = await mountLibrary(libraryItems(7));
+    await openLibrary();
+    expect(rowLayout().at(-1)!.height).toBe(160);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
+    for (let notch = 0; notch < 3; notch++) {
+      // happy-dom's wheel event drops `ctrlKey` and the pointer's place from its init, so they are set on the event.
+      const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
+      for (const [name, value] of Object.entries({ ctrlKey: true, clientX: 100, clientY: 100 })) {
+        Object.defineProperty(event, name, { value });
+      }
+      gridScroll().dispatchEvent(event);
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+    vi.useRealTimers();
+    expect(rowLayout().at(-1)!.height).toBe(243);
+    expect(localStorage.getItem("rr_device.library.rowHeight")).toBe("243");
+
+    await refresh(page, libraryItems(7));
+    await openLibrary();
+    expect(rowLayout().at(-1)!.height).toBe(243);
+    expect(rowLayout()[0]!.width).toBeCloseTo(800, 6);
   });
 
   it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {

@@ -29,8 +29,10 @@ import {
 import {
   createLibraryGridController,
   type LibraryGridController,
-  type LibraryGridCoverage
+  type LibraryGridCoverage,
+  type LibraryGridOptions
 } from "./libraryGridController";
+import { DEFAULT_TARGET_ROW_HEIGHT, isTargetRowHeight } from "./libraryGridLayout";
 import { libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
 import { playRefusalFailure } from "./libraryPlayModel";
 import { parseLibraryQueryPage } from "./libraryProjectionModel";
@@ -53,6 +55,7 @@ export type LibraryBody =
 
 const CONTROLS_COLLAPSED_KEY = "library.controlsCollapsed";
 const SORT_KEY = "library.sort";
+const ROW_HEIGHT_KEY = "library.rowHeight";
 
 /** The sort and its direction, as remembered across a page refresh. */
 interface RememberedSort {
@@ -71,17 +74,14 @@ function isRememberedSort(value: unknown): value is RememberedSort {
 /** The source list as loaded, null when its load failed, or "unauthorized" when the server answered 401. */
 type SourcesLoad = FilterSource[] | null | "unauthorized";
 
-export type CreateLibraryGrid = (
-  host: HTMLElement,
-  onCoverage: (coverage: LibraryGridCoverage) => void
-) => LibraryGridController;
+export type CreateLibraryGrid = (host: HTMLElement, options: Required<LibraryGridOptions>) => LibraryGridController;
 
 /**
  * The Library tab's browse window, controls, Filters line, and tile play. The first page loads once the server is
  * ready, and the window keeps its tiles and scroll position while the tab is hidden. The panel shows and hides the
- * tab. The tab remembers on this device whether its controls are collapsed, and its sort and direction. A refresh
- * that keeps a source's items because its folder listed no media files shows a notice naming the folder, once per
- * folder for the page's life.
+ * tab. The tab remembers on this device whether its controls are collapsed, its sort and direction, and the row height
+ * a zoom over the grid set. A refresh that keeps a source's items because its folder listed no media files shows a
+ * notice naming the folder, once per folder for the page's life.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
@@ -151,7 +151,7 @@ export interface LibraryOptions {
   notifications: Pick<Notifications, "notify">;
   /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
   panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
-  /** Remembers whether the controls are collapsed, and the sort and direction. */
+  /** Remembers whether the controls are collapsed, the sort and direction, and the grid's row height. */
   device: DeviceStore;
   /** The tag catalog the tabs share, whose categories the Random line names under By category. */
   tagCatalog: Pick<TagCatalog, "catalog" | "ensureLoaded">;
@@ -165,7 +165,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const { store, api, connection, player, panel, device, dialogs, notifications, tagCatalog } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const createGrid: CreateLibraryGrid =
-    options.createGrid ?? ((host, onCoverage) => createLibraryGridController(host, apiBaseUrl, { onCoverage }));
+    options.createGrid ?? ((host, gridOptions) => createLibraryGridController(host, apiBaseUrl, gridOptions));
   const requestFrame = options.requestFrame ?? ((callback: () => void) => void requestAnimationFrame(() => callback()));
 
   // The search text isn't remembered.
@@ -175,6 +175,8 @@ export function createLibrary(options: LibraryOptions): Library {
     : createDefaultBrowseControls();
   const controls = signal(initialControls);
   const controlsCollapsed = signal(device.read(CONTROLS_COLLAPSED_KEY, false, isBoolean));
+  /** The row height the grid's rows aim for, which a zoom over the grid sets and each grid created starts from. */
+  let rowHeight = device.read(ROW_HEIGHT_KEY, DEFAULT_TARGET_ROW_HEIGHT, isTargetRowHeight);
   const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
   const randomLine = computed(() => randomLineText(store.randomOptions.value, spreadCategories(tagCatalog.catalog.value)));
   const summary = signal<string | null>(null);
@@ -565,7 +567,14 @@ export function createLibrary(options: LibraryOptions): Library {
     },
 
     attachGrid(host) {
-      const created = createGrid(host, onCoverage);
+      const created = createGrid(host, {
+        onCoverage,
+        rowHeight,
+        onRowHeightChange(height) {
+          rowHeight = height;
+          device.write(ROW_HEIGHT_KEY, height);
+        }
+      });
       grid = created;
       created.setPlayingItemId(store.current.peek()?.itemId ?? null);
       const resetScroll = pendingScrollTop;

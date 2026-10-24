@@ -8,6 +8,7 @@ import { NotificationList, Popups } from "./Notifications";
 import { Panel } from "./Panel";
 import { Player } from "./Player";
 import { ScreenBoundary } from "./ScreenBoundary";
+import { blockWheelPageZoom } from "./wheel";
 
 /**
  * The part of the page that goes fullscreen: the player with its popups beside it, the side panel with its tabs, Auto
@@ -67,6 +68,8 @@ export function Stage() {
   // dropdowns giving up focus after a pick, so the next key is a shortcut.
   useLayoutEffect(() => listenForShortcuts(document, { player, audio, panel, fullscreen, settings, rating: playerRating }), []);
   useLayoutEffect(() => blurDropdownsAfterPick(document), []);
+  // Ctrl+scroll never zooms the page, so over the library grid it zooms the grid's rows.
+  useLayoutEffect(() => blockWheelPageZoom(window), []);
 
   return (
     <div id="fullscreen-stage" class="fullscreen-stage" ref={stage}>
