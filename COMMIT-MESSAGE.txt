@@ -20,9 +20,7 @@ Instructions:
 
 Commit Message:
 
-M12k7: Remove the WebUI's screen-reader-only markup and complete the milestone
+Docs: Move WebUI Grid Scrollbar Seek out of v0.15.0 to the backlog
 
-- WebUI: Live regions, announcements, descriptions, and state attributes are gone, with the roles on the stars, the panel handle, tiles, the file name, Auto Tag's progress, and the bell's list and the names only those roles used, and the tabs' sections lose the names their headings gave them. Hidden text such as the count line's spoken words and "Saved" goes, as does aria-hidden on everything but icons inside controls. Controls keep their names, and nothing on screen changes.
-- WebUI: The open bell and held buttons get their look from the is-open and shows-problem classes, the player indicator's wrapper goes, and dead code goes with the markup, such as movedAnnouncement, ReorderStatus, the stars' label props, and the panel's maxWidth.
-- Tests: Field validation, Settings, Filter, Tags, Stats, Panel, Library, Player, and Notifications tests find flagged fields, held buttons, hints, tooltips, star values, the panel's width, errors, and open states by what the page shows, and the snapshots are regenerated.
-- Docs: MILESTONES.md lands the Screen reader slice and moves the milestone to MILESTONES-COMPLETED.md, the testing checklist gets its release checks, and the Long-Press Tooltips trap drops the accessible description. CONTEXT.md and docs/domain-inventory.md drop the removed markup, CHANGELOG.md's keyboard navigation bullet adds that screen readers no longer get announcements, descriptions, states, or roles, and AGENTS.md's screen reader rule drops its sentence about this milestone.
+- MILESTONES.md: WebUI Grid Scrollbar Seek leaves v0.15.0 and becomes backlog item P57, low priority, since filters, sorts, and search already find files without scrolling far down the grid. Its slices, traps, and acceptance are unchanged.
+- MILESTONES.md: WebUI Grid Row Reuse and Zoom moves from M12l1 to M12l, since it is the only M12l milestone left.
