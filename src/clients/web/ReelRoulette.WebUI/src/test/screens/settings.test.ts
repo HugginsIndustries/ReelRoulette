@@ -9,6 +9,7 @@ import {
   currentStyle,
   DESKTOP_USER_AGENT,
   FakeServer,
+  flagAnswer,
   IPHONE_USER_AGENT,
   json,
   mountPage,
@@ -1720,7 +1721,7 @@ describe("Notifications", () => {
   it("applies each popup setting at once and keeps it, as the next message shows", async () => {
     const server = new FakeServer();
     server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
-    server.on("POST", "/api/favorite", () => json({}));
+    server.on("POST", "/api/favorite", flagAnswer);
     await mount(server);
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await openSettings();

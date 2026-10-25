@@ -323,7 +323,7 @@ public sealed class ItemIdContractTests : IDisposable
         }
 
         Assert.IsType<RecordPlaybackResponse>(Value(ServerHostComposition.RecordPlayback(record, state, operations)));
-        Assert.Equal(1, operations.ClearPlaybackStats(clear).ClearedCount);
+        Assert.Equal(new CatalogPlaybackStatsClear(1, 1), operations.ClearPlaybackStats(clear));
         Assert.IsType<ItemRatingResponse>(Value(ServerHostComposition.SetRating(rating, state, operations)));
         Assert.IsType<ItemRatingResponse>(Value(ServerHostComposition.SetRating(cleared, state, operations)));
 
@@ -340,7 +340,7 @@ public sealed class ItemIdContractTests : IDisposable
     }
 
     [Fact]
-    public void ClearPlaybackStats_WithAllItems_ClearsEveryItem()
+    public void ClearPlaybackStats_WithAllItems_ClearsEveryItem_AndCountsEveryItem()
     {
         var (host, operations, state) = SeedPlayedItems();
         var request = Request<ClearPlaybackStatsRequest>("""{"allItems":true}""");
@@ -348,22 +348,62 @@ public sealed class ItemIdContractTests : IDisposable
 
         var response = Assert.IsType<ClearPlaybackStatsResponse>(Value(ServerHostComposition.ClearPlaybackStats(request, operations, state)));
 
-        Assert.Equal(2, response.ClearedCount);
+        // The unplayed item counts too.
+        Assert.Equal(3, response.Count);
         Assert.Equal((0, 0), (host.Session.ReadItemState("item-1")!.PlayCount, host.Session.ReadItemState("item-2")!.PlayCount));
         SingleEvent(state, "resyncRequired");
     }
 
     [Fact]
-    public void ClearPlaybackStats_WithItemIds_ClearsOnlyThoseItems()
+    public void ClearPlaybackStats_WithItemIds_ClearsOnlyThoseItems_AndCountsTheNamedItemsInTheLibrary()
     {
         var (host, operations, state) = SeedPlayedItems();
-        var request = Request<ClearPlaybackStatsRequest>("""{"itemIds":["item-2"]}""");
+        var request = Request<ClearPlaybackStatsRequest>("""{"itemIds":["item-2","unplayed","missing","item-2"]}""");
 
         var response = Assert.IsType<ClearPlaybackStatsResponse>(Value(ServerHostComposition.ClearPlaybackStats(request, operations, state)));
 
-        Assert.Equal(1, response.ClearedCount);
+        // The unplayed item counts though it had no stats to clear, and the id no item has doesn't.
+        Assert.Equal(2, response.Count);
         Assert.Equal((3, 0), (host.Session.ReadItemState("item-1")!.PlayCount, host.Session.ReadItemState("item-2")!.PlayCount));
         SingleEvent(state, "resyncRequired");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "ClearPlaybackStatsResponse");
+    }
+
+    [Fact]
+    public void ClearPlaybackStats_PublishesResyncRequired_WithTheRevisionBeforeItAndItsOwn()
+    {
+        var (_, operations, state) = SeedPlayedItems();
+        state.CreateEnvelope("earlier", new { });
+        state.CreateEnvelope("earlier", new { });
+
+        ServerHostComposition.ClearPlaybackStats(Request<ClearPlaybackStatsRequest>("""{"itemIds":["item-1"]}"""), operations, state);
+
+        var envelope = SingleEvent(state, "resyncRequired");
+        var payload = Assert.IsType<ResyncRequiredPayload>(envelope.Payload);
+        Assert.Equal(3, envelope.Revision);
+        Assert.Equal(("playbackStatsCleared", 2L, 3L), (payload.Reason, payload.LastEventId, payload.CurrentRevision));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(payload), "ResyncRequiredPayload");
+    }
+
+    [Fact]
+    public void ClearPlaybackStats_ThatChangesNothing_PublishesNothing_AndEachClearLogsItsCounts()
+    {
+        var (_, operations, state) = SeedPlayedItems();
+
+        var response = Assert.IsType<ClearPlaybackStatsResponse>(Value(ServerHostComposition.ClearPlaybackStats(
+            Request<ClearPlaybackStatsRequest>("""{"itemIds":["unplayed","missing"]}"""),
+            operations,
+            state)));
+        ServerHostComposition.ClearPlaybackStats(Request<ClearPlaybackStatsRequest>("""{"allItems":true}"""), operations, state);
+
+        Assert.Equal(1, response.Count);
+        Assert.Single(state.GetReplayAfter(0).Events);
+        var lines = File.ReadAllLines(Path.Combine(_tempDir, "last.log"))
+            .Where(line => line.Contains("Clear playback stats", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.Contains("[info] Clear playback stats allItems=false count=1 changed=0 elapsedMs=", lines[0]);
+        Assert.Contains("[info] Clear playback stats allItems=true count=3 changed=2 elapsedMs=", lines[1]);
     }
 
     // A request that names no items is refused rather than read as every item, so an old client that sends
@@ -674,7 +714,8 @@ public sealed class ItemIdContractTests : IDisposable
             items:
             [
                 new SeedItem("item-1", Path.Combine(_tempDir, "first.mp4")) { PlayCount = 3 },
-                new SeedItem("item-2", Path.Combine(_tempDir, "second.mp4")) { PlayCount = 5 }
+                new SeedItem("item-2", Path.Combine(_tempDir, "second.mp4")) { PlayCount = 5 },
+                new SeedItem("unplayed", Path.Combine(_tempDir, "unplayed.mp4"))
             ]);
         var host = CatalogOpen.Host(_tempDir);
         return (host, CreateOperations(host), new ServerStateService());

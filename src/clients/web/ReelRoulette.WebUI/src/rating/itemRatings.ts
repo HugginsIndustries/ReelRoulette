@@ -34,8 +34,8 @@ export interface ItemRatings {
   /** Sets the item's rating, or clears it with null, sending a key's change once the keys pause. */
   set(item: RatedItem, rating: number | null, options: { byKey: boolean }): void;
   /**
-   * Takes the playing item's rating as a new read gives it, such as a history step's play answer, so a change made
-   * while the item wasn't playing shows, though this device no longer keeps it, as after a resync.
+   * Takes the playing item's rating as a new read gives it, such as a history step's play answer or the player's read
+   * after a resync, so a change made while the item wasn't playing shows, though this device no longer keeps it.
    */
   takeRead(itemId: string, rating: number | null): void;
 }
@@ -88,7 +88,7 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
 
   /**
    * Keeps the rating the server answered or an event brought. On the playing item it also becomes the item's read, as
-   * its favorite does, so the player keeps showing it through a resync, which no read of the player's own follows.
+   * its favorite does, so the player keeps showing it through a resync until the player's read of the item lands.
    */
   function keepConfirmed(itemId: string, rating: number | null): void {
     confirmed.set(itemId, rating);

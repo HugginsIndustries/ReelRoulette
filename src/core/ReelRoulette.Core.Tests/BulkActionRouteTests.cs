@@ -525,6 +525,55 @@ public sealed class BulkActionRouteTests : IDisposable
         Assert.Contains("error: Deleting files is an admin action, which needs the server's control token.", operation);
     }
 
+    // Past 1,000 listed items, a bulk event is replaced by resyncRequired, so one change can't send every device megabytes.
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(1001)]
+    public void BulkItemState_PublishesItsEventUpToTheCap_AndResyncRequiredInItsPlacePastIt(int changed)
+    {
+        var ids = SeedItems(changed);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+
+        var result = ServerHostComposition.SetBulkItemState(
+            new BulkItemStateRequest { ItemIds = ids, Flag = "favorite", Value = true },
+            state,
+            CreateOperations());
+
+        Assert.Equal(changed, BulkCount(result));
+        AssertListedOrReplaced(state, "bulkItemStateChanged", changed, payload =>
+            Assert.Equal(changed, Assert.IsType<BulkItemStateChangedPayload>(payload).Items.Count));
+    }
+
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(1001)]
+    public void BulkRating_PublishesItsEventUpToTheCap_AndResyncRequiredInItsPlacePastIt(int changed)
+    {
+        var ids = SeedItems(changed);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+
+        var result = ServerHostComposition.SetBulkRating(new BulkRatingRequest { ItemIds = ids, Rating = 3 }, state, CreateOperations());
+
+        Assert.Equal(changed, BulkCount(result));
+        AssertListedOrReplaced(state, "bulkItemRatingChanged", changed, payload =>
+            Assert.Equal(changed, Assert.IsType<BulkItemRatingChangedPayload>(payload).Items.Count));
+    }
+
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(1001)]
+    public void DeleteFiles_PublishesItemsRemovedUpToTheCap_AndResyncRequiredInItsPlacePastIt(int removed)
+    {
+        var ids = SeedItems(removed, withFiles: true);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+
+        var response = Assert.IsType<DeleteFilesResponse>(Value(DeleteFiles(Local(), ids, state)));
+
+        Assert.Equal(removed, response.DeletedCount);
+        AssertListedOrReplaced(state, "itemsRemoved", removed, payload =>
+            Assert.Equal(ids, Assert.IsType<ItemsRemovedPayload>(payload).ItemIds));
+    }
+
     [Fact]
     public void TagCounts_CountEachTagAcrossTheItems_IgnoringCase_InPlaceOfEachItemsTags()
     {
@@ -603,6 +652,49 @@ public sealed class BulkActionRouteTests : IDisposable
         OpenApiSpec.AssertMatchesSchema(
             OpenApiSpec.SerializeAsServer(new LibraryIdsQueryRequest { FilterState = Filter("{}"), Search = "one" }),
             "LibraryIdsQueryRequest");
+    }
+
+    /// <summary>Seeds <paramref name="count"/> items, with files on disk when asked, and returns their ids.</summary>
+    private List<string> SeedItems(int count, bool withFiles = false)
+    {
+        var items = Enumerable.Range(0, count)
+            .Select(index =>
+            {
+                var path = Path.Combine(_mediaDir, $"clip-{index}.mp4");
+                if (withFiles)
+                {
+                    File.WriteAllBytes(path, [0x01]);
+                }
+
+                return new SeedItem($"item-{index:D4}", path);
+            })
+            .ToList();
+        CatalogSeed.Write(_dataDir, items: items);
+        return items.Select(item => item.Id).ToList();
+    }
+
+    /// <summary>
+    /// The one published event is <paramref name="eventType"/> for at most 1,000 items, and otherwise resyncRequired
+    /// in its place, with the revision before it and its own, and a last.log line saying so.
+    /// </summary>
+    private void AssertListedOrReplaced(ServerStateService state, string eventType, int itemCount, Action<object> assertListed)
+    {
+        var envelope = Assert.Single(state.GetReplayAfter(0).Events);
+        var replacedLines = LogLines().Where(line => line.Contains("in place of", StringComparison.Ordinal)).ToList();
+        if (itemCount <= 1000)
+        {
+            Assert.Equal(eventType, envelope.EventType);
+            assertListed(envelope.Payload);
+            Assert.Empty(replacedLines);
+            return;
+        }
+
+        Assert.Equal("resyncRequired", envelope.EventType);
+        var resync = Assert.IsType<ResyncRequiredPayload>(envelope.Payload);
+        Assert.Equal((eventType, envelope.Revision - 1, envelope.Revision), (resync.Reason, resync.LastEventId, resync.CurrentRevision));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(resync), "ResyncRequiredPayload");
+        var line = Assert.Single(replacedLines);
+        Assert.Contains($"[info] Published resyncRequired in place of {eventType}, which would have listed {itemCount} items.", line);
     }
 
     private IResult DeleteFiles(

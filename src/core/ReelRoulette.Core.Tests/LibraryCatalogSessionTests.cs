@@ -563,12 +563,12 @@ public sealed class LibraryCatalogSessionTests
         Assert.Null(session.RecordPlayback("missing"));
 
         var revisionBeforeClear = session.Revision;
-        Assert.Equal(0, session.ClearPlaybackStats(["missing"]));
+        Assert.Equal(new CatalogPlaybackStatsClear(0, 0), session.ClearPlaybackStats(["missing"]));
         Assert.Equal(revisionBeforeClear, session.Revision);
         Assert.Equal(6, session.ReadItemState("item-b")!.PlayCount);
         Assert.NotNull(session.ReadItemState("item-time")!.LastPlayedUtc);
 
-        Assert.Equal(1, session.ClearPlaybackStats(["ITEM-B", "item-b", "missing"]));
+        Assert.Equal(new CatalogPlaybackStatsClear(1, 1), session.ClearPlaybackStats(["ITEM-B", "item-b", "missing"]));
         var clearedB = session.ReadItemState("item-b");
         Assert.Equal(0, clearedB!.PlayCount);
         Assert.Null(clearedB.LastPlayedUtc);
@@ -578,12 +578,13 @@ public sealed class LibraryCatalogSessionTests
 
         // No ids clears nothing, even while items have stats; only the explicit call clears them all.
         var revisionBeforeClearAll = session.Revision;
-        Assert.Equal(0, session.ClearPlaybackStats([]));
-        Assert.Equal(0, session.ClearPlaybackStats(["  "]));
+        Assert.Equal(default, session.ClearPlaybackStats([]));
+        Assert.Equal(default, session.ClearPlaybackStats(["  "]));
         Assert.Equal(revisionBeforeClearAll, session.Revision);
         Assert.Equal(int.MaxValue, session.ReadItemState("item-max")!.PlayCount);
 
-        Assert.Equal(3, session.ClearAllPlaybackStats());
+        // Every item counts, and the three with stats change.
+        Assert.Equal(new CatalogPlaybackStatsClear(5, 3), session.ClearAllPlaybackStats());
         Assert.Equal(0, session.ReadItemState("item-max")!.PlayCount);
         Assert.Null(session.ReadItemState("item-max")!.LastPlayedUtc);
         Assert.Equal(0, session.ReadItemState("item-time")!.PlayCount);
@@ -592,8 +593,23 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal(0, session.ReadItemState("item-clean")!.PlayCount);
 
         var revisionAfterClear = session.Revision;
-        Assert.Equal(0, session.ClearAllPlaybackStats());
+        Assert.Equal(new CatalogPlaybackStatsClear(5, 0), session.ClearAllPlaybackStats());
         Assert.Equal(revisionAfterClear, session.Revision);
+    }
+
+    [Fact]
+    public void ClearPlaybackStats_PastOneChunkOfIds_ClearsEveryChunk_ThoughTheLastHasNothingToClear()
+    {
+        using var dir = new TempDirectory();
+        // The first 500 ids, one chunk, have stats; the 501st, in a chunk of its own, has none.
+        var ids = Enumerable.Range(0, 501).Select(index => $"item-{index:D3}").ToList();
+        CatalogSeed.Write(
+            dir.Path,
+            items: ids.Select((id, index) => new SeedItem(id, $"/media/{id}.mp4") { PlayCount = index < 500 ? 1 : 0 }));
+        var session = CatalogOpen.Open(dir.Path).Session!;
+
+        Assert.Equal(new CatalogPlaybackStatsClear(501, 500), session.ClearPlaybackStats(ids));
+        Assert.All(ids, id => Assert.Equal(0, session.ReadItemState(id)!.PlayCount));
     }
 
     [Fact]
@@ -705,7 +721,7 @@ public sealed class LibraryCatalogSessionTests
         Assert.Empty(session.SetItemsFlag([path], CatalogItemFlag.Favorite, true));
         Assert.Empty(session.SetItemsFlag([path], CatalogItemFlag.Blacklist, true));
         Assert.Null(session.RecordPlayback(path));
-        Assert.Equal(0, session.ClearPlaybackStats([path]));
+        Assert.Equal(new CatalogPlaybackStatsClear(0, 0), session.ClearPlaybackStats([path]));
         Assert.False(session.ApplyItemTagEdits([path], [], ["Night"], out _, out var resolved));
         Assert.Empty(resolved);
 

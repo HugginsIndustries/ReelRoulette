@@ -218,7 +218,8 @@ public sealed class ClearPlaybackStatsRequest
 
 public sealed class ClearPlaybackStatsResponse
 {
-    public int ClearedCount { get; set; }
+    /// <summary>How many of the named items are in the library, whether or not they had stats to clear.</summary>
+    public int Count { get; set; }
 }
 
 public sealed class RecordPlaybackResponse
@@ -732,6 +733,23 @@ public sealed class RefreshStatusChangedPayload
 
 public sealed class StreamOpenedPayload
 {
+    public long CurrentRevision { get; set; }
+}
+
+/// <summary>Tells a client to read its state again, after a revision gap or in place of events it wasn't sent.</summary>
+public sealed class ResyncRequiredPayload
+{
+    public const string EventType = "resyncRequired";
+    public const string RevisionGap = "revisionGap";
+    public const string PlaybackStatsCleared = "playbackStatsCleared";
+
+    /// <summary><see cref="RevisionGap"/>, <see cref="PlaybackStatsCleared"/>, or the type of the event it replaces.</summary>
+    public string Reason { get; set; } = string.Empty;
+
+    /// <summary>For a revision gap, the client's last event ID; when published, the revision before this event's.</summary>
+    public long LastEventId { get; set; }
+
+    /// <summary>For a revision gap, the server's revision when the gap was found; when published, this event's revision.</summary>
     public long CurrentRevision { get; set; }
 }
 

@@ -43,6 +43,11 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+/** The server's answer to a favorite or blacklist change, where setting one flag clears the other. */
+function flagAnswer(body: { itemId?: string; isFavorite?: boolean; isBlacklisted?: boolean }): Response {
+  return json({ itemId: body.itemId, path: "", isFavorite: body.isFavorite === true, isBlacklisted: body.isBlacklisted === true, revision: 1 });
+}
+
 /** A stand-in for the `<video>` element. Its `play` notes what was set when it was called. */
 function fakeVideo() {
   const video = {
@@ -187,6 +192,9 @@ function setup(
       const itemId = decodeURIComponent(path.slice("/api/play/".length));
       const entry = store.history.peek().find((item) => item.itemId === itemId);
       return entry ? json({ ...entry }) : json({ error: "Item not found", code: "play_item_not_found" }, 404);
+    }
+    if (path === "/api/favorite" || path === "/api/blacklist") {
+      return flagAnswer(body);
     }
     return json({});
   }) as typeof fetch;
@@ -1357,12 +1365,46 @@ describe("createPlayer", () => {
     const removing = page.player.toggleBlacklist();
     // Another item plays before the server answers.
     page.play(PHOTO);
-    answer(json({}));
+    answer(flagAnswer({ itemId: "item-other", isBlacklisted: false }));
     await removing;
     expect(page.notified).toEqual([
       { kind: "actions", text: "Removed from favorites", detail: "clip.mp4", key: "flag" },
       { kind: "actions", text: "Removed from blacklist", detail: "other.mp4", key: "flag" }
     ]);
+  });
+
+  it("applies a favorite or blacklist answer that arrives after Next to the item it was for", async () => {
+    const page = setup();
+    page.play(VIDEO);
+    const answer = holdReply(page, "/api/favorite");
+    const favoriting = page.player.toggleFavorite();
+    // Another item plays before the server answers.
+    page.play(SECOND_VIDEO);
+    answer(flagAnswer({ itemId: "item-video", isFavorite: true }));
+    await favoriting;
+
+    expect([page.store.current.value?.itemId, page.store.current.value?.isFavorite, page.player.favorite.value]).toEqual([
+      "item-other",
+      false,
+      false
+    ]);
+    const cached: PlayingItem = { ...VIDEO };
+    page.store.itemStates.applyTo(cached);
+    expect(cached.isFavorite).toBe(true);
+    page.player.previous();
+    expect([page.store.current.value?.itemId, page.player.favorite.value]).toEqual(["item-video", true]);
+    expect(page.notified).toEqual([{ kind: "actions", text: "Added to favorites", detail: "clip.mp4", key: "flag" }]);
+  });
+
+  it("drops the item states it kept on a resync, so an item played again shows its play's state, and reads the playing item", () => {
+    const page = setup();
+    page.play(VIDEO);
+    page.emit("itemStateChanged", { itemId: "item-other", path: "/media/other.mp4", isFavorite: true, isBlacklisted: false });
+    page.emit("resyncRequired", {});
+    expect(page.requests("/api/library/item").map((request) => request.body)).toEqual([{ id: "item-video" }]);
+
+    page.play(SECOND_VIDEO);
+    expect(page.player.favorite.value).toBe(false);
   });
 
   it("shows a favorite or blacklist that couldn't reach the server in the notice, leaving the buttons as they were", async () => {

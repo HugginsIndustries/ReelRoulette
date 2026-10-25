@@ -1,15 +1,16 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem, type PlayItemFailure } from "../api/coreApi";
 import {
+  HttpStatusError,
   noticeRequestFailure,
   PLAYBACK_REQUEST_TIMEOUT_MS,
-  requestWithNotice,
   ServerUnreachableError,
   UnauthorizedError,
   withTimeout
 } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
-import { applyItemStateToCurrent } from "../library/currentItemState";
+import { applyItemStateToCurrent, type ItemFlags } from "../library/currentItemState";
+import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
 import { playRefusalFailure } from "../library/libraryPlayModel";
 import type { ItemStateChangedPayload } from "../library/libraryProjectionSync";
 import { errorType, playbackTraceLine } from "../logging/relayLogLines";
@@ -20,6 +21,7 @@ import type { AppStore, PlayingItem } from "../state/appStore";
 import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import { countText } from "../text/countText";
+import type { components } from "../types/openapi.generated";
 import type { BulkItemStateChangedPayload } from "../types/serverContracts";
 import type { AudioStage } from "./audioStage";
 import { createFrameClock, type FramedVideo } from "./frameStep";
@@ -257,7 +259,7 @@ export interface PlayerOptions {
   dialogs: Pick<Dialogs, "notice">;
   /** The one-off messages: a favorite or blacklist change made here, or on another device, and a skipped file. */
   notifications: Pick<Notifications, "notify">;
-  /** The ratings this device shows, which take the rating a history step's play answer gives the item. */
+  /** The ratings this device shows, which take the rating a play answer, or the read after a resync, gives the item. */
   ratings: Pick<ItemRatings, "takeRead">;
   /** Defaults to the browser's animation frames, looked up on each request. */
   frames?: FrameScheduler;
@@ -270,6 +272,14 @@ interface ArmedAttempt {
   id: string;
   attemptId: number;
 }
+
+/** An item's favorite, blacklist, and rating, as a play answer or a read gives them. */
+interface ItemRead extends ItemFlags {
+  rating: number | null;
+}
+
+/** The server's answer to a favorite or blacklist change: the item's id and both its flags. */
+type LibraryStateResponse = components["schemas"]["LibraryStateResponse"];
 
 /** The time shown while no video's or photo timer's time is known, so the controls keep their look. */
 const NO_TIME = "0:00 / 0:00";
@@ -855,7 +865,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
   /** What the server answered a play request for the current item. */
   type PlayAnswer =
-    | { kind: "played"; mediaUrl: string; rating: number | null }
+    | { kind: "played"; mediaUrl: string; read: ItemRead }
     | { kind: "refused"; result: PlayItemFailure }
     | { kind: "unauthorized" }
     | { kind: "unreachable" }
@@ -881,7 +891,15 @@ export function createPlayer(options: PlayerOptions): Player {
     const result = outcome.value;
     if (!result.ok) return { kind: "refused", result };
     return result.response?.mediaUrl
-      ? { kind: "played", mediaUrl: result.response.mediaUrl, rating: result.response.rating ?? null }
+      ? {
+          kind: "played",
+          mediaUrl: result.response.mediaUrl,
+          read: {
+            isFavorite: result.response.isFavorite === true,
+            isBlacklisted: result.response.isBlacklisted === true,
+            rating: result.response.rating ?? null
+          }
+        }
       : { kind: "error", error: "NoMediaUrl" };
   }
 
@@ -923,8 +941,8 @@ export function createPlayer(options: PlayerOptions): Player {
   }
 
   /**
-   * A history step's play: its fresh media URL replaces the entry's, and its media loads with it. Its rating becomes the
-   * entry's, so a change made while the entry wasn't playing shows.
+   * A history step's play: its fresh media URL replaces the entry's, and its media loads with it. Its favorite,
+   * blacklist, and rating become the entry's, so a change made while the entry wasn't playing shows.
    */
   async function playFresh(item: PlayingItem, attemptId: number): Promise<void> {
     const attempt: ArmedAttempt = { mediaType: item.mediaType, id: item.id, attemptId };
@@ -941,7 +959,7 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     item.mediaUrl = answer.mediaUrl;
-    ratings.takeRead(item.itemId, answer.rating);
+    takeItemRead(item.itemId, answer.read);
     loadMedia(item, attemptId);
   }
 
@@ -1015,6 +1033,7 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     trace("info", "recover");
+    takeItemRead(item.itemId, answer.read);
     playFreshUrl(attempt, item, answer.mediaUrl, position);
   }
 
@@ -1096,6 +1115,7 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     trace("info", "media-recheck");
+    takeItemRead(item.itemId, answer.read);
     playFreshUrl(attempt, item, answer.mediaUrl, position);
   }
 
@@ -1260,7 +1280,24 @@ export function createPlayer(options: PlayerOptions): Player {
     }
   }
 
-  /** Favoriting clears the blacklist, and blacklisting clears the favorite. */
+  /** Keeps an item's favorite and blacklist, and shows them while that item plays. */
+  function takeItemState(itemId: string, flags: ItemFlags): void {
+    store.itemStates.remember(itemId, flags);
+    if (applyItemStateToCurrent(store.current.peek(), { itemId, ...flags })) {
+      showToggles();
+    }
+  }
+
+  /** Takes an item's favorite, blacklist, and rating as a play answer or a read gives them. */
+  function takeItemRead(itemId: string, read: ItemRead): void {
+    takeItemState(itemId, { isFavorite: read.isFavorite, isBlacklisted: read.isBlacklisted });
+    ratings.takeRead(itemId, read.rating);
+  }
+
+  /**
+   * Favoriting clears the blacklist, and blacklisting clears the favorite, as the server answers. The answer goes to
+   * the item the request was for, which may no longer play by then.
+   */
   async function toggleFlag(flag: "isFavorite" | "isBlacklisted"): Promise<void> {
     const isFavorite = flag === "isFavorite";
     const item = store.current.peek();
@@ -1269,19 +1306,15 @@ export function createPlayer(options: PlayerOptions): Player {
     // The item the request acts on, named as the now-playing line names it, though another may play by the answer.
     const fileName = playingFileName(item);
     const path = isFavorite ? "/api/favorite" : "/api/blacklist";
-    const taken = await requestWithNotice(dialogs, `${isFavorite ? "Favorite" : "Blacklist"} update failed`, () =>
+    let answer: LibraryStateResponse;
+    try {
       // The client id comes back on the change's event, so this device can tell its own change from another's.
-      api.post(path, { itemId: item.itemId, [flag]: nextValue, clientId: store.identity.clientId })
-    );
-    if (!taken) return;
-    // Applied to the item playing when the server answers.
-    const current = store.current.peek()!;
-    current[flag] = nextValue;
-    if (nextValue) {
-      current[isFavorite ? "isBlacklisted" : "isFavorite"] = false;
+      answer = await api.postJson(path, { itemId: item.itemId, [flag]: nextValue, clientId: store.identity.clientId });
+    } catch (error) {
+      noticeRequestFailure(dialogs, `${isFavorite ? "Favorite" : "Blacklist"} update failed`, error);
+      return;
     }
-    store.itemStates.remember(current.itemId, { isFavorite: current.isFavorite, isBlacklisted: current.isBlacklisted });
-    showToggles();
+    takeItemState(answer.itemId, { isFavorite: answer.isFavorite, isBlacklisted: answer.isBlacklisted });
     const text = isFavorite
       ? nextValue
         ? "Added to favorites"
@@ -1292,13 +1325,31 @@ export function createPlayer(options: PlayerOptions): Player {
     notifications.notify({ kind: "actions", text, detail: fileName, key: "flag" });
   }
 
+  /**
+   * Reads the playing item again and takes its favorite, blacklist, and rating, as after a resync. An item no longer in
+   * the library, or a read that fails, leaves the player as it is.
+   */
+  async function readPlayingItem(): Promise<void> {
+    const itemId = store.current.peek()?.itemId;
+    if (!itemId) return;
+    let read: LibraryProjectionItem | null;
+    try {
+      read = parseLibraryItem(await api.postJson("/api/library/item", { id: itemId }));
+    } catch (error) {
+      // A 401's pairing prompt says why, and a 404 means the item has left the library.
+      if (!(error instanceof UnauthorizedError) && !(error instanceof HttpStatusError && error.status === 404)) {
+        trace("warn", "resync-read-failed", { error: errorType(error) });
+      }
+      return;
+    }
+    if (!read) return;
+    takeItemRead(itemId, read);
+  }
+
   connection.on("itemStateChanged", (payload: ItemStateChangedPayload | null | undefined) => {
     const itemId = payload?.itemId;
     if (!payload || !itemId) return;
-    store.itemStates.remember(itemId, { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted });
-    if (applyItemStateToCurrent(store.current.peek(), payload)) {
-      showToggles();
-    }
+    takeItemState(itemId, { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted });
     // This device's own change already said so, as Your actions. An event without a client id counts as another
     // device's.
     if (payload.clientId && payload.clientId === store.identity.clientId) {
@@ -1331,6 +1382,12 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     notifications.notify({ kind: "devices", text: bulkItemStateText(payload), key: "sync-bulk" });
+  });
+
+  // Events may have been missed, so the states they brought may be out of date, and the playing item is read again.
+  connection.on("resyncRequired", () => {
+    store.itemStates.clear();
+    void readPlayingItem();
   });
 
   // A showing photo's timer, and a video's, takes the new length, keeping the time it has run and whether it runs or

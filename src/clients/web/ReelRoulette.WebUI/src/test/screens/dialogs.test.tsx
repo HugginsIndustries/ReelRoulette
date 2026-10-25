@@ -3,14 +3,29 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/pr
 import { render as renderInto } from "preact";
 import { useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createControlAccess, type ControlAccess } from "../../api/controlAccess";
 import { createDialogs, type Dialogs } from "../../dialogs/dialogs";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { createAppApi } from "../../state/appApi";
 import { createAppServices, type AppServices } from "../../state/appServices";
 import { App } from "../../ui/App";
 import { AppContext, useApp } from "../../ui/appContext";
 import { DialogHost, NameDialog } from "../../ui/Dialog";
 import { EMPTY_FIELD, isFlagged, type FieldProblem } from "../../validation/fieldValidation";
-import { API_BASE_URL, FakeEventSource, FakeServer, SSE_URL, pageReady, resetPage, settle, stubFullscreenApi, stubWebAudio } from "./pageHarness";
+import {
+  API_BASE_URL,
+  FakeEventSource,
+  FakeServer,
+  SSE_URL,
+  json,
+  openNotices,
+  pageReady,
+  resetPage,
+  settle,
+  status,
+  stubFullscreenApi,
+  stubWebAudio
+} from "./pageHarness";
 
 /** The dialogs in the order the page opened them, so the last one is on top. */
 let opened: HTMLDialogElement[] = [];
@@ -105,14 +120,33 @@ function EditTagHarness({ saved }: { saved: (name: string) => void }) {
   );
 }
 
-function renderWithDialogs(saved = vi.fn()): { dialogs: Dialogs; saved: typeof saved } {
+/** Answers the control routes' requests, as "{method} {path}", with the server's answers. */
+type ControlReply = (route: string, body: any) => Response;
+
+function renderWithDialogs(
+  saved = vi.fn(),
+  controlReply: ControlReply = () => status(204)
+): { dialogs: Dialogs; saved: typeof saved; controlAccess: ControlAccess; controlRoutes: string[] } {
   const dialogs = createDialogs({ relayStatus: () => {} });
+  const controlRoutes: string[] = [];
+  // The control routes' 401 never asks for pairing.
+  const api = createAppApi("http://server", {
+    onUnauthorized: (route) => {
+      throw new Error(`${route} asked for pairing.`);
+    },
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const route = `${init?.method ?? "GET"} ${new URL(String(input)).pathname}`;
+      controlRoutes.push(route);
+      return controlReply(route, typeof init?.body === "string" ? JSON.parse(init.body) : undefined);
+    }) as typeof fetch
+  });
+  const controlAccess = createControlAccess({ api, dialogs });
   render(
-    <AppContext.Provider value={{ dialogs } as unknown as AppServices}>
+    <AppContext.Provider value={{ dialogs, controlAccess } as unknown as AppServices}>
       <EditTagHarness saved={saved} />
     </AppContext.Provider>
   );
-  return { dialogs, saved };
+  return { dialogs, saved, controlAccess, controlRoutes };
 }
 
 async function openEditTag(): Promise<HTMLDialogElement> {
@@ -270,6 +304,73 @@ describe("the dialog component", () => {
     await expect(closed).resolves.toBe(false);
     await settle();
     expect(openDialogs()).toEqual([]);
+  });
+});
+
+/** The server's answers to another machine: 401 for the access check, and the pair route's 401 for a wrong token. */
+function anotherMachine(route: string, body: any): Response {
+  if (route === "GET /control/access") {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  return body?.token === "secret" ? json({ paired: true, message: "Control paired." }) : json({ error: "The control token is wrong." }, 401);
+}
+
+describe("the control-token prompt", () => {
+  it("doesn't show when the server allows admin actions", async () => {
+    const { controlAccess, controlRoutes } = renderWithDialogs();
+    await expect(controlAccess.ensure("Delete files failed")).resolves.toBe(true);
+    await settle();
+    expect([controlRoutes, openDialogs()]).toEqual([["GET /control/access"], []]);
+  });
+
+  it("asks for the token in a password field, with Continue disabled quietly while it is empty, and an accepted token allows", async () => {
+    const { controlAccess, controlRoutes } = renderWithDialogs(vi.fn(), anotherMachine);
+    const allowed = controlAccess.ensure("Delete files failed");
+    await settle();
+    const prompt = top();
+    const field = prompt.querySelector("input") as HTMLInputElement;
+    expect(document.getElementById(prompt.getAttribute("aria-labelledby")!)?.textContent).toBe("Control token");
+    expect(prompt.querySelector("label")?.textContent).toBe("This is an admin action. Enter the server's control token.");
+    expect([field.type, document.activeElement]).toEqual(["password", field]);
+    expect([buttonIn(prompt, "Continue").disabled, prompt.querySelector(".vfield-icon")]).toEqual([true, null]);
+
+    await type(field, " secret ");
+    expect(buttonIn(prompt, "Continue").disabled).toBe(false);
+    fireEvent.keyDown(field, { key: "Enter" });
+    await expect(allowed).resolves.toBe(true);
+    await settle();
+    expect(controlRoutes).toEqual(["GET /control/access", "POST /control/pair"]);
+    expect(openDialogs()).toEqual([]);
+  });
+
+  it("stays open on a wrong token, with the server's reason in the field until the token changes", async () => {
+    const { controlAccess } = renderWithDialogs(vi.fn(), anotherMachine);
+    const allowed = controlAccess.ensure("Delete files failed");
+    await settle();
+    const prompt = top();
+    const field = prompt.querySelector("input") as HTMLInputElement;
+    await type(field, "wrong");
+    await press(buttonIn(prompt, "Continue"));
+
+    expect(openDialogs()).toEqual([prompt]);
+    expect(prompt.querySelector(".vfield-tip")?.textContent).toBe("The control token is wrong.");
+    expect(buttonIn(prompt, "Continue").disabled).toBe(true);
+    await type(field, "wrong again");
+    expect(buttonIn(prompt, "Continue").disabled).toBe(false);
+    await waitFor(() => expect(prompt.querySelector(".vfield-icon")).toBeNull());
+
+    await press(buttonIn(prompt, "Cancel"));
+    await expect(allowed).resolves.toBe(false);
+    expect(openDialogs()).toEqual([]);
+  });
+
+  it("shows a failed request in the notice, worded with what failed and without its status", async () => {
+    const { controlAccess } = renderWithDialogs(vi.fn(), () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await expect(controlAccess.ensure("Delete files failed")).resolves.toBe(false);
+    await settle();
+    expect(openNotices()).toEqual(["Delete files failed: Couldn't reach the server."]);
   });
 });
 

@@ -297,21 +297,21 @@ public sealed class LibraryOperationsServiceTests
             {
                 ItemIds = ["item-2", "missing"]
             });
-            Assert.Equal(1, selected.ClearedCount);
+            Assert.Equal(new CatalogPlaybackStatsClear(1, 1), selected);
             Assert.Equal(3, host.Session.ReadItemState("item-1")!.PlayCount);
             Assert.Equal(0, host.Session.ReadItemState("item-2")!.PlayCount);
             Assert.Null(host.Session.ReadItemState("item-2")!.LastPlayedUtc);
             Assert.Equal(0, host.Session.ReadItemState("item-3")!.PlayCount);
 
             var all = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { AllItems = true });
-            Assert.Equal(1, all.ClearedCount);
+            Assert.Equal(new CatalogPlaybackStatsClear(3, 1), all);
             Assert.Equal(0, host.Session.ReadItemState("item-1")!.PlayCount);
             Assert.Null(host.Session.ReadItemState("item-1")!.LastPlayedUtc);
             Assert.Equal(0, host.Session.ReadItemState("item-3")!.PlayCount);
 
             var revisionAfterClear = host.Session.Revision;
             var none = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { ItemIds = [] });
-            Assert.Equal(0, none.ClearedCount);
+            Assert.Equal(new CatalogPlaybackStatsClear(0, 0), none);
             Assert.Equal(revisionAfterClear, host.Session.Revision);
         }
         finally

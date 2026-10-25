@@ -25,6 +25,7 @@ import {
   popupsShown,
   pressStars,
   randomAnswer,
+  flagAnswer,
   ratingAnswer,
   ratingRequests,
   releasePointer,
@@ -763,8 +764,8 @@ describe("a file that can't play", () => {
 describe("favorite and blacklist", () => {
   it("send the playing item's id and the device's client id, light their buttons, and clear each other", async () => {
     const server = serverPicking(VIDEO_ITEM);
-    server.on("POST", "/api/favorite", () => json({}));
-    server.on("POST", "/api/blacklist", () => json({}));
+    server.on("POST", "/api/favorite", flagAnswer);
+    server.on("POST", "/api/blacklist", flagAnswer);
     const page = await mount(server);
     const clientId = page.clientId();
     expect(clientId).not.toBe("");
@@ -807,6 +808,24 @@ describe("favorite and blacklist", () => {
       )
     );
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
+  });
+
+  it("show the play answer's flags on Previous after a resync, for an item whose flags changed on the server", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("POST", "/api/favorite", flagAnswer);
+    const page = await mountAndPlay(server);
+    await click(button("Favorite"));
+    await click(button("Next"));
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+
+    // A change elsewhere that the server announced only with a resync: the first video is now blacklisted.
+    page.stream().emit("resyncRequired", 3, { reason: "bulkItemStateChanged", lastEventId: 2, currentRevision: 3 });
+    await flush();
+    server.on("POST", "/api/play/item-video", () => json({ ...VIDEO_ITEM, isFavorite: false, isBlacklisted: true }));
+
+    await click(button("Previous"));
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    expect([isLit("Favorite"), isLit("Blacklist")]).toEqual([false, true]);
   });
 
   it("show an update the server refuses in the notice, with its reason when it gives one, and leave the buttons as they were", async () => {
@@ -893,6 +912,8 @@ describe("favorite and blacklist", () => {
     await flush();
     expect(isLit("Blacklist")).toBe(false);
 
+    // The server's play answer carries the state the event announced.
+    server.on("POST", "/api/play/item-video", () => json({ ...VIDEO_ITEM, isBlacklisted: true }));
     await click(button("Previous"));
     expect(isLit("Blacklist")).toBe(true);
     expect(isLit("Favorite")).toBe(false);
@@ -952,6 +973,8 @@ describe("favorite and blacklist", () => {
     expect(isLit("Blacklist")).toBe(false);
     expect(popupsShown()).toEqual(["Blacklisted 1,234 items on another device"]);
 
+    // The server's play answer carries the state the batch announced.
+    server.on("POST", "/api/play/item-video", () => json({ ...VIDEO_ITEM, isBlacklisted: true }));
     await click(button("Previous"));
     expect(isLit("Blacklist")).toBe(true);
     expect(isLit("Favorite")).toBe(false);
@@ -3070,7 +3093,7 @@ describe("page structure", () => {
 
   it("adds no browser storage keys but its buttons' state on this device", async () => {
     const server = serverPicking(VIDEO_ITEM, PHOTO_ITEM);
-    server.on("POST", "/api/favorite", () => json({}));
+    server.on("POST", "/api/favorite", flagAnswer);
     await mountAndPlay(server);
 
     await click(button("Mute"));
@@ -3604,6 +3627,30 @@ describe("the player's rating", () => {
     page.stream().emit("resyncRequired", 3, {});
     await flush();
     expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
+  });
+
+  it("on a resync, shows the playing item's favorite, blacklist, and rating as the server reads them", async () => {
+    const server = serverPicking(rated(VIDEO_ITEM, 2));
+    server.on("POST", "/api/favorite", flagAnswer);
+    const page = await mount(server);
+    // Nothing reads while nothing plays.
+    page.stream().emit("resyncRequired", 1, { reason: "revisionGap", lastEventId: 0, currentRevision: 1 });
+    await flush();
+    expect(server.requests("POST", "/api/library/item")).toHaveLength(0);
+
+    await click(emptyState());
+    await click(button("Favorite"));
+    expect([isLit("Favorite"), isLit("Blacklist"), starShows()]).toEqual([true, false, ["Rating, 2 stars", true, "2"]]);
+
+    // A change made elsewhere that the server announced only with a resync.
+    server.on("POST", "/api/library/item", (call) =>
+      json({ id: VIDEO_ITEM.id, sourceId: "s1", fileName: VIDEO_ITEM.displayName, mediaType: 0, isFavorite: false, isBlacklisted: true, rating: 4, tags: [] })
+    );
+    page.stream().emit("resyncRequired", 3, { reason: "bulkItemStateChanged", lastEventId: 2, currentRevision: 3 });
+    await flush();
+    expect(server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-video" }]);
+    expect([isLit("Favorite"), isLit("Blacklist"), starShows()]).toEqual([false, true, ["Rating, 4 stars", true, "4"]]);
+    expect(openNotices()).toEqual([]);
   });
 
   it("follows a batch's rating on the playing item, and another device's batch pops up once, while this device's own pops up nothing", async () => {

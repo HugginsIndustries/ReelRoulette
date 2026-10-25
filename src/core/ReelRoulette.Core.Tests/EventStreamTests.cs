@@ -58,6 +58,22 @@ public sealed class EventStreamTests
     }
 
     [Fact]
+    public async Task ARevisionGapSendsResyncRequired_WithTheClientsLastEventIdAndTheServersRevision()
+    {
+        var state = new ServerStateService();
+        state.PublishExternal("itemStateChanged", Favorite("a.mp4"));
+
+        // A last event ID ahead of the server's revision comes from before a restart.
+        var resync = Assert.Single(await ReadStreamAsync(state, lastEventId: 500, frames: 1));
+
+        Assert.Equal("resyncRequired", resync.EventType);
+        Assert.Equal("revisionGap", resync.Payload.GetProperty("reason").GetString());
+        Assert.Equal(500, resync.Payload.GetProperty("lastEventId").GetInt64());
+        Assert.Equal(1, resync.Payload.GetProperty("currentRevision").GetInt64());
+        OpenApiSpec.AssertMatchesSchema(resync.Payload, "ResyncRequiredPayload");
+    }
+
+    [Fact]
     public void ReplayAfter_ALastEventIdOfZeroReplaysFromTheStartOrReportsAGap()
     {
         var state = new ServerStateService();

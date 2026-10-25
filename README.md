@@ -12,7 +12,7 @@ ReelRoulette is a server-first media randomizer, used in the browser on any devi
   - WebUI static assets
   - Operator UI (`/operator`)
 - Control-plane/admin operations are exposed under `/control/*` (status, settings, pair, restart, stop, testing, logs).
-- The Operator opens directly on the server machine. From another machine it first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests through a reverse proxy count as another machine, even when the proxy runs on the server machine.
+- The Operator opens directly on the server machine, and the WebUI's Delete files… needs no control token there. From another machine, each first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests through a reverse proxy count as another machine, even when the proxy runs on the server machine.
 - The WebUI is the only client, over the API and SSE; server/core owns authoritative domain state.
 
 ## Prerequisites
@@ -101,7 +101,7 @@ On Android, Chrome installs the WebUI as an app only over HTTPS on the default p
 - Serve the WebUI at the host root, such as `https://reel.example.com/`, not under a path.
 - The proxy must send `X-Forwarded-For` and `X-Forwarded-Proto`, and either pass the original `Host` or send `X-Forwarded-Host`. Tailscale Serve and Caddy do this by default. Without `X-Forwarded-For`, requests through the proxy look like they come from the server machine.
 - Turn on **Allow remote connections** in the Operator and restart the server when it asks. Off, the server answers only the server machine and refuses requests through the proxy. On, it also serves plain HTTP on the LAN at its port.
-- Requests through the proxy count as another device, even from the server machine. With the default auth mode, each device pairs once with the shared token, and the Operator asks for the control token.
+- Requests through the proxy count as another device, even from the server machine. With the default auth mode, each device pairs once with the shared token, and the Operator and the WebUI's Delete files… ask for the control token.
 - A self-signed certificate that you click through is not expected to be enough for Chrome to offer Install.
 
 ### Tailscale Serve

@@ -18,6 +18,7 @@ import {
   openNotices,
   pageReady,
   pickPreset,
+  popupsShown,
   presetSelect,
   randomAnswer,
   resetPage,
@@ -25,10 +26,14 @@ import {
   setViewport,
   settle,
   status,
+  starsShown,
   stubLayoutSize,
+  stubStarLayout,
   stylesheetText,
+  tapStars,
   unauthorizedLogLine,
   useStylesheet,
+  xFor,
   type MountedPage
 } from "./pageHarness";
 
@@ -1861,11 +1866,11 @@ function barButton(name: "Select all" | "Clear selection" | "Selection actions")
   return within(selectionBar()!).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
 }
 
-/** The bar's parts in order: each button's name, or the count's text. */
+/** The bar's parts in order, leaving out the menu's items: each button's name, or the count's text. */
 function barParts(): string[] {
-  return Array.from(selectionBar()!.querySelectorAll("button, .library-selection-count")).map((part) =>
-    part instanceof HTMLButtonElement ? part.getAttribute("aria-label") ?? "" : part.textContent ?? ""
-  );
+  return Array.from(selectionBar()!.querySelectorAll("button, .library-selection-count"))
+    .filter((part) => !part.closest(".menu"))
+    .map((part) => (part instanceof HTMLButtonElement ? part.getAttribute("aria-label") ?? "" : part.textContent ?? ""));
 }
 
 function selectionMenu(): HTMLElement {
@@ -1945,7 +1950,8 @@ describe("selection", () => {
     expect(currentStyle(check("item-2").firstElementChild!).fontVariationSettings).toBe('"FILL" 1, "wght" 700, "GRAD" 0, "opsz" 20');
 
     expect(barParts()).toEqual(["Select all", "Clear selection", "1 / 3 selected", "Selection actions"]);
-    expect(Array.from(selectionBar()!.querySelectorAll("button")).map((button) => [button.title, button.textContent])).toEqual([
+    const barButtons = Array.from(selectionBar()!.querySelectorAll("button")).filter((button) => !button.closest(".menu"));
+    expect(barButtons.map((button) => [button.title, button.textContent])).toEqual([
       ["Select all", "select_all"],
       ["Clear selection", "deselect"],
       ["Selection actions", "more_vert"]
@@ -2203,6 +2209,461 @@ describe("selection and Escape", () => {
     await closeNotices();
     await pressEscape();
     expect([selecting(), isOpen()]).toEqual([false, true]);
+  });
+});
+
+/** How many items match in the bulk actions' tests, of which the first page loads 200. */
+const MATCHING = 1234;
+
+/** A count as the device groups it, such as "1,234". */
+function grouped(count: number): string {
+  return count.toLocaleString();
+}
+
+/**
+ * Mounts a library of `MATCHING` items, shows it, and selects every one with Select all, most of them not loaded. The
+ * server answers each bulk route with a count that differs from the selection's, `ANSWERED`.
+ */
+async function selectAllItems(
+  setup: (server: FakeServer) => void = () => {},
+  items: LibraryRow[] = libraryItems(MATCHING)
+): Promise<LibraryPage & { ids: string[] }> {
+  const ids = items.map((item) => item.id);
+  const mounted = await mountLibrary(items, (server) => {
+    server.on("POST", "/api/library/query-ids", () => json({ ids }));
+    server.on("POST", "/api/bulk/item-state", () => json({ count: ANSWERED }));
+    server.on("POST", "/api/bulk/rating", () => json({ count: ANSWERED }));
+    server.on("POST", "/api/playback/clear-stats", () => json({ count: ANSWERED }));
+    setup(server);
+  });
+  await openLibrary();
+  expect(tile(`item-${MATCHING}`)).toBeNull();
+  await click(check("item-1"));
+  await click(barButton("Select all"));
+  expect(barParts()[2]).toBe(`${grouped(MATCHING)} / ${grouped(MATCHING)} selected`);
+  return { ...mounted, ids };
+}
+
+/** The count the fake server answers the bulk routes with. */
+const ANSWERED = 1200;
+
+/** The Selection actions menu's items and rules in order: each item's label, or "—" for a rule. */
+function menuParts(): string[] {
+  return Array.from(selectionMenu().children).map((part) => (part.tagName === "HR" ? "—" : part.textContent ?? ""));
+}
+
+function menuItems(): HTMLButtonElement[] {
+  return Array.from(selectionMenu().querySelectorAll("button"));
+}
+
+function menuItem(label: string): HTMLButtonElement {
+  const found = menuItems().find((button) => button.textContent === label);
+  if (!found) {
+    throw new Error(`The menu has no ${label}.`);
+  }
+  return found;
+}
+
+/** Opens Selection actions and picks `label`. */
+async function pickAction(label: string): Promise<void> {
+  await click(barButton("Selection actions"));
+  await click(menuItem(label));
+}
+
+/** The in-app dialogs open now, oldest first. */
+function shownDialogs(): HTMLDialogElement[] {
+  return Array.from(document.querySelectorAll<HTMLDialogElement>("dialog.app-dialog"));
+}
+
+/** The open dialog whose heading or message reads `text`, or null. */
+function findDialog(text: string): HTMLDialogElement | null {
+  return shownDialogs().find((dialog) => dialog.querySelector("h3, .dialog-message")?.textContent === text) ?? null;
+}
+
+function dialogWith(text: string): HTMLDialogElement {
+  const found = findDialog(text);
+  if (!found) {
+    throw new Error(`No dialog reads "${text}".`);
+  }
+  return found;
+}
+
+function buttonIn(dialog: HTMLElement, label: string): HTMLButtonElement {
+  const found = Array.from(dialog.querySelectorAll("button")).find((button) => button.textContent?.trim() === label);
+  if (!found) {
+    throw new Error(`No ${label} button in the dialog.`);
+  }
+  return found;
+}
+
+/** The popups of other devices' changes showing. */
+function otherDevicePopups(): string[] {
+  return popupsShown().filter((text) => text.includes("another device"));
+}
+
+const CONTROL_TOKEN = "control-secret";
+const WRONG_TOKEN_REASON = "The control token is wrong.";
+
+/**
+ * Answers the control routes as the server answers another machine: `GET /control/access` with 401 until the control
+ * token is paired, and `POST /control/pair` with 401 and its reason for a wrong token.
+ */
+function serveControlFromAnotherMachine(server: FakeServer): void {
+  let session = false;
+  server.on("GET", "/control/access", () => (session ? status(204) : json({ error: "Unauthorized" }, 401)));
+  server.on("POST", "/control/pair", (call) => {
+    if (call.body?.token !== CONTROL_TOKEN) {
+      return json({ error: WRONG_TOKEN_REASON }, 401);
+    }
+    session = true;
+    return json({ paired: true, message: "Control paired." });
+  });
+}
+
+function tokenPrompt(): HTMLDialogElement | null {
+  return findDialog("Control token");
+}
+
+function tokenField(): HTMLInputElement {
+  return document.getElementById("control-token-input") as HTMLInputElement;
+}
+
+function continueButton(): HTMLButtonElement {
+  return document.getElementById("control-token-continue") as HTMLButtonElement;
+}
+
+async function typeToken(text: string): Promise<void> {
+  fireEvent.input(tokenField(), { target: { value: text } });
+  await flush();
+}
+
+describe("bulk actions", () => {
+  it("Selection actions lists its actions in three groups with a rule between them, Delete files… in red, in the menu's look", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    await click(check("item-1"));
+    await click(barButton("Selection actions"));
+
+    expect(menuParts()).toEqual([
+      "Add to favorites",
+      "Remove from favorites",
+      "Add to blacklist",
+      "Remove from blacklist",
+      "—",
+      "Rate…",
+      "Clear playback stats…",
+      "—",
+      "Delete files…"
+    ]);
+    const error = currentStyle(document.documentElement).getPropertyValue("--error").trim();
+    expect(currentStyle(menuItem("Delete files…")).color).toBe(error);
+    expect(currentStyle(menuItem("Add to favorites")).color).not.toBe(error);
+    expect([currentStyle(menuItem("Rate…")).minHeight, currentStyle(menuItem("Rate…")).textAlign]).toEqual(["40px", "left"]);
+    expect(menuItems().every((button) => !button.disabled)).toBe(true);
+  });
+
+  it("picking an action closes the menu before the action asks anything", async () => {
+    await selectAllItems();
+    await pickAction("Clear playback stats…");
+    expect(selectionMenu().hidden).toBe(true);
+    expect(findDialog(`Clear playback stats for ${grouped(MATCHING)} items?`)).not.toBeNull();
+  });
+
+  it("favorites and the blacklist each send one request for every selected item, loaded or not, and say so with the count the server answered", async () => {
+    const { server, page, ids } = await selectAllItems();
+    const cases = [
+      { label: "Add to favorites", flag: "favorite", value: true, popup: `Added ${grouped(ANSWERED)} items to favorites.` },
+      { label: "Remove from favorites", flag: "favorite", value: false, popup: `Removed ${grouped(ANSWERED)} items from favorites.` },
+      { label: "Add to blacklist", flag: "blacklist", value: true, popup: `Blacklisted ${grouped(ANSWERED)} items.` },
+      { label: "Remove from blacklist", flag: "blacklist", value: false, popup: `Removed ${grouped(ANSWERED)} items from the blacklist.` }
+    ];
+    for (const [index, { label, flag, value, popup }] of cases.entries()) {
+      await pickAction(label);
+      const requests = server.requests("POST", "/api/bulk/item-state");
+      expect(requests).toHaveLength(index + 1);
+      expect(requests.at(-1)!.body).toEqual({ itemIds: ids, flag, value, clientId: page.clientId() });
+      // Each popup replaces the last.
+      await waitFor(() => expect(popupsShown()).toEqual([popup]));
+    }
+    expect(selecting()).toBe(true);
+  });
+
+  it("the tiles take the after-values of this device's own bulk event, which shows no Other devices popup", async () => {
+    const items = libraryItems(MATCHING);
+    items[0] = { ...items[0]!, isFavorite: true };
+    const { page, library } = await selectAllItems(undefined, items);
+    const badges = () => Array.from(tile("item-1")!.querySelectorAll(".library-grid-tile-badge-icon")).map((icon) => icon.textContent);
+    expect(badges()).toEqual(["favorite"]);
+    await pickAction("Add to blacklist");
+    // The server's library, which a reload reads, as the change left it.
+    library.items[0] = { ...library.items[0]!, isFavorite: false, isBlacklisted: true };
+    const event = (clientId: string) => ({
+      flag: "blacklist",
+      value: true,
+      count: ANSWERED,
+      // Blacklisting cleared the favorite, which the event says.
+      items: [{ itemId: "item-1", isFavorite: false, isBlacklisted: true, previousIsFavorite: true, previousIsBlacklisted: false }],
+      clientId
+    });
+    page.stream().emit("bulkItemStateChanged", 5, event(page.clientId()));
+    await flush();
+
+    expect(badges()).toEqual(["thumb_down"]);
+    expect(popupsShown()).toEqual([`Blacklisted ${grouped(ANSWERED)} items.`]);
+    // Another device's same event pops up, so only the client id keeps this device's own quiet.
+    page.stream().emit("bulkItemStateChanged", 6, event("another-client"));
+    await flush();
+    expect(otherDevicePopups()).toEqual([`Blacklisted ${grouped(ANSWERED)} items on another device`]);
+  });
+
+  it("the tiles take Add to favorites clearing a blacklisting from this device's own bulk event", async () => {
+    const items = libraryItems(MATCHING);
+    items[1] = { ...items[1]!, isBlacklisted: true };
+    const { page, library } = await selectAllItems(undefined, items);
+    const badges = () => Array.from(tile("item-2")!.querySelectorAll(".library-grid-tile-badge-icon")).map((icon) => icon.textContent);
+    expect(badges()).toEqual(["thumb_down"]);
+    await pickAction("Add to favorites");
+    // The server's library, which a reload reads, as the change left it.
+    library.items[1] = { ...library.items[1]!, isFavorite: true, isBlacklisted: false };
+    page.stream().emit("bulkItemStateChanged", 5, {
+      flag: "favorite",
+      value: true,
+      count: ANSWERED,
+      // Favoriting cleared the blacklisting, which the event says.
+      items: [{ itemId: "item-2", isFavorite: true, isBlacklisted: false, previousIsFavorite: false, previousIsBlacklisted: true }],
+      clientId: page.clientId()
+    });
+    await flush();
+
+    expect(badges()).toEqual(["favorite"]);
+  });
+
+  it("Rate… chooses a rating with its stars before Rate sets it on every selected item in one request, and Clear rating clears it", async () => {
+    useStylesheet();
+    stubStarLayout();
+    const { server, page, ids } = await selectAllItems();
+    await pickAction("Rate…");
+
+    const dialog = dialogWith(`Rate ${grouped(MATCHING)} items`);
+    const stars = dialog.querySelector<HTMLElement>(".rating")!;
+    // Centered, rather than at the right as in the Stats tab's row.
+    expect([currentStyle(stars).marginLeft, currentStyle(stars).marginRight]).toEqual(["auto", "auto"]);
+    const words = () => dialog.querySelector(".rate-dialog-words")?.textContent;
+    expect(Array.from(dialog.querySelectorAll(".dialog-actions > button")).map((button) => button.textContent)).toEqual(["Clear rating", "Cancel", "Rate"]);
+    expect(document.activeElement).toBe(buttonIn(dialog, "Cancel"));
+    expect([starsShown(stars), words()]).toEqual([0, "Choose a rating"]);
+    expect([buttonIn(dialog, "Rate").disabled, buttonIn(dialog, "Rate").title]).toEqual([true, "Choose a rating first"]);
+
+    await tapStars(stars, xFor(3.5));
+    expect([starsShown(stars), words()]).toEqual([3.5, "3.5 stars"]);
+    expect([buttonIn(dialog, "Rate").disabled, buttonIn(dialog, "Rate").title]).toEqual([false, ""]);
+    expect(server.requests("POST", "/api/bulk/rating")).toEqual([]);
+
+    await click(buttonIn(dialog, "Rate"));
+    expect(findDialog(`Rate ${grouped(MATCHING)} items`)).toBeNull();
+    expect(server.requests("POST", "/api/bulk/rating").map((call) => call.body)).toEqual([{ itemIds: ids, rating: 3.5, clientId: page.clientId() }]);
+    await waitFor(() => expect(popupsShown()).toEqual([`Rated ${grouped(ANSWERED)} items 3.5 stars.`]));
+    page.stream().emit("bulkItemRatingChanged", 5, {
+      rating: 3.5,
+      count: ANSWERED,
+      items: [{ itemId: "item-1", rating: 3.5, previousRating: null }],
+      clientId: page.clientId()
+    });
+    await flush();
+    expect(otherDevicePopups()).toEqual([]);
+
+    await pickAction("Rate…");
+    await click(buttonIn(dialogWith(`Rate ${grouped(MATCHING)} items`), "Clear rating"));
+    expect(server.requests("POST", "/api/bulk/rating").map((call) => call.body)).toEqual([
+      { itemIds: ids, rating: 3.5, clientId: page.clientId() },
+      { itemIds: ids, rating: null, clientId: page.clientId() }
+    ]);
+    await waitFor(() => expect(popupsShown()).toEqual([`Cleared the rating on ${grouped(ANSWERED)} items.`]));
+
+    await pickAction("Rate…");
+    await click(buttonIn(dialogWith(`Rate ${grouped(MATCHING)} items`), "Cancel"));
+    expect(shownDialogs()).toEqual([]);
+    expect(server.requests("POST", "/api/bulk/rating")).toHaveLength(2);
+  });
+
+  it("Clear playback stats… asks first, with Cancel focused and a red Clear, then clears every selected item's stats", async () => {
+    const { server, ids } = await selectAllItems();
+    await pickAction("Clear playback stats…");
+    let confirm = dialogWith(`Clear playback stats for ${grouped(MATCHING)} items?`);
+    expect(document.activeElement).toBe(buttonIn(confirm, "Cancel"));
+    expect(buttonIn(confirm, "Clear").classList.contains("btn-danger")).toBe(true);
+    await click(buttonIn(confirm, "Cancel"));
+    expect(server.requests("POST", "/api/playback/clear-stats")).toEqual([]);
+
+    await pickAction("Clear playback stats…");
+    confirm = dialogWith(`Clear playback stats for ${grouped(MATCHING)} items?`);
+    await click(buttonIn(confirm, "Clear"));
+    expect(server.requests("POST", "/api/playback/clear-stats").map((call) => call.body)).toEqual([{ itemIds: ids }]);
+    await waitFor(() => expect(popupsShown()).toEqual([`Cleared playback stats for ${grouped(ANSWERED)} items.`]));
+  });
+
+  it("names a failed action in plain words with the server's reason", async () => {
+    const reason = "The library is busy.";
+    await selectAllItems((server) => {
+      for (const path of ["/api/bulk/item-state", "/api/bulk/rating", "/api/playback/clear-stats", "/api/library/delete-files"]) {
+        server.on("POST", path, () => json({ error: reason }, 503));
+      }
+      server.on("GET", "/control/access", () => status(204));
+    });
+    for (const label of ["Add to favorites", "Remove from favorites", "Add to blacklist", "Remove from blacklist"]) {
+      await pickAction(label);
+      expect(openNotices()).toEqual([`${label} failed: ${reason}`]);
+      await closeNotices();
+    }
+    await pickAction("Rate…");
+    await click(buttonIn(dialogWith(`Rate ${grouped(MATCHING)} items`), "Clear rating"));
+    expect(openNotices()).toEqual([`Rating update failed: ${reason}`]);
+    await closeNotices();
+    await pickAction("Clear playback stats…");
+    await click(buttonIn(dialogWith(`Clear playback stats for ${grouped(MATCHING)} items?`), "Clear"));
+    expect(openNotices()).toEqual([`Clear playback stats failed: ${reason}`]);
+    await closeNotices();
+    expect(popupsShown()).toEqual([]);
+  });
+});
+
+describe("delete files", () => {
+  it("from another machine asks for the control token before confirming, keeps the prompt open on a wrong token, and deletes every selected item's file", async () => {
+    useStylesheet();
+    const { server, ids } = await selectAllItems((fake) => {
+      serveControlFromAnotherMachine(fake);
+      fake.on("POST", "/api/library/delete-files", () => json({ deletedCount: 1230, failedItemIds: ["item-1", "item-2", "item-3", "item-4"] }));
+    });
+    await pickAction("Delete files…");
+
+    const prompt = tokenPrompt()!;
+    expect(prompt).not.toBeNull();
+    expect(server.requests("GET", "/control/access")).toHaveLength(1);
+    expect(prompt.querySelector("label")?.textContent).toBe("This is an admin action. Enter the server's control token.");
+    expect([tokenField().type, document.activeElement]).toEqual(["password", tokenField()]);
+    // Styled as the dialogs' text fields are, with room for the red icon.
+    expect([currentStyle(tokenField()).minHeight, currentStyle(tokenField()).paddingRight]).toEqual(["44px", "40px"]);
+    expect(Array.from(prompt.querySelectorAll(".dialog-actions > button")).map((button) => button.textContent)).toEqual(["Cancel", "Continue"]);
+    // Empty, Continue is disabled quietly, with no red icon.
+    expect([continueButton().disabled, prompt.querySelector(".vfield-icon")]).toEqual([true, null]);
+    expect(findDialog(`Permanently delete ${grouped(MATCHING)} files from disk and remove them from the library? This can't be undone.`)).toBeNull();
+
+    await typeToken("wrong");
+    await click(continueButton());
+    expect(server.requests("POST", "/control/pair").map((call) => call.body)).toEqual([{ token: "wrong" }]);
+    expect(tokenPrompt()).toBe(prompt);
+    expect(prompt.querySelector(".vfield-icon")).not.toBeNull();
+    expect(prompt.querySelector(".vfield-tip")?.textContent).toBe(WRONG_TOKEN_REASON);
+    expect(continueButton().disabled).toBe(true);
+    // A wrong token is the token's problem, not a device that needs pairing.
+    expect(server.logLines().some((line) => line.includes("Pair first"))).toBe(false);
+
+    await typeToken(CONTROL_TOKEN);
+    expect(continueButton().disabled).toBe(false);
+    await click(continueButton());
+    expect(tokenPrompt()).toBeNull();
+
+    const confirm = dialogWith(`Permanently delete ${grouped(MATCHING)} files from disk and remove them from the library? This can't be undone.`);
+    expect(document.activeElement).toBe(buttonIn(confirm, "Cancel"));
+    expect(buttonIn(confirm, `Delete ${grouped(MATCHING)} Files`).classList.contains("btn-danger")).toBe(true);
+    await click(buttonIn(confirm, `Delete ${grouped(MATCHING)} Files`));
+
+    expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: ids }]);
+    await waitFor(() => expect(popupsShown()).toEqual([`Deleted ${grouped(1230)} files.`]));
+    expect(openNotices()).toEqual(["4 files couldn't be deleted, so their items stay in the library."]);
+    expect(selecting()).toBe(false);
+    await closeNotices();
+
+    // The control session lasts, so the next delete asks the server, which allows it, and shows no prompt.
+    await click(check("item-5"));
+    await pickAction("Delete files…");
+    expect(server.requests("GET", "/control/access")).toHaveLength(2);
+    expect(tokenPrompt()).toBeNull();
+    expect(findDialog("Permanently delete 1 file from disk and remove it from the library? This can't be undone.")).not.toBeNull();
+    expect(server.requests("POST", "/control/pair")).toHaveLength(2);
+  });
+
+  it("on the server machine asks for no token, and for one file says so, with no popup when nothing was deleted", async () => {
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("GET", "/control/access", () => status(204));
+      fake.on("POST", "/api/library/delete-files", () => json({ deletedCount: 0, failedItemIds: ["item-2"] }));
+    });
+    await openLibrary();
+    await click(check("item-2"));
+    await pickAction("Delete files…");
+
+    expect(tokenPrompt()).toBeNull();
+    const confirm = dialogWith("Permanently delete 1 file from disk and remove it from the library? This can't be undone.");
+    expect(buttonIn(confirm, "Delete 1 File").classList.contains("btn-danger")).toBe(true);
+    await click(buttonIn(confirm, "Delete 1 File"));
+
+    expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: ["item-2"] }]);
+    expect(server.requests("POST", "/control/pair")).toEqual([]);
+    expect(openNotices()).toEqual(["1 file couldn't be deleted, so its item stays in the library."]);
+    expect(popupsShown()).toEqual([]);
+    expect(selecting()).toBe(false);
+  });
+
+  it("ends selection once confirmed, so an answer that arrives later leaves a new selection alone", async () => {
+    let answer: () => void = () => {};
+    await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("GET", "/control/access", () => status(204));
+      fake.on("POST", "/api/library/delete-files", async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return json({ deletedCount: 1, failedItemIds: [] });
+      });
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    await pickAction("Delete files…");
+    await click(buttonIn(dialogWith("Permanently delete 1 file from disk and remove it from the library? This can't be undone."), "Delete 1 File"));
+    expect(selecting()).toBe(false);
+
+    await click(check("item-2"));
+    answer();
+    await waitFor(() => expect(popupsShown()).toEqual(["Deleted 1 file."]));
+    expect([selecting(), barParts()[2]]).toEqual([true, "1 / 3 selected"]);
+  });
+
+  it("ends without deleting when the token prompt or the confirmation is cancelled", async () => {
+    const { server } = await selectAllItems((fake) => serveControlFromAnotherMachine(fake));
+    await pickAction("Delete files…");
+    await click(buttonIn(tokenPrompt()!, "Cancel"));
+    expect([shownDialogs(), selecting()]).toEqual([[], true]);
+
+    await pickAction("Delete files…");
+    await typeToken(CONTROL_TOKEN);
+    await click(continueButton());
+    await click(buttonIn(dialogWith(`Permanently delete ${grouped(MATCHING)} files from disk and remove them from the library? This can't be undone.`), "Cancel"));
+    expect([shownDialogs(), selecting()]).toEqual([[], true]);
+    expect(server.requests("POST", "/api/library/delete-files")).toEqual([]);
+  });
+
+  it("shows a refusal from a control session that ended before the request, with the server's reason and no retry", async () => {
+    const reason = "This is an admin action. Pair with the control token first.";
+    const { server } = await selectAllItems((fake) => {
+      fake.on("GET", "/control/access", () => status(204));
+      fake.on("POST", "/api/library/delete-files", () => json({ error: reason, code: "control_token_required" }, 403));
+    });
+    await pickAction("Delete files…");
+    await click(buttonIn(dialogWith(`Permanently delete ${grouped(MATCHING)} files from disk and remove them from the library? This can't be undone.`), `Delete ${grouped(MATCHING)} Files`));
+
+    expect(openNotices()).toEqual([`Delete files failed: ${reason}`]);
+    // Selection ended when the delete was confirmed.
+    expect([tokenPrompt(), server.requests("POST", "/api/library/delete-files").length, selecting()]).toEqual([null, 1, false]);
+  });
+
+  it("shows a failed access check in the notice, worded without its status", async () => {
+    const { server } = await selectAllItems((fake) => {
+      fake.on("GET", "/control/access", () => json({ error: REMOTE_CONNECTIONS_OFF }, 403));
+    });
+    await pickAction("Delete files…");
+
+    expect(openNotices()).toEqual([`Delete files failed: ${REMOTE_CONNECTIONS_OFF}`]);
+    expect([tokenPrompt(), server.requests("POST", "/api/library/delete-files")]).toEqual([null, []]);
   });
 });
 

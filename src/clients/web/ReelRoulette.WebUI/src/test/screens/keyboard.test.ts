@@ -8,6 +8,7 @@ import {
   popupsShown,
   presetSelect,
   randomAnswer,
+  flagAnswer,
   ratingAnswer,
   ratingRequests,
   resetPage,
@@ -65,8 +66,8 @@ function serverPicking(...items: unknown[]): FakeServer {
   const server = new FakeServer().playsItems(...items);
   let next = 0;
   server.on("POST", "/api/random", () => randomAnswer(items[Math.min(next++, items.length - 1)]));
-  server.on("POST", "/api/favorite", () => json({}));
-  server.on("POST", "/api/blacklist", () => json({}));
+  server.on("POST", "/api/favorite", flagAnswer);
+  server.on("POST", "/api/blacklist", flagAnswer);
   server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
   server.on("GET", "/api/sources", () => json([]));
   return server;

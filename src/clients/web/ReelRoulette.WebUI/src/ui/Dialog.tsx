@@ -1,7 +1,8 @@
 import type { ComponentChildren, RefObject } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
+import { CONTROL_TOKEN_MESSAGE, CONTROL_TOKEN_TITLE } from "../api/controlAccess";
 import type { OpenDialog } from "../dialogs/dialogs";
-import { actionBlock, type FieldProblem } from "../validation/fieldValidation";
+import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
 import { useApp } from "./appContext";
 import { HeldButton, ValidatedField } from "./FieldValidation";
 
@@ -125,13 +126,20 @@ export interface NameDialogProps {
   label: string;
   fieldId: string;
   saveId: string;
+  /** Save's label, such as Continue for a step before an action. Defaults to Save. */
+  saveLabel?: string;
+  /** "password" for a secret, such as the control token. Defaults to "text". */
+  inputType?: "text" | "password";
   value: string;
   /** The name's problem, from the field validation pattern. Any problem disables Save, since the field is beside it. */
   problem: FieldProblem | null;
   /** Whether the field shows its problem, from `isFlagged`. */
   flagged: boolean;
   onInput: (text: string) => void;
-  /** Save, or Enter in the field, while the name has no problem. */
+  /**
+   * Save, or Enter in the field, while the name has no problem. The caller closes the dialog, or keeps it open with
+   * the server's refusal as the name's problem.
+   */
   onSave: () => void;
   onCancel: () => void;
   /** Shows a red Delete, which should ask first in a dialog stacked above. */
@@ -145,7 +153,8 @@ export interface NameDialogProps {
  * and Cancel and Save. It opens with the name focused and selected.
  */
 export function NameDialog(props: NameDialogProps) {
-  const { title, label, fieldId, saveId, value, problem, flagged, onInput, onSave, onCancel, onDelete, children } = props;
+  const { title, label, fieldId, saveId, saveLabel = "Save", inputType = "text", value, problem, flagged } = props;
+  const { onInput, onSave, onCancel, onDelete, children } = props;
   const titleId = useId();
   const name = useRef<HTMLInputElement>(null);
   // The name is a field of the dialog Save is in, so any problem in it disables Save.
@@ -159,8 +168,9 @@ export function NameDialog(props: NameDialogProps) {
           {(control) => (
             <input
               {...control}
+              // Preact types each input type's attributes apart, so the type is spread.
+              {...(inputType === "password" ? { type: "password" } : { type: "text" })}
               id={fieldId}
-              type="text"
               autocomplete="off"
               value={value}
               onInput={(event) => onInput(event.currentTarget.value)}
@@ -187,7 +197,7 @@ export function NameDialog(props: NameDialogProps) {
             Cancel
           </button>
           <HeldButton id={saveId} disabled={saveDisabled} heldReason={null} onClick={onSave}>
-            Save
+            {saveLabel}
           </HeldButton>
         </div>
       </div>
@@ -241,11 +251,40 @@ function NoticeDialog({ dialog, answer }: { dialog: Extract<OpenDialog, { kind: 
   );
 }
 
-/** The confirmations and notices the dialog service shows, each above the ones before it. */
+/** The control-token prompt, while an admin action asks for the token. */
+function ControlTokenDialog() {
+  const { controlAccess } = useApp();
+  const view = controlAccess.prompt.value;
+  if (!view) {
+    return null;
+  }
+  return (
+    <NameDialog
+      title={CONTROL_TOKEN_TITLE}
+      label={CONTROL_TOKEN_MESSAGE}
+      fieldId="control-token-input"
+      saveId="control-token-continue"
+      saveLabel="Continue"
+      inputType="password"
+      value={view.token}
+      problem={view.problem}
+      flagged={isFlagged(view.problem)}
+      onInput={controlAccess.input}
+      onSave={() => void controlAccess.submit()}
+      onCancel={controlAccess.cancel}
+    />
+  );
+}
+
+/**
+ * The control-token prompt, and the confirmations and notices the dialog service shows, each above the ones before
+ * it.
+ */
 export function DialogHost() {
   const { dialogs } = useApp();
   return (
     <>
+      <ControlTokenDialog />
       {dialogs.open.value.map((dialog) =>
         dialog.kind === "confirm" ? (
           <ConfirmDialog key={dialog.id} dialog={dialog} answer={(confirmed) => dialogs.answer(dialog.id, confirmed)} />

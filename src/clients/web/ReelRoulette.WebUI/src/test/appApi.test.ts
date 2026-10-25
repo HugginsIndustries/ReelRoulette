@@ -12,6 +12,12 @@ function recordingFetch(reply: () => Response | Promise<Response>) {
   return { calls, fetchImpl };
 }
 
+function failingFetch(error: Error): typeof fetch {
+  return (async () => {
+    throw error;
+  }) as typeof fetch;
+}
+
 describe("createAppApi", () => {
   it("builds URLs against the API base, with or without a trailing slash", () => {
     const api = createAppApi("http://localhost:51301/", { onUnauthorized: () => {} });
@@ -112,6 +118,24 @@ describe("createAppApi", () => {
     await expect(unreachable.post("/api/favorite", {})).rejects.toBeInstanceOf(ServerUnreachableError);
     await expect(unreachable.getJson("/api/presets")).rejects.toThrow("Couldn't reach the server.");
     await expect(unreachable.postJson("/api/tag-editor/model", {})).rejects.toThrow("Couldn't reach the server.");
+  });
+
+  it("sends a control route's request around the pairing prompt, answering its 401 as it is", async () => {
+    const onUnauthorized = vi.fn();
+    let reply = () => new Response(JSON.stringify({ error: "The control token is wrong." }), { status: 401, headers: { "Content-Type": "application/json" } });
+    const { calls, fetchImpl } = recordingFetch(() => reply());
+    const api = createAppApi("http://localhost:51301", { onUnauthorized, fetch: fetchImpl });
+
+    const refused = await api.requestAroundPairing("/control/pair", { method: "POST", body: JSON.stringify({ token: "wrong" }) });
+    expect(refused.status).toBe(401);
+    expect(calls[0]).toMatchObject({ url: "http://localhost:51301/control/pair", init: { method: "POST", body: JSON.stringify({ token: "wrong" }) } });
+    reply = () => new Response(null, { status: 204 });
+    expect((await api.requestAroundPairing("/control/access")).status).toBe(204);
+    expect(calls[1]!.url).toBe("http://localhost:51301/control/access");
+    expect(onUnauthorized).not.toHaveBeenCalled();
+
+    const unreachable = createAppApi("http://localhost:51301", { onUnauthorized, fetch: failingFetch(new TypeError("Load failed")) });
+    await expect(unreachable.requestAroundPairing("/control/access")).rejects.toBeInstanceOf(ServerUnreachableError);
   });
 
   it("relays a log line as the WebUI, and ignores a failure to send it", async () => {

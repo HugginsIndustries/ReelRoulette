@@ -39,9 +39,12 @@ public sealed class ServerStateService
         "control.testing.suite"
     ];
 
-    private readonly object _revisionLock = new();
+    /// <summary>
+    /// Held while an event takes its revision, joins the replay history, and goes to every open stream, so every stream
+    /// and the history get events in revision order.
+    /// </summary>
+    private readonly object _eventLock = new();
     private readonly object _subscribersLock = new();
-    private readonly object _historyLock = new();
     private readonly object _filterSessionLock = new();
     private readonly object _sourceLock = new();
     private readonly ILogger<ServerStateService> _logger;
@@ -51,6 +54,13 @@ public sealed class ServerStateService
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
     private readonly Queue<ServerEventEnvelope> _eventHistory = new();
     private const int EventHistoryCapacity = 256;
+
+    /// <summary>
+    /// The most items an event lists. A bulk event costs about 147 bytes an item, and every open stream and the replay
+    /// history hold it, so past this the server publishes <c>resyncRequired</c> in its place.
+    /// </summary>
+    public const int MaxEventItems = 1000;
+
     private List<StoredPreset> _presetCatalog = [];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -86,9 +96,9 @@ public sealed class ServerStateService
 
     public ReplayResult GetReplayAfter(long revision)
     {
-        var currentRevision = GetCurrentRevision();
-        lock (_historyLock)
+        lock (_eventLock)
         {
+            var currentRevision = _revision;
             if (_eventHistory.Count == 0)
             {
                 return new ReplayResult
@@ -427,14 +437,46 @@ public sealed class ServerStateService
         return Publish(eventType, payload);
     }
 
-    public ServerEventEnvelope CreateEnvelope(string eventType, object payload)
+    /// <summary>
+    /// Publishes an event that lists <paramref name="itemCount"/> items, or, past <see cref="MaxEventItems"/>,
+    /// <c>resyncRequired</c> in its place, with the event's type as its reason, and a <c>last.log</c> line saying so.
+    /// The payload is built only when the event is published.
+    /// </summary>
+    public ServerEventEnvelope PublishListingItems(string eventType, int itemCount, Func<object> payload)
     {
-        long revision;
-        lock (_revisionLock)
+        if (itemCount <= MaxEventItems)
         {
-            revision = ++_revision;
+            return Publish(eventType, payload());
         }
 
+        _serverLog?.Append("info", $"Published resyncRequired in place of {eventType}, which would have listed {itemCount} items.");
+        return PublishResyncRequired(eventType);
+    }
+
+    /// <summary>
+    /// Publishes <c>resyncRequired</c> to every stream, carrying the revision before it and its own, taken together.
+    /// </summary>
+    public ServerEventEnvelope PublishResyncRequired(string reason)
+    {
+        return Publish(ResyncRequiredPayload.EventType, revision => new ResyncRequiredPayload
+        {
+            Reason = reason,
+            LastEventId = revision - 1,
+            CurrentRevision = revision
+        });
+    }
+
+    /// <summary>An event for one stream alone, which takes a revision but joins neither the history nor other streams.</summary>
+    public ServerEventEnvelope CreateEnvelope(string eventType, object payload)
+    {
+        lock (_eventLock)
+        {
+            return NewEnvelope(++_revision, eventType, payload);
+        }
+    }
+
+    private static ServerEventEnvelope NewEnvelope(long revision, string eventType, object payload)
+    {
         return new ServerEventEnvelope
         {
             Revision = revision,
@@ -462,7 +504,7 @@ public sealed class ServerStateService
 
     public long GetCurrentRevision()
     {
-        lock (_revisionLock)
+        lock (_eventLock)
         {
             return _revision;
         }
@@ -470,28 +512,39 @@ public sealed class ServerStateService
 
     private ServerEventEnvelope Publish(string eventType, object payload)
     {
-        var envelope = CreateEnvelope(eventType, payload);
-        lock (_historyLock)
+        return Publish(eventType, _ => payload);
+    }
+
+    /// <summary>
+    /// Takes the next revision, builds the event's payload for it, keeps the event for replay, and sends it to every
+    /// open stream, all under one lock, so no other event can take a later revision and arrive first. A stream's
+    /// channel is unbounded, so sending to it never waits.
+    /// </summary>
+    private ServerEventEnvelope Publish(string eventType, Func<long, object> payloadFor)
+    {
+        lock (_eventLock)
         {
+            var revision = ++_revision;
+            var envelope = NewEnvelope(revision, eventType, payloadFor(revision));
             _eventHistory.Enqueue(envelope);
             while (_eventHistory.Count > EventHistoryCapacity)
             {
                 _eventHistory.Dequeue();
             }
-        }
 
-        List<Channel<ServerEventEnvelope>> subscribersSnapshot;
-        lock (_subscribersLock)
-        {
-            subscribersSnapshot = _subscribers.ToList();
-        }
+            List<Channel<ServerEventEnvelope>> subscribersSnapshot;
+            lock (_subscribersLock)
+            {
+                subscribersSnapshot = _subscribers.ToList();
+            }
 
-        foreach (var subscriber in subscribersSnapshot)
-        {
-            subscriber.Writer.TryWrite(envelope);
-        }
+            foreach (var subscriber in subscribersSnapshot)
+            {
+                subscriber.Writer.TryWrite(envelope);
+            }
 
-        return envelope;
+            return envelope;
+        }
     }
 
     private static JsonElement ParsePresetFilter(string json)

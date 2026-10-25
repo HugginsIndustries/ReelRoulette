@@ -691,6 +691,15 @@ export function ratingAnswer(call: FetchCall): Response {
 }
 
 /**
+ * The server's answer to a favorite or blacklist request: the item's id and both its flags, where setting one flag
+ * clears the other, since a request carries only the flag it sets.
+ */
+export function flagAnswer(call: FetchCall): Response {
+  const body = (call.body ?? {}) as { itemId?: string; isFavorite?: boolean; isBlacklisted?: boolean };
+  return json({ itemId: body.itemId, path: "", isFavorite: body.isFavorite === true, isBlacklisted: body.isBlacklisted === true, revision: 1 });
+}
+
+/**
  * Makes `element` a list that scrolls, as happy-dom lays none out: `height` pixels tall from `top` in the window,
  * holding `content` pixels. Its `overflow-y` is set on it, since happy-dom's computed style doesn't take it from the
  * `overflow` shorthand. happy-dom sends no scroll event when its `scrollTop` is set, so a test sends one.

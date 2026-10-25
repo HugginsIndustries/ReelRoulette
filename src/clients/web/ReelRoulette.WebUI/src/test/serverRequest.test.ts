@@ -4,6 +4,7 @@ import {
   HttpStatusError,
   noticeRequestFailure,
   readJson,
+  readWithNotice,
   refusalError,
   requestFailure,
   requestRoute,
@@ -194,6 +195,21 @@ describe("requestWithNotice", () => {
       ["Favorite update failed.", "Favorite update failed (HTTP 500)."],
       ["Favorite update failed: Couldn't reach the server.", "Favorite update failed: Couldn't reach the server."]
     ]);
+  });
+});
+
+describe("readWithNotice", () => {
+  it("answers what the request read, or null once its failure shows, and nothing for a 401", async () => {
+    const notice = vi.fn(async (_message: string, _logText?: string) => {});
+    const dialogs = { notice };
+    const failing = (error: Error) => async () => {
+      throw error;
+    };
+
+    await expect(readWithNotice(dialogs, "Add to favorites failed", async () => ({ count: 1200 }))).resolves.toEqual({ count: 1200 });
+    await expect(readWithNotice(dialogs, "Add to favorites failed", failing(new HttpStatusError(503, "The library is busy.")))).resolves.toBeNull();
+    await expect(readWithNotice(dialogs, "Add to favorites failed", failing(new UnauthorizedError()))).resolves.toBeNull();
+    expect(notice.mock.calls).toEqual([["Add to favorites failed: The library is busy.", "Add to favorites failed (HTTP 503)."]]);
   });
 });
 

@@ -117,7 +117,6 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
     api,
     dialogs,
     notifications,
-    fetch: fetchImpl,
     createEventSource: (url) => {
       const source = new FakeSource(url);
       sources.push(source);

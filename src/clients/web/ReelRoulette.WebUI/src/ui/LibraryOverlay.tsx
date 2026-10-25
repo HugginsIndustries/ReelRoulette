@@ -1,14 +1,20 @@
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { FILTER_SUMMARY_LABEL, FILTER_SUMMARY_SEPARATOR } from "../filter/filterSummaryModel";
+import { BULK_FLAG_ACTIONS, CHOOSE_RATING_REASON, type RateDialogView } from "../library/bulkActions";
 import { ALL_SELECTED_REASON } from "../library/library";
 import { formatSelectionCount, getSortLabel, LIBRARY_SORT_MODES } from "../library/libraryBrowseModel";
 import { TILE_CHECK_CLASS } from "../library/libraryGridTile";
 import type { LibraryOverlayMessage } from "../library/libraryOverlayModel";
 import { listenForTilePress, type TilePress } from "../library/libraryTilePress";
 import { RANDOM_LINE_LABEL } from "../random/randomOptions";
+import { ratingText } from "../rating/rating";
+import { countText } from "../text/countText";
 import { useApp } from "./appContext";
+import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { useLightDismiss } from "./LightDismiss";
+import { Menu, type MenuItem } from "./Menu";
+import { RatingStars } from "./RatingStars";
 
 /** The item id of the tile an event landed on, if any. */
 function tileItemId(target: EventTarget | null): string | null {
@@ -91,17 +97,18 @@ export function LibraryOverlay() {
         </div>
       )}
       <SelectionBar />
+      <RateDialog />
     </div>
   );
 }
 
 /**
  * While selecting: Select all, Clear selection, how many are selected, and, at the far end, Selection actions, whose
- * menu opens above the bar and closes on a press outside it or Escape.
+ * menu opens above the bar and closes on a press outside it, Escape, or a pick.
  */
 function SelectionBar() {
   const { library } = useApp();
-  const { selection } = library;
+  const { selection, bulk } = library;
   const actions = useRef<HTMLDivElement>(null);
   useLightDismiss({
     open: selection.menuOpen,
@@ -113,6 +120,14 @@ function SelectionBar() {
     return null;
   }
   const allSelected = library.allSelected.value;
+  const groups: MenuItem[][] = [
+    BULK_FLAG_ACTIONS.map((action) => ({ label: action.label, onPick: () => void bulk.setFlag(action) })),
+    [
+      { label: "Rate…", onPick: bulk.openRate },
+      { label: "Clear playback stats…", onPick: () => void bulk.clearPlaybackStats() }
+    ],
+    [{ label: "Delete files…", danger: true, onPick: () => void bulk.deleteFiles() }]
+  ];
   return (
     <div id="library-selection-bar" class="library-selection-bar">
       <button
@@ -148,9 +163,47 @@ function SelectionBar() {
         >
           <Icon name="more_vert" />
         </button>
-        <div id="library-selection-menu" class="library-selection-menu" hidden={!selection.menuOpen.value}></div>
+        <Menu id="library-selection-menu" class="library-selection-menu" hidden={!selection.menuOpen.value} groups={groups} onClose={selection.closeMenu} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Rate…: the Stats tab's stars, empty at first, with the rating chosen in words under them. The stars only choose, so a
+ * stray tap can't rate every selected item; Rate sets the rating chosen, and Clear rating clears it.
+ */
+function RateDialog() {
+  const { library } = useApp();
+  const view = library.bulk.rateDialog.value;
+  return view ? <RateDialogContent view={view} /> : null;
+}
+
+function RateDialogContent({ view }: { view: RateDialogView }) {
+  const { bulk } = useApp().library;
+  const titleId = useId();
+  const cancel = useRef<HTMLButtonElement>(null);
+  const chosen = view.rating !== null;
+  return (
+    <Dialog labelledBy={titleId} onCancel={bulk.cancelRate} initialFocus={cancel}>
+      <div class="dialog-body rate-dialog">
+        <h3 id={titleId}>Rate {countText(view.count, "item")}</h3>
+        <RatingStars rating={view.rating} onSet={bulk.chooseRating} />
+        <p class="rate-dialog-words">{chosen ? ratingText(view.rating) : "Choose a rating"}</p>
+        <div class="dialog-actions">
+          <button type="button" onClick={() => void bulk.clearRating()}>
+            Clear rating
+          </button>
+          <span class="dialog-spacer" />
+          <button ref={cancel} type="button" onClick={bulk.cancelRate}>
+            Cancel
+          </button>
+          <button type="button" disabled={!chosen} title={chosen ? undefined : CHOOSE_RATING_REASON} onClick={() => void bulk.rate()}>
+            Rate
+          </button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 

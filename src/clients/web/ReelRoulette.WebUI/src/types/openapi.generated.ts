@@ -317,6 +317,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the caller may do what a control route does
+         * @description Answers 204 to a caller the `/control` routes accept: a direct request from the server machine, or one with a
+         *     control session from `POST /control/pair` or the control token as a bearer header, and the `/control` routes'
+         *     401 otherwise. It reads nothing, so a client asks it before an admin action, such as
+         *     `POST /api/library/delete-files`, to learn whether to ask for the control token first.
+         */
+        get: operations["getControlAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/presets": {
         parameters: {
             query?: never;
@@ -530,7 +553,8 @@ export interface paths {
          * @description Deletes the file of each named item from disk and then removes the item, with its tags, from the library.
          *     An item whose file isn't on disk, or can't be deleted, stays in the library and is listed in
          *     `failedItemIds`. An id no item has is skipped. It publishes one `itemsRemoved` event for the items it
-         *     removed, when it removed any. It writes one `last.log` line with the counts, and when some files stay, a
+         *     removed, when it removed any, or `resyncRequired` with the reason `itemsRemoved` in its place when it removed
+         *     more than 1,000. It writes one `last.log` line with the counts, and when some files stay, a
          *     warning line with how many were missing and the errors' types, both with no paths.
          *
          *     It is an admin action, accepted as `/control` routes are: from the server machine, a direct request from
@@ -831,7 +855,8 @@ export interface paths {
          * @description Sets or clears `flag` on every named item in one write. Setting favorite clears blacklist, and setting
          *     blacklist clears favorite, as `POST /api/favorite` and `POST /api/blacklist` do. An id no item has is
          *     skipped. When any named item is in the library, it publishes one `bulkItemStateChanged` event in place of
-         *     one `itemStateChanged` per item.
+         *     one `itemStateChanged` per item, or, when that event would list more than 1,000 changed items,
+         *     `resyncRequired` with the reason `bulkItemStateChanged` in its place, and writes a `last.log` line saying so.
          */
         post: operations["postBulkItemState"];
         delete?: never;
@@ -853,7 +878,9 @@ export interface paths {
          * Set or clear one rating on many items
          * @description Sets `rating`, in stars, on every named item in one write, or clears it with null. A rating is independent of
          *     favorite and blacklist, so neither changes. An id no item has is skipped. When any named item is in the
-         *     library, it publishes one `bulkItemRatingChanged` event in place of one `itemRatingChanged` per item.
+         *     library, it publishes one `bulkItemRatingChanged` event in place of one `itemRatingChanged` per item, or,
+         *     when that event would list more than 1,000 changed items, `resyncRequired` with the reason
+         *     `bulkItemRatingChanged` in its place, and writes a `last.log` line saying so.
          */
         post: operations["postBulkRating"];
         delete?: never;
@@ -892,7 +919,9 @@ export interface paths {
          * Clear playback stats
          * @description Clears the play count and last-played time of the items in `itemIds`, or of every item with
          *     `allItems: true`. A request with neither, or with both, is refused and clears nothing, so a request
-         *     that names no items never clears the whole library.
+         *     that names no items never clears the whole library. An id no item has is skipped. When it cleared the stats of
+         *     any item, it publishes `resyncRequired` with the reason `playbackStatsCleared`. It writes one `last.log` line
+         *     with its counts and elapsed time.
          */
         post: operations["postClearPlaybackStats"];
         delete?: never;
@@ -1129,7 +1158,8 @@ export interface paths {
          * Apply duplicate keep/delete selections
          * @description Deletes the files of each selection's items but the one it keeps, and removes those items, through the same
          *     code as `POST /api/library/delete-files`. A selection whose kept item isn't in the library is skipped. It
-         *     publishes one `itemsRemoved` event for the items it removed, when it removed any. It writes the same `last.log`
+         *     publishes one `itemsRemoved` event for the items it removed, when it removed any, or `resyncRequired` in its
+         *     place when it removed more than 1,000, as `POST /api/library/delete-files` does. It writes the same `last.log`
          *     lines as `POST /api/library/delete-files`, named `Duplicate apply`.
          *
          *     It is an admin action, accepted as `POST /api/library/delete-files` is, by the `/control` routes' check.
@@ -1253,6 +1283,8 @@ export interface paths {
          *     - If the revision gap exceeds replay buffer retention, server emits a
          *       `resyncRequired` event. Clients requery the state they still show.
          *       An item-state read returns only the requested paths. An empty path list returns no items.
+         *     - The server also publishes `resyncRequired` after clear-stats, and in
+         *       place of an event that would list more than 1,000 items.
          *     Identity/session continuity:
          *     - Clients should provide a stable `clientId` per installation/device.
          *     - Clients may provide an optional `sessionId` per runtime session to
@@ -1978,8 +2010,12 @@ export interface components {
             itemIds?: string[] | null;
         };
         ClearPlaybackStatsResponse: {
-            /** Format: int32 */
-            clearedCount: number;
+            /**
+             * Format: int32
+             * @description How many of the named items are in the library, whether or not they had stats to clear, as the bulk routes
+             *     count them; with `allItems`, every item in the library.
+             */
+            count: number;
         };
         ServerEventEnvelope: {
             /** Format: int64 */
@@ -2001,7 +2037,7 @@ export interface components {
             /** @description The client that made the change, from its favorite or blacklist request, or null when the request named none. */
             clientId?: string | null;
         };
-        /** @description Published by `POST /api/bulk/item-state` when any named item is in the library, for all of them at once. */
+        /** @description Published by `POST /api/bulk/item-state` when any named item is in the library, for all of them at once, when it lists at most 1,000 changed items; past that, the route publishes `resyncRequired` in its place. */
         BulkItemStateChangedPayload: {
             /**
              * @description The flag the request set or cleared.
@@ -2029,7 +2065,7 @@ export interface components {
             /** @description Blacklist before this change. */
             previousIsBlacklisted: boolean;
         };
-        /** @description Published by `POST /api/bulk/rating` when any named item is in the library, for all of them at once. */
+        /** @description Published by `POST /api/bulk/rating` when any named item is in the library, for all of them at once, when it lists at most 1,000 changed items; past that, the route publishes `resyncRequired` in its place. */
         BulkItemRatingChangedPayload: {
             /**
              * Format: double
@@ -2059,7 +2095,7 @@ export interface components {
              */
             previousRating: number | null;
         };
-        /** @description Published by `POST /api/library/delete-files` and `POST /api/duplicates/apply` for the items they removed from the library. */
+        /** @description Published by `POST /api/library/delete-files` and `POST /api/duplicates/apply` for the items they removed from the library, at most 1,000; past that, they publish `resyncRequired` in its place. */
         ItemsRemovedPayload: {
             itemIds: string[];
         };
@@ -2101,12 +2137,27 @@ export interface components {
              */
             previousLastPlayedUtc?: string | null;
         };
+        /**
+         * @description Tells a client that events it needs were missed or not sent, so it reads its state again. Sent to one stream
+         *     for a revision gap, and published to every stream when clear-stats clears stats, or in place of a
+         *     `bulkItemStateChanged`, `bulkItemRatingChanged`, or `itemsRemoved` that would list more than 1,000 items.
+         */
         ResyncRequiredPayload: {
-            /** @example revisionGap */
+            /**
+             * @description `revisionGap`, `playbackStatsCleared`, or the type of the event it replaces: `bulkItemStateChanged`,
+             *     `bulkItemRatingChanged`, or `itemsRemoved`.
+             * @example revisionGap
+             */
             reason: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description For a revision gap, the client's last event ID; when published, the revision before this event's.
+             */
             lastEventId: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description For a revision gap, the server's revision when the gap was found; when published, this event's revision.
+             */
             currentRevision: number;
         };
         /** @description First event on a stream opened without a last event ID. Its envelope revision is the server's current revision, so a client can resume from it after a reconnect even when no other event arrived. */
@@ -3291,7 +3342,43 @@ export interface operations {
                     "application/json": components["schemas"]["PairResponse"];
                 };
             };
-            /** @description Invalid token */
+            /** @description A wrong or missing control token, or no control token set, with the reason "The control token is wrong." */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when the request is from another device and remote connections are off */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller may do admin actions */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The caller needs the control token */
             401: {
                 headers: {
                     [name: string]: unknown;

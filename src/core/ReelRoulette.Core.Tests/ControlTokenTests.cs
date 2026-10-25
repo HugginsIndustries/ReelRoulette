@@ -156,6 +156,51 @@ public sealed class ControlTokenTests : IDisposable
     }
 
     [Fact]
+    public async Task ControlAccess_PassesTheGate_FromTheServerMachine_WithAControlSession_AndWithTheBearerToken_AndAnswers204()
+    {
+        var settings = CreateSettings(SavedOffSettings);
+        var token = settings.GetControlRuntimeSettings().AdminSharedToken;
+        var options = new ServerRuntimeOptions { RequireAuth = false };
+        var sessions = new ServerSessionStore();
+        var sessionId = sessions.CreateSession(ServerSessionStore.ControlScope, DateTimeOffset.UtcNow, TimeSpan.FromHours(1));
+
+        var (local, _) = await InvokeMiddleware(options, sessions, settings, "/control/access", IPAddress.Loopback);
+        var (withSession, _) = await InvokeMiddleware(
+            options,
+            sessions,
+            settings,
+            "/control/access",
+            LanClient,
+            context => context.Request.Headers.Cookie = $"{options.ControlAdminCookieName}={sessionId}");
+        var (withToken, _) = await InvokeMiddleware(
+            options,
+            sessions,
+            settings,
+            "/control/access",
+            LanClient,
+            context => context.Request.Headers.Authorization = $"Bearer {token}");
+
+        Assert.True(local);
+        Assert.True(withSession);
+        Assert.True(withToken);
+        Assert.Equal(StatusCodes.Status204NoContent, Assert.IsAssignableFrom<IStatusCodeHttpResult>(ServerHostComposition.GetControlAccess()).StatusCode);
+    }
+
+    [Fact]
+    public async Task ControlAccess_FromAnotherMachineWithoutASessionOrTheToken_GetsTheControlGates401()
+    {
+        var settings = CreateSettings(SavedOffSettings);
+        var options = new ServerRuntimeOptions { RequireAuth = false };
+
+        var (passed, refused) = await InvokeMiddleware(options, new ServerSessionStore(), settings, "/control/access", LanClient);
+        var (_, statusRefused) = await InvokeMiddleware(options, new ServerSessionStore(), settings, "/control/status", LanClient);
+
+        Assert.False(passed);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Response.StatusCode);
+        Assert.Equal(ReadBody(statusRefused), ReadBody(refused));
+    }
+
+    [Fact]
     public void Start_WithNoControlToken_GeneratesAndSavesOne()
     {
         var first = CreateSettings(null);
@@ -240,6 +285,7 @@ public sealed class ControlTokenTests : IDisposable
             new ServerLogService(_tempDir));
 
         Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal("The control token is wrong.", OpenApiSpec.ErrorReason(result));
         Assert.Equal(0, context.Response.Headers.SetCookie.Count);
         Assert.Empty(sessions.GetActiveSessions(ServerSessionStore.ControlScope, DateTimeOffset.UtcNow));
         var log = File.ReadAllText(Path.Combine(_tempDir, "last.log"));
@@ -374,6 +420,7 @@ public sealed class ControlTokenTests : IDisposable
             new ServerLogService(_tempDir));
 
         Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal("The control token is wrong.", OpenApiSpec.ErrorReason(result));
         Assert.Empty(sessions.GetActiveSessions(ServerSessionStore.ControlScope, DateTimeOffset.UtcNow));
     }
 
@@ -442,6 +489,12 @@ public sealed class ControlTokenTests : IDisposable
         context.Connection.RemoteIpAddress = IPAddress.Loopback;
         context.Connection.LocalIpAddress = IPAddress.Loopback;
         return context;
+    }
+
+    private static string ReadBody(DefaultHttpContext context)
+    {
+        context.Response.Body.Position = 0;
+        return new StreamReader(context.Response.Body).ReadToEnd();
     }
 
     private static async Task<(bool NextCalled, DefaultHttpContext Context)> InvokeMiddleware(

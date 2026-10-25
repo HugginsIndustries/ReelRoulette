@@ -1303,45 +1303,50 @@ public sealed class LibraryCatalogSession
         return committed ? recorded : null;
     }
 
-    /// <summary>Clears the playback stats of the named items only. No ids clears nothing.</summary>
-    public int ClearPlaybackStats(IReadOnlyCollection<string> itemIds)
+    /// <summary>
+    /// Clears the playback stats of the named items only, and answers how many of them are in the library and how many
+    /// had stats to clear. No ids clears nothing.
+    /// </summary>
+    public CatalogPlaybackStatsClear ClearPlaybackStats(IReadOnlyCollection<string> itemIds)
     {
         var requested = DistinctIds(itemIds);
         if (requested.Count == 0)
         {
-            return 0;
+            return default;
         }
 
+        var count = 0;
         var cleared = 0;
-        var committed = Commit((connection, transaction) =>
+        Commit((connection, transaction) =>
         {
-            foreach (var id in requested)
-            {
-                cleared += LibraryCatalogStore.Execute(
-                    connection,
-                    transaction,
-                    "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE id = $id AND (play_count != 0 OR last_played_utc IS NOT NULL);",
-                    ("$id", id));
-            }
-
+            count = CountItems(connection, transaction, requested);
+            cleared = 0;
+            ForEachIdChunk(
+                connection,
+                transaction,
+                requested,
+                "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE id IN ({0}) AND (play_count != 0 OR last_played_utc IS NOT NULL);",
+                command => cleared += command.ExecuteNonQuery());
             return cleared > 0;
         });
-        return committed ? cleared : 0;
+        return new CatalogPlaybackStatsClear(count, cleared);
     }
 
-    /// <summary>Clears every item's playback stats.</summary>
-    public int ClearAllPlaybackStats()
+    /// <summary>Clears every item's playback stats, and answers how many items there are and how many had stats to clear.</summary>
+    public CatalogPlaybackStatsClear ClearAllPlaybackStats()
     {
+        var count = 0;
         var cleared = 0;
-        var committed = Commit((connection, transaction) =>
+        Commit((connection, transaction) =>
         {
+            count = LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM items;", transaction);
             cleared = LibraryCatalogStore.Execute(
                 connection,
                 transaction,
                 "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE play_count != 0 OR last_played_utc IS NOT NULL;");
             return cleared > 0;
         });
-        return committed ? cleared : 0;
+        return new CatalogPlaybackStatsClear(count, cleared);
     }
 
     public CatalogItemState? ReadItemState(string identifier)
@@ -1812,9 +1817,7 @@ public sealed class LibraryCatalogSession
         SqliteTransaction transaction,
         IReadOnlyList<string> ids)
     {
-        var itemCount = 0;
-        ForEachIdChunk(connection, transaction, ids, "SELECT COUNT(*) FROM items WHERE id IN ({0});", command =>
-            itemCount += Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture));
+        var itemCount = CountItems(connection, transaction, ids);
 
         // Ids are distinct, so each chunk counts its own items and the chunks' counts add up.
         var byFold = new Dictionary<string, (string Name, int Count)>(StringComparer.Ordinal);
@@ -2138,6 +2141,15 @@ public sealed class LibraryCatalogSession
             command.CommandText = string.Format(CultureInfo.InvariantCulture, sql, string.Join(", ", parameters));
             run(command);
         }
+    }
+
+    /// <summary>How many of <paramref name="ids"/>, which are distinct, name an item.</summary>
+    private static int CountItems(SqliteConnection connection, SqliteTransaction? transaction, IReadOnlyList<string> ids)
+    {
+        var count = 0;
+        ForEachIdChunk(connection, transaction, ids, "SELECT COUNT(*) FROM items WHERE id IN ({0});", command =>
+            count += Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture));
+        return count;
     }
 
     /// <summary>
@@ -2981,6 +2993,12 @@ public sealed class CatalogItemState
     /// <summary>The rating in half stars, or null for none (see <see cref="ItemRating"/>).</summary>
     public int? RatingHalfStars { get; init; }
 }
+
+/// <summary>
+/// A playback stats clear: how many of the named items, or with every item, how many items, are in the library, and how
+/// many of them had stats to clear.
+/// </summary>
+public readonly record struct CatalogPlaybackStatsClear(int Count, int Changed);
 
 /// <summary>The flag a bulk change sets or clears.</summary>
 public enum CatalogItemFlag

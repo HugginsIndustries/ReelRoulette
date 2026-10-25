@@ -506,17 +506,26 @@ public sealed class LibraryOperationsService
         }
     }
 
-    public ClearPlaybackStatsResponse ClearPlaybackStats(ClearPlaybackStatsRequest request)
+    /// <summary>
+    /// Clears the playback stats of the named items, or of every item with <c>allItems</c>, and returns how many of
+    /// them are in the library and how many had stats to clear. It writes one <c>last.log</c> line with the counts and
+    /// the elapsed time.
+    /// </summary>
+    public CatalogPlaybackStatsClear ClearPlaybackStats(ClearPlaybackStatsRequest request)
     {
+        var stopwatch = Stopwatch.StartNew();
+        CatalogPlaybackStatsClear cleared;
         lock (_lock)
         {
-            return new ClearPlaybackStatsResponse
-            {
-                ClearedCount = request.AllItems
-                    ? _catalog.Session.ClearAllPlaybackStats()
-                    : _catalog.Session.ClearPlaybackStats(request.ItemIds ?? [])
-            };
+            cleared = request.AllItems
+                ? _catalog.Session.ClearAllPlaybackStats()
+                : _catalog.Session.ClearPlaybackStats(request.ItemIds ?? []);
         }
+
+        _serverLog.Append(
+            "info",
+            $"Clear playback stats allItems={(request.AllItems ? "true" : "false")} count={cleared.Count} changed={cleared.Changed} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        return cleared;
     }
 
     public RecordPlaybackResult RecordPlayback(string itemId)

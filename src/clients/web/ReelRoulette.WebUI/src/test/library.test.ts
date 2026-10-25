@@ -173,7 +173,9 @@ function setup(options: { storage?: DeviceStorage } = {}) {
       notices.push(message);
       noticeLogs.push(logText);
       return Promise.resolve();
-    }
+    },
+    // No test here confirms a bulk action.
+    confirm: () => Promise.resolve(false)
   };
   const service = createLibrary({
     config: { apiBaseUrl: "http://server/", sseUrl: "http://server/api/events" },
@@ -183,6 +185,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     player,
     dialogs,
     notifications,
+    controlAccess: { ensure: () => Promise.resolve(true) },
     panel,
     device: createDeviceStore(options.storage ?? null),
     tagCatalog: createTagCatalog({ api, connection }),

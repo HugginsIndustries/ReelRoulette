@@ -20,11 +20,13 @@ Instructions:
 
 Commit Message:
 
-M12m: Settle the bulk actions in the mockup, and split off Selection follows results
+M12m: Act on selected library items from the Selection actions menu
 
-- The Selection actions menu reads Add to and Remove from favorites and the blacklist, then Rate…, Edit tags…, and Clear playback stats…, then a red Delete files….
-- Rate… opens "Rate {n} items" with the Stats tab's stars, empty at first: the stars only choose, Rate sets the rating on every selected item and waits, disabled with its reason, until one is chosen, and Clear rating clears them all.
-- Delete files… always deletes the files, with no choice to keep them: "Permanently delete {n} files from disk and remove them from the library? This can't be undone." with a red "Delete {n} Files", then "Deleted {n} files.", and a notice for files that couldn't be deleted.
-- From another machine, the control token prompt asks once a session, and a wrong token stays in its field with "The control token is wrong."; the mockup's name dialog can stay open when the server refuses a value.
-- MILESTONES.md records the approved wording and the plan's choices for the Bulk actions slice: a route that says whether a caller needs the control token, clear-stats' count and resync fields, a resync in place of an event that would list more than 1,000 items, the player's read of the playing item after a resync, and Edit tags… waiting for the Tag edits slice.
-- MILESTONES.md moves keeping the selection to matching items into a new Selection follows results slice, right after Bulk actions, with its scope, traps, and acceptance.
+- WebUI: The Selection actions menu, the app's new shared menu list, adds selected items to or removes them from favorites or the blacklist, rates them or clears their rating in a Rate dialog whose stars choose before Rate applies, clears their playback stats after asking, or deletes their files, each in one request on every selected id, loaded or not, with a popup counting what the server answered.
+- WebUI: Delete files… asks GET /control/access first and, on its 401, the control-token prompt, a password field that keeps a wrong token's reason, then "Permanently delete {n} files from disk and remove them from the library?" with a red "Delete {n} Files", which ends selection, so a late answer never ends a later one, then says "Deleted {n} files." and notes files that couldn't be deleted.
+- Server: GET /control/access answers whether a caller may do admin actions, POST /control/pair refuses with "The control token is wrong.", and clear-stats answers count, the named items in the library, and writes a last.log line.
+- Server: Every published resyncRequired carries the revision before it and its own, and an event that would list more than 1,000 items, bulk favorite, blacklist, or rating or itemsRemoved, is published as resyncRequired in its place, with a last.log line.
+- Server: Each event takes its revision and reaches the replay history and every stream under one lock, so two events published at once can no longer reach a stream out of order and have the lower one skipped.
+- WebUI: A favorite or blacklist answer goes to the item it was for after Next, each play answer brings its item's flags and rating, and a resync re-reads the playing item, so its buttons and star show the server's state.
+- Cleanup: Pairing and the /control requests share one request around the pairing prompt, requestWithNotice builds on readWithNotice, the page tests share one flag answer, and clear-stats clears in chunks with the tag counts' item count.
+- Docs: OpenAPI, the generated types, README.md, CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and the changelog describe the actions and the server changes, the mockup's menu hover follows the app's, and MILESTONES.md records the slice's evidence and its updated delete check, has Selection follows results drop items a resync removes, and has the admin gate ask GET /control/access.

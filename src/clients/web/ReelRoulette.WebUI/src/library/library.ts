@@ -1,4 +1,5 @@
 import { computed, effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
+import type { ControlAccess } from "../api/controlAccess";
 import { requestPlayItem } from "../api/coreApi";
 import { errorText, noticeRequestFailure, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
@@ -17,6 +18,7 @@ import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { RefreshKeptSource } from "../types/serverContracts";
+import { createBulkActions, type BulkActions } from "./bulkActions";
 import { KEPT_SOURCES_LOG_TEXT, keptSourcesMessage, type KeptSourceFolder } from "./keptSources";
 import {
   LIBRARY_SORT_MODES,
@@ -118,6 +120,8 @@ export interface Library {
   readonly selection: LibrarySelection;
   /** As many items are selected as the search and the filter match, so Select all has nothing to add. */
   readonly allSelected: ReadonlySignal<boolean>;
+  /** The Selection actions menu's actions on the selected items. */
+  readonly bulk: BulkActions;
 
   /** The tab's view rendered, so the tab can open. */
   attach(): void;
@@ -173,10 +177,15 @@ export interface LibraryOptions {
   api: AppApi;
   connection: ServerConnection;
   player: Pick<Player, "playCurrent">;
-  /** The in-app dialogs, for a play that fails and a refresh that kept a source's items. */
-  dialogs: Pick<Dialogs, "notice">;
-  /** The one-off messages, for a later page that fails to load. */
+  /**
+   * The in-app dialogs, for a play that fails, a refresh that kept a source's items, and the bulk actions' confirmations
+   * and failures.
+   */
+  dialogs: Pick<Dialogs, "notice" | "confirm">;
+  /** The one-off messages, for a later page that fails to load and the bulk actions' popups. */
   notifications: Pick<Notifications, "notify">;
+  /** Asks for the control token before the delete action, when the server wants it. */
+  controlAccess: Pick<ControlAccess, "ensure">;
   /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
   panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
   /** Remembers whether the controls are collapsed, the sort and direction, and the grid's row height. */
@@ -190,7 +199,7 @@ export interface LibraryOptions {
 }
 
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player, panel, device, dialogs, notifications, tagCatalog } = options;
+  const { store, api, connection, player, panel, device, dialogs, notifications, controlAccess, tagCatalog } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const createGrid: CreateLibraryGrid =
     options.createGrid ?? ((host, gridOptions) => createLibraryGridController(host, apiBaseUrl, gridOptions));
@@ -214,6 +223,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const body = signal<LibraryBody>({ kind: "blank" });
   const selection = createLibrarySelection();
   const allSelected = computed(() => matchCount.value !== null && selection.count.value === matchCount.value);
+  const bulk = createBulkActions({ store, api, dialogs, notifications, controlAccess, selection });
   /** Select all's request under way, which a selection ending aborts. */
   let selectAllRequest: AbortController | null = null;
 
@@ -651,6 +661,7 @@ export function createLibrary(options: LibraryOptions): Library {
     body,
     selection,
     allSelected,
+    bulk,
 
     attach() {
       attached = true;

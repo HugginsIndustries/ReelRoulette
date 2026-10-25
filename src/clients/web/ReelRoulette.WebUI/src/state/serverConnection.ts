@@ -7,7 +7,7 @@ import {
   settledKeptSources,
   type RefreshSnapshotInput
 } from "../events/refreshStatusProjection";
-import { errorText, noticeRequestFailure, refusalError, sendRequest, UnauthorizedError } from "../api/serverRequest";
+import { errorText, noticeRequestFailure, refusalError, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { findPresetById } from "../filter/filterStateModel";
 import { presetChanges, presetPopups, type PresetEventRecord } from "../filter/presetEvents";
@@ -111,8 +111,6 @@ export interface ServerConnectionOptions {
   dialogs: Pick<Dialogs, "notice">;
   /** The one-off messages: Paired., Reconnected., how a library refresh ended, and preset changes from another device. */
   notifications: Pick<Notifications, "notify">;
-  /** Defaults to the global `fetch`, looked up on each request. */
-  fetch?: typeof fetch;
   /** Defaults to the browser's `EventSource`. */
   createEventSource?: (url: string) => EventSourceLike;
   /** The page whose focus, visibility, and network changes reconnect the event stream. */
@@ -121,7 +119,6 @@ export interface ServerConnectionOptions {
 
 export function createServerConnection(options: ServerConnectionOptions): ServerConnection {
   const { store, api, dialogs, notifications } = options;
-  const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
   const pageWindow = options.window ?? (typeof window === "undefined" ? undefined : window);
   const listeners: { [K in keyof ServerConnectionEvents]: ServerConnectionEvents[K][] } = {
     serverReady: [],
@@ -561,10 +558,10 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     if (!trimmed) {
       return;
     }
-    // Not through `api.request`, since a 401 here is a wrong token, which says so rather than asking for pairing.
+    // Around the pairing prompt, since a 401 here is a wrong token, which says so rather than asking for pairing.
     let response: Response;
     try {
-      response = await sendRequest(send, api.url("/api/pair"), {
+      response = await api.requestAroundPairing("/api/pair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: trimmed })

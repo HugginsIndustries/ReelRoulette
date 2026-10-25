@@ -19,6 +19,8 @@ export interface ItemStateEvent {
 export interface ItemStateCache {
   remember(itemId: string | null | undefined, flags: ItemFlags): void;
   applyTo(item: CurrentItem | null | undefined): void;
+  /** Forgets every item's state, as after a resync, when events may have been missed. */
+  clear(): void;
 }
 
 function idKey(itemId: string | null | undefined): string {
@@ -46,6 +48,9 @@ export function createItemStateCache(): ItemStateCache {
       }
       item.isFavorite = cached.isFavorite;
       item.isBlacklisted = cached.isBlacklisted;
+    },
+    clear() {
+      states.clear();
     }
   };
 }

@@ -201,6 +201,9 @@ public static class ServerHostComposition
             return HandleControlPairRequest(context, request?.Token, options, settings, sessions, logs);
         });
 
+        // The /control gate answers 401 to a caller it doesn't accept, so reaching this means the caller may do admin actions.
+        app.MapGet("/control/access", GetControlAccess);
+
         app.MapGet("/api/version", GetVersion);
 
         app.MapGet("/api/capabilities", GetCapabilities);
@@ -759,7 +762,8 @@ public static class ServerHostComposition
 
     /// <summary>
     /// Sets or clears favorite or blacklist on every named item in one write, and publishes one
-    /// <c>bulkItemStateChanged</c> for all of them, naming the client that made it, when any is in the library.
+    /// <c>bulkItemStateChanged</c> for all of them, naming the client that made it, when any is in the library, or
+    /// <c>resyncRequired</c> in its place past <see cref="ServerStateService.MaxEventItems"/> changed items.
     /// </summary>
     internal static IResult SetBulkItemState(BulkItemStateRequest request, ServerStateService state, LibraryOperationsService operations)
     {
@@ -784,13 +788,13 @@ public static class ServerHostComposition
         var changes = operations.SetItemsFlag(request.ItemIds!, flag, request.Value);
         if (changes.Count > 0)
         {
-            state.PublishExternal("bulkItemStateChanged", new BulkItemStateChangedPayload
+            var changed = changes.Where(change => change.Changed).ToList();
+            state.PublishListingItems("bulkItemStateChanged", changed.Count, () => new BulkItemStateChangedPayload
             {
                 Flag = request.Flag,
                 Value = request.Value,
                 Count = changes.Count,
-                Items = changes
-                    .Where(change => change.Changed)
+                Items = changed
                     .Select(change => new BulkItemState
                     {
                         ItemId = change.Id,
@@ -809,7 +813,8 @@ public static class ServerHostComposition
 
     /// <summary>
     /// Sets or clears one rating, in stars, on every named item in one write, and publishes one
-    /// <c>bulkItemRatingChanged</c> for all of them, naming the client that made it, when any is in the library.
+    /// <c>bulkItemRatingChanged</c> for all of them, naming the client that made it, when any is in the library, or
+    /// <c>resyncRequired</c> in its place past <see cref="ServerStateService.MaxEventItems"/> changed items.
     /// </summary>
     internal static IResult SetBulkRating(BulkRatingRequest request, ServerStateService state, LibraryOperationsService operations)
     {
@@ -826,12 +831,12 @@ public static class ServerHostComposition
         var changes = operations.SetItemsRating(request.ItemIds!, halfStars);
         if (changes.Count > 0)
         {
-            state.PublishExternal("bulkItemRatingChanged", new BulkItemRatingChangedPayload
+            var changed = changes.Where(change => change.Changed).ToList();
+            state.PublishListingItems("bulkItemRatingChanged", changed.Count, () => new BulkItemRatingChangedPayload
             {
                 Rating = ItemRating.ToStars(halfStars),
                 Count = changes.Count,
-                Items = changes
-                    .Where(change => change.Changed)
+                Items = changed
                     .Select(change => new BulkItemRating
                     {
                         ItemId = change.Id,
@@ -924,11 +929,15 @@ public static class ServerHostComposition
             statusCode: StatusCodes.Status403Forbidden);
     }
 
+    /// <summary>
+    /// Publishes <c>itemsRemoved</c> when items were removed, or <c>resyncRequired</c> in its place past
+    /// <see cref="ServerStateService.MaxEventItems"/> of them.
+    /// </summary>
     private static void PublishItemsRemoved(ServerStateService state, IReadOnlyList<string> removedItemIds)
     {
         if (removedItemIds.Count > 0)
         {
-            state.PublishExternal("itemsRemoved", new ItemsRemovedPayload { ItemIds = removedItemIds.ToList() });
+            state.PublishListingItems("itemsRemoved", removedItemIds.Count, () => new ItemsRemovedPayload { ItemIds = removedItemIds.ToList() });
         }
     }
 
@@ -971,7 +980,8 @@ public static class ServerHostComposition
 
     /// <summary>
     /// Clears every item's playback stats only when the request says <c>allItems</c>, so a request that names no
-    /// items, such as one with a field this server doesn't read, clears nothing.
+    /// items, such as one with a field this server doesn't read, clears nothing. It answers how many of the named items
+    /// are in the library, and publishes <c>resyncRequired</c> when it cleared any item's stats.
     /// </summary>
     internal static IResult ClearPlaybackStats(ClearPlaybackStatsRequest request, LibraryOperationsService operations, ServerStateService state)
     {
@@ -986,16 +996,13 @@ public static class ServerHostComposition
             return Results.BadRequest(new { error = "itemIds is required, or allItems to clear every item" });
         }
 
-        var response = operations.ClearPlaybackStats(request);
-        if (response.ClearedCount > 0)
+        var cleared = operations.ClearPlaybackStats(request);
+        if (cleared.Changed > 0)
         {
-            state.PublishExternal("resyncRequired", new
-            {
-                reason = "playbackStatsCleared"
-            });
+            state.PublishResyncRequired(ResyncRequiredPayload.PlaybackStatsCleared);
         }
 
-        return Results.Ok(response);
+        return Results.Ok(new ClearPlaybackStatsResponse { Count = cleared.Count });
     }
 
     internal static IResult RecordPlayback(RecordPlaybackRequest request, ServerStateService state, LibraryOperationsService operations)
@@ -1342,12 +1349,12 @@ public static class ServerHostComposition
                 if (replay.GapDetected)
                 {
                     var resyncEnvelope = state.CreateEnvelope(
-                        "resyncRequired",
-                        new
+                        ResyncRequiredPayload.EventType,
+                        new ResyncRequiredPayload
                         {
-                            reason = "revisionGap",
-                            lastEventId = lastEventRevision,
-                            currentRevision = replay.CurrentRevision
+                            Reason = ResyncRequiredPayload.RevisionGap,
+                            LastEventId = lastEventRevision,
+                            CurrentRevision = replay.CurrentRevision
                         });
                     await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
                     lastDeliveredRevision = resyncEnvelope.Revision;
@@ -1416,6 +1423,8 @@ public static class ServerHostComposition
         return Results.Ok(new { paired = true, message = "Paired successfully" });
     }
 
+    internal static IResult GetControlAccess() => Results.NoContent();
+
     internal static IResult HandleControlPairRequest(
         HttpContext context,
         string? token,
@@ -1431,7 +1440,7 @@ public static class ServerHostComposition
         {
             var remote = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             logs.Append("warn", $"Control pairing failed from {remote}: wrong or missing control token.");
-            return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
+            return Results.Json(new { error = "The control token is wrong." }, statusCode: StatusCodes.Status401Unauthorized);
         }
 
         IssueControlSession(context, options, sessions);

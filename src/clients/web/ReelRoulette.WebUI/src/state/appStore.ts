@@ -138,7 +138,7 @@ export interface AppStore {
   readonly loop: ReadonlySignal<boolean>;
   /** The player's Autoplay, kept on this device. Change it with `setAutoplay`. */
   readonly autoplay: ReadonlySignal<boolean>;
-  /** Each item's favorite and blacklist as last seen, applied when an item plays again. */
+  /** Each item's favorite and blacklist as last seen, applied when an item plays again, until a resync clears them. */
   readonly itemStates: ItemStateCache;
   readonly presets: Signal<ApiPreset[]>;
   readonly presetMenu: Signal<PresetMenu>;

@@ -1,4 +1,5 @@
 import { computed, type ReadonlySignal } from "@preact/signals";
+import { createControlAccess, type ControlAccess } from "../api/controlAccess";
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
@@ -36,16 +37,18 @@ export interface UnsavedTabs {
 }
 
 /**
- * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, when its
- * controls show, its sound and loudness normalization and compression, ambient mode's glow, fullscreen, side panel, the
- * panel's library, tag editor, stats, filter, and randomization tabs, and the settings its Settings tab sets, with
- * Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
+ * One page's runtime config, shared state, server requests, in-app dialogs, admin access, server connection, player,
+ * when its controls show, its sound and loudness normalization and compression, ambient mode's glow, fullscreen, side
+ * panel, the panel's library, tag editor, stats, filter, and randomization tabs, and the settings its Settings tab sets,
+ * with Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
   store: AppStore;
   api: AppApi;
   dialogs: Dialogs;
+  /** Whether this device may do admin actions, and the control-token prompt that asks when it may not. */
+  controlAccess: ControlAccess;
   connection: ServerConnection;
   player: Player;
   /** Whether the player's controls show, as Hide player controls and its settings say. */
@@ -108,6 +111,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     relayStatus: (logText) => store.relayStatus(logText),
     record: (message) => notifications.record(message)
   });
+  const controlAccess = createControlAccess({ api, dialogs });
   const connection = createServerConnection({
     sseUrl: config.sseUrl,
     pairToken: config.pairToken,
@@ -152,7 +156,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   // By category lists and the Library tab's Random line names.
   const tagCatalog = createTagCatalog({ api, connection });
   // After the player, so the player handles an item-state event before the library does.
-  const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device, tagCatalog });
+  const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, controlAccess, panel, device, tagCatalog });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications, tagCatalog });
   const tagEditor = createTagEditor({
     store,
@@ -248,6 +252,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     store,
     api,
     dialogs,
+    controlAccess,
     connection,
     player,
     playerControls,

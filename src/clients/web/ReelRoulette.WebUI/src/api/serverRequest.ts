@@ -71,8 +71,8 @@ export async function sendRequest(send: typeof fetch, input: RequestInfo | URL, 
  * Sends requests to the server as `sendRequest` does, and answers every 401 in one place: it asks for pairing, whose
  * prompt is the only thing to act on, with the request's route as `requestRoute` names it, for the one `last.log` line
  * the page sends, which the server refuses from a device that isn't paired, and throws an `UnauthorizedError`, for
- * which callers show and log no failure of their own. Pairing itself, whose 401 means a wrong token, sends with
- * `sendRequest` instead.
+ * which callers show and log no failure of their own. Pairing itself, whose 401 means a wrong token, and the `/control`
+ * routes, whose 401 means the control token is needed, go around it through `AppApi.requestAroundPairing`.
  */
 export function createServerRequester(send: typeof fetch, onUnauthorized: (route: string) => void): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -202,20 +202,31 @@ export function noticeRequestFailure(dialogs: NoticeDialogs, failed: string, err
 }
 
 /**
+ * Sends a request with `read`, which throws on a failure as `AppApi.postJson` does, and answers what it read, or null
+ * once the failure shows in `dialogs`' notice, as `noticeRequestFailure` shows it.
+ */
+export async function readWithNotice<T>(dialogs: NoticeDialogs, failed: string, read: () => Promise<T>): Promise<T | null> {
+  try {
+    return await read();
+  } catch (error) {
+    noticeRequestFailure(dialogs, failed, error);
+    return null;
+  }
+}
+
+/**
  * Sends a change with `send` and says whether the server took it. A failure shows in `dialogs`' notice, as
  * `noticeRequestFailure` shows it.
  */
 export async function requestWithNotice(dialogs: NoticeDialogs, failed: string, send: () => Promise<Response>): Promise<boolean> {
-  try {
+  const taken = await readWithNotice(dialogs, failed, async () => {
     const response = await send();
     if (!response.ok) {
       throw await refusalError(response);
     }
     return true;
-  } catch (error) {
-    noticeRequestFailure(dialogs, failed, error);
-    return false;
-  }
+  });
+  return taken ?? false;
 }
 
 /**

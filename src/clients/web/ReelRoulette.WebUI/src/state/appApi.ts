@@ -1,4 +1,4 @@
-import { createServerRequester, readJson, refusalError } from "../api/serverRequest";
+import { createServerRequester, readJson, refusalError, sendRequest } from "../api/serverRequest";
 
 /**
  * Server requests the screens share, against the runtime config's API base URL. A request that couldn't reach the
@@ -8,8 +8,14 @@ import { createServerRequester, readJson, refusalError } from "../api/serverRequ
  */
 export interface AppApi {
   url(path: string): string;
-  /** Sends a request to the server, as `fetch` does, with the failures above. Pairing doesn't use it. */
+  /** Sends a request to the server, as `fetch` does, with the failures above. */
   request: typeof fetch;
+  /**
+   * Sends a request whose 401 doesn't mean this device needs pairing: pairing's own, whose 401 is a wrong token, and
+   * the `/control` routes', whose 401 means the control token is needed. It goes around the pairing prompt, so only a
+   * request that couldn't reach the server throws, as a `ServerUnreachableError`.
+   */
+  requestAroundPairing(path: string, init?: RequestInit): Promise<Response>;
   /** Posts a JSON body. The caller checks the response. */
   post(path: string, payload?: unknown): Promise<Response>;
   /**
@@ -62,6 +68,9 @@ export function createAppApi(apiBaseUrl: string, options: AppApiOptions): AppApi
   return {
     url,
     request,
+    requestAroundPairing(path, requestOptions) {
+      return sendRequest(send, url(path), requestOptions);
+    },
     post(path, payload) {
       return post(path, payload);
     },

@@ -147,7 +147,8 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   min-width: 0;
 }
 /* Specific enough to win over the dialogs' own input padding. */
-.vfield:not(.vfield-after) > input[type="text"] {
+.vfield:not(.vfield-after) > input[type="text"],
+.vfield:not(.vfield-after) > input[type="password"] {
   flex: 1 1 auto;
   min-width: 0;
   padding-right: 40px;
@@ -364,6 +365,7 @@ html.theme-light .app-dialog {
 }
 .app-dialog button,
 .app-dialog input[type="text"],
+.app-dialog input[type="password"],
 .app-dialog select {
   min-height: 44px;
   font-size: 1rem;
@@ -385,13 +387,62 @@ html.theme-light .app-dialog {
 .app-dialog button:hover:not(:disabled) {
   background: var(--control-bg-hover);
 }
+.app-dialog button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .app-dialog input[type="text"],
+.app-dialog input[type="password"],
 .app-dialog select {
   padding: 0 10px;
   min-width: 0;
 }
 .app-dialog .btn-danger {
   color: var(--error);
+}
+
+/* The app's menu: actions in groups with a rule between them, one look for every menu. Its container places it. */
+.menu {
+  min-width: 230px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.menu[hidden] {
+  display: none;
+}
+.menu button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--page-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .menu button:hover:not(:disabled) {
+    background: rgba(127, 127, 127, 0.16);
+  }
+}
+.menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.menu .menu-danger {
+  color: var(--error);
+}
+.menu-rule {
+  border: 0;
+  border-top: 1px solid var(--surface-border);
+  margin: 4px 0;
 }
 
 /* Icon-only buttons in the panel's tabs and Auto Tag. */
@@ -1681,18 +1732,15 @@ body.sorting * {
   bottom: calc(100% + 6px);
   right: 0;
   z-index: 40;
-  min-width: 230px;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface-raised);
-  color: var(--page-fg);
-  border: 1px solid var(--control-border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.library-selection-menu[hidden] {
-  display: none;
+/* Rate…: the Stats tab's stars, centered, with the rating they choose under them. */
+.rate-dialog .rating {
+  margin: 6px auto 0;
+}
+.rate-dialog-words {
+  margin: 0;
+  text-align: center;
+  color: var(--muted-fg);
 }
 .library-overlay-status-error {
   color: var(--error);
@@ -2099,6 +2147,7 @@ body.short-screen .settings-tab-header h2 {
 }
 body.short-screen .app-dialog button,
 body.short-screen .app-dialog input[type="text"],
+body.short-screen .app-dialog input[type="password"],
 body.short-screen .app-dialog select,
 body.short-screen .btn,
 body.short-screen .ctl {

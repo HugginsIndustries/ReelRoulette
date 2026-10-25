@@ -37,6 +37,16 @@ describe("currentItemState", () => {
     expect(lower.isFavorite).toBe(true);
   });
 
+  it("forgets every item's state once cleared", () => {
+    const cache = createItemStateCache();
+    cache.remember("id-a", { isFavorite: true, isBlacklisted: false });
+    cache.clear();
+
+    const item = current("id-a", "/media/a.mp4");
+    cache.applyTo(item);
+    expect(item.isFavorite).toBe(false);
+  });
+
   it("ignores an item with no item id", () => {
     const cache = createItemStateCache();
     cache.remember("", { isFavorite: true, isBlacklisted: false });
