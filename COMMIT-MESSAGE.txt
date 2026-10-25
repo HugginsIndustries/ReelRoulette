@@ -20,12 +20,6 @@ Instructions:
 
 Commit Message:
 
-M12m: Select library tiles with a check icon, a modifier click, or a long press
+Docs: Run headless browsers only with approval and networking cut off
 
-- WebUI: Each library tile has a check icon at its top left, shown on hover with a mouse and on every tile while selecting; clicking it, a Shift, Ctrl, or Cmd+click, or a half-second long press with a finger or pen starts selection, and a selected tile turns orange with its thumbnail shrunk.
-- WebUI: While selecting, a click, a Ctrl or Cmd+click, or a long press adds or removes a tile, Shift+click adds the range from the last tile chosen, and deselecting the last tile ends selection. A long press opens no browser menu and doesn't play its tile, and only the first finger down starts one, so a pinch never does.
-- WebUI: A bar below the grid holds Select all, Clear selection, "{n} selected", and Selection actions, whose menu the bulk actions will fill. Select all adds every id POST /api/library/query-ids answers for the grid's search and filter, loaded or not, and is disabled once everything matching is selected.
-- WebUI: A new search, filter, or preset ends selection, a new sort keeps it, items the app deletes leave it, and it lasts while the panel shows another tab or closes. Esc closes the Selection actions menu, then ends selection while the Library tab shows, before the panel.
-- WebUI: Hovering a tile dims only its thumbnail, and only on a device that can hover; the grid's text can't be highlighted, and its thumbnails can't be dragged.
-- Cleanup: Auto Tag and the tag editor share one Icon component, Select all's request and answer use the generated contract types, and tiles play only through the tile click, with no check for a blank id there or in requestPlayItem, since tiles and history steps always send a real one.
-- Docs: The mockup shows the bar's new order, modifier clicks, and the Esc and search rules, and previews the Grid look slice's design ahead of the app. MILESTONES.md records the selection decisions, adds the Grid look and Context menu slices and a selection rule to Bulk actions that covers items a refresh removes, and gives P57 a timeline rail slice.
+- AGENTS.md says an agent runs a headless browser only with the user's approval for that run, with a throwaway profile under artifacts/scratch/, and with networking cut off at the system level, since a browser's own offline settings still let it reach the network.
