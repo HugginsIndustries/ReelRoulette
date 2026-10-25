@@ -3410,6 +3410,7 @@ function placeGridScrollbar(grid) {
   if (grid.style.paddingRight !== paddingRight) grid.style.paddingRight = paddingRight;
 }
 function layoutGrid(force) {
+  dropUnmatchedSelection();
   const grid = $("lib-grid");
   if (grid.offsetParent === null) {
     if (force) gridStale = true;
@@ -4702,6 +4703,8 @@ $("tags-save").addEventListener("click", () => {
   renderStats();
   renderCategoryList();
   renderRandomization();
+  // A tag change can move items into or out of a tag filter's results.
+  layoutGrid(true);
   // Saving for the selection acknowledges itself as the other bulk actions do.
   acknowledge(several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied", "tags");
 });
@@ -5475,16 +5478,35 @@ let selecting = false;
 let lastSelected = null;
 let swallowClick = false;
 const selected = new Set();
+// The matching count the bar last showed.
+let bulkMatching = -1;
 function renderBulk() {
   $("bulk-bar").hidden = !selecting;
   // "{n} / {matching} selected", both grouped, as the count line reads "{matching} / {total} shown".
   const matching = visibleItems().items.length;
+  bulkMatching = matching;
   $("bulk-count").textContent = `${selected.size.toLocaleString()} / ${matching.toLocaleString()} selected`;
   // Select all has nothing to add while as many items are selected as match.
   const allSelected = selected.size === matching;
   $("bulk-all").disabled = allSelected;
   $("bulk-all").title = allSelected ? "Everything is already selected" : "Select all";
   if (tagSelectionLive) followPlayingItem();
+}
+// Selected items that leave the results, as after an action or a change from another device, leave the selection, so
+// an action never reaches an item the grid doesn't show. Selection ends when none are left. The bar is redrawn only when
+// its count changes, so a resize doesn't redraw the Tags tab that follows the selection.
+function dropUnmatchedSelection() {
+  if (!selecting) return;
+  const matching = new Set(visibleItems().items.map((item) => item.id));
+  const before = selected.size;
+  selected.forEach((id) => {
+    if (!matching.has(id)) selected.delete(id);
+  });
+  if (!selected.size) return setSelecting(false);
+  if (!matching.has(lastSelected)) lastSelected = null;
+  if (selected.size === before && matching.size === bulkMatching) return;
+  renderBulk();
+  renderSelection();
 }
 function setSelecting(on) {
   selecting = on;

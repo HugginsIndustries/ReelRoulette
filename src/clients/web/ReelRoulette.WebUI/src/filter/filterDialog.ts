@@ -2,7 +2,7 @@ import { batch, signal, type ReadonlySignal } from "@preact/signals";
 import { noticeRequestFailure, readJson, refusalError, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
-import { eventLoadFailedLine } from "../logging/relayLogLines";
+import { failureLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
 import { moveEntry } from "../reorder/reorder";
@@ -643,7 +643,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       remote = await loadRemote();
     } catch (error) {
       if (!(error instanceof UnauthorizedError)) {
-        void api.relayLog("warn", eventLoadFailedLine("filter", error));
+        void api.relayLog("warn", failureLine("filter=event-load-failed", error));
       }
       return;
     }

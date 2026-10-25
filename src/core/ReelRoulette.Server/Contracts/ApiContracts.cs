@@ -894,6 +894,9 @@ public sealed class LibraryIdsQueryRequest
 {
     public JsonElement? FilterState { get; set; }
     public string? Search { get; set; }
+
+    /// <summary>When set, only these ids are answered, those that match, as when checking a selection.</summary>
+    public List<string>? ItemIds { get; set; }
 }
 
 public sealed class LibraryIdsQueryResponse

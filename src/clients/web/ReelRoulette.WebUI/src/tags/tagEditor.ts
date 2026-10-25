@@ -5,7 +5,7 @@ import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
-import { eventLoadFailedLine } from "../logging/relayLogLines";
+import { failureLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import {
   createTagSaveSession,
@@ -713,7 +713,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       await loadModel();
     } catch (error) {
       if (!(error instanceof UnauthorizedError)) {
-        void api.relayLog("warn", eventLoadFailedLine("tags", error));
+        void api.relayLog("warn", failureLine("tags=event-load-failed", error));
       }
     }
   }

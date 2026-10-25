@@ -530,7 +530,9 @@ export interface paths {
          * List the ids of every library item a query matches
          * @description The ids of every item that `POST /api/library/query` with the same `filterState` and `search` matches, for
          *     selecting all of them: enabled sources, then the search, then the filter, with no paging, no page cap, and no
-         *     order. Each request writes one `last.log` line with the count and the elapsed time.
+         *     order. With `itemIds`, only those of them that match, for checking which selected items still do. Each request
+         *     writes one `last.log` line with the count, how many ids `itemIds` named when the request has it, and the elapsed
+         *     time.
          */
         post: operations["postLibraryQueryIds"];
         delete?: never;
@@ -1635,6 +1637,8 @@ export interface components {
             filterState?: components["schemas"]["FilterState"] | null;
             /** @description As in `LibraryQueryRequest`. */
             search?: string | null;
+            /** @description When set, the answer holds only those of these catalog ids that match, each once, as when checking a selection; an empty list answers none. Ids match exactly. */
+            itemIds?: string[] | null;
         };
         LibraryIdsQueryResponse: {
             /** @description The catalog id of every item the query matches. */

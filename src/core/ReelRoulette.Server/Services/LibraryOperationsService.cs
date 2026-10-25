@@ -200,7 +200,8 @@ public sealed class LibraryOperationsService
 
     /// <summary>
     /// The id of every item the browse query with the same filter and search matches, for selecting all of them, or
-    /// the reason the filter is refused.
+    /// only those of the request's <see cref="LibraryIdsQueryRequest.ItemIds"/> that match, for checking a selection,
+    /// or the reason the filter is refused.
     /// </summary>
     public LibraryIdsQueryResponse? QueryLibraryIds(LibraryIdsQueryRequest? request, out string? error)
     {
@@ -221,7 +222,16 @@ public sealed class LibraryOperationsService
             });
         }
 
-        _serverLog.Append("info", $"Library ids query total={ids.Count} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        // One full match costs about the same whatever the selection's size, where looking the ids up a chunk at a time
+        // costs more than it from a few thousand ids on.
+        var requested = request.ItemIds?.ToHashSet(StringComparer.Ordinal);
+        if (requested != null)
+        {
+            ids = ids.Where(requested.Contains).ToList();
+        }
+
+        var requestedText = requested == null ? string.Empty : $" requested={requested.Count}";
+        _serverLog.Append("info", $"Library ids query{requestedText} total={ids.Count} elapsedMs={stopwatch.ElapsedMilliseconds}.");
         return new LibraryIdsQueryResponse { Ids = ids };
     }
 

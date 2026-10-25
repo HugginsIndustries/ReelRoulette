@@ -78,13 +78,13 @@
     "expected": "reload"
   },
   {
-    "name": "blacklist on an unloaded item under Blacklisted excluded patches because it cannot enter",
+    "name": "blacklist on an unloaded item under Blacklisted excluded reloads because it may leave",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": false, "isBlacklisted": true },
     "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "favorite on an unloaded item under Favorites only reloads",
@@ -96,13 +96,13 @@
     "expected": "reload"
   },
   {
-    "name": "unfavorite on an unloaded item under Favorites only patches",
+    "name": "unfavorite on an unloaded item under Favorites only reloads because it may leave",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": false, "isBlacklisted": false },
     "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "favorite on an unloaded item that was not blacklisted under Blacklisted excluded patches",
@@ -155,14 +155,14 @@
     "expected": "patch"
   },
   {
-    "name": "blacklist on an unloaded item under Blacklisted excluded with previous values patches",
+    "name": "blacklist on an unloaded item under Blacklisted excluded with previous values reloads because it leaves",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": true },
     "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "playback on a loaded tile under name sort patches",
@@ -213,9 +213,19 @@
     "expected": "patch"
   },
   {
-    "name": "playback on an unloaded item under onlyNeverPlayed patches because it cannot enter",
+    "name": "first playback on an unloaded item under onlyNeverPlayed reloads because it leaves",
     "event": "playback",
     "loaded": false,
+    "playCount": 1,
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "a later playback on an unloaded item under onlyNeverPlayed patches because it was already out",
+    "event": "playback",
+    "loaded": false,
+    "playCount": 3,
     "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
@@ -299,24 +309,24 @@
     "expected": "reload"
   },
   {
-    "name": "removing a selected tag from an unloaded item patches because it cannot enter",
+    "name": "removing a selected tag from an unloaded item reloads because it may leave",
     "event": "tags",
     "loaded": false,
     "addedTags": [],
     "removedTags": ["Beach"],
     "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
-    "name": "adding an excluded tag to an unloaded item patches because it cannot enter",
+    "name": "adding an excluded tag to an unloaded item reloads because it may leave",
     "event": "tags",
     "loaded": false,
     "addedTags": ["Skip"],
     "removedTags": [],
     "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "favorite on a loaded tile under favorites excluded reloads",
@@ -369,14 +379,14 @@
     "expected": "reload"
   },
   {
-    "name": "favorite on an unloaded item under favorites excluded with previous values patches because it cannot enter",
+    "name": "favorite on an unloaded item under favorites excluded with previous values reloads because it leaves",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
     "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "unfavorite on an unloaded item under favorites excluded reloads because it may enter",
@@ -388,13 +398,13 @@
     "expected": "reload"
   },
   {
-    "name": "favorite on an unloaded item under favorites excluded patches because it cannot enter",
+    "name": "favorite on an unloaded item under favorites excluded reloads because it may leave",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
     "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "unblacklist on a loaded tile under blacklisted only reloads",
@@ -456,13 +466,13 @@
     "expected": "reload"
   },
   {
-    "name": "favorite on an unloaded item under blacklisted only patches because it cannot enter",
+    "name": "favorite on an unloaded item under blacklisted only reloads because it may leave",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
     "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "a rating on a loaded tile under the default filter and name sort patches",
@@ -505,14 +515,14 @@
     "expected": "reload"
   },
   {
-    "name": "a rating on an unloaded item under only unrated patches because it cannot enter",
+    "name": "a rating on an unloaded unrated item under only unrated reloads because it leaves",
     "event": "rating",
     "loaded": false,
     "rating": 3,
     "previousRating": null,
     "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "onlyUnrated": true, "selectedTags": [], "excludedTags": []},
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "a rating cleared on an unloaded item under only unrated reloads because it may enter",
@@ -595,14 +605,14 @@
     "expected": "patch"
   },
   {
-    "name": "an unloaded item's rating falling below the minimum patches because it cannot enter",
+    "name": "an unloaded item's rating falling below the minimum reloads because it leaves",
     "event": "rating",
     "loaded": false,
     "rating": 2,
     "previousRating": 4,
     "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
     "sortMode": "Name",
-    "expected": "patch"
+    "expected": "reload"
   },
   {
     "name": "a rating on a loaded tile under the rating sort reloads",
@@ -639,6 +649,56 @@
     "event": "playback",
     "loaded": true,
     "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "unfavorite on an unloaded favorite under Favorites only with previous values reloads because it leaves",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": false },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "unblacklist on an unloaded item under blacklisted only with previous values reloads because it leaves",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": false, "isBlacklisted": true },
+    "after": { "isFavorite": false, "isBlacklisted": false },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "blacklist on an unloaded favorite under favorites and Blacklisted excluded patches because it stays out",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": true },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "adding an unrelated tag to an unloaded item under a tag filter patches",
+    "event": "tags",
+    "loaded": false,
+    "addedTags": ["Sunset"],
+    "removedTags": ["Night"],
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": ["Indoor"] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "a rating changed on an unloaded rated item under only unrated patches because it stays out",
+    "event": "rating",
+    "loaded": false,
+    "rating": 4,
+    "previousRating": 3,
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "onlyUnrated": true, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   }

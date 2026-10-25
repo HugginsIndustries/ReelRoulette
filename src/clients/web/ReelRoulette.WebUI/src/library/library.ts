@@ -6,7 +6,7 @@ import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterSource } from "../filter/filterDialogModel";
 import { filterSummaryParts } from "../filter/filterSummaryModel";
 import { randomLineText, spreadCategories } from "../random/randomOptions";
-import { playbackTraceLine } from "../logging/relayLogLines";
+import { failureLine, playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
 import type { Player } from "../playback/player";
@@ -95,8 +95,9 @@ export type CreateLibraryGrid = (host: HTMLElement, options: Required<LibraryGri
  * server is ready, and the window keeps its tiles and scroll position while the tab is hidden. The panel shows and
  * hides the tab. The tab remembers on this device whether its controls are collapsed, its sort and direction, and the
  * row height a zoom over the grid set. A refresh that keeps a source's items because its folder listed no media files
- * shows a notice naming the folder, once per folder for the page's life. Selection lasts while the tab is hidden, and a
- * change to the search or the filter the grid shows ends it.
+ * shows a notice naming the folder, once per folder for the page's life. Selection lasts while the tab is hidden, a
+ * change to the search or the filter the grid shows ends it, and selected items that leave the results, which reloads
+ * the window, leave it.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
@@ -226,6 +227,8 @@ export function createLibrary(options: LibraryOptions): Library {
   const bulk = createBulkActions({ store, api, dialogs, notifications, controlAccess, selection });
   /** Select all's request under way, which a selection ending aborts. */
   let selectAllRequest: AbortController | null = null;
+  /** The check of the selected items under way, which a later check or a selection ending aborts. */
+  let selectionCheck: AbortController | null = null;
 
   let attached = false;
   let open = false;
@@ -248,6 +251,10 @@ export function createLibrary(options: LibraryOptions): Library {
   const session = createLibraryQuerySession((request, signal) => postQuery(request, signal));
   session.setListener((event) => {
     renderWindow(event.scroll);
+    // Every change that can take an item out of the results reloads the window, so a reload checks the selection.
+    if (event.reloaded) {
+      void checkSelection();
+    }
     if (!event.statusMessage) {
       return;
     }
@@ -568,12 +575,53 @@ export function createLibrary(options: LibraryOptions): Library {
     }
   }
 
-  // Select all's answer would start selection over, so a selection ending drops it.
-  selection.active.subscribe((active) => {
-    if (!active && selectAllRequest) {
-      selectAllRequest.abort();
-      selectAllRequest = null;
+  /**
+   * Takes out of the selection the selected items that no longer match the window's search and filter, loaded or not,
+   * so an action never reaches an item the grid doesn't show. Items selected while the answer is on its way stay. A
+   * failure leaves the selection as it was, for the next reload to check, and only logs, since nobody asked for it.
+   */
+  async function checkSelection(): Promise<void> {
+    if (!selection.active.peek()) {
+      return;
     }
+    selectionCheck?.abort();
+    const request = new AbortController();
+    selectionCheck = request;
+    const sent = selection.ids();
+    try {
+      const raw = await api.postJson(
+        "/api/library/query-ids",
+        { ...session.matchQuery(), itemIds: sent },
+        { signal: request.signal }
+      );
+      if (request.signal.aborted) {
+        return;
+      }
+      const matching = new Set(parseLibraryIds(raw));
+      selection.remove(sent.filter((id) => !matching.has(id)));
+    } catch (error) {
+      // A 401 shows only the pairing prompt, which the request has asked for, and sent its line.
+      if (!request.signal.aborted && !(error instanceof UnauthorizedError)) {
+        void api.relayLog("warn", failureLine("library=selection-check-failed", error));
+      }
+    } finally {
+      if (selectionCheck === request) {
+        selectionCheck = null;
+      }
+    }
+  }
+
+  // Select all's answer would start selection over, and a check's would take items out of a new one, so a selection
+  // ending drops them.
+  selection.active.subscribe((active) => {
+    if (active) {
+      return;
+    }
+    for (const request of [selectAllRequest, selectionCheck]) {
+      request?.abort();
+    }
+    selectAllRequest = null;
+    selectionCheck = null;
   });
   // The tiles shown change their marks in place.
   effect(() => {

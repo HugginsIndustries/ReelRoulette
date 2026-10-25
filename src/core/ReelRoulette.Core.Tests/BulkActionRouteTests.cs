@@ -103,6 +103,38 @@ public sealed class BulkActionRouteTests : IDisposable
     }
 
     [Fact]
+    public void QueryIds_WithItemIds_AnswersOnlyThoseThatMatch_EachOnce()
+    {
+        CatalogSeed.Write(
+            _dataDir,
+            sources: [new SeedSource("on", "/media/on"), new SeedSource("off", "/media/off", IsEnabled: false)],
+            items:
+            [
+                new SeedItem("kept-1", "/media/on/clip-1.mp4") { SourceId = "on", RelativePath = "clip-1.mp4" },
+                new SeedItem("kept-2", "/media/on/clip-2.mp4") { SourceId = "on", RelativePath = "clip-2.mp4" },
+                new SeedItem("blacklisted", "/media/on/clip-3.mp4") { SourceId = "on", RelativePath = "clip-3.mp4", IsBlacklisted = true },
+                new SeedItem("unsearched", "/media/on/other.mp4") { SourceId = "on", RelativePath = "other.mp4" },
+                new SeedItem("disabled", "/media/off/clip-4.mp4") { SourceId = "off", RelativePath = "clip-4.mp4" },
+                new SeedItem("not-asked", "/media/on/clip-5.mp4") { SourceId = "on", RelativePath = "clip-5.mp4" }
+            ]);
+        var operations = CreateOperations();
+
+        var ids = QueryIds(operations, new LibraryIdsQueryRequest
+        {
+            Search = "clip",
+            FilterState = Filter("{}"),
+            ItemIds = ["kept-1", "kept-2", "kept-1", "blacklisted", "unsearched", "disabled", "missing", "KEPT-2"]
+        });
+
+        Assert.Equal(["kept-1", "kept-2"], ids.Order(StringComparer.Ordinal));
+        Assert.Empty(QueryIds(operations, new LibraryIdsQueryRequest { FilterState = Filter("{}"), ItemIds = [] }));
+
+        var logLines = LogLines().Where(line => line.Contains("Library ids query", StringComparison.Ordinal)).ToList();
+        Assert.Contains("requested=7 total=2 elapsedMs=", logLines[0]);
+        Assert.Contains("requested=0 total=0 elapsedMs=", logLines[1]);
+    }
+
+    [Fact]
     public void QueryIds_RefusesAFilterThatIsNotAnObject()
     {
         CatalogSeed.Write(_dataDir);
@@ -651,6 +683,9 @@ public sealed class BulkActionRouteTests : IDisposable
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "LibraryIdsQueryResponse");
         OpenApiSpec.AssertMatchesSchema(
             OpenApiSpec.SerializeAsServer(new LibraryIdsQueryRequest { FilterState = Filter("{}"), Search = "one" }),
+            "LibraryIdsQueryRequest");
+        OpenApiSpec.AssertMatchesSchema(
+            OpenApiSpec.SerializeAsServer(new LibraryIdsQueryRequest { FilterState = Filter("{}"), Search = "one", ItemIds = ["item-1"] }),
             "LibraryIdsQueryRequest");
     }
 

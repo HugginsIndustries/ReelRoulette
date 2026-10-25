@@ -20,7 +20,11 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Keep hidden player controls hidden as autoplay or a swipe moves to another item
+M12m: Selected items that leave the results leave the selection
 
-- WebUI: With Hide player controls on Timeout and Keep visible while paused on, the controls no longer show, or restart their countdown, each time autoplay, a swipe, Next, Previous, or Random moves to another item.
-- WebUI: Playback no longer reads as waiting for the user between items, once an item starts and before its media shows, as while a history step waits for its fresh media URL, and a new item hides the last one before pausing its video, so that pause never reads as the user's.
+- WebUI: After each reload of the library window while selecting, the selected ids go with the window's search and filter to POST /api/library/query-ids, and the ones it doesn't answer leave the selection, loaded or not, so items an action here, another device, a refresh, or a removal sent as resyncRequired takes out of the results leave it, and the bar's count and Select all follow. Ids selected meanwhile stay, a selection ending drops the answer, and a failed check only logs.
+- WebUI: A change that takes an item outside the loaded tiles out of the results now reloads the window, as one that brings it in did, so the count line follows: a favorite or blacklist change, a rating under Only unrated or a minimum, a filtered tag, or a first play under Only never played, which the event's play count shows. The favorite and blacklist rule compares whether the item matched before and after, for loaded and unloaded items alike.
+- Server: POST /api/library/query-ids takes an optional itemIds and answers only those of them that match, from one full match, which measured a flat 22-26 ms where looking the ids up in chunks took up to 300 ms for every item.
+- Mockup: Its selection drops items that leave its results and ends when none are left, and its Edit tags save lays the grid out again.
+- Cleanup: One failureLine builds the tabs' and the selection check's failure log lines, and the page tests' fake library answers the ids query from its own items.
+- Docs: OpenAPI, the generated types, CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and the changelog describe the check and the rule, and MILESTONES.md records the slice's evidence, its release check, and source changes reaching the selection through Admin Source Management's reload.

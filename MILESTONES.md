@@ -169,7 +169,7 @@ Last milestone completed: M12l
 | Selection | ✅ Complete | Selecting tiles by their check icon, a long press, or a Shift, Ctrl, or Cmd+click, the selection bar with Select all and Clear selection, and the Esc order. |
 | Library look | ✅ Complete | The Library tab as the mockup shows it: the selected tile's look, rounded tiles, no border or background, gaps set by the zoom's row height and snapped to device pixels, the zoom from 120 px, the thin scrollbar in the tab's right margin, the count line's "shown", the preset dropdown's "Preset:", and the Filters and Random lines' chevrons. |
 | Bulk actions | ✅ Complete | The Selection actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload and count, a resync in place of an event too large to send, the player's read of the playing item after a resync, and favorite and blacklist answers applied to the item they were for. |
-| Selection follows results | ⏳ Planned | Selected items that leave the results leave the selection, loaded or not, through a check of the selected ids after each reload of the window, and an item that leaves the results reloads the window, so the counts follow. |
+| Selection follows results | ✅ Complete | Selected items that leave the results leave the selection, loaded or not, through a check of the selected ids after each reload of the window, and an item that leaves the results reloads the window, so the counts follow. |
 | Context menu | ⏳ Planned | A right-click on a library tile opens an app-styled context menu with the Selection actions menu's options, built as a shared context menu component. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
 
@@ -516,6 +516,19 @@ Last milestone completed: M12l
 - The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, `dotnet test ReelRoulette.sln` passes with 733 Core and 19 ServerApp tests, SystemChecks passes, `npm run verify` passes with 2,333 tests in 94 files, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- On a copy of the newest server backup of the developer catalog, 49,450 items, with Python's SQLite 3.53.4, checking ids against the default filter took 22–26 ms at every selection size with one full match and the sent ids kept from it, and 0.2 ms for 50 ids, 25 ms for 7,000, and 171 ms for every id looked up 500 at a time by the primary key. Under a one-tag filter the lookups took 300 ms for every id, crossing over near 3,500 ids. The full match is used, and its answer still weighs only the sent ids that match (measured).
+- `BulkActionRouteTests.cs` covers `itemIds` answering only the named ids that match, each once, leaving out one the filter excludes, one the search excludes, one from a disabled source, one no item has, and one in other casing; an empty list answering none; the log line's `requested=`; and the request with `itemIds` against its OpenAPI schema.
+- `library-tile-effect.json` has 73 cases: the 11 that patched an item that isn't loaded as it left now reload, named for why, the play under Only never played as its first, and 6 are new, for leaving with previous values and for staying out, among them a blacklisted favorite under Favorites and Blacklisted excluded and a later play under Only never played. With the rule changed and the fixture not yet, only those 11 failed, so the one comparison of matching before and after gives every loaded case the answer it had (measured). `libraryQuerySession.test.ts` shows a blacklist that takes an item that isn't loaded out reloading and one already out not, a first play of an item that isn't loaded reloading under Only never played and a later one not, and the listener told of a first page, a new sort, and a reload, but not a further page or a patch.
+- `library.test.ts` covers the check after a reload: it sends the window's search and filter with every selected id, loaded or not; the ids no longer answered leave, with the count, match count, and Select all following; ids selected while the answer is on its way stay; a later check replaces one under way; a selection ending drops the answer, even for a new selection; nothing is checked without a selection; and a failed check keeps the selection with no notice and logs `library=selection-check-failed` with its status. Its fake server, and the page tests' fake library, answer the ids query from their own items, filtered by `itemIds`, in place of two stubs that answered every item.
+- The page tests in `screens/library.test.ts` show selected items leaving the selection after this device's Add to blacklist, ending it when none are left; this device's blacklist of an item past the loaded tiles, with the count line, the bar's count, and Select all's disabled state following; another device's blacklist of a loaded and an unloaded item; a refresh; and a removal of 1,100 items sent as `resyncRequired`.
+- Each break failed its tests and passed once restored: the server ignoring `itemIds`, no check after a reload, every unanswered id removed rather than only those sent, a check's answer kept after selection ends, an older check not replaced, a reset not counted as a reload, the enter-only rule for flags or for ratings, a flag rule that reloads for any change to a filtered flag, and every play reloading under Only never played (measured).
+- The mockup's selection drops items that leave its results and ends when none are left (`dropUnmatchedSelection`, at the top of `layoutGrid` in `build/layout.src.html`), and its Edit tags… save lays the grid out again. Its bar redraws only when the selection or the match count changed, since `layoutGrid` runs on every resize and the bar redraws the Tags tab while that tab follows the selection.
+- Beyond the Scope, one `failureLine` in `relayLogLines.ts` builds the selection check's log line and the Filter and Tags tabs', in place of `eventLoadFailedLine`, and the tabs' lines read as before.
+- `shared/api/openapi.yaml`, the generated WebUI types, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe `itemIds`, the check, and the rule, and Admin Source Management's WebUI source sync slice records that its reload drops a disabled or removed source's selected items through the check.
+
 #### Context menu slice
 
 **Scope**
@@ -583,7 +596,7 @@ Last milestone completed: M12l
 
 #### Release checks
 
-- Manual: In the WebUI on a desktop browser and a phone, select several items, and every matching item with Select all, apply each bulk action but the delete action, and the tiles update.
+- Manual: In the WebUI on a desktop browser and a phone, select several items, and every matching item with Select all, apply each bulk action but the delete action, and the tiles update, and items an action takes out of the results, such as blacklisted ones, leave the selection.
 - Manual: Copy two throwaway videos into a source folder and refresh the library. In Firefox on the desktop, select one's tile and delete it with Delete files…, which asks for no control token; on the iPad, delete the other, which asks for the control token once first. Each file is gone from the folder and its tile from the grid.
 - Manual: On the iPad and the Android phone, a long press on a library tile selects it and starts selection, with no menu or text highlight of the browser's own.
 - Manual: On Firefox on the desktop, the iPad, and the Android phone, every gap in the library grid looks the same, unselected and selected, the grid's scrollbar sits in the tab's right margin, and the preset dropdown reads "Preset: {name}" with its arrow.
@@ -598,6 +611,7 @@ Last milestone completed: M12l
 - Removing items from the library while keeping their files, since the next refresh would add the files back as new items.
 - A context menu anywhere but on library tiles, and turning the browser's own menu off across the app, which is WebUI Context Menus.
 - Ctrl+click selection on a Mac, where browsers send Ctrl+click as a right-click.
+- Selected items that a source change takes out of the results, which is Admin Source Management.
 
 ### M12n1 - WebUI Context Menus
 
@@ -1834,6 +1848,7 @@ Last milestone completed: M12l
 - On a source event, reload the loaded library window, keeping the scroll position as the desktop did, and refresh the profile dialog's Sources tab.
 - The Filter tab reloads on the new source events as it does on `sourceStateChanged`.
 - Overlapping resyncs: keep one in flight and coalesce events that arrive meanwhile, since this milestone adds source events that reload every open WebUI.
+- Selected items that a disabled or removed source takes out of the results leave the selection, through the check of the selected ids that follows each reload of the library window.
 
 **Traps**
 
@@ -1841,11 +1856,13 @@ Last milestone completed: M12l
 - The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
 - Browser-Playable Filter has the Filter tab reload on `sourceStateChanged` as opening it does, keeping its unsaved changes, and the rest of the WebUI ignores the event.
 - `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order.
+- Each reload of the library window while selection lasts checks the selected ids against the results (`checkSelection` in `src/library/library.ts`), so a source event's reload needs nothing more to drop a disabled or removed source's items from the selection.
 
 **Acceptance**
 
 - Adding, renaming, removing, enabling, or disabling a source from the admin section updates every open WebUI's library window, Filter tab source list, and profile dialog's Sources tab without a reload, in WebUI tests for source event handling.
 - Overlapping resync events cause one reload at a time, in WebUI tests for overlapping resyncs.
+- Disabling or removing a source drops its items from another WebUI's selection, in WebUI tests for source event handling.
 - `npm run verify` passes, and one quick spot check of an admin section source toggle seen in another WebUI tab.
 
 #### Release checks

@@ -113,6 +113,11 @@ function setup(options: { storage?: DeviceStorage } = {}) {
         searchBaselineCount: totalCount
       });
     }
+    // As the server does: every matching id, or only the matching ones of `itemIds`.
+    if (path === "/api/library/query-ids" && !replies.has(path)) {
+      const ids = library.items.map((item) => String(item.id));
+      return json({ ids: body?.itemIds ? ids.filter((id) => body.itemIds.includes(id)) : ids });
+    }
     return (await replies.get(path)?.()) ?? json({});
   }) as typeof fetch;
   const relayed: string[] = [];
@@ -1240,6 +1245,91 @@ describe("selection", () => {
     expect(t.library.selection.ids()).toEqual(["item-2"]);
     t.emit("itemsRemoved", { itemIds: ["item-2"] });
     expect(t.library.selection.active.peek()).toBe(false);
+  });
+
+  it("after a reload, selected items that no longer match leave the selection, loaded or not, from the window's search and filter", async () => {
+    const t = await shown(300);
+    t.store.appliedFilter.value = { ...createDefaultFilterState(), favoritesMode: "only" };
+    t.library.setSearch("clip");
+    await t.library.commitQuery();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    await t.library.selectAll();
+    expect([t.library.selection.count.peek(), t.library.allSelected.peek()]).toEqual([300, true]);
+
+    // The server no longer matches a loaded item and one past the loaded page.
+    t.fakeLibrary.items = t.fakeLibrary.items.filter((item) => item.id !== "item-1" && item.id !== "item-250");
+    t.emit("refreshCompleted");
+    await settle();
+
+    const check = t.requests("/api/library/query-ids").at(-1)!.body;
+    expect(Object.keys(check).sort()).toEqual(["filterState", "itemIds", "search"]);
+    expect(check).toEqual(expect.objectContaining({ search: "clip", filterState: expect.objectContaining({ favoritesMode: "only" }) }));
+    expect(check.itemIds).toHaveLength(300);
+    expect(["item-1", "item-250", "item-2", "item-251"].map((id) => t.library.selection.has(id))).toEqual([false, false, true, true]);
+    expect([t.library.selection.count.peek(), t.library.matchCount.peek(), t.library.allSelected.peek()]).toEqual([298, 298, true]);
+  });
+
+  it("items selected while a check's answer is on its way stay, and a later check replaces one under way", async () => {
+    const t = await shown();
+    const answers: Array<(ids: string[]) => void> = [];
+    t.replies.set(
+      "/api/library/query-ids",
+      () => new Promise<Response>((resolve) => answers.push((ids) => resolve(json({ ids }))))
+    );
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    t.emit("refreshCompleted");
+    await settle();
+    t.library.clickTile("item-2", PLAIN);
+    t.emit("refreshCompleted");
+    await settle();
+    expect(t.requests("/api/library/query-ids").map((request) => request.body.itemIds)).toEqual([["item-1"], ["item-1", "item-2"]]);
+
+    // The first check's answer comes after the second was sent, so it is dropped.
+    answers[0]!([]);
+    await settle();
+    expect(t.library.selection.ids()).toEqual(["item-1", "item-2"]);
+
+    t.library.clickTile("item-3", PLAIN);
+    answers[1]!(["item-2"]);
+    await settle();
+    expect(t.library.selection.ids()).toEqual(["item-2", "item-3"]);
+  });
+
+  it("ending selection drops a check's answer, even for a new selection", async () => {
+    const t = await shown();
+    let answer: () => void = () => {};
+    t.replies.set("/api/library/query-ids", () => new Promise<Response>((resolve) => (answer = () => resolve(json({ ids: [] })))));
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    t.emit("refreshCompleted");
+    await settle();
+    expect(t.requests("/api/library/query-ids")).toHaveLength(1);
+
+    t.library.selection.clear();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    answer();
+    await settle();
+    expect(t.library.selection.ids()).toEqual(["item-1"]);
+  });
+
+  it("checks nothing after a reload while nothing is selected", async () => {
+    const t = await shown();
+    t.emit("refreshCompleted");
+    await settle();
+    expect(t.queries()).toHaveLength(2);
+    expect(t.requests("/api/library/query-ids")).toHaveLength(0);
+  });
+
+  it("a check that fails keeps the selection, shows nothing, and logs its status", async () => {
+    const t = await shown();
+    t.replies.set("/api/library/query-ids", () => json({ error: "The library is busy." }, 503));
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+
+    t.emit("refreshCompleted");
+    await settle();
+
+    expect(t.library.selection.ids()).toEqual(["item-1"]);
+    expect([t.notices, t.notified]).toEqual([[], []]);
+    expect(t.relayed).toContain("library=selection-check-failed status=503");
   });
 
   it("hiding the tab closes the Selection actions menu and keeps the selection", async () => {

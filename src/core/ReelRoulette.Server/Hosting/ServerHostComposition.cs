@@ -941,7 +941,10 @@ public static class ServerHostComposition
         }
     }
 
-    /// <summary>The ids of every item the library query with the same filter and search matches.</summary>
+    /// <summary>
+    /// The ids of every item the library query with the same filter and search matches, or only those of the named
+    /// <see cref="LibraryIdsQueryRequest.ItemIds"/> that match.
+    /// </summary>
     internal static IResult QueryLibraryIds(LibraryIdsQueryRequest? request, LibraryOperationsService operations)
     {
         var response = operations.QueryLibraryIds(request, out var error);

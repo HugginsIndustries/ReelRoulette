@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HttpStatusError } from "../api/serverRequest";
-import { eventLoadFailedLine, playbackTraceLine, screenErrorLine, statusLogLine } from "../logging/relayLogLines";
+import { failureLine, playbackTraceLine, screenErrorLine, statusLogLine } from "../logging/relayLogLines";
 
 const itemPath = "/mnt/nas/multimedia/TV/Show/102 Reef Blower.avi";
 const mediaUrl = "/api/media/tok-3f9a2c71";
@@ -66,12 +66,12 @@ describe("relayLogLines", () => {
     expect(screenErrorLine("status", "thrown text")).toBe("ui-error screen=status error=string");
   });
 
-  it("names a failed event load's status or error type, and never the error message", () => {
-    expect(eventLoadFailedLine("filter", new HttpStatusError(503, `Tag "Reef Blower" is missing`))).toBe("filter=event-load-failed status=503");
-    const line = eventLoadFailedLine("tags", new TypeError(`Cannot read ${itemPath}`));
+  it("names a failed request's status or error type after its line, and never the error message", () => {
+    expect(failureLine("filter=event-load-failed", new HttpStatusError(503, `Tag "Reef Blower" is missing`))).toBe("filter=event-load-failed status=503");
+    const line = failureLine("tags=event-load-failed", new TypeError(`Cannot read ${itemPath}`));
 
     expectNoItemDetails(line);
     expect(line).toBe("tags=event-load-failed error=TypeError");
-    expect(eventLoadFailedLine("tags", "thrown text")).toBe("tags=event-load-failed error=string");
+    expect(failureLine("library=selection-check-failed", "thrown text")).toBe("library=selection-check-failed error=string");
   });
 });

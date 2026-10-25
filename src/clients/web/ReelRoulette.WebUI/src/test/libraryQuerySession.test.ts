@@ -29,6 +29,7 @@ interface TileEffectCase {
   removedTags?: string[];
   rating?: number | null;
   previousRating?: number | null;
+  playCount?: number | null;
   /** A filter as the wire carries it, read the way the WebUI reads one. */
   filter: ApiFilterState;
   sortMode: string;
@@ -294,7 +295,31 @@ describe("libraryQuerySession", () => {
     expect(session.snapshot().scrollTop).toBe(80);
   });
 
-  it("reloads for a favorite on an item that is not loaded only when it could enter the window", async () => {
+  it("says the window was read again after a first page, a new sort, and a reload, but not after a further page or a patch", async () => {
+    const reloaded: Array<boolean | undefined> = [];
+    const session = createLibraryQuerySession(async (request) =>
+      page(Array.from({ length: request.limit }, (_, index) => item(`tile-${request.offset + index}`)), 8_000, 8_000)
+    );
+    session.setListener((event) => reloaded.push(event.reloaded));
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    session.setOverlayVisible(true);
+    await session.considerFill(0, 1, LAST_PAGE_HEIGHT);
+    await session.applyFavorites([{
+      itemId: "tile-1",
+      isFavorite: true,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: false
+    }]);
+    expect(reloaded).toEqual([undefined, true, false, undefined]);
+
+    reloaded.length = 0;
+    await session.resetQuery(createDefaultFilterState(), controls({ sortMode: "PlayCount" }));
+    await session.reloadLoaded();
+    expect(reloaded).toEqual([true, true]);
+  });
+
+  it("reloads for a blacklist that takes an item that is not loaded out of the results, so the count follows", async () => {
     let calls = 0;
     const session = createLibraryQuerySession(async () => {
       calls += 1;
@@ -302,10 +327,44 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
-    await session.applyFavorites([{ itemId: "other", isFavorite: false, isBlacklisted: true }]);
-    expect(calls).toBe(1);
+    // The default filter leaves blacklisted items out.
+    await session.applyFavorites([{
+      itemId: "other",
+      isFavorite: false,
+      isBlacklisted: true,
+      previousIsFavorite: false,
+      previousIsBlacklisted: false
+    }]);
+    expect(calls).toBe(2);
 
-    await session.applyFavorites([{ itemId: "other", isFavorite: true, isBlacklisted: false }]);
+    // One already blacklisted stays out.
+    await session.applyFavorites([{
+      itemId: "other",
+      isFavorite: false,
+      isBlacklisted: true,
+      previousIsFavorite: false,
+      previousIsBlacklisted: true
+    }]);
+    expect(calls).toBe(2);
+
+    // Without the values before it, the item may have entered or left.
+    await session.applyFavorites([{ itemId: "other", isFavorite: false, isBlacklisted: true }]);
+    expect(calls).toBe(3);
+  });
+
+  it("reloads under Only never played for the first play of an item that is not loaded, and not for a later one", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a")], 1, 1);
+    });
+    await session.ensureLoaded({ ...createDefaultFilterState(), onlyNeverPlayed: true }, controls());
+
+    await session.applyPlayback({ itemId: "other", playCount: 1 });
+    expect(calls).toBe(2);
+
+    // One played before was already out.
+    await session.applyPlayback({ itemId: "other", playCount: 2 });
     expect(calls).toBe(2);
   });
 
@@ -811,7 +870,8 @@ describe("library query decisions", () => {
       addedTags: entry.addedTags ?? [],
       removedTags: entry.removedTags ?? [],
       rating: entry.rating ?? null,
-      previousRating: entry.previousRating ?? null
+      previousRating: entry.previousRating ?? null,
+      playCount: entry.playCount ?? null
     };
     expect(libraryQueryTileEffect(change, filterStateFromApiObject(entry.filter), entry.sortMode)).toBe(entry.expected);
   });

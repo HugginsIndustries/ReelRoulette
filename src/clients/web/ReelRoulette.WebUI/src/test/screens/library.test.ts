@@ -147,6 +147,12 @@ function serveLibrary(server: FakeServer, items: LibraryRow[]): FakeLibrary {
       searchBaselineCount: library.searchBaselineCount ?? totalCount
     });
   });
+  // As the server does: every matching id, or only the matching ones of `itemIds`.
+  server.on("POST", "/api/library/query-ids", (call) => {
+    const ids = library.items.map((item) => String(item.id));
+    const asked = call.body?.itemIds ? new Set<string>(call.body.itemIds) : null;
+    return json({ ids: asked ? ids.filter((id) => asked.has(id)) : ids });
+  });
   return library;
 }
 
@@ -2051,10 +2057,7 @@ describe("selection", () => {
   });
 
   it("Select all selects every item the search and filters match, loaded or not, and is then disabled", async () => {
-    const items = libraryItems(1234);
-    const { server } = await mountLibrary(items, (fake) => {
-      fake.on("POST", "/api/library/query-ids", () => json({ ids: items.map((item) => item.id) }));
-    });
+    const { server } = await mountLibrary(libraryItems(1234));
     await openLibrary();
     expect(tile("item-1000")).toBeNull();
     await click(check("item-1"));
@@ -2230,7 +2233,6 @@ async function selectAllItems(
 ): Promise<LibraryPage & { ids: string[] }> {
   const ids = items.map((item) => item.id);
   const mounted = await mountLibrary(items, (server) => {
-    server.on("POST", "/api/library/query-ids", () => json({ ids }));
     server.on("POST", "/api/bulk/item-state", () => json({ count: ANSWERED }));
     server.on("POST", "/api/bulk/rating", () => json({ count: ANSWERED }));
     server.on("POST", "/api/playback/clear-stats", () => json({ count: ANSWERED }));
@@ -2525,6 +2527,93 @@ describe("bulk actions", () => {
     expect(openNotices()).toEqual([`Clear playback stats failed: ${reason}`]);
     await closeNotices();
     expect(popupsShown()).toEqual([]);
+  });
+});
+
+describe("selection follows results", () => {
+  /** The server no longer matches `ids`, as after they are blacklisted under the default filter or removed. */
+  function leaveResults(library: FakeLibrary, ids: readonly string[]): void {
+    const leaving = new Set(ids);
+    library.items = library.items.filter((item) => !leaving.has(String(item.id)));
+  }
+
+  function blacklisted(itemId: string) {
+    return { itemId, isFavorite: false, isBlacklisted: true, previousIsFavorite: false, previousIsBlacklisted: false };
+  }
+
+  it("items this device's bulk action takes out of the results leave the selection, which ends when none are left", async () => {
+    const { page, library } = await mountLibrary(libraryItems(5), (server) => {
+      server.on("POST", "/api/bulk/item-state", () => json({ count: 2 }));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-2")!);
+
+    await pickAction("Add to blacklist");
+    leaveResults(library, ["item-1", "item-2"]);
+    page.stream().emit("bulkItemStateChanged", 2, {
+      flag: "blacklist",
+      value: true,
+      count: 2,
+      items: [blacklisted("item-1"), blacklisted("item-2")],
+      clientId: page.clientId()
+    });
+
+    await waitFor(() => expect(selecting()).toBe(false));
+    expect(countLine()).toBe("3 / 3 shown");
+    expect(selectedTiles()).toEqual([]);
+  });
+
+  it("this device's change to a selected item past the loaded tiles takes it out, and the counts and Select all follow", async () => {
+    const { page, library } = await selectAllItems();
+    leaveResults(library, ["item-1000"]);
+    page.stream().emit("itemStateChanged", 2, { ...blacklisted("item-1000"), path: "C:\\media\\clip 1000.mp4", clientId: page.clientId() });
+
+    const left = grouped(MATCHING - 1);
+    await waitFor(() => expect(barParts()[2]).toBe(`${left} / ${left} selected`));
+    expect(countLine()).toBe(`${left} / ${left} shown`);
+    expect([barButton("Select all").disabled, barButton("Select all").title]).toEqual([true, "Everything is already selected"]);
+  });
+
+  it("another device's change takes selected items out, loaded or not", async () => {
+    const { page, library } = await selectAllItems();
+    leaveResults(library, ["item-2", "item-1000"]);
+    page.stream().emit("bulkItemStateChanged", 2, {
+      flag: "blacklist",
+      value: true,
+      count: 2,
+      items: [blacklisted("item-2"), blacklisted("item-1000")],
+      clientId: "another-client"
+    });
+
+    const left = grouped(MATCHING - 2);
+    await waitFor(() => expect(barParts()[2]).toBe(`${left} / ${left} selected`));
+    expect(tile("item-2")).toBeNull();
+    expect(barButton("Select all").disabled).toBe(true);
+  });
+
+  it("a refresh that removes selected items takes them out of the selection", async () => {
+    const { page, library } = await mountLibrary(libraryItems(5));
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-3")!);
+
+    leaveResults(library, ["item-3"]);
+    page.stream().emit("refreshStatusChanged", 2, { snapshot: FINISHED_REFRESH });
+
+    await waitFor(() => expect(barParts()[2]).toBe("1 / 4 selected"));
+    expect(selectedTiles()).toEqual(["item-1"]);
+  });
+
+  it("a removal of more than 1,000 items that arrives as a resync takes them out of the selection", async () => {
+    const { page, library } = await selectAllItems();
+    leaveResults(library, Array.from({ length: 1100 }, (_, index) => `item-${index + 1}`));
+    page.stream().emit("resyncRequired", 2, { reason: "itemsRemoved", lastEventId: 1, currentRevision: 2 });
+
+    const left = grouped(MATCHING - 1100);
+    await waitFor(() => expect(barParts()[2]).toBe(`${left} / ${left} selected`));
+    expect(selectedTiles()[0]).toBe("item-1101");
+    expect(barButton("Select all").disabled).toBe(true);
   });
 });
 

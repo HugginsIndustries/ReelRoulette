@@ -69,12 +69,13 @@ export function playbackTraceLine(
 }
 
 /**
- * Builds the line relayed to the server log when the Filter or Tags tab fails to load again for a server event. It
- * names the failure's HTTP status, or the error's type, never its message, which can hold a name.
+ * Builds the line relayed to the server log for a request that failed on its own, with no notice, such as
+ * `filter=event-load-failed`: `line`, then the failure's HTTP status, or the error's type, never its message, which can
+ * hold a name.
  */
-export function eventLoadFailedLine(tab: "filter" | "tags", error: unknown): string {
+export function failureLine(line: string, error: unknown): string {
   if (error instanceof HttpStatusError) {
-    return `${tab}=event-load-failed status=${error.status}`;
+    return `${line} status=${error.status}`;
   }
-  return `${tab}=event-load-failed error=${errorType(error)}`;
+  return `${line} error=${errorType(error)}`;
 }

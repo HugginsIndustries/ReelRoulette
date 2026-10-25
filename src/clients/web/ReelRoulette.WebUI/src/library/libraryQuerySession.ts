@@ -35,9 +35,11 @@ type LibraryIdsQueryRequest = components["schemas"]["LibraryIdsQueryRequest"];
 
 /**
  * What a query matches by: the filter and the search, without its sort or its page, as `POST /api/library/query-ids`
- * takes it, always with both.
+ * takes them, always with both.
  */
-export type LibraryMatchQuery = { [Key in keyof LibraryIdsQueryRequest]-?: NonNullable<LibraryIdsQueryRequest[Key]> };
+export type LibraryMatchQuery = {
+  [Key in "filterState" | "search"]-?: NonNullable<LibraryIdsQueryRequest[Key]>;
+};
 
 export interface LibraryQueryRequest extends LibraryMatchQuery {
   sortMode: LibrarySortMode;
@@ -72,6 +74,8 @@ export interface LibraryQuerySessionSnapshot {
 
 export interface LibraryQuerySessionEvent {
   scroll: "top" | "keep";
+  /** The window was read again from its first page, so items may have left the results. */
+  reloaded?: boolean;
   /**
    * A failed load's message: for the first page, its `last.log` line, with its status, since the body shows
    * `failureText`; for a later one, the popup's text.
@@ -103,7 +107,7 @@ export interface LibraryTileFlags {
 /**
  * One item's change from a favorite, blacklist, playback, tag, or rating event. `before` is the favorite and blacklist
  * before the event: the loaded tile's, or the event's previous values for an item that is not loaded. A rating change
- * gives the event's rating and the one before, in stars or null for none.
+ * gives the event's rating and the one before, in stars or null for none, and a play the item's play count after it.
  */
 export interface LibraryTileChange {
   kind: LibraryQueryTileEvent;
@@ -114,6 +118,7 @@ export interface LibraryTileChange {
   removedTags?: readonly string[] | null;
   rating?: number | null;
   previousRating?: number | null;
+  playCount?: number | null;
 }
 
 export type LibraryTileEffectFilter = Pick<
@@ -194,9 +199,10 @@ export function libraryQueryReloadWindows(loadedCount: number): Array<{ offset: 
 }
 
 /**
- * Reload the loaded window only when the change can alter what it shows or its order. A loaded tile reloads
- * when a changed field is in the filter or sort and can take it out or move it. An item that is not loaded
- * reloads only when the change could bring it into the window. Locked to src/test/fixtures/library-tile-effect.json.
+ * Reload the loaded window only when the change can alter what it shows, its order, or how many items match. A loaded
+ * tile reloads when a changed field is in the filter or sort and can take it out or move it. An item that is not
+ * loaded reloads when the change could bring it into the results or take it out of them, so the count follows. Locked
+ * to src/test/fixtures/library-tile-effect.json.
  */
 export function libraryQueryTileEffect(
   change: LibraryTileChange,
@@ -209,7 +215,12 @@ export function libraryQueryTileEffect(
       reload = flagChangeReloads(change, filter);
       break;
     case "playback":
-      reload = sortMode === "LastPlayed" || sortMode === "PlayCount" || (change.loaded && filter.onlyNeverPlayed);
+      // A first play takes an item out of Only never played. A loaded tile was never played, and an item that is not
+      // loaded was when the play brought its count to 1, which a missing count is taken for.
+      reload =
+        sortMode === "LastPlayed" ||
+        sortMode === "PlayCount" ||
+        (filter.onlyNeverPlayed && (change.loaded || (change.playCount ?? 1) === 1));
       break;
     case "tags":
       reload = tagChangeReloads(change, filter);
@@ -231,32 +242,28 @@ function modeAllows(mode: FlagFilterMode, flag: boolean): boolean {
   return mode === "off" || (mode === "only" ? flag : !flag);
 }
 
+/**
+ * Reloads when the item matched the flag filters before the change and doesn't after it, or the reverse. Without the
+ * values before it, the item may have entered or left, so it reloads.
+ */
 function flagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
   const { favoritesMode, blacklistedMode } = filter;
   if (favoritesMode === "off" && blacklistedMode === "off") {
     return false;
   }
-  const after = change.after;
-  if (!after) {
+  const { before, after } = change;
+  if (!before || !after) {
     return true;
   }
   const matches = (flags: LibraryTileFlags) =>
     modeAllows(favoritesMode, flags.isFavorite) && modeAllows(blacklistedMode, flags.isBlacklisted);
-  const before = change.before;
-  if (before) {
-    if (change.loaded) {
-      return (
-        (favoritesMode !== "off" && before.isFavorite !== after.isFavorite) ||
-        (blacklistedMode !== "off" && before.isBlacklisted !== after.isBlacklisted)
-      );
-    }
-    // With the previous values known, an item that is not loaded reloads only when it enters the filter.
-    return !matches(before) && matches(after);
-  }
-  return matches(after);
+  return matches(before) !== matches(after);
 }
 
-/** Adding a selected tag or removing an excluded one can only bring an item in; the reverse can only take it out. */
+/**
+ * Removing a selected tag or adding an excluded one can take a loaded tile out, and adding a selected tag keeps it in.
+ * An item that is not loaded can enter or leave with any change to a filtered tag.
+ */
 function tagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
   const selected = new Set(filter.selectedTags.map((tag) => tag.toLowerCase()));
   const excluded = new Set(filter.excludedTags.map((tag) => tag.toLowerCase()));
@@ -268,12 +275,13 @@ function tagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFi
   if (change.loaded) {
     return hits(change.removedTags, selected) || hits(change.addedTags, excluded);
   }
-  return hits(change.addedTags, selected) || hits(change.removedTags, excluded);
+  const filtered = new Set([...selected, ...excluded]);
+  return hits(change.addedTags, filtered) || hits(change.removedTags, filtered);
 }
 
 /**
- * Only unrated and a minimum rating keep a loaded tile while its new rating still matches, and reload for an item that
- * is not loaded only when its new rating matches and the one before didn't.
+ * Only unrated and a minimum rating reload when the item matched before the change and doesn't after it, or the
+ * reverse: a loaded tile matched, and an item that is not loaded matched when its previous rating did.
  */
 function ratingChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
   const { onlyUnrated, minRating } = filter;
@@ -281,8 +289,8 @@ function ratingChangeReloads(change: LibraryTileChange, filter: LibraryTileEffec
     return false;
   }
   const matches = (rating: number | null) => (!onlyUnrated || rating === null) && (minRating === null || (rating ?? 0) >= minRating);
-  const rating = change.rating ?? null;
-  return change.loaded ? !matches(rating) : matches(rating) && !matches(change.previousRating ?? null);
+  const matchedBefore = change.loaded || matches(change.previousRating ?? null);
+  return matchedBefore !== matches(change.rating ?? null);
 }
 
 /** An in-flight reset stays a reset. Any other open query, or a reload effect, reads the loaded window again. */
@@ -498,7 +506,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       if (gen === generation) {
         inFlight = null;
-        notify({ scroll, statusMessage: null });
+        notify({ scroll, statusMessage: null, reloaded: kind !== "append" });
       }
     } catch (error) {
       if (gen !== generation || controller.signal.aborted) {
@@ -613,7 +621,8 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       const index = indexProjectionItems(items);
       const change: LibraryTileChange = {
         kind: "playback",
-        loaded: findProjectionItem(index, payload.itemId) != null
+        loaded: findProjectionItem(index, payload.itemId) != null,
+        playCount: payload.playCount
       };
       const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
       if (replay) {
