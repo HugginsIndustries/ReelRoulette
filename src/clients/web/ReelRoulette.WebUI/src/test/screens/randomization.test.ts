@@ -133,7 +133,7 @@ function byCategoryIcon(): HTMLElement | null {
 }
 
 function randomLine(): string {
-  return document.getElementById("library-random-line")?.textContent ?? "";
+  return document.querySelector("#library-random-line .library-line-text")?.textContent ?? "";
 }
 
 function cycleReads(server: FakeServer) {

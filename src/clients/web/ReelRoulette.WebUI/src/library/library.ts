@@ -107,8 +107,10 @@ export interface Library {
   readonly filterSummary: ReadonlySignal<string[]>;
   /** The random pick options as the Random line names them after its label, such as "Shuffle · Spread by folder". */
   readonly randomLine: ReadonlySignal<string>;
-  /** The tab's count line, "{matching} / {total}", or null while it is hidden. */
+  /** The tab's count line, "{matching} / {total} shown", or null while it is hidden. */
   readonly summary: ReadonlySignal<string | null>;
+  /** How many items the search and the filter match, while the window is ready, or null. */
+  readonly matchCount: ReadonlySignal<number | null>;
   /** The sort direction button's label. It changes when a page in the new order arrives. */
   readonly directionLabel: ReadonlySignal<string>;
   readonly body: ReadonlySignal<LibraryBody>;
@@ -644,6 +646,7 @@ export function createLibrary(options: LibraryOptions): Library {
     filterSummary,
     randomLine,
     summary,
+    matchCount,
     directionLabel,
     body,
     selection,

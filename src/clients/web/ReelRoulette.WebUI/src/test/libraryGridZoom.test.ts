@@ -9,8 +9,8 @@ import {
   type ZoomView
 } from "../library/libraryGridZoom";
 
-/** The scales a gesture at 160 px rows can reach, 100 to 300 px. */
-const START: GridZoomStart = { left: 20, top: 40, minScale: 100 / 160, maxScale: 300 / 160 };
+/** The scales a gesture at 160 px rows can reach, 120 to 300 px. */
+const START: GridZoomStart = { left: 20, top: 40, minScale: 120 / 160, maxScale: 300 / 160 };
 
 function host(start: GridZoomStart | null = START) {
   const shows: ZoomView[] = [];

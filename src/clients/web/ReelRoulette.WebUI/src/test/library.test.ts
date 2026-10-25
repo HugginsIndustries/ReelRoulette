@@ -273,7 +273,7 @@ describe("library window", () => {
     t.showTab();
     expect(t.library.isOpen()).toBe(true);
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.summary.peek()).toBe("3 / 3");
+    expect(t.library.summary.peek()).toBe("3 / 3 shown");
     const grid = t.mountGrid();
     expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], resetScroll: false }]);
     expect(t.queries()).toHaveLength(1);
@@ -407,7 +407,7 @@ describe("library window", () => {
     t.fakeLibrary.failures.push(503);
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.summary.peek()).toBe("3 / 3");
+    expect(t.library.summary.peek()).toBe("3 / 3 shown");
     expect(t.statuses).toEqual(["Library load failed (HTTP 503)."]);
 
     t.showTab();
@@ -429,7 +429,7 @@ describe("library window", () => {
     t.emit("refreshCompleted");
     await settle();
     expect(grid.contents.at(-1)).toEqual({ ids: ["item-1", "item-2"], resetScroll: false });
-    expect(t.library.summary.peek()).toBe("2 / 2");
+    expect(t.library.summary.peek()).toBe("2 / 2 shown");
 
     t.showTab();
     expect(grid.flushes).toEqual(["shown"]);
@@ -515,7 +515,7 @@ describe("row height", () => {
     expect((await shownGrid(setup({ storage }))).rowHeight).toBe(243);
   });
 
-  for (const kept of ["99", "301", "160.5", "\"200\"", "null", "{"]) {
+  for (const kept of ["99", "119", "301", "160.5", "\"200\"", "null", "{"]) {
     it(`creates the grid at 160 px rows when the kept row height is ${kept}`, async () => {
       const storage = deviceStorage({ "rr_device.library.rowHeight": kept });
       expect((await shownGrid(setup({ storage }))).rowHeight).toBe(160);
@@ -643,12 +643,12 @@ describe("search and sort", () => {
     expect(t.library.directionLabel.peek()).toBe("A–Z");
     await settle();
     expect(t.queries()[1]).toMatchObject({ sortMode: "PlayCount", sortDescending: true, offset: 0 });
-    expect(t.library.directionLabel.peek()).toBe("Most Plays → Least Plays");
+    expect(t.library.directionLabel.peek()).toBe("Most → Least");
 
     t.library.toggleSortDirection();
     await settle();
     expect(t.queries()[2]).toMatchObject({ sortMode: "PlayCount", sortDescending: false });
-    expect(t.library.directionLabel.peek()).toBe("Least Plays → Most Plays");
+    expect(t.library.directionLabel.peek()).toBe("Least → Most");
   });
 });
 

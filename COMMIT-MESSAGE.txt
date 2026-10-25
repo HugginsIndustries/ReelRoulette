@@ -20,13 +20,13 @@ Instructions:
 
 Commit Message:
 
-M12m: Settle the Library tab's look in the mockup, and start the grid's zoom at 120 px
+M12m: Build the Library tab's approved look
 
-- Every tile has rounded 4 px corners, and a selected tile is grey around its thumbnail, inset 8 px at every zoom, so the Mockup tab has no grid look choices left.
-- The gap between tiles follows the row height the zoom sets, the same in every row: 2 px from 120 to 179 px, 3 px from 180 to 239 px, and 4 px from 240 to 300 px, in whole device pixels.
-- The zoom's smallest row height is 120 px in place of 100, in the mockup now and in the app with the Library look slice.
-- The count line reads "{matching} / {total} shown", the closed preset dropdown reads "Preset: {name}", with a bold "Preset:" in its padding, its options' plain names, and "Loading…", the Filters and Random lines end with a chevron, with a faint tint on hover, the Play count sort reads "Most → Least" and "Least → Most", and the selection bar reads "{n} / {matching} selected".
-- The preset dropdown, search, Sort, and its direction are the lines' 32 px height, with 16 px text, and the preset and search share a row only once the controls are 520 px wide, in place of 414.
-- MILESTONES.md renames the Grid look slice the Library look slice and records the approved mockup's look, the gap rule, the zoom's new minimum, and the Library tab changes, with their traps, the docs, tests, and changelog entry that still give the old values among them, and their acceptance.
-- Long-Press Tooltips on Touch Screens becomes WebUI Tooltips: the app draws every tooltip in its own theme, on desktop hover too, and a long press shows the same tip, with traps for the title attributes it replaces and the tests that read them.
-- MILESTONES.md's Maintenance Rules add that work the user wants done later goes into the Scope of the milestone that will do it, never only into a Not included section.
+- WebUI: A selected tile's thumbnail is inset 8 px with 4 px corners in a grey frame, #333333 or #e0e3e8 by theme, and its check mark shows black, or white in the light theme, with the shadow around the whole mark. Every tile has 4 px corners, and the grid has no border, corners, or background of its own.
+- WebUI: Tiles sit 2 px apart while the rows aim for 120 to 179 px, 3 px to 239 px, and 4 px to 300 px, with the gap, each row's height, and each tile's edges on whole device pixels, laid out again after a browser zoom, so every gap draws the same width. The zoom's smallest row height is 120 px.
+- WebUI: The grid's thin scrollbar sits centered in the tab's right margin, and the tiles keep their width whether a scrollbar takes room or not.
+- WebUI: The count line reads "{matching} / {total} shown", the selection bar "{n} / {matching} selected", the Play count sort "Most → Least" and "Least → Most", and the preset dropdown "Preset: {name}", with a bold label in its padding, and "Loading…".
+- WebUI: The Filters and Random lines end with a chevron and tint faintly on hover with a mouse, and they and the controls are 32 px high, on a phone on its side too, with the controls' text at 16 px. The preset and search share a row from a panel about 546 px wide.
+- WebUI: The Library tab takes the other tabs' header, field, button, and icon button styles, as the mockup does, so its fields are lighter in the dark theme, the sort direction button takes their 16 px text, and the count line is the muted grey, and its error messages take the app's error red.
+- Cleanup: The Library tab's own copies of those styles, its unused result-list styles, and the theme tokens nothing read are gone.
+- Docs: CONTEXT.md, docs/domain-inventory.md, the changelog, and the testing checklist describe the new look, the mockup's selection count cuts off with "…" as the app's does, and MILESTONES.md records the slice's evidence.

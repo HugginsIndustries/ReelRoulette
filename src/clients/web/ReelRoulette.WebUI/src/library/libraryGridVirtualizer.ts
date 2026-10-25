@@ -29,13 +29,14 @@ export interface LibraryGridVirtualizerState {
 export function buildGridRowsFromItems(
   items: readonly LibraryProjectionItem[],
   layoutWidth: number,
-  targetRowHeight: number
+  targetRowHeight: number,
+  devicePixelRatio: number
 ): LibraryGridRowLayout[] {
   if (items.length === 0) {
     return [];
   }
   const aspects = buildItemAspectRatios(items);
-  return buildRows(aspects, 0, aspects.length, layoutWidth, targetRowHeight);
+  return buildRows(aspects, 0, aspects.length, layoutWidth, targetRowHeight, devicePixelRatio);
 }
 
 export function rebuildOffsetIndex(rows: readonly LibraryGridRowLayout[]): GridOffsetIndex {
@@ -146,9 +147,10 @@ export function findVisibleRowRange(
 export function createVirtualizerState(
   items: readonly LibraryProjectionItem[],
   layoutWidth: number,
-  targetRowHeight: number
+  targetRowHeight: number,
+  devicePixelRatio: number
 ): LibraryGridVirtualizerState {
-  const rows = buildGridRowsFromItems(items, layoutWidth, targetRowHeight);
+  const rows = buildGridRowsFromItems(items, layoutWidth, targetRowHeight, devicePixelRatio);
   return {
     rows,
     offsetIndex: rebuildOffsetIndex(rows)

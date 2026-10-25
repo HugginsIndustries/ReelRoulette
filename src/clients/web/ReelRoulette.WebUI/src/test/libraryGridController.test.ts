@@ -9,7 +9,6 @@ import {
   type LibraryGridCoverage,
   type LibraryGridOptions
 } from "../library/libraryGridController";
-import { TILE_GAP } from "../library/libraryGridLayout";
 import {
   createVirtualizerState,
   findRowIndexForItem,
@@ -22,10 +21,17 @@ import { stubMatchingMediaQuery, stubProperty, type Restores } from "./stubs";
 
 const VIEWPORT_HEIGHT = 600;
 const RESIZE_DEBOUNCE_MS = 90;
+/** The Library tab's right margin, its right padding, which the grid's scrollbar sits in. */
+const TAB_MARGIN = 12;
 
-/** The grid's width while it shows; 0 hides it, as a hidden tab does. */
+/** The grid's width while it shows, inside the Library tab's margins; 0 hides it, as a hidden tab does. */
 let panelWidth = 800;
-/** The width of the grid scroller's scrollbar, which its `clientWidth` leaves out, as a browser's does. */
+/** The grid's height while it shows. */
+let viewportHeight = VIEWPORT_HEIGHT;
+/**
+ * The width a scrollbar takes on the grid's scroller, which its `clientWidth` leaves out, as a browser's does; 0 for
+ * one drawn over the content.
+ */
 let scrollbarWidth = 0;
 const resizeCallbacks: Array<() => void> = [];
 /** Undoes what the tests stubbed on shared prototypes and the window, newest first. */
@@ -43,23 +49,37 @@ function hasBox(element: HTMLElement): boolean {
   return true;
 }
 
+/** An element's width with its border, as a browser lays it out: the grid's scroller reaches past its negative margin. */
+function boxWidth(element: HTMLElement): number {
+  if (!hasBox(element)) {
+    return 0;
+  }
+  if (!element.classList.contains("library-grid-scroll")) {
+    return panelWidth;
+  }
+  return panelWidth - (Number.parseFloat(element.style.marginRight) || 0);
+}
+
 /**
- * Gives shown elements the panel's width, less the scrollbar's on the grid's scroller, and the viewport's height, as
- * happy-dom lays nothing out, and makes an element without a box ignore scrolling, as a browser does. happy-dom's
- * ResizeObserver never calls back, so `resize` does.
+ * Gives shown elements the panel's width, with the grid's scroller reaching past its negative right margin and its
+ * `clientWidth` less the scrollbar's, and the viewport's height, as happy-dom lays nothing out, and makes an element
+ * without a box ignore scrolling, as a browser does. happy-dom's ResizeObserver never calls back, so `resize` does.
  */
 function stubLayout(): void {
+  stubProperty(restores, HTMLElement.prototype, "offsetWidth", {
+    get(this: HTMLElement) {
+      return boxWidth(this);
+    }
+  });
   stubProperty(restores, HTMLElement.prototype, "clientWidth", {
     get(this: HTMLElement) {
-      if (!hasBox(this)) {
-        return 0;
-      }
-      return this.classList.contains("library-grid-scroll") ? panelWidth - scrollbarWidth : panelWidth;
+      const width = boxWidth(this);
+      return width > 0 && this.classList.contains("library-grid-scroll") ? width - scrollbarWidth : width;
     }
   });
   stubProperty(restores, HTMLElement.prototype, "clientHeight", {
     get(this: HTMLElement) {
-      return hasBox(this) ? VIEWPORT_HEIGHT : 0;
+      return hasBox(this) ? viewportHeight : 0;
     }
   });
   const scrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")!;
@@ -126,9 +146,13 @@ function thumbnailItems(count: number): LibraryProjectionItem[] {
   });
 }
 
+/** A grid in a Library tab with its right margin. */
 function createGrid(options?: LibraryGridOptions): { container: HTMLElement; grid: LibraryGridController } {
+  const tab = document.createElement("div");
+  tab.style.paddingRight = `${TAB_MARGIN}px`;
   const container = document.createElement("div");
-  document.body.appendChild(container);
+  tab.appendChild(container);
+  document.body.appendChild(tab);
   return { container, grid: createLibraryGridController(container, "http://localhost", options) };
 }
 
@@ -155,6 +179,15 @@ function rows(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(".library-grid-row"));
 }
 
+function rowsLayer(container: HTMLElement): HTMLElement {
+  return container.querySelector<HTMLElement>(".library-grid-rows")!;
+}
+
+/** The gap between tiles, which the grid sets on the rows' layer for the stylesheet. */
+function tileGapOf(container: HTMLElement): number {
+  return Number.parseFloat(rowsLayer(container).style.getPropertyValue("--library-grid-gap"));
+}
+
 function tilesById(container: HTMLElement): Map<string, HTMLElement> {
   return new Map(
     Array.from(container.querySelectorAll<HTMLElement>(".library-grid-tile")).map((tile) => [tile.dataset.itemId!, tile])
@@ -174,6 +207,7 @@ function rowsByFirstItem(container: HTMLElement): Map<string, HTMLElement> {
 
 beforeEach(() => {
   panelWidth = 800;
+  viewportHeight = VIEWPORT_HEIGHT;
   scrollbarWidth = 0;
   resizeCallbacks.length = 0;
   stubLayout();
@@ -254,26 +288,39 @@ describe("layout width", () => {
   function rowWidths(container: HTMLElement): number[] {
     return rows(container).map((row) => {
       const tiles = Array.from(row.querySelectorAll<HTMLElement>(".library-grid-tile"));
-      return tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + TILE_GAP * (tiles.length - 1);
+      return tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + tileGapOf(container) * (tiles.length - 1);
     });
   }
 
-  it("lays the rows out beside the grid's scrollbar, whose room the grid always keeps", () => {
-    vi.useFakeTimers();
-    scrollbarWidth = 16;
-    const { container, grid } = createGrid();
-    grid.setBrowseContent({ visibleItems: thumbnailItems(400) });
+  /** Where the middle of the grid's scrollbar is, from the edge of the Library tab's content into its right margin. */
+  function scrollbarMiddle(container: HTMLElement): number {
+    const reach = -Number.parseFloat(scroller(container).style.marginRight);
+    return reach - (scrollbarWidth || 8) / 2;
+  }
 
-    expect(rowWidths(container).length).toBeGreaterThan(3);
-    expect(rowWidths(container)).toEqual(rowWidths(container).map(() => expect.closeTo(784, 4)));
-    resizeTo(600);
-    expect(rowWidths(container)).toEqual(rowWidths(container).map(() => expect.closeTo(584, 4)));
+  for (const [kind, width] of [
+    ["a scrollbar that takes room", 10],
+    ["a scrollbar drawn over the content", 0]
+  ] as const) {
+    it(`centers ${kind} in the Library tab's right margin, keeping the tiles to the tab's width`, () => {
+      vi.useFakeTimers();
+      scrollbarWidth = width;
+      const { container, grid } = createGrid();
+      grid.setBrowseContent({ visibleItems: thumbnailItems(400) });
 
-    // The room stays kept whether or not the rows fill the grid, so the width the rows are laid out to doesn't change as
-    // the scrollbar comes and goes.
+      expect(scrollbarMiddle(container)).toBe(TAB_MARGIN / 2);
+      expect(rowWidths(container).length).toBeGreaterThan(3);
+      expect(rowWidths(container)).toEqual(rowWidths(container).map(() => expect.closeTo(800, 9)));
+      resizeTo(600);
+      expect(scrollbarMiddle(container)).toBe(TAB_MARGIN / 2);
+      expect(rowWidths(container)).toEqual(rowWidths(container).map(() => expect.closeTo(600, 9)));
+      grid.destroy();
+    });
+  }
+
+  it("keeps the scrollbar's room whether or not the rows fill the grid, so its place doesn't change as it comes and goes", () => {
     const stylesheet = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../styles.css"), "utf8");
     expect(stylesheet).toMatch(/\.library-grid-scroll \{[^}]*\bscrollbar-gutter: stable;/);
-    grid.destroy();
   });
 });
 
@@ -487,10 +534,6 @@ function touchOver(container: HTMLElement, type: string, points: Array<[number, 
   return event;
 }
 
-function rowsLayer(container: HTMLElement): HTMLElement {
-  return container.querySelector<HTMLElement>(".library-grid-rows")!;
-}
-
 /** The rows' layer's scale and move while a gesture lasts. */
 function layerView(container: HTMLElement): { x: number; y: number; scale: number } {
   const match = /^translate\((\S+)px, (\S+)px\) scale\((\S+)\)$/.exec(rowsLayer(container).style.transform);
@@ -565,7 +608,7 @@ describe("grid zoom", () => {
     grid.destroy();
   });
 
-  it("settles once the wheel stops, at a row height from 100 to 300 px, its rows' shortest and tallest scaled with it", () => {
+  it("settles once the wheel stops, at a row height from 120 to 300 px, its rows' shortest and tallest scaled with it", () => {
     vi.useFakeTimers();
     const onRowHeightChange = vi.fn();
     const { container, grid } = createGrid({ onRowHeightChange });
@@ -575,19 +618,73 @@ describe("grid zoom", () => {
     zoomBy(container, 3, 300, 200);
     expect(onRowHeightChange.mock.calls).toEqual([[243]]);
     expect(rowsLayer(container).style.transform).toBe("");
-    expectShownRows(container, items, createVirtualizerState(items, 800, 243));
+    expectShownRows(container, items, createVirtualizerState(items, 800, 243, 1));
     for (const row of rows(container)) {
       expect(Number.parseFloat(row.style.height)).toBeGreaterThanOrEqual(243 * 0.625);
       expect(Number.parseFloat(row.style.height)).toBeLessThanOrEqual(243 * 1.5);
     }
 
     zoomBy(container, -20, 300, 200);
-    expect(onRowHeightChange).toHaveBeenLastCalledWith(100);
-    expectShownRows(container, items, createVirtualizerState(items, 800, 100));
+    expect(onRowHeightChange).toHaveBeenLastCalledWith(120);
+    expectShownRows(container, items, createVirtualizerState(items, 800, 120, 1));
 
     zoomBy(container, 20, 300, 200);
     expect(onRowHeightChange).toHaveBeenLastCalledWith(300);
-    expectShownRows(container, items, createVirtualizerState(items, 800, 300));
+    expectShownRows(container, items, createVirtualizerState(items, 800, 300, 1));
+    grid.destroy();
+  });
+
+  it("sets the gap for the row height the rows aim for on the rows' layer, and changes it when a zoom settles in another of its ranges", () => {
+    vi.useFakeTimers();
+    const { container, grid } = createGrid();
+    grid.setBrowseContent({ visibleItems: thumbnailItems(400) });
+    const gap = () => rowsLayer(container).style.getPropertyValue("--library-grid-gap");
+    expect(gap()).toBe("2px");
+
+    // While the gesture lasts the gap scales with the rows, and takes its new width when it settles.
+    wheelOver(container, { deltaY: -100, clientX: 300, clientY: 200 });
+    wheelOver(container, { deltaY: -100, clientX: 300, clientY: 200 });
+    expect(gap()).toBe("2px");
+    vi.advanceTimersByTime(1000);
+    expect(gap()).toBe("3px");
+    zoomBy(container, 2, 300, 200);
+    expect(gap()).toBe("4px");
+    zoomBy(container, -20, 300, 200);
+    expect(gap()).toBe("2px");
+    grid.destroy();
+  });
+
+  it("lays the rows out on whole device pixels at a fractional device pixel ratio, with the gap on them too", () => {
+    stubProperty(restores, window, "devicePixelRatio", { value: 1.25 });
+    const { container, grid } = createGrid({ rowHeight: 243 });
+    const items = thumbnailItems(400);
+    grid.setBrowseContent({ visibleItems: items });
+
+    expect(rowsLayer(container).style.getPropertyValue("--library-grid-gap")).toBe("4px");
+    expectShownRows(container, items, createVirtualizerState(items, 800, 243, 1.25));
+    const shown = rows(container);
+    expect(shown.length).toBeGreaterThan(3);
+    for (const row of shown) {
+      const height = Number.parseFloat(row.style.height) * 1.25;
+      expect(Math.abs(height - Math.round(height))).toBeLessThan(1e-6);
+    }
+    grid.destroy();
+  });
+
+  it("lays the rows out again on the new device pixels when the ratio changes but the width doesn't, as a browser zoom does", () => {
+    vi.useFakeTimers();
+    const { container, grid } = createGrid();
+    const items = thumbnailItems(400);
+    grid.setBrowseContent({ visibleItems: items });
+    expect(rowsLayer(container).style.getPropertyValue("--library-grid-gap")).toBe("2px");
+
+    // Zooming the page to 125% keeps the panel's width in CSS pixels; the grid's height changes, which the resize
+    // observer reports.
+    stubProperty(restores, window, "devicePixelRatio", { value: 1.25 });
+    resizeTo(800);
+
+    expect(rowsLayer(container).style.getPropertyValue("--library-grid-gap")).toBe("2.4px");
+    expectShownRows(container, items, createVirtualizerState(items, 800, 160, 1.25));
     grid.destroy();
   });
 
@@ -597,7 +694,7 @@ describe("grid zoom", () => {
     const { container, grid } = createGrid({ rowHeight: 220, onRowHeightChange });
     const items = thumbnailItems(400);
     grid.setBrowseContent({ visibleItems: items });
-    expectShownRows(container, items, createVirtualizerState(items, 800, 220));
+    expectShownRows(container, items, createVirtualizerState(items, 800, 220, 1));
 
     const event = wheelOver(container, { deltaY: -100, clientX: 300, clientY: 200, ctrlKey: false });
     vi.advanceTimersByTime(1000);
@@ -610,18 +707,23 @@ describe("grid zoom", () => {
 
   it("starts a gesture with the rows that fill the view at the smallest scale it can reach", () => {
     vi.useFakeTimers();
+    // A view tall enough that the rows to fill it at the smallest scale reach past the ones a scroll shows around it.
+    viewportHeight = 1200;
     const { container, grid } = createGrid({ rowHeight: 300 });
     grid.setBrowseContent({ visibleItems: thumbnailItems(400) });
-    scrollTo(container, 3000);
-    const extent = () => spacerHeight(container, "top") + rows(container).reduce((sum, row) => sum + Number.parseFloat(row.style.height) + 1, 0);
-    expect(spacerHeight(container, "top")).toBeGreaterThan(1800);
-    expect(extent()).toBeLessThan(4800);
+    scrollTo(container, 4000);
+    const extent = () =>
+      spacerHeight(container, "top") + rows(container).reduce((sum, row) => sum + Number.parseFloat(row.style.height) + tileGapOf(container), 0);
+    // A scroll shows the rows within 900 px of the view, give or take a row of at most 1.5 times 300 px.
+    expect(spacerHeight(container, "top")).toBeGreaterThan(4000 - 900 - 460);
+    expect(extent()).toBeLessThan(4000 + 1200 + 900 + 460);
 
     wheelOver(container, { deltaY: 100, clientX: 300, clientY: 200 });
 
-    // At a third of the size, the view shows three views' height of rows, from as far as two views above it.
-    expect(spacerHeight(container, "top")).toBeLessThanOrEqual(3000 - 2 * VIEWPORT_HEIGHT);
-    expect(extent()).toBeGreaterThanOrEqual(3000 + 3 * VIEWPORT_HEIGHT);
+    // At 120 px, 0.4 of the size, the view shows two and a half views' height of rows, from as far as one and a half
+    // views above it.
+    expect(spacerHeight(container, "top")).toBeLessThanOrEqual(4000 - 1.5 * 1200);
+    expect(extent()).toBeGreaterThanOrEqual(4000 + 2.5 * 1200);
     grid.destroy();
   });
 
@@ -667,7 +769,7 @@ describe("grid zoom", () => {
     grid.setBrowseContent({ visibleItems: items });
     scrollTo(container, 1500);
     // A tile at the top of where the grid scrolls to during the gesture, which the pointer is over when it settles.
-    const layout = createVirtualizerState(items, 800, 160);
+    const layout = createVirtualizerState(items, 800, 160, 1);
     const row = layout.offsetIndex.rowTopOffsets.findIndex((top) => top >= 2500);
     const patchedId = items[layout.rows[row]!.tiles[0]!.itemIndex]!.id;
     const badge = () => tilesById(container).get(patchedId)!.querySelector(".library-grid-tile-badge");
@@ -694,7 +796,7 @@ describe("grid zoom", () => {
 
     vi.advanceTimersByTime(1000);
     expect(badge()).not.toBeNull();
-    expectShownRows(container, patched, createVirtualizerState(patched, 560, 184));
+    expectShownRows(container, patched, createVirtualizerState(patched, 560, 184, 1));
     grid.destroy();
   });
 
@@ -710,7 +812,7 @@ describe("grid zoom", () => {
     vi.advanceTimersByTime(1000);
 
     expect(scroller(container).scrollTop).toBe(0);
-    expectShownRows(container, other, createVirtualizerState(other, 800, 184));
+    expectShownRows(container, other, createVirtualizerState(other, 800, 184, 1));
     grid.destroy();
   });
 
@@ -721,14 +823,14 @@ describe("grid zoom", () => {
     grid.setBrowseContent({ visibleItems: items });
     scrollTo(container, 1500);
     // The pointer over a row's first tile, a quarter of the way down it.
-    const before = createVirtualizerState(items, 800, 160);
+    const before = createVirtualizerState(items, 800, 160, 1);
     const row = before.offsetIndex.rowTopOffsets.findIndex((top) => top >= 1700);
     const anchorItem = before.rows[row]!.tiles[0]!.itemIndex;
     const clientY = before.offsetIndex.rowTopOffsets[row]! - 1500 + before.rows[row]!.rowHeight / 4;
 
     zoomBy(container, 3, 5, clientY);
 
-    const after = createVirtualizerState(items, 800, 243);
+    const after = createVirtualizerState(items, 800, 243, 1);
     const afterRow = findRowIndexForItem(after.rows, anchorItem);
     const top = after.offsetIndex.rowTopOffsets[afterRow]! - scroller(container).scrollTop;
     expect(top + after.rows[afterRow]!.rowHeight / 4).toBeCloseTo(clientY, 6);
@@ -738,15 +840,15 @@ describe("grid zoom", () => {
 
   it("moves each tile in view from its scaled place to its new one, and fades in the tiles coming into view", () => {
     vi.useFakeTimers();
-    const { container, grid } = createGrid();
+    const { container, grid } = createGrid({ rowHeight: 300 });
     const items = thumbnailItems(400);
     grid.setBrowseContent({ visibleItems: items });
-    const before = createVirtualizerState(items, 800, 160);
+    const before = createVirtualizerState(items, 800, 300, 1);
 
     zoomBy(container, -3, 10, 10);
 
     // In view now: the tiles of the rows that start above the view's bottom.
-    const after = createVirtualizerState(items, 800, 105);
+    const after = createVirtualizerState(items, 800, 197, 1);
     const inView = after.rows
       .filter((row, index) => after.offsetIndex.rowTopOffsets[index]! < VIEWPORT_HEIGHT)
       .flatMap((row) => row.tiles.map((tile) => `item-${tile.itemIndex}`));
@@ -785,10 +887,10 @@ describe("grid zoom", () => {
     const items = thumbnailItems(400);
     grid.setBrowseContent({ visibleItems: items });
 
-    zoomBy(container, -3, 10, 10);
+    zoomBy(container, -2, 10, 10);
 
-    expect(onRowHeightChange.mock.calls).toEqual([[105]]);
-    expectShownRows(container, items, createVirtualizerState(items, 800, 105));
+    expect(onRowHeightChange.mock.calls).toEqual([[121]]);
+    expectShownRows(container, items, createVirtualizerState(items, 800, 121, 1));
     expect(tileMoves(container).size).toBe(0);
     grid.destroy();
   });

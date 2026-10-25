@@ -1188,6 +1188,8 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 @media (prefers-reduced-motion: reduce) { .lib-tile-frame, .lib-tile-art { transition: none; } }
 .bulk-bar { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; position: relative; }
 .bulk-bar .btn { min-height: 40px; padding: 4px 10px; }
+/* A count wider than its room is cut off with "…" rather than wrapping. */
+#bulk-count { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .menu {
   position: absolute;
   bottom: calc(100% + 6px);

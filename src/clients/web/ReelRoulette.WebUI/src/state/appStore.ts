@@ -39,7 +39,7 @@ const APPLIED_FILTER_KEY = "filter.applied";
 /** A repeated message is relayed to the server log at most once in this window. */
 const STATUS_RELAY_REPEAT_MS = 1000;
 
-export const PRESET_MENU_LOADING = "Loading...";
+export const PRESET_MENU_LOADING = "Loading…";
 export const PRESET_MENU_LOAD_FAILED = "Error loading presets";
 export const PRESET_MENU_BLOCKED = "Server compatibility check failed";
 export const PRESET_MENU_NO_LIBRARY = "Running without a library";

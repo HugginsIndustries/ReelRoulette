@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultBrowseControls,
   formatBrowseResultSummary,
+  formatSelectionCount,
   getSortDirectionLabel,
   isDefaultDescendingForSortMode,
   LIBRARY_SORT_MODES,
@@ -40,9 +41,15 @@ describe("libraryBrowseModel", () => {
     }
   });
 
-  it("reads the count line as matching / total with grouped numbers", () => {
+  it("reads the count line as matching / total shown with grouped numbers", () => {
     const total = (49106).toLocaleString();
-    expect(formatBrowseResultSummary(615, 49106)).toBe(`615 / ${total}`);
-    expect(formatBrowseResultSummary(0, 0)).toBe("0 / 0");
+    expect(formatBrowseResultSummary(615, 49106)).toBe(`615 / ${total} shown`);
+    expect(formatBrowseResultSummary(0, 0)).toBe("0 / 0 shown");
+  });
+
+  it("reads the selection count as selected / matching with grouped numbers, or only the selected while no match count is known", () => {
+    expect(formatSelectionCount(15, 615)).toBe("15 / 615 selected");
+    expect(formatSelectionCount(1234, 49466)).toBe(`${(1234).toLocaleString()} / ${(49466).toLocaleString()} selected`);
+    expect(formatSelectionCount(3, null)).toBe("3 selected");
   });
 });

@@ -667,7 +667,7 @@ describe("createServerConnection", () => {
     });
     connection.start();
     await settle();
-    expect(store.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "", message: true });
+    expect(store.presetMenu.value).toEqual({ entries: [{ label: "Loading…", value: "" }], selectedValue: "", message: true });
 
     serverDown = false;
     sources[0]!.onopen?.(new Event("open"));
@@ -923,7 +923,7 @@ describe("createServerConnection", () => {
     const { store, connection, statuses, notified } = setup({ "GET /api/presets": () => json({}, presetsStatus) });
     await connection.loadPresets();
     expect(store.pairingRequired.value).toBe(true);
-    expect(store.presetMenu.value.entries).toEqual([{ label: "Loading...", value: "" }]);
+    expect(store.presetMenu.value.entries).toEqual([{ label: "Loading…", value: "" }]);
     expect(statuses).toEqual([]);
 
     presetsStatus = 500;

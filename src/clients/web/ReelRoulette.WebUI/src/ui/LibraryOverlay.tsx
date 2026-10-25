@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { FILTER_SUMMARY_LABEL, FILTER_SUMMARY_SEPARATOR } from "../filter/filterSummaryModel";
 import { ALL_SELECTED_REASON } from "../library/library";
-import { getSortLabel, LIBRARY_SORT_MODES } from "../library/libraryBrowseModel";
+import { formatSelectionCount, getSortLabel, LIBRARY_SORT_MODES } from "../library/libraryBrowseModel";
 import { TILE_CHECK_CLASS } from "../library/libraryGridTile";
 import type { LibraryOverlayMessage } from "../library/libraryOverlayModel";
 import { listenForTilePress, type TilePress } from "../library/libraryTilePress";
@@ -58,7 +58,7 @@ export function LibraryOverlay() {
         </p>
         <button
           id="library-controls-toggle"
-          class="icon-glyph-base icon-glyph-button library-controls-toggle"
+          class="icon-btn"
           type="button"
           aria-label={collapsed ? "Show library controls and filters" : "Hide library controls and filters"}
           title={collapsed ? "Show controls & filters" : "Hide controls & filters"}
@@ -72,15 +72,15 @@ export function LibraryOverlay() {
       <div id="library-controls" class={collapsed ? "library-controls is-collapsed" : "library-controls"}>
         <div class="library-controls-pair">
           <PresetSelect />
-          <input id="library-search-input" class="library-overlay-search" type="search" placeholder="Search…" aria-label="Search library" autocomplete="off" value={controls.searchQuery} disabled={blocked} onInput={(event) => library.setSearch(event.currentTarget.value)} />
+          <input id="library-search-input" class="ctl" type="search" placeholder="Search…" aria-label="Search library" autocomplete="off" value={controls.searchQuery} disabled={blocked} onInput={(event) => library.setSearch(event.currentTarget.value)} />
         </div>
         <div class="library-controls-sort">
-          <select id="library-sort-select" class="library-overlay-sort-select" aria-label="Sort library" value={controls.sortMode} disabled={blocked} onChange={(event) => library.setSortMode(event.currentTarget.value)}>
+          <select id="library-sort-select" class="ctl" aria-label="Sort library" value={controls.sortMode} disabled={blocked} onChange={(event) => library.setSortMode(event.currentTarget.value)}>
             {LIBRARY_SORT_MODES.map((mode) => (
               <option key={mode} value={mode}>{getSortLabel(mode)}</option>
             ))}
           </select>
-          <button id="library-sort-direction-btn" class="library-overlay-sort-direction" type="button" aria-label="Toggle sort direction" disabled={blocked} onClick={library.toggleSortDirection}>{library.directionLabel.value}</button>
+          <button id="library-sort-direction-btn" class="btn library-overlay-sort-direction" type="button" aria-label="Toggle sort direction" disabled={blocked} onClick={library.toggleSortDirection}>{library.directionLabel.value}</button>
         </div>
       </div>
       {body.kind === "grid" ? (
@@ -117,7 +117,7 @@ function SelectionBar() {
     <div id="library-selection-bar" class="library-selection-bar">
       <button
         id="library-select-all"
-        class="icon-glyph-base icon-glyph-button"
+        class="icon-btn"
         type="button"
         aria-label="Select all"
         title={allSelected ? ALL_SELECTED_REASON : "Select all"}
@@ -128,7 +128,7 @@ function SelectionBar() {
       </button>
       <button
         id="library-clear-selection"
-        class="icon-glyph-base icon-glyph-button"
+        class="icon-btn"
         type="button"
         aria-label="Clear selection"
         title="Clear selection"
@@ -136,11 +136,11 @@ function SelectionBar() {
       >
         <Icon name="deselect" />
       </button>
-      <span id="library-selection-count" class="library-selection-count">{`${selection.count.value.toLocaleString()} selected`}</span>
+      <span id="library-selection-count" class="library-selection-count">{formatSelectionCount(selection.count.value, library.matchCount.value)}</span>
       <div class="library-selection-actions" ref={actions}>
         <button
           id="library-selection-actions"
-          class="icon-glyph-base icon-glyph-button"
+          class="icon-btn"
           type="button"
           aria-label="Selection actions"
           title="Selection actions"
@@ -151,6 +151,19 @@ function SelectionBar() {
         <div id="library-selection-menu" class="library-selection-menu" hidden={!selection.menuOpen.value}></div>
       </div>
     </div>
+  );
+}
+
+/** A Filters or Random line's parts: its bold label and text, cut off with "…" before the chevron at its right edge. */
+function LineParts({ label, text }: { label: string; text: string }) {
+  return (
+    <>
+      <span class="library-line-text">
+        <b>{label}</b>
+        {text}
+      </span>
+      <Icon name="chevron_right" class="library-line-chevron" />
+    </>
   );
 }
 
@@ -167,8 +180,7 @@ function FilterSummary({ collapsed }: { collapsed: boolean }) {
       hidden={parts.length === 0}
       onClick={() => void library.openFilterTab()}
     >
-      <b>{FILTER_SUMMARY_LABEL}</b>
-      {parts.join(FILTER_SUMMARY_SEPARATOR)}
+      <LineParts label={FILTER_SUMMARY_LABEL} text={parts.join(FILTER_SUMMARY_SEPARATOR)} />
     </button>
   );
 }
@@ -184,31 +196,55 @@ function RandomLine({ collapsed }: { collapsed: boolean }) {
       title="Open the Randomization tab"
       onClick={() => void library.openRandomizationTab()}
     >
-      <b>{RANDOM_LINE_LABEL}</b>
-      {library.randomLine.value}
+      <LineParts label={RANDOM_LINE_LABEL} text={library.randomLine.value} />
     </button>
   );
 }
 
 /**
- * While it shows a message in place of the presets (loading, failed, the compatibility check, or running without a
- * library), it is disabled.
+ * The preset dropdown, which reads "Preset: {name}" while closed, its options keeping their plain names. "Preset:" sits
+ * in its left padding, which makes room for it by its measured width, since the font decides it, measured again
+ * whenever its size changes, as when the panel first shows it. While it shows a message in place of the presets
+ * (loading, failed, the compatibility check, or running without a library), it is disabled.
  */
 function PresetSelect() {
   const { store } = useApp();
   const menu = store.presetMenu.value;
+  const field = useRef<HTMLDivElement>(null);
+  const label = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const fit = () => {
+      const width = label.current!.getBoundingClientRect().width;
+      if (width) {
+        field.current!.style.setProperty("--preset-label-width", `${width}px`);
+      }
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(fit);
+    observer.observe(label.current!);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <select
-      id="preset-select"
-      aria-label="Choose preset"
-      value={menu.selectedValue}
-      disabled={menu.message}
-      onChange={(event) => store.pickHeaderPreset(event.currentTarget.value)}
-    >
-      {menu.entries.map((entry) => (
-        <option key={entry.value} value={entry.value}>{entry.label}</option>
-      ))}
-    </select>
+    <div class="library-preset-field" ref={field}>
+      <select
+        id="preset-select"
+        class="ctl"
+        aria-label="Choose preset"
+        value={menu.selectedValue}
+        disabled={menu.message}
+        onChange={(event) => store.pickHeaderPreset(event.currentTarget.value)}
+      >
+        {menu.entries.map((entry) => (
+          <option key={entry.value} value={entry.value}>{entry.label}</option>
+        ))}
+      </select>
+      <span class="library-preset-label" ref={label}>Preset:</span>
+    </div>
   );
 }
 

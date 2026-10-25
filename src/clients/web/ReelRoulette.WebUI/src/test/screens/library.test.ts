@@ -4,7 +4,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TILE_GAP } from "../../library/libraryGridLayout";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
@@ -228,7 +227,7 @@ function summary(): HTMLElement {
   return document.getElementById("library-overlay-summary") as HTMLElement;
 }
 
-/** The count line as it shows, such as "3 / 3". */
+/** The count line as it shows, such as "3 / 3 shown". */
 function countLine(): string {
   return summary().textContent ?? "";
 }
@@ -413,7 +412,7 @@ describe("first page", () => {
 
     await openLibrary();
     expect(summary().hidden).toBe(false);
-    expect(countLine()).toBe("3 / 3");
+    expect(countLine()).toBe("3 / 3 shown");
     expect(controlsShown()).toBe(true);
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4", "clip 3.mp4"]);
     expect(library.queries()).toHaveLength(1);
@@ -432,7 +431,7 @@ describe("first page", () => {
     await library.release();
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]);
-    expect(countLine()).toBe("2 / 2");
+    expect(countLine()).toBe("2 / 2 shown");
     expect(controlsShown()).toBe(true);
   });
 
@@ -449,6 +448,7 @@ describe("first page", () => {
   });
 
   it("shows the load error in the error color, keeping the controls", async () => {
+    useStylesheet();
     const { server, library } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
@@ -456,7 +456,16 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(overlay().querySelector(".library-overlay-status-error")?.textContent).toBe("Library load failed.");
+    const error = overlay().querySelector(".library-overlay-status-error")!;
+    expect(error.textContent).toBe("Library load failed.");
+    const errorColor = () => [currentStyle(error).color, currentStyle(document.documentElement).getPropertyValue("--error").trim()];
+    expect(errorColor()[0]).toBe(errorColor()[1]);
+    document.documentElement.classList.add("theme-light");
+    try {
+      expect(errorColor()[0]).toBe(errorColor()[1]);
+    } finally {
+      document.documentElement.classList.remove("theme-light");
+    }
     // It shows in place, so it only relays, with the status in place of the text.
     await expectRelayed(server, "Library load failed (HTTP 503).");
     expect(controlsShown()).toBe(true);
@@ -528,7 +537,7 @@ describe("first page", () => {
     expect(server.requests("GET", "/api/presets")).toHaveLength(presetLoads + 1);
   });
 
-  it("keeps the preset dropdown on Loading... while the presets need pairing, with only the pairing prompt", async () => {
+  it("keeps the preset dropdown on Loading… while the presets need pairing, with only the pairing prompt", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () => status(401));
     server.on("GET", "/api/presets", () => status(401));
@@ -536,7 +545,7 @@ describe("first page", () => {
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/version")));
     await settle();
 
-    expect(selectedPresetLabel()).toBe("Loading...");
+    expect(selectedPresetLabel()).toBe("Loading…");
     // Neither 401 shows anything but the pairing prompt: the server answered, so it isn't offline.
     expect(server.logLines().some((line) => line.startsWith("status=Reconnecting…"))).toBe(false);
     expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
@@ -586,7 +595,7 @@ describe("first page", () => {
     await openLibrary();
 
     expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
-    expect(countLine()).toBe("0 / 5");
+    expect(countLine()).toBe("0 / 5 shown");
     expect(controlsShown()).toBe(true);
   });
 });
@@ -610,7 +619,7 @@ describe("search and sort", () => {
     expect(library.queries()).toHaveLength(2);
     expect(library.queries()[1]).toMatchObject({ search: "hol", sortMode: "Name", offset: 0, limit: 200 });
     expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
-    expect(countLine()).toBe("0 / 3");
+    expect(countLine()).toBe("0 / 3 shown");
     expect(searchBox().value).toBe("hol");
   });
 
@@ -721,7 +730,7 @@ describe("fill on scroll", () => {
     await waitFor(() => expect(library.queries()).toHaveLength(2));
     expect(library.queries()[1]).toMatchObject({ offset: 200, limit: 200 });
     await flush();
-    expect(countLine()).toBe("450 / 450");
+    expect(countLine()).toBe("450 / 450 shown");
 
     await scrollGridTo(600);
     expect(library.queries()).toHaveLength(2);
@@ -767,7 +776,7 @@ describe("fill on scroll", () => {
     await scrollGridTo(1_000_100);
     await flush();
     expect(library.queries().slice(3).map((query) => query.offset)).toEqual([400, 600]);
-    expect(countLine()).toBe("650 / 650");
+    expect(countLine()).toBe("650 / 650 shown");
   });
 
   it("hiding and showing keeps the tiles and the scroll position without querying", async () => {
@@ -849,7 +858,7 @@ describe("fill on scroll", () => {
     expect(body()).toBe(host);
     expect(gridScroll()).toBe(scroller);
     expect(gridScroll().scrollTop).toBe(600);
-    expect(countLine()).toBe("449 / 449");
+    expect(countLine()).toBe("449 / 449 shown");
   });
 });
 
@@ -859,13 +868,13 @@ describe("starting over", () => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
     await openLibrary();
-    expect(countLine()).toBe("3 / 3");
+    expect(countLine()).toBe("3 / 3 shown");
 
     library.items = [libraryItem(2, { isFavorite: true })];
     library.searchBaselineCount = 3;
     await pickPreset("preset-favorites");
     expect(library.queries()[1]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 200 });
-    expect(countLine()).toBe("1 / 3");
+    expect(countLine()).toBe("1 / 3 shown");
     expect(tileNames()).toEqual(["clip 2.mp4"]);
   });
 
@@ -925,7 +934,7 @@ describe("live updates", () => {
     expect(library.queries()).toHaveLength(3);
     expect(library.queries()[2]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 3 });
     expect(tileNames()).toEqual(["clip 2.mp4", "clip 3.mp4"]);
-    expect(countLine()).toBe("2 / 2");
+    expect(countLine()).toBe("2 / 2 shown");
   });
 
   it("a playback event patches the tiles under Name and reloads them under Play count", async () => {
@@ -993,7 +1002,7 @@ describe("live updates", () => {
     expect(library.queries()).toHaveLength(3);
     expect(library.queries()[2]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 5 });
     expect(tileNames()).toEqual(["clip 4.mp4", "clip 5.mp4"]);
-    expect(countLine()).toBe("2 / 2");
+    expect(countLine()).toBe("2 / 2 shown");
   });
 
   it("a batch favoriting several loaded tiles updates each badge without reloading", async () => {
@@ -1061,7 +1070,7 @@ describe("live updates", () => {
     expect(library.queries()).toHaveLength(2);
     expect(library.queries()[1]).toMatchObject({ offset: 0, limit: 4 });
     expect(tileNames()).toEqual(["clip 2.mp4", "clip 4.mp4"]);
-    expect(countLine()).toBe("2 / 2");
+    expect(countLine()).toBe("2 / 2 shown");
   });
 
   it("a tag event on a loaded tile reloads the window under a tag filter", async () => {
@@ -1348,17 +1357,37 @@ function randomLine(): HTMLButtonElement {
   return document.getElementById("library-random-line") as HTMLButtonElement;
 }
 
+/** A Filters or Random line's text, its label included, before the chevron at its end. */
+function lineText(line: HTMLButtonElement): string {
+  return line.querySelector(".library-line-text")?.textContent ?? "";
+}
+
 function collapseButton(): HTMLButtonElement {
   return document.getElementById("library-controls-toggle") as HTMLButtonElement;
 }
 
+/** The gap the grid set between its tiles, across a row and between rows. */
+function tileGapShown(): number {
+  return Number.parseFloat(overlay().querySelector<HTMLElement>(".library-grid-rows")!.style.getPropertyValue("--library-grid-gap"));
+}
+
 /** The tiles' row heights and widths as the grid laid them out, gaps included. */
 function rowLayout(): Array<{ height: number; width: number }> {
+  const gap = tileGapShown();
   return Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-row")).map((row) => {
     const tiles = Array.from(row.querySelectorAll<HTMLElement>(".library-grid-tile"));
-    const width = tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + TILE_GAP * (tiles.length - 1);
+    const width = tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + gap * (tiles.length - 1);
     return { height: Number.parseFloat(row.style.height), width };
   });
+}
+
+/**
+ * The width the grid lays its rows out to: the scroller's, less the right padding that keeps the tiles clear of a
+ * scrollbar in the tab's margin. happy-dom lays nothing out, so a stubbed width doesn't grow as the scroller reaches into
+ * the margin, as a browser's does.
+ */
+function rowsWidth(scrollerWidth: number): number {
+  return scrollerWidth - Number.parseFloat(gridScroll().style.paddingRight || "0");
 }
 
 /** Unmounts the page and mounts it again with what this device remembers, as a page refresh does. */
@@ -1420,18 +1449,34 @@ describe("controls", () => {
     expect(controlsShown()).toBe(true);
   });
 
-  it("put the preset and search in one row from a panel about 440 px wide, and stack them narrower", async () => {
+  it("keep the collapse button at the header's right end while the count line is hidden", async () => {
+    useStylesheet();
+    const { library } = await mountLibrary(libraryItems(2));
+    await openLibrary();
+    library.failures.push(503);
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await flush();
+
+    // happy-dom lays nothing out, so the button's own margin stands in for its place: it takes the room the hidden
+    // count line leaves, rather than sitting beside the title.
+    expect(summary().hidden).toBe(true);
+    expect(currentStyle(collapseButton()).marginLeft).toBe("auto");
+  });
+
+  it("put the preset and search in one row from a panel about 546 px wide, and stack them narrower", async () => {
     await mountLibrary(libraryItems(3));
     await openLibrary();
-    const pair = presetSelect().parentElement!;
+    const field = presetSelect().parentElement!;
+    const pair = field.parentElement!;
+    expect(field.classList.contains("library-preset-field")).toBe(true);
     expect(pair.classList.contains("library-controls-pair")).toBe(true);
-    expect(Array.from(pair.children)).toEqual([presetSelect(), searchBox()]);
+    expect(Array.from(pair.children)).toEqual([field, searchBox()]);
 
     // happy-dom doesn't apply container queries (measured), so the rule's text stands in for the layout.
     const stylesheet = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
     expect(stylesheet).toMatch(/\.library-controls \{\s*container: library-controls \/ inline-size;/);
     expect(stylesheet).toMatch(
-      /@container library-controls \(min-width: 414px\) \{\s*\.library-controls-pair \{\s*flex-direction: row;\s*\}\s*\.library-controls-pair > \* \{\s*flex: 1 1 0;\s*\}\s*\}/
+      /@container library-controls \(min-width: 520px\) \{\s*\.library-controls-pair \{\s*flex-direction: row;\s*\}\s*\.library-controls-pair > \* \{\s*flex: 1 1 0;\s*min-width: 0;\s*\}\s*\}/
     );
     expect(stylesheet).toMatch(/\.library-controls-pair \{\s*display: flex;\s*flex-direction: column;/);
   });
@@ -1443,8 +1488,8 @@ describe("controls", () => {
     });
     await openLibrary();
     await pickPreset("preset-favorites");
-    expect(currentStyle(filtersLine()).display).toBe("block");
-    expect(currentStyle(randomLine()).display).toBe("block");
+    expect(currentStyle(filtersLine()).display).toBe("flex");
+    expect(currentStyle(randomLine()).display).toBe("flex");
     expect(collapseButton().title).toBe("Hide controls & filters");
     expect(collapseButton().getAttribute("aria-label")).toBe("Hide library controls and filters");
     expect(collapseButton().textContent).toBe("unfold_less");
@@ -1467,9 +1512,94 @@ describe("controls", () => {
 
     await click(collapseButton());
     expect(currentStyle(controls()).display).not.toBe("none");
-    expect(currentStyle(filtersLine()).display).toBe("block");
-    expect(currentStyle(randomLine()).display).toBe("block");
+    expect(currentStyle(filtersLine()).display).toBe("flex");
+    expect(currentStyle(randomLine()).display).toBe("flex");
     expect(collapseButton().title).toBe("Hide controls & filters");
+  });
+
+  it("show a bold Preset: label in the preset dropdown's left padding, before the name the dropdown draws", async () => {
+    useStylesheet();
+    // happy-dom lays nothing out, so the label's width the field makes room for is stubbed.
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, this.classList.contains("library-preset-label") ? 52 : 0, 0);
+    });
+    try {
+      await mountLibrary(libraryItems(3), (server) => {
+        server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+      });
+      await openLibrary();
+    } finally {
+      measure.mockRestore();
+    }
+    const field = presetSelect().parentElement!;
+    const label = field.querySelector<HTMLElement>(".library-preset-label")!;
+    expect(Array.from(field.children)).toEqual([presetSelect(), label]);
+    expect(label.textContent).toBe("Preset:");
+    expect(field.style.getPropertyValue("--preset-label-width")).toBe("52px");
+    const style = currentStyle(label);
+    expect([style.position, style.left, style.fontWeight, style.pointerEvents]).toEqual(["absolute", "11px", "600", "none"]);
+    expect(style.color).toBe(currentStyle(document.documentElement).getPropertyValue("--control-fg").trim());
+    expect(style.opacity).not.toBe("0.5");
+    // The dropdown draws the chosen name after the label, in its padding, and its options keep their plain names.
+    expect(stylesheetText()).toMatch(/\.library-preset-field > \.ctl \{[^}]*padding-left: calc\(14px \+ var\(--preset-label-width, 3\.75em\)\);/);
+    expect(Array.from(presetSelect().options).map((option) => option.textContent)).toEqual(["None", "Favorites"]);
+  });
+
+  it("show a message in the preset dropdown after its Preset: label, which dims with the disabled dropdown", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => status(500));
+    });
+    await openLibrary();
+    expect([presetSelect().disabled, selectedPresetLabel()]).toEqual([true, "Error loading presets"]);
+    expect(currentStyle(presetSelect().parentElement!.querySelector(".library-preset-label")!).opacity).toBe("0.5");
+  });
+
+  it("give the preset dropdown, search, Sort, its direction, and the Filters and Random lines one height, with the controls' text at 16 px", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await openLibrary();
+    await pickPreset("preset-favorites");
+    const fields = [presetSelect(), searchBox(), sortSelect(), directionButton()];
+    expect([...fields, filtersLine(), randomLine()].map((element) => currentStyle(element).height)).toEqual(Array(6).fill("32px"));
+    expect(fields.map((element) => currentStyle(element).fontSize)).toEqual(Array(4).fill("16px"));
+  });
+
+  it("take the other tabs' field and button styles, as the mockup does", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    expect([presetSelect(), searchBox(), sortSelect()].map((field) => field.classList.contains("ctl"))).toEqual([true, true, true]);
+    expect(directionButton().classList.contains("btn")).toBe(true);
+    expect([currentStyle(searchBox()).paddingLeft, currentStyle(sortSelect()).paddingLeft]).toEqual(["10px", "10px"]);
+    expect(currentStyle(summary()).color).toBe(currentStyle(document.documentElement).getPropertyValue("--muted-fg").trim());
+    const iconButtons = [collapseButton()];
+    expect(iconButtons.map((button) => button.className)).toEqual(["icon-btn"]);
+  });
+
+  it("end the Filters and Random lines with a chevron after their text, which is cut off with an ellipsis, and tint them on hover only where the device can hover", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await openLibrary();
+    await pickPreset("preset-favorites");
+    for (const line of [filtersLine(), randomLine()]) {
+      const [text, chevron] = Array.from(line.children) as HTMLElement[];
+      expect(line.children).toHaveLength(2);
+      expect(text!.className).toBe("library-line-text");
+      expect([chevron!.className, chevron!.textContent]).toEqual(["material-symbol-icon library-line-chevron", "chevron_right"]);
+      const textStyle = currentStyle(text!);
+      expect([textStyle.overflow, textStyle.textOverflow, textStyle.whiteSpace]).toEqual(["hidden", "ellipsis", "nowrap"]);
+      expect(currentStyle(chevron!).fontSize).toBe("18px");
+    }
+    const css = stylesheetText();
+    const hover = mediaBlocks(css, "(hover: hover)").join("\n").replace(/\s+/g, " ");
+    expect(hover).toContain(".library-line:hover { background: rgba(127, 127, 127, 0.1); }");
+    expect(outsideMedia(css, "(hover: hover)")).not.toMatch(/library-line[\w-]*:hover/);
+    expect(outsideMedia(css, "(hover: hover)")).not.toMatch(/\.library-overlay button:hover/);
   });
 });
 
@@ -1484,10 +1614,10 @@ describe("Filters line", () => {
     await pickPreset("preset-rich");
     expect(filtersLine().hidden).toBe(false);
     expect(filtersLine().querySelector("b")!.textContent).toBe("Filters: ");
-    expect(filtersLine().textContent).toBe("Filters: Favorites only · Only never played · Photos only · Min 01:30 · 2 tags · 1 tag excluded");
+    expect(lineText(filtersLine())).toBe("Filters: Favorites only · Only never played · Photos only · Min 01:30 · 2 tags · 1 tag excluded");
 
     await pickPreset("preset-blacklisted");
-    expect(filtersLine().textContent).toBe("Filters: Blacklisted only");
+    expect(lineText(filtersLine())).toBe("Filters: Blacklisted only");
 
     // Blacklisted excluded is the default, which the line doesn't name.
     await pickPreset("");
@@ -1507,11 +1637,11 @@ describe("Filters line", () => {
     await openLibrary();
 
     await pickPreset("preset-unrated");
-    expect(filtersLine().textContent).toBe("Filters: Only unrated");
+    expect(lineText(filtersLine())).toBe("Filters: Only unrated");
     await pickPreset("preset-good");
-    expect(filtersLine().textContent).toBe("Filters: Only files this browser can play · Min 3.5 stars · Videos only");
+    expect(lineText(filtersLine())).toBe("Filters: Only files this browser can play · Min 3.5 stars · Videos only");
     await pickPreset("preset-any");
-    expect(filtersLine().textContent).toBe("Filters: Min 1 star");
+    expect(lineText(filtersLine())).toBe("Filters: Min 1 star");
   });
 
   it("names the Added and Created ranges by their choice, after the durations and before the tags", async () => {
@@ -1528,13 +1658,13 @@ describe("Filters line", () => {
     await openLibrary();
 
     await pickPreset("preset-recent");
-    expect(filtersLine().textContent).toBe("Filters: Added in last 30 days");
+    expect(lineText(filtersLine())).toBe("Filters: Added in last 30 days");
     await pickPreset("preset-year");
-    expect(filtersLine().textContent).toBe("Filters: Max 10:00 · Added in last 7 days · Created this year · 1 tag");
+    expect(lineText(filtersLine())).toBe("Filters: Max 10:00 · Added in last 7 days · Created this year · 1 tag");
     await pickPreset("preset-custom");
     // In the device's own date format, which Intl gives.
     const shown = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).formatRange(new Date(2026, 0, 3), new Date(2026, 2, 31));
-    expect(filtersLine().textContent).toBe(`Filters: Added ${shown} · Created in last 90 days`);
+    expect(lineText(filtersLine())).toBe(`Filters: Added ${shown} · Created in last 90 days`);
   });
 
   it("counts the chosen sources out of all the sources, loading them for a source filter", async () => {
@@ -1546,7 +1676,7 @@ describe("Filters line", () => {
     await openLibrary();
 
     await pickPreset("preset-one-source");
-    await waitFor(() => expect(filtersLine().textContent).toBe("Filters: 1 of 3 sources"));
+    await waitFor(() => expect(lineText(filtersLine())).toBe("Filters: 1 of 3 sources"));
     expect(server.requests("GET", "/api/sources")).toHaveLength(1);
   });
 
@@ -1587,7 +1717,7 @@ describe("Random line", () => {
     expect(filtersLine().hidden).toBe(true);
     expect(randomLine().hidden).toBe(false);
     expect(randomLine().querySelector("b")!.textContent).toBe("Random: ");
-    expect(randomLine().textContent).toBe("Random: Shuffle · Spread by folder");
+    expect(lineText(randomLine())).toBe("Random: Shuffle · Spread by folder");
     expect(randomLine().title).toBe("Open the Randomization tab");
   });
 
@@ -1610,7 +1740,7 @@ describe("Random line", () => {
       fake.on("POST", "/api/tag-editor/model", () => json(CATALOG));
     });
     await openLibrary();
-    await waitFor(() => expect(randomLine().textContent).toBe("Random: Spread by folder, People, and Places · Favor less played and higher rated"));
+    await waitFor(() => expect(lineText(randomLine())).toBe("Random: Spread by folder, People, and Places · Favor less played and higher rated"));
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(1);
   });
 });
@@ -1641,10 +1771,9 @@ describe("rows", () => {
         expect(row.height).toBeGreaterThanOrEqual(100);
         expect(row.height).toBeLessThanOrEqual(240);
       }
-      // Every row but the last fills the width; the last keeps its tiles' shapes at 160 px. happy-dom keeps six decimals
-      // of each tile's width, so a row's adds up to within a few millionths.
+      // Every row but the last fills the width; the last keeps its tiles' shapes at 160 px.
       for (const row of rows.slice(0, -1)) {
-        expect(row.width).toBeCloseTo(width, 5);
+        expect(row.width).toBeCloseTo(rowsWidth(width), 5);
       }
       expect(rows.some((row) => Math.abs(row.height - 160) > 1)).toBe(true);
     });
@@ -1652,6 +1781,15 @@ describe("rows", () => {
 });
 
 describe("tile icons and tooltip", () => {
+  it("round every tile's corners, and give the grid no border, corners, or background of its own", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    expect(currentStyle(tile("item-1")!).borderRadius).toBe("4px");
+    const body = currentStyle(document.getElementById("library-overlay-body")!);
+    expect([body.borderTopWidth, body.borderRadius, body.backgroundColor, body.overflow]).toEqual(["", "", "", ""]);
+  });
+
   it("show favorite and blacklist as filled icons with a drop shadow and no dark rectangle", async () => {
     useStylesheet();
     await mountLibrary([libraryItem(1, { isFavorite: true, isBlacklisted: true })]);
@@ -1803,15 +1941,45 @@ describe("selection", () => {
     expect(currentStyle(check("item-2")).color).toBe(currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim());
     expect(currentStyle(check("item-1")).color).toBe("#fff");
     const media = (id: string) => currentStyle(tile(id)!.querySelector(".library-grid-tile-media")!);
-    expect([media("item-1").transform, media("item-2").transform]).toEqual(["", "scale(0.86)"]);
+    expect([media("item-1").getPropertyValue("inset"), media("item-2").getPropertyValue("inset")]).toEqual(["0", "8px"]);
     expect(currentStyle(check("item-2").firstElementChild!).fontVariationSettings).toBe('"FILL" 1, "wght" 700, "GRAD" 0, "opsz" 20');
 
-    expect(barParts()).toEqual(["Select all", "Clear selection", "1 selected", "Selection actions"]);
+    expect(barParts()).toEqual(["Select all", "Clear selection", "1 / 3 selected", "Selection actions"]);
     expect(Array.from(selectionBar()!.querySelectorAll("button")).map((button) => [button.title, button.textContent])).toEqual([
       ["Select all", "select_all"],
       ["Clear selection", "deselect"],
       ["Selection actions", "more_vert"]
     ]);
+  });
+
+  it("shows a selected tile grey around its thumbnail, inset 8 px with 4 px corners, with its check mark black, or white in the light theme", async () => {
+    useStylesheet();
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    await click(check("item-2"));
+
+    const media = (id: string) => currentStyle(tile(id)!.querySelector(".library-grid-tile-media")!);
+    // happy-dom keeps the inset as the stylesheet writes it, one length for every side.
+    expect([media("item-1").getPropertyValue("inset"), media("item-2").getPropertyValue("inset")]).toEqual(["0", "8px"]);
+    expect([media("item-1").borderRadius, media("item-2").borderRadius]).toEqual(["", "4px"]);
+    // The thumbnail covers the inset as it covers the tile.
+    expect(stylesheetText()).toMatch(/\.library-grid-tile-image \{[^}]*object-fit: cover;/);
+    const shadow = "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5))";
+    // Selected, the shadow is around the whole mark, its disc included, and not on the icon, whose check mark it would grey.
+    expect([currentStyle(check("item-2")).filter, currentStyle(check("item-2").firstElementChild!).filter]).toEqual([shadow, "none"]);
+    expect([currentStyle(check("item-1")).filter, currentStyle(check("item-1").firstElementChild!).filter]).toEqual(["", shadow]);
+
+    const looks = () => ({
+      tiles: [currentStyle(tile("item-1")!).backgroundColor, currentStyle(tile("item-2")!).backgroundColor],
+      disc: currentStyle(check("item-2")).backgroundImage
+    });
+    expect(looks()).toEqual({ tiles: ["", "#333333"], disc: "radial-gradient(circle closest-side, #000000 0 76%, transparent 80%)" });
+    document.documentElement.classList.add("theme-light");
+    try {
+      expect(looks()).toEqual({ tiles: ["", "#e0e3e8"], disc: "radial-gradient(circle closest-side, #ffffff 0 76%, transparent 80%)" });
+    } finally {
+      document.documentElement.classList.remove("theme-light");
+    }
   });
 
   it("shows the check icon and dims only the thumbnail on hover only where the device can hover", () => {
@@ -1844,7 +2012,7 @@ describe("selection", () => {
     fireEvent.click(tile("item-6")!, { shiftKey: true });
     await flush();
     expect(selectedTiles()).toEqual(["item-2", "item-3", "item-4", "item-5", "item-6"]);
-    expect(barParts()[2]).toBe("5 selected");
+    expect(barParts()[2]).toBe("5 / 6 selected");
     expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
   });
 
@@ -1889,12 +2057,12 @@ describe("selection", () => {
     await click(barButton("Select all"));
 
     expect(server.requests("POST", "/api/library/query-ids")).toHaveLength(1);
-    expect(barParts()[2]).toBe(`${(1234).toLocaleString()} selected`);
+    expect(barParts()[2]).toBe(`${(1234).toLocaleString()} / ${(1234).toLocaleString()} selected`);
     expect(selectedTiles()).toEqual(Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-tile")).map((tile) => tile.dataset.itemId!));
     expect([barButton("Select all").disabled, barButton("Select all").title]).toEqual([true, "Everything is already selected"]);
 
     await click(tile("item-2")!);
-    expect(barParts()[2]).toBe(`${(1233).toLocaleString()} selected`);
+    expect(barParts()[2]).toBe(`${(1233).toLocaleString()} / ${(1234).toLocaleString()} selected`);
     expect(barButton("Select all").disabled).toBe(false);
   });
 
@@ -1927,7 +2095,7 @@ describe("selection", () => {
     library.items = [library.items[1]!, library.items[2]!];
     page.stream().emit("itemsRemoved", 2, { itemIds: ["item-1"] });
     await flush();
-    expect([barParts()[2], selectedTiles()]).toEqual(["1 selected", ["item-2"]]);
+    expect([barParts()[2], selectedTiles()]).toEqual(["1 / 2 selected", ["item-2"]]);
 
     library.items = [library.items[1]!];
     page.stream().emit("itemsRemoved", 3, { itemIds: ["item-2"] });
@@ -2097,7 +2265,7 @@ describe("memory", () => {
     await refresh(page, libraryItems(7));
     await openLibrary();
     expect(rowLayout().at(-1)!.height).toBe(243);
-    expect(rowLayout()[0]!.width).toBeCloseTo(800, 6);
+    expect(rowLayout()[0]!.width).toBeCloseTo(rowsWidth(800), 6);
   });
 
   it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {
@@ -2167,7 +2335,7 @@ describe("memory", () => {
     const { library } = await mountLibrary(libraryItems(3), (server) => server.on("GET", "/api/sources", () => json(SOURCES)));
     expect(library.queries()[0].filterState.includedSourceIds).toEqual(["source-gone"]);
     await openLibrary();
-    await waitFor(() => expect(filtersLine().textContent).toBe("Filters: 0 of 3 sources"));
+    await waitFor(() => expect(lineText(filtersLine())).toBe("Filters: 0 of 3 sources"));
   });
 });
 

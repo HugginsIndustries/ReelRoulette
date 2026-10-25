@@ -10,7 +10,7 @@ export type LibrarySortMode = NonNullable<components["schemas"]["LibraryQueryReq
 const LIBRARY_SORTS: Readonly<Record<LibrarySortMode, { label: string; ascending: string; descending: string }>> = {
   Name: { label: "Name", ascending: "A–Z", descending: "Z–A" },
   LastPlayed: { label: "Last played", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
-  PlayCount: { label: "Play count", ascending: "Least Plays → Most Plays", descending: "Most Plays → Least Plays" },
+  PlayCount: { label: "Play count", ascending: "Least → Most", descending: "Most → Least" },
   Duration: { label: "Duration", ascending: "Shortest → Longest", descending: "Longest → Shortest" },
   DateAdded: { label: "Date added", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
   DateCreated: { label: "Date created", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
@@ -48,7 +48,16 @@ export function getSortDirectionLabel(sortMode: LibrarySortMode, descending: boo
   return descending ? sort.descending : sort.ascending;
 }
 
-/** The Library tab's count line, "{matching} / {total}", such as "615 / 49,106". */
+/** The Library tab's count line, "{matching} / {total} shown", such as "615 / 49,106 shown". */
 export function formatBrowseResultSummary(matchingCount: number, totalCount: number): string {
-  return `${matchingCount.toLocaleString()} / ${totalCount.toLocaleString()}`;
+  return `${matchingCount.toLocaleString()} / ${totalCount.toLocaleString()} shown`;
+}
+
+/**
+ * The selection bar's count, "{selected} / {matching} selected", such as "15 / 615 selected", grouped as the count line
+ * is. While the match count isn't known, as after a failed reload, it reads "{selected} selected".
+ */
+export function formatSelectionCount(selectedCount: number, matchingCount: number | null): string {
+  const selected = selectedCount.toLocaleString();
+  return matchingCount === null ? `${selected} selected` : `${selected} / ${matchingCount.toLocaleString()} selected`;
 }

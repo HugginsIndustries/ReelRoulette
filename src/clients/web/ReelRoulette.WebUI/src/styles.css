@@ -2,7 +2,6 @@
 :root {
   --huggins-orange: #ef7f22;
   --huggins-orange-hover: #f28a34;
-  --huggins-orange-pressed: #d96f1e;
   --huggins-orange-soft-border: #ef7f22aa;
   --huggins-orange-soft-inset: #ef7f2266;
   --lime-green: #22ef7f;
@@ -10,15 +9,12 @@
   --lime-green-soft-inset: #22ef7f66;
   --violet: #7f22ef;
   --violet-soft-border: #7f22efaa;
-  --icon-dark-grey: #333333;
-  --icon-dark-grey-hover: #444444;
   --icon-foreground: #ffffff;
   --icon-hover-opacity: 0.75;
   --icon-pressed-opacity: 0.55;
   --icon-disabled-opacity: 0.45;
   --page-bg: #1a1a1a;
   --page-fg: #e0e0e0;
-  --panel-bg: #2a2a2a;
   --panel-border: #444444;
   --input-bg: #2a2a2a;
   --input-fg: #e0e0e0;
@@ -40,6 +36,10 @@
   /* The side panel and its icons. */
   --surface: #111111;
   --surface-border: #333333;
+  /* A selected library tile is this grey around its inset thumbnail, and a disc of this color behind its check icon
+     shows the check mark. */
+  --tile-selected-bg: #333333;
+  --tile-check-disc: #000000;
   --icon: #ffffff;
   /* The screen's safe-area insets: the notch, the status bar, and the home indicator, which the page keeps its
      controls clear of. They read 0 where there are none. Rules take max() of one inside calc(), which is the same
@@ -56,7 +56,6 @@
 html.theme-light {
   --page-bg: #eceff4;
   --page-fg: #1a1d21;
-  --panel-bg: #ffffff;
   --panel-border: #c5cad3;
   --input-bg: #ffffff;
   --input-fg: #1a1d21;
@@ -76,6 +75,8 @@ html.theme-light {
   --control-fg: #1a1d21;
   --surface: #f4f5f8;
   --surface-border: #c5cad3;
+  --tile-selected-bg: #e0e3e8;
+  --tile-check-disc: #ffffff;
   --icon: #333333;
 }
 
@@ -1012,9 +1013,10 @@ html.theme-light .ambient canvas {
    indicator. */
 .fullscreen-stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] { bottom: 112px; }
 .player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
-/* The Filter, Tags, Stats, and Settings tabs, as the mockup lays them out: a head with the heading and a body that
-   scrolls, with icon buttons in the head and a footer in the Filter and Tags tabs. The Randomization tab is laid out
-   as the Settings tab is. */
+/* The Library, Filter, Tags, Stats, and Settings tabs, as the mockup lays them out: a head with the heading and a body
+   that scrolls, with icon buttons in the head and a footer in the Filter and Tags tabs. The Randomization tab is laid
+   out as the Settings tab is. */
+.library-overlay,
 .filter-dialog,
 .tag-editor,
 .stats-tab,
@@ -1027,6 +1029,7 @@ html.theme-light .ambient canvas {
   padding: 12px;
   gap: 10px;
 }
+.library-overlay-header,
 .filter-dialog-header,
 .tag-editor-header,
 .stats-tab-header,
@@ -1037,6 +1040,7 @@ html.theme-light .ambient canvas {
   min-height: 44px;
   flex: 0 0 auto;
 }
+.library-overlay-header h2,
 .filter-dialog-header h2,
 .tag-editor-header h2,
 .stats-tab-header h2,
@@ -1410,48 +1414,37 @@ body.sorting * {
   -webkit-user-select: none;
 }
 
+/* The Library tab. Its controls and the Filters and Random lines share one height. */
 .library-overlay {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  gap: 10px;
+  --library-line-height: 32px;
 }
-.library-overlay-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
+/* The Library tab's header, the other tabs' header with the count line taking the room beside the title. The collapse
+   button stays at the header's right end while the count line is hidden too. */
 .library-overlay-header h2 {
-  margin: 0;
-  font-size: 1.15rem;
   flex: 0 0 auto;
+}
+.library-overlay-header > .icon-btn {
+  margin-left: auto;
 }
 .library-overlay-header .library-overlay-summary {
   flex: 1 1 auto;
   margin: 0;
-  padding: 0 12px;
   min-width: 0;
   text-align: right;
   font-size: 0.9rem;
-  color: #ccc;
+  color: var(--muted-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The grid or the tab's message. The tiles sit on the tab itself, with no border, corners, or background of the grid's
+   own, and nothing here clips, so the grid can reach into the tab's right margin for its scrollbar. */
 .library-overlay-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   padding: 0;
-  border: 1px solid #333;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
 }
 .library-overlay-browse {
   flex: 1;
@@ -1459,9 +1452,10 @@ body.sorting * {
   display: flex;
   flex-direction: column;
 }
-/* The grid scrolls with one finger and claims pinches, which zoom its rows rather than the page. It always keeps its
-   scrollbar's room, so the width its rows are laid out to stays the same as the scrollbar comes and goes. Its text
-   isn't selectable, so Shift+click selects tiles and not the text across them, and a long press doesn't select text. */
+/* The grid scrolls with one finger and claims pinches, which zoom its rows rather than the page. A scrollbar that takes
+   room always keeps it, in the tab's right margin, where the grid controller places it, so the tiles stay where they
+   are as it comes and goes. Its text isn't selectable, so Shift+click selects tiles and not the text across them, and a
+   long press doesn't select text. */
 .library-grid-scroll {
   flex: 1;
   min-height: 0;
@@ -1472,6 +1466,15 @@ body.sorting * {
   scrollbar-gutter: stable;
   user-select: none;
   -webkit-user-select: none;
+}
+/* The grid's scrollbar is the thin one, which fits inside the tab's 12 px margin: Chrome's and Firefox's own thin
+   scrollbar where it takes room, and in Safari, which draws the page's own style, 12 px with a 2 px clear border, an
+   8 px thumb. */
+.library-grid-scroll.themed-scrollbar {
+  scrollbar-width: thin;
+}
+.library-grid-scroll.themed-scrollbar::-webkit-scrollbar {
+  width: 12px;
 }
 .library-grid-spacer {
   flex-shrink: 0;
@@ -1488,32 +1491,34 @@ body.sorting * {
   flex-direction: column;
   transform-origin: 0 0;
 }
-/* Tiles sit one fixed gap apart, across a row and between rows (TILE_GAP in libraryGridLayout.ts). */
+/* Tiles sit one gap apart, across a row and between rows, which the row height the zoom sets decides and the grid
+   controller sets in whole device pixels (tileGap in libraryGridLayout.ts). */
 .library-grid-row {
   display: flex;
   flex-direction: row;
-  gap: 1px;
+  gap: var(--library-grid-gap);
   flex-shrink: 0;
-  margin-bottom: 1px;
+  margin-bottom: var(--library-grid-gap);
 }
-/* A long press selects a tile, so it opens no callout of the browser's own, such as Safari's image menu. */
+/* Every tile has 4 px corners, as a selected tile's thumbnail does. A long press selects a tile, so it opens no callout
+   of the browser's own, such as Safari's image menu. */
 .library-grid-tile {
   position: relative;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: 4px;
   cursor: pointer;
   -webkit-touch-callout: none;
 }
 /* The thumbnail and what sits on it. Hovering dims it, on a device that can hover, so a tap leaves no tile dimmed, and
-   pressing dims it more; the check icon beside it stays bright. A selected tile's thumbnail shrinks inside the tile, so
-   the check icon, which stays put, sits on its top-left corner. */
+   pressing dims it more; the check icon beside it stays bright. A selected tile's thumbnail is inset by the same margin
+   on every side at every zoom, as Google Photos does, so the check icon, which stays put, sits over its top-left corner
+   whatever the tile's shape. */
 .library-grid-tile-media {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  transition: transform 0.15s ease, border-radius 0.15s ease;
+  transition: inset 0.15s ease, border-radius 0.15s ease;
 }
 @media (hover: hover) {
   .library-grid-tile:hover .library-grid-tile-media {
@@ -1525,7 +1530,7 @@ body.sorting * {
 }
 /* Selection, as Google Photos does it: one icon, a white circle with a check mark, at the tile's top left. It shows
    faded with the pointer over a tile and on every tile while selecting, bright with the pointer on it, and filled
-   orange, with a white check mark, on a selected tile, which takes an orange tint around its shrunk thumbnail. */
+   orange on a selected tile, which is grey around its inset thumbnail. */
 .library-grid-tile-check {
   position: absolute;
   top: 4px;
@@ -1551,18 +1556,21 @@ body.sorting * {
 .library-overlay.is-selecting .library-grid-tile-check {
   display: flex;
 }
+/* A selected tile is grey around its thumbnail, inset 8 px on every side with 4 px corners, whose image covers the inset
+   as it covers the tile (object-fit: cover). A disc behind the selected icon shows its check mark black inside the
+   orange circle, whatever the thumbnail behind it, and white in the light theme. */
 .library-grid-tile.is-selected {
-  background: color-mix(in srgb, var(--huggins-orange) 22%, var(--surface));
+  background: var(--tile-selected-bg);
 }
 .library-grid-tile.is-selected .library-grid-tile-media {
-  transform: scale(0.86);
+  inset: 8px;
   border-radius: 4px;
 }
 .library-grid-tile.is-selected .library-grid-tile-check {
   display: flex;
   opacity: 1;
   color: var(--huggins-orange);
-  background: radial-gradient(circle, #fff 0 42%, transparent 44%);
+  background: radial-gradient(circle closest-side, var(--tile-check-disc) 0 76%, transparent 80%);
 }
 @media (prefers-reduced-motion: reduce) {
   .library-grid-tile-media {
@@ -1584,9 +1592,15 @@ body.sorting * {
   object-fit: cover;
   -webkit-user-drag: none;
 }
-/* The tiles' icons are filled, with a soft drop shadow so they stay readable on bright thumbnails. */
-.library-grid-tile .material-symbol-icon.is-filled {
+/* The tiles' icons are filled, with a soft drop shadow so they stay readable on bright thumbnails. Selected, the check
+   icon's shadow is drawn around the mark as a whole, its disc and the circle together, so none of it falls inside the
+   check mark, which would grey a white one. */
+.library-grid-tile .material-symbol-icon.is-filled,
+.library-grid-tile.is-selected .library-grid-tile-check {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5));
+}
+.library-grid-tile.is-selected .library-grid-tile-check .material-symbol-icon.is-filled {
+  filter: none;
 }
 .library-grid-tile-badge {
   position: absolute;
@@ -1681,42 +1695,7 @@ body.sorting * {
   display: none;
 }
 .library-overlay-status-error {
-  color: #ffb4b4;
-}
-.library-overlay button {
-  min-height: 44px;
-  min-width: 44px;
-  padding: 8px 12px;
-  border: 1px solid #555;
-  border-radius: 8px;
-  background: #2a2a2a;
-  color: #fff;
-  cursor: pointer;
-}
-.library-overlay button:hover:not(:disabled) {
-  background: #353535;
-  border-color: #7a7a7a;
-}
-.library-overlay button.icon-glyph-base {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #fff;
-}
-html.theme-light .library-overlay-body {
-  background: #f4f5f8;
-  border-color: var(--panel-border);
-}
-html.theme-light .library-overlay button:not(.icon-glyph-base) {
-  background: var(--panel-bg);
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .library-overlay button.icon-glyph-base {
-  color: var(--icon-dark-grey);
-}
-html.theme-light .library-overlay-status-error {
-  color: #b42318;
+  color: var(--error);
 }
 
 /* The Library tab's controls, in order: the preset and search, then sort with its direction. They collapse with the
@@ -1733,105 +1712,121 @@ html.theme-light .library-overlay-status-error {
   flex-direction: column;
   gap: 8px;
 }
-/* The preset and search share a row from a panel about 440 px wide, the controls being 26 px narrower; narrower, they
-   stack. */
-@container library-controls (min-width: 414px) {
+/* The preset and search share a row once the controls are 520 px wide, a panel about 546 px wide, the controls being
+   26 px narrower, so "Preset:" leaves room for the preset's name. Narrower, a phone held upright included, they stack. */
+@container library-controls (min-width: 520px) {
   .library-controls-pair {
     flex-direction: row;
   }
   .library-controls-pair > * {
     flex: 1 1 0;
+    min-width: 0;
   }
 }
 .library-controls-sort {
   display: flex;
   gap: 8px;
 }
-.library-controls select,
-.library-overlay-search {
-  min-width: 0;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid #555;
-  border-radius: 8px;
-  background: #1a1a1a;
-  color: #fff;
-  font: inherit;
+/* The preset dropdown, search, Sort, and its direction are the Filters and Random lines' height, on a phone on its side
+   too: a height every browser keeps, rather than a minimum, which Safari ignores on a dropdown. Their text stays 16 px,
+   since Safari on iOS zooms the page into a field with smaller text when it is focused, and only their padding shrinks.
+   While the server fails the compatibility check, or the preset dropdown shows a message, they dim to half. */
+.library-overlay .library-controls .ctl,
+.library-overlay .library-controls .btn {
+  height: var(--library-line-height);
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
-.library-controls select:disabled,
-.library-overlay-search:disabled,
-.library-overlay-sort-direction:disabled {
+.library-overlay .library-controls .ctl:disabled,
+.library-overlay .library-controls .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.library-controls-sort select {
+.library-controls-sort .ctl {
   flex: 1 1 auto;
 }
 .library-overlay-sort-direction {
   flex: 0 0 auto;
   min-width: 128px;
+}
+/* The preset dropdown reads "Preset: {name}" while closed, and its options keep their plain names. The dropdown draws
+   the chosen name, its "…", and its arrow itself, and "Preset:", bold in the name's color, sits in its left padding,
+   inside its border, where the Sort dropdown's and the search field's text start. A press on it reaches the dropdown,
+   so a press anywhere in the field opens it, and it dims with the dropdown. The padding makes room for it by its width
+   (--preset-label-width), which the tab measures, since the font decides it. */
+.library-preset-field {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.library-overlay .library-preset-field > .ctl {
+  flex: 1 1 auto;
+  width: 100%;
+  padding-left: calc(14px + var(--preset-label-width, 3.75em));
+}
+.library-preset-label {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--control-fg);
   white-space: nowrap;
+  pointer-events: none;
+}
+.library-preset-field:has(> .ctl:disabled) .library-preset-label {
+  opacity: 0.5;
 }
 .library-controls.is-collapsed,
 .library-line.is-collapsed {
   display: none !important;
 }
 /* The Filters line and the Random line: each one line, naming the applied filters or the random pick options, which
-   opens the Filter or the Randomization tab. */
-.library-overlay button.library-line {
+   opens the Filter or the Randomization tab. Each ends with a chevron, its text cut off with "…" before it, and tints
+   faintly with the pointer over it, on a device that can hover. */
+.library-line {
   flex: 0 0 auto;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   width: 100%;
-  min-height: 0;
-  padding: 6px 8px;
+  height: var(--library-line-height);
+  margin: 0;
+  padding: 0 4px 0 8px;
   border: 1px solid var(--surface-border);
   border-radius: 6px;
   background: transparent;
   color: var(--muted-fg);
+  font: inherit;
   font-size: 0.85rem;
   text-align: left;
+  cursor: pointer;
+}
+.library-line[hidden] {
+  display: none;
+}
+.library-line-text {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.library-overlay button.library-line[hidden] {
-  display: none;
+.library-line-chevron {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+}
+@media (hover: hover) {
+  .library-line:hover {
+    background: rgba(127, 127, 127, 0.1);
+  }
 }
 .library-line b {
   color: var(--page-fg);
   font-weight: 600;
-}
-.library-overlay-results-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.library-overlay-result-row {
-  padding: 8px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.95rem;
-  line-height: 1.4;
-  word-break: break-word;
-}
-.library-overlay-result-row:last-child {
-  border-bottom: none;
-}
-html.theme-light .library-overlay-search,
-html.theme-light .library-controls select {
-  background: #fff;
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .library-overlay-summary {
-  color: #555;
-}
-html.theme-light .library-overlay button.library-line {
-  background: transparent;
-  color: var(--muted-fg);
-  border-color: var(--surface-border);
-}
-html.theme-light .library-overlay-result-row {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
 /* The player column holds the popups beside the player, so it is their containing block. Nothing on it may make a
@@ -2088,6 +2083,7 @@ body.short-screen .settings-tab {
   padding: 6px 10px;
   gap: 6px;
 }
+body.short-screen .library-overlay-header,
 body.short-screen .filter-dialog-header,
 body.short-screen .tag-editor-header,
 body.short-screen .stats-tab-header,
@@ -2101,9 +2097,6 @@ body.short-screen .stats-tab-header h2,
 body.short-screen .settings-tab-header h2 {
   font-size: 1rem;
 }
-body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-line),
-body.short-screen .library-overlay-search,
-body.short-screen .library-controls select,
 body.short-screen .app-dialog button,
 body.short-screen .app-dialog input[type="text"],
 body.short-screen .app-dialog select,

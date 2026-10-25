@@ -1982,7 +1982,7 @@ describe("saving", () => {
       }
     });
     await pickPreset("preset-beach");
-    expect(document.getElementById("library-filter-summary")!.textContent).toBe("Filters: 1 tag");
+    expect(document.querySelector("#library-filter-summary .library-line-text")!.textContent).toBe("Filters: 1 tag");
     const before = libraryQueries(server).length;
     await openEditor();
     await deleteTag("Beach");

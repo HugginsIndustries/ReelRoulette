@@ -5,7 +5,8 @@ import {
   MIN_TARGET_ROW_HEIGHT,
   clampTargetRowHeight,
   computeAvailableLayoutWidth,
-  getTileLeftOffsets
+  getTileLeftOffsets,
+  tileGap
 } from "./libraryGridLayout";
 import { createLibraryGridRows, type LibraryGridRows, type ShownTile } from "./libraryGridRows";
 import {
@@ -31,6 +32,13 @@ import { LIBRARY_QUERY_WINDOW_SIZE } from "./libraryQuerySession";
 
 const RESIZE_DEBOUNCE_MS = 90;
 const MIN_FALLBACK_WIDTH = 280;
+/** How wide a scrollbar drawn over the content is taken to be, which no browser reports, to center it in the margin. */
+const OVERLAY_SCROLLBAR_WIDTH = 8;
+
+/** The screen's device pixels to a CSS pixel, which a browser zoom changes. */
+function currentDevicePixelRatio(): number {
+  return window.devicePixelRatio || 1;
+}
 
 export interface LibraryGridCoverage {
   scrollTop: number;
@@ -53,7 +61,7 @@ export interface LibraryGridController {
 
 export interface LibraryGridOptions {
   onCoverage?: (coverage: LibraryGridCoverage) => void;
-  /** The row height the rows aim for, a whole number of pixels from 100 to 300. Defaults to 160. */
+  /** The row height the rows aim for, a whole number of pixels from 120 to 300. Defaults to 160. */
   rowHeight?: number;
   /** A zoom over the grid settled at a new row height for the rows to aim for. */
   onRowHeightChange?: (rowHeight: number) => void;
@@ -127,6 +135,8 @@ export function createLibraryGridController(
   let targetRowHeight = options?.rowHeight ?? DEFAULT_TARGET_ROW_HEIGHT;
   let virtualizerState: LibraryGridVirtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
   let layoutWidth = computeAvailableLayoutWidth(container.clientWidth || MIN_FALLBACK_WIDTH);
+  /** The device pixel ratio the rows were laid out on, which a browser zoom changes without changing their width. */
+  let layoutDevicePixelRatio = 1;
   let lastVisibleStart = -1;
   let lastVisibleEnd = -1;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -196,15 +206,55 @@ export function createLibraryGridController(
     }
   }
 
-  // The scroller's own width leaves out its scrollbar, whose room it always keeps, so the rows fit beside it.
+  /**
+   * The grid reaches into the Library tab's right margin, so its scrollbar sits centered in that margin rather than
+   * beside the tiles. A scrollbar that takes room, which the gutter keeps, takes it from the margin, and a padding of the
+   * rest keeps the tiles to the same width either way.
+   */
+  function placeScrollbar(scroll: HTMLElement): void {
+    const tab = container.parentElement;
+    const margin = (tab && Number.parseFloat(getComputedStyle(tab).paddingRight)) || 0;
+    // The room a scrollbar takes: the box's width less its content and padding.
+    const bar = Math.max(0, scroll.offsetWidth - scroll.clientWidth);
+    // Its middle at the margin's middle; one wider than the margin reaches past it.
+    const reach = Math.max(bar, (margin + (bar || OVERLAY_SCROLLBAR_WIDTH)) / 2);
+    const marginRight = `${-reach}px`;
+    const paddingRight = `${reach - bar}px`;
+    if (scroll.style.marginRight !== marginRight) {
+      scroll.style.marginRight = marginRight;
+    }
+    if (scroll.style.paddingRight !== paddingRight) {
+      scroll.style.paddingRight = paddingRight;
+    }
+  }
+
+  // Places the scrollbar first, then lays the rows out to the scroller's width less its scrollbar and the padding that
+  // places it, which is the Library tab's width inside its margins, whether a scrollbar takes room or not.
   function measureLayoutWidth(): number {
-    const measured = scrollEl?.clientWidth ?? container.clientWidth ?? MIN_FALLBACK_WIDTH;
-    return computeAvailableLayoutWidth(measured);
+    if (!scrollEl) {
+      return computeAvailableLayoutWidth(container.clientWidth || MIN_FALLBACK_WIDTH);
+    }
+    placeScrollbar(scrollEl);
+    return computeAvailableLayoutWidth(scrollEl.clientWidth - (Number.parseFloat(scrollEl.style.paddingRight) || 0));
+  }
+
+  /**
+   * Lays the rows out at the grid's width and the row height they aim for, on the screen's device pixels, and sets the
+   * gap between them, which the stylesheet reads from the rows' layer, when it changes.
+   */
+  function layOut(): void {
+    const devicePixelRatio = currentDevicePixelRatio();
+    layoutDevicePixelRatio = devicePixelRatio;
+    layoutWidth = measureLayoutWidth();
+    virtualizerState = createVirtualizerState(items, layoutWidth, targetRowHeight, devicePixelRatio);
+    const gap = `${tileGap(targetRowHeight, devicePixelRatio)}px`;
+    if (rowsEl && rowsEl.style.getPropertyValue("--library-grid-gap") !== gap) {
+      rowsEl.style.setProperty("--library-grid-gap", gap);
+    }
   }
 
   function rebuildVirtualizer(resetScroll: boolean): void {
-    layoutWidth = measureLayoutWidth();
-    virtualizerState = createVirtualizerState(items, layoutWidth, targetRowHeight);
+    layOut();
     lastVisibleStart = -1;
     lastVisibleEnd = -1;
     if (resetScroll && scrollEl) {
@@ -402,8 +452,7 @@ export function createLibraryGridController(
       items = content.visibleItems;
     }
 
-    layoutWidth = measureLayoutWidth();
-    virtualizerState = createVirtualizerState(items, layoutWidth, targetRowHeight);
+    layOut();
     const next = virtualizerState.offsetIndex;
     const gridBox = viewBox();
     let scrollTop = scrollEl.scrollTop;
@@ -466,7 +515,10 @@ export function createLibraryGridController(
         return;
       }
       const nextWidth = measureLayoutWidth();
-      if (!layoutStale && Math.abs(nextWidth - layoutWidth) < 0.5 && items.length > 0 && virtualizerState.rows.length > 0) {
+      // A browser zoom changes the device pixel ratio and the grid's height, not its width, and the rows are snapped to
+      // the old ratio's device pixels, so they're laid out again.
+      const samePixels = currentDevicePixelRatio() === layoutDevicePixelRatio;
+      if (!layoutStale && samePixels && Math.abs(nextWidth - layoutWidth) < 0.5 && items.length > 0 && virtualizerState.rows.length > 0) {
         updateVisibleRows(true);
         return;
       }

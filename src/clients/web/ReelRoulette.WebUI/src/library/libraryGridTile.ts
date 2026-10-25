@@ -66,7 +66,7 @@ function thumbnailImage(url: string): HTMLImageElement {
 /**
  * Every tile has the playing icon, which the stylesheet shows only on the playing tile, so the grid can move it
  * without changing the tiles. The name is the whole tile's tooltip, and shows in the name bar with the Settings
- * tab's option. The check icon sits beside the thumbnail rather than on it, so a selected tile's thumbnail shrinks
+ * tab's option. The check icon sits beside the thumbnail rather than on it, so a selected tile's thumbnail is inset
  * and dims on its own while the icon stays put; the stylesheet shows it while selecting or with the pointer over the
  * tile.
  */

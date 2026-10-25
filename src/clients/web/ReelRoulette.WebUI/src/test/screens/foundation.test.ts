@@ -452,11 +452,11 @@ describe("preset dropdown", () => {
     );
   });
 
-  it("shows Loading... until presets arrive and an error entry when they cannot load, with nothing to choose", async () => {
+  it("shows Loading… until presets arrive and an error entry when they cannot load, with nothing to choose", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => status(500));
     mountPage({ server });
-    expect(optionLabels(presetSelect())).toEqual(["Loading..."]);
+    expect(optionLabels(presetSelect())).toEqual(["Loading…"]);
     expect(presetSelect().disabled).toBe(true);
 
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["Error loading presets"]));

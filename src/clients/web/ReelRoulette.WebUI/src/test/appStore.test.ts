@@ -85,7 +85,7 @@ describe("createAppStore", () => {
     expect(empty.randomOptions.value).toEqual(DEFAULT_RANDOM_OPTIONS);
     expect(empty.randomBehavior.value).toBe("jump");
     expect(empty.randomCycle.value).toBeNull();
-    expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "", message: true });
+    expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading…", value: "" }], selectedValue: "", message: true });
   });
 
   it("saves Advance after from 1 to 3600 seconds on this device, tells listeners, and ignores anything else", () => {

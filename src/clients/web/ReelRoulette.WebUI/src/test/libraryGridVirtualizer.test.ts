@@ -44,7 +44,7 @@ function makeItem(index: number): LibraryProjectionItem {
 describe("libraryGridVirtualizer", () => {
   it("bounds visible row count for large libraries at mid-scroll", () => {
     const items = Array.from({ length: 1200 }, (_, i) => makeItem(i));
-    const state = createVirtualizerState(items, 920, 160);
+    const state = createVirtualizerState(items, 920, 160, 1);
     expect(state.rows.length).toBeGreaterThan(200);
 
     const midScroll = Math.floor(state.offsetIndex.totalExtentHeight / 2);
@@ -57,7 +57,7 @@ describe("libraryGridVirtualizer", () => {
 
   it("spacer heights sum to total extent", () => {
     const aspects = Array.from({ length: 40 }, () => 16 / 9);
-    const rows = buildRows(aspects, 0, aspects.length, 640, 160);
+    const rows = buildRows(aspects, 0, aspects.length, 640, 160, 1);
     const offsetIndex = rebuildOffsetIndex(rows);
     const window = findVisibleRowRange(offsetIndex, 500, 400, 900);
 
@@ -66,7 +66,7 @@ describe("libraryGridVirtualizer", () => {
       rows.slice(window.firstVisibleRow, window.endExclusive).reduce((sum, row, i, slice) => {
         void i;
         void slice;
-        return sum + row.rowHeight + 1;
+        return sum + row.rowHeight + row.gap;
       }, 0) +
       window.bottomSpacerHeight;
 
@@ -74,8 +74,18 @@ describe("libraryGridVirtualizer", () => {
     expect(mountedExtent).toBeGreaterThanOrEqual(offsetIndex.totalExtentHeight - 2000);
   });
 
+  it("puts every row's top on a whole device pixel at a fractional device pixel ratio", () => {
+    const items = Array.from({ length: 300 }, (_, i) => makeItem(i));
+    const state = createVirtualizerState(items, 919.7, 243, 1.25);
+
+    expect(state.rows.length).toBeGreaterThan(20);
+    for (const top of [...state.offsetIndex.rowTopOffsets, state.offsetIndex.totalExtentHeight]) {
+      expect(Math.abs(top * 1.25 - Math.round(top * 1.25))).toBeLessThan(1e-6);
+    }
+  });
+
   it("returns empty window when there are no rows", () => {
-    const state = createVirtualizerState([], 920, 160);
+    const state = createVirtualizerState([], 920, 160, 1);
     const window = findVisibleRowRange(state.offsetIndex, 0, 600);
     expect(window.firstVisibleRow).toBe(0);
     expect(window.endExclusive).toBe(0);
@@ -85,7 +95,7 @@ describe("libraryGridVirtualizer", () => {
 
   it("measures the trailing items from the top of the row holding the first of them", () => {
     const aspects = Array.from({ length: 40 }, () => 16 / 9);
-    const rows = buildRows(aspects, 0, aspects.length, 480, 160);
+    const rows = buildRows(aspects, 0, aspects.length, 480, 160, 1);
     const state = { rows, offsetIndex: rebuildOffsetIndex(rows) };
     expect(rows.every((row) => row.tiles.length === 2)).toBe(true);
     const { rowTopOffsets, totalExtentHeight } = state.offsetIndex;
@@ -94,12 +104,12 @@ describe("libraryGridVirtualizer", () => {
     expect(measureTrailingItemsHeight(state, 11)).toBe(totalExtentHeight - rowTopOffsets[14]!);
     expect(measureTrailingItemsHeight(state, 40)).toBe(totalExtentHeight);
     expect(measureTrailingItemsHeight(state, 200)).toBe(totalExtentHeight);
-    expect(measureTrailingItemsHeight(createVirtualizerState([], 480, 160), 200)).toBe(0);
+    expect(measureTrailingItemsHeight(createVirtualizerState([], 480, 160, 1), 200)).toBe(0);
   });
 
   it("finds the row holding an item", () => {
     const items = Array.from({ length: 300 }, (_, i) => makeItem(i));
-    const { rows } = createVirtualizerState(items, 920, 160);
+    const { rows } = createVirtualizerState(items, 920, 160, 1);
 
     for (const index of [0, 1, 57, 150, 299]) {
       const row = rows[findRowIndexForItem(rows, index)]!;
@@ -111,7 +121,7 @@ describe("libraryGridVirtualizer", () => {
 
   it("includes single row for small libraries", () => {
     const items = [makeItem(0), makeItem(1)];
-    const state = createVirtualizerState(items, 920, 160);
+    const state = createVirtualizerState(items, 920, 160, 1);
     const window = findVisibleRowRange(state.offsetIndex, 0, 800);
     expect(visibleRowCount(window)).toBeGreaterThanOrEqual(1);
     expect(visibleRowCount(window)).toBeLessThanOrEqual(state.rows.length);
