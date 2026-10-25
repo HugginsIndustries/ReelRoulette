@@ -2617,6 +2617,27 @@ describe("Hide player controls", () => {
     await untilHidden();
   });
 
+  it("with Keep visible while paused, autoplay and a swipe moving to another item leave them hidden", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM, SECOND_VIDEO, VIDEO_ITEM));
+    await click(button("Autoplay"));
+    await untilHidden();
+
+    // Autoplay moves on to a pick, and a swipe left picks again.
+    fireEvent.ended(video());
+    await flush();
+    expect([video().src, controlsShown()]).toEqual([SECOND_VIDEO_URL, false]);
+    await swipe(video(), { x: 300, y: 100 }, { x: 200, y: 110 });
+    expect([video().src, controlsShown()]).toEqual([VIDEO_URL, false]);
+
+    // A swipe right steps back through history, and autoplay steps forward through it.
+    await swipe(video(), { x: 100, y: 100 }, { x: 250, y: 90 });
+    expect([video().src, controlsShown()]).toEqual([SECOND_VIDEO_URL, false]);
+    fireEvent.ended(video());
+    await flush();
+    expect([video().src, controlsShown()]).toEqual([VIDEO_URL, false]);
+  });
+
   it("Never keeps them shown through time and clicks", async () => {
     localStorage.setItem(`rr_device.${HIDE_CONTROLS_KEY}`, JSON.stringify("never"));
     useFakeClock();

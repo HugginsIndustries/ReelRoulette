@@ -145,7 +145,8 @@ export interface Player {
   /**
    * Playback waits for the user, as Play shows: before anything plays, once the user or Auto-Pause pauses, at the end
    * of a video nothing plays on from, or when the browser won't play it. Not on a photo whose timer the bar doesn't
-   * show, nor while a video moves on from its end, as it repeats or autoplay goes on.
+   * show, nor while a video moves on from its end, as it repeats or autoplay goes on, nor between items, once an item
+   * starts and before its media shows.
    */
   readonly paused: ReadonlySignal<boolean>;
   readonly seekBar: ReadonlySignal<SeekBarView>;
@@ -605,9 +606,11 @@ export function createPlayer(options: PlayerOptions): Player {
     }
     const play = playButton.peek();
     // The browser pauses a video at its end just before its `ended`, which repeats it or moves on, so that pause
-    // doesn't wait for the user.
+    // doesn't wait for the user. Neither does the time between items, once an item starts and before its media shows,
+    // as while a history step waits for its fresh media URL.
     const movesOn = videoShown() && elements!.video.ended && (stretching || autoplayGoesOn());
-    paused.value = !play.disabled && !play.showsPause && !movesOn;
+    const betweenItems = !!store.current.peek() && !videoShown() && !photoShown();
+    paused.value = !play.disabled && !play.showsPause && !movesOn && !betweenItems;
     moveBarWhilePlaying();
   }
 
@@ -774,14 +777,16 @@ export function createPlayer(options: PlayerOptions): Player {
     armed = null;
     mediaFailed.value = false;
     resumeAt = null;
+    // The last item hides before it stops, so its video's pause, however soon its event comes, finds nothing shown and
+    // doesn't wait for the user.
+    video.style.display = "none";
+    photo.style.display = "none";
+    emptyState.style.display = "none";
     // A new item stops the last at once, so a pause still fading out has nothing left to do.
     audio.cancelPause();
     video.pause();
     video.src = "";
     photo.src = "";
-    video.style.display = "none";
-    photo.style.display = "none";
-    emptyState.style.display = "none";
     // The bar starts empty, so it never shows the last item's time.
     seekSlider.value = "0";
     showToggles();

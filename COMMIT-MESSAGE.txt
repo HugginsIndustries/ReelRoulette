@@ -20,13 +20,7 @@ Instructions:
 
 Commit Message:
 
-M12m: Act on selected library items from the Selection actions menu
+Bugfix: Keep hidden player controls hidden as autoplay or a swipe moves to another item
 
-- WebUI: The Selection actions menu, the app's new shared menu list, adds selected items to or removes them from favorites or the blacklist, rates them or clears their rating in a Rate dialog whose stars choose before Rate applies, clears their playback stats after asking, or deletes their files, each in one request on every selected id, loaded or not, with a popup counting what the server answered.
-- WebUI: Delete files… asks GET /control/access first and, on its 401, the control-token prompt, a password field that keeps a wrong token's reason, then "Permanently delete {n} files from disk and remove them from the library?" with a red "Delete {n} Files", which ends selection, so a late answer never ends a later one, then says "Deleted {n} files." and notes files that couldn't be deleted.
-- Server: GET /control/access answers whether a caller may do admin actions, POST /control/pair refuses with "The control token is wrong.", and clear-stats answers count, the named items in the library, and writes a last.log line.
-- Server: Every published resyncRequired carries the revision before it and its own, and an event that would list more than 1,000 items, bulk favorite, blacklist, or rating or itemsRemoved, is published as resyncRequired in its place, with a last.log line.
-- Server: Each event takes its revision and reaches the replay history and every stream under one lock, so two events published at once can no longer reach a stream out of order and have the lower one skipped.
-- WebUI: A favorite or blacklist answer goes to the item it was for after Next, each play answer brings its item's flags and rating, and a resync re-reads the playing item, so its buttons and star show the server's state.
-- Cleanup: Pairing and the /control requests share one request around the pairing prompt, requestWithNotice builds on readWithNotice, the page tests share one flag answer, and clear-stats clears in chunks with the tag counts' item count.
-- Docs: OpenAPI, the generated types, README.md, CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and the changelog describe the actions and the server changes, the mockup's menu hover follows the app's, and MILESTONES.md records the slice's evidence and its updated delete check, has Selection follows results drop items a resync removes, and has the admin gate ask GET /control/access.
+- WebUI: With Hide player controls on Timeout and Keep visible while paused on, the controls no longer show, or restart their countdown, each time autoplay, a swipe, Next, Previous, or Random moves to another item.
+- WebUI: Playback no longer reads as waiting for the user between items, once an item starts and before its media shows, as while a history step waits for its fresh media URL, and a new item hides the last one before pausing its video, so that pause never reads as the user's.

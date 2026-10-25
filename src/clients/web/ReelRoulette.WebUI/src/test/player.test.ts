@@ -632,6 +632,43 @@ describe("createPlayer", () => {
     expect(page.player.paused.value).toBe(false);
   });
 
+  it("doesn't wait for the user between items, as autoplay or Next moves on to a pick or Previous or Next steps through history, while a step waits for its fresh media URL too", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const { video, photo } = page.elements;
+    page.player.toggleAutoplay();
+    page.playVideo(VIDEO, 60);
+    const values: boolean[] = [];
+    const stop = page.player.paused.subscribe((value) => values.push(value));
+
+    // Autoplay moves on from the video's end to a pick, and Next picks again.
+    page.answerRandom(SECOND_VIDEO, PHOTO);
+    video.paused = true;
+    video.ended = true;
+    page.player.videoPlayStateChanged();
+    page.player.videoEnded();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(video.src).toContain("item-other");
+    page.player.next();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(photo.src).toContain("item-photo");
+
+    // Previous waits for its fresh media URL with nothing shown, then Next steps forward to the photo again.
+    const answer = holdReply(page, "/api/play/item-other");
+    page.player.previous();
+    await vi.advanceTimersByTimeAsync(500);
+    expect([video.style.display, photo.style.display]).toEqual(["none", "none"]);
+    answer(json({ ...SECOND_VIDEO }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect([video.src, video.style.display]).toEqual(["http://server/api/media/item-other?token=t", "block"]);
+    page.player.next();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(photo.style.display).toBe("block");
+
+    stop();
+    expect(values).not.toContain(true);
+  });
+
   it("pauses a playing video for Auto-Pause and resumes it, and leaves a paused one paused", () => {
     const page = setup();
     page.play(VIDEO);
