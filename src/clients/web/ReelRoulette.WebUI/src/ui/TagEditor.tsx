@@ -3,12 +3,9 @@ import type { TagCategory as CatalogCategory, TagCategoryRow, TagChipRow } from 
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import { ValidatedField } from "./FieldValidation";
+import { Icon } from "./Icon";
 import { DragHandle, useReorder, type Reorder } from "./Reorder";
 import { TagCategory, tagsInUse } from "./TagCategory";
-
-function Icon({ name }: { name: string }) {
-  return <span class="material-symbol-icon">{name}</span>;
-}
 
 /**
  * The Tags tab's tag editor, with its Edit Tag, Edit Category, and New Category dialogs, and the button that opens

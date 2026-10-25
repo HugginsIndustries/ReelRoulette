@@ -18,7 +18,7 @@ import { blockWheelPageZoom } from "./wheel";
  * dragging the panel's handle doesn't render the player.
  */
 export function Stage() {
-  const { api, fullscreen, panel, player, audio, settings, playerRating } = useApp();
+  const { api, fullscreen, panel, player, audio, settings, playerRating, library } = useApp();
   const stage = useRef<HTMLDivElement>(null);
   const playerColumn = useRef<HTMLElement>(null);
 
@@ -48,12 +48,16 @@ export function Stage() {
     return () => panel.attachPlayer(null);
   }, []);
 
-  // Escape closes the panel when it is open, and otherwise leaves pseudo-fullscreen. While a dialog or Auto Tag is open,
-  // Escape is theirs: it closes the top one.
+  // Escape ends selection while the Library tab shows, then closes the panel when it is open, and otherwise leaves
+  // pseudo-fullscreen. While a dialog or Auto Tag is open, Escape is theirs: it closes the top one.
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (stage.current?.querySelector("dialog[open]")) return;
+      if (library.isOpen() && library.selection.active.peek()) {
+        library.selection.clear();
+        return;
+      }
       if (panel.isOpen.peek()) {
         void panel.close();
         return;

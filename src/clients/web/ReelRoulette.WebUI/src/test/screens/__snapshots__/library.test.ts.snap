@@ -149,15 +149,21 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
                       "play_circle"
                   <div class="library-grid-tile-filename">
                     "clip 1.mp4"
+                <span class="library-grid-tile-check" title="Select">
+                  <span class="material-symbol-icon is-filled">
+                    "check_circle"
               <div class="library-grid-tile" data-item-id="item-2" style="height: 160px; width: 284.444444px" title="clip 2.mp4">
                 <div class="library-grid-tile-media">
                   <div class="library-grid-tile-scrim">
-                    <img alt="" class="library-grid-tile-image" decoding="async" loading="lazy" src="http://localhost:51301/api/thumbnail/item-2?v=v7">
+                    <img alt="" class="library-grid-tile-image" decoding="async" draggable="false" loading="lazy" src="http://localhost:51301/api/thumbnail/item-2?v=v7">
                   <div class="library-grid-tile-playing">
                     <span class="material-symbol-icon is-filled">
                       "play_circle"
                   <div class="library-grid-tile-filename">
                     "clip 2.mp4"
+                <span class="library-grid-tile-check" title="Select">
+                  <span class="material-symbol-icon is-filled">
+                    "check_circle"
               <div class="library-grid-tile" data-item-id="item-3" style="height: 160px; width: 213.333333px" title="clip 3.mp4">
                 <div class="library-grid-tile-media">
                   <div class="library-grid-tile-scrim">
@@ -171,6 +177,9 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
                       "play_circle"
                   <div class="library-grid-tile-filename">
                     "clip 3.mp4"
+                <span class="library-grid-tile-check" title="Select">
+                  <span class="material-symbol-icon is-filled">
+                    "check_circle"
         <div class="library-grid-spacer library-grid-spacer-bottom" style="height: 0px">
 "
 `;

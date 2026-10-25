@@ -1460,7 +1460,8 @@ body.sorting * {
   flex-direction: column;
 }
 /* The grid scrolls with one finger and claims pinches, which zoom its rows rather than the page. It always keeps its
-   scrollbar's room, so the width its rows are laid out to stays the same as the scrollbar comes and goes. */
+   scrollbar's room, so the width its rows are laid out to stays the same as the scrollbar comes and goes. Its text
+   isn't selectable, so Shift+click selects tiles and not the text across them, and a long press doesn't select text. */
 .library-grid-scroll {
   flex: 1;
   min-height: 0;
@@ -1469,6 +1470,8 @@ body.sorting * {
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   scrollbar-gutter: stable;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .library-grid-spacer {
   flex-shrink: 0;
@@ -1493,23 +1496,78 @@ body.sorting * {
   flex-shrink: 0;
   margin-bottom: 1px;
 }
+/* A long press selects a tile, so it opens no callout of the browser's own, such as Safari's image menu. */
 .library-grid-tile {
   position: relative;
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 0;
   cursor: pointer;
+  -webkit-touch-callout: none;
 }
-.library-grid-tile:hover {
-  opacity: 0.79;
-}
-.library-grid-tile:active {
-  opacity: 0.72;
-}
+/* The thumbnail and what sits on it. Hovering dims it, on a device that can hover, so a tap leaves no tile dimmed, and
+   pressing dims it more; the check icon beside it stays bright. A selected tile's thumbnail shrinks inside the tile, so
+   the check icon, which stays put, sits on its top-left corner. */
 .library-grid-tile-media {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  transition: transform 0.15s ease, border-radius 0.15s ease;
+}
+@media (hover: hover) {
+  .library-grid-tile:hover .library-grid-tile-media {
+    opacity: 0.79;
+  }
+}
+.library-grid-tile:active .library-grid-tile-media {
+  opacity: 0.72;
+}
+/* Selection, as Google Photos does it: one icon, a white circle with a check mark, at the tile's top left. It shows
+   faded with the pointer over a tile and on every tile while selecting, bright with the pointer on it, and filled
+   orange, with a white check mark, on a selected tile, which takes an orange tint around its shrunk thumbnail. */
+.library-grid-tile-check {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  display: none;
+  border-radius: 50%;
+  color: #fff;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+.library-grid-tile-check .material-symbol-icon {
+  font-size: 26px;
+}
+@media (hover: hover) {
+  .library-grid-tile:hover .library-grid-tile-check {
+    display: flex;
+  }
+  .library-grid-tile-check:hover {
+    opacity: 1;
+  }
+}
+.library-overlay.is-selecting .library-grid-tile-check {
+  display: flex;
+}
+.library-grid-tile.is-selected {
+  background: color-mix(in srgb, var(--huggins-orange) 22%, var(--surface));
+}
+.library-grid-tile.is-selected .library-grid-tile-media {
+  transform: scale(0.86);
+  border-radius: 4px;
+}
+.library-grid-tile.is-selected .library-grid-tile-check {
+  display: flex;
+  opacity: 1;
+  color: var(--huggins-orange);
+  background: radial-gradient(circle, #fff 0 42%, transparent 44%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .library-grid-tile-media {
+    transition: none;
+  }
 }
 .library-grid-tile-scrim {
   position: absolute;
@@ -1517,11 +1575,14 @@ body.sorting * {
   background: rgba(0, 0, 0, 0.133);
   overflow: hidden;
 }
+/* A thumbnail can't be dragged, so a long press on it selects its tile rather than lifting the picture, as Safari's
+   image drag would. */
 .library-grid-tile-image {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  -webkit-user-drag: none;
 }
 /* The tiles' icons are filled, with a soft drop shadow so they stay readable on bright thumbnails. */
 .library-grid-tile .material-symbol-icon.is-filled {
@@ -1581,6 +1642,43 @@ body.sorting * {
   padding: 12px;
   font-size: 1rem;
   line-height: 1.5;
+}
+/* While selecting, below the grid: Select all, Clear selection, the count, and Selection actions at the far end, whose
+   menu opens above it, over the grid. */
+.library-selection-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.library-selection-count {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-selection-actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+.library-selection-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 230px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.library-selection-menu[hidden] {
+  display: none;
 }
 .library-overlay-status-error {
   color: #ffb4b4;

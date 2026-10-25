@@ -116,20 +116,4 @@ describe("requestPlayItem", () => {
       ).rejects.toThrow("Couldn't reach the server.");
     }
   );
-
-  it("fails locally when item id is blank", async () => {
-    const fetchMock = vi.fn() as unknown as typeof fetch;
-    const result = await requestPlayItem(
-      CONFIG,
-      "   ",
-      { clientId: "web-1", sessionId: "session-1" },
-      fetchMock
-    );
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.refusal).toMatchObject({ status: 400, code: "play_item_id_invalid" });
-    }
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 });

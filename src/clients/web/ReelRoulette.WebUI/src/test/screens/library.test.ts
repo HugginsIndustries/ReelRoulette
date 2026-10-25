@@ -27,6 +27,7 @@ import {
   settle,
   status,
   stubLayoutSize,
+  stylesheetText,
   unauthorizedLogLine,
   useStylesheet,
   type MountedPage
@@ -1705,6 +1706,335 @@ describe("tile icons and tooltip", () => {
     await openLibrary();
     expect(tile("item-1")!.title).toBe("clip 1.mp4");
     expect(tile("item-1")!.querySelector(".library-grid-tile-filename")!.textContent).toBe("clip 1.mp4");
+  });
+});
+
+/** A tile's check icon, found by its tooltip. */
+function check(itemId: string): HTMLElement {
+  return within(tile(itemId)!).getByTitle(/^(Select|Deselect)$/);
+}
+
+/** The selection bar, or null while not selecting. */
+function selectionBar(): HTMLElement | null {
+  return document.getElementById("library-selection-bar");
+}
+
+function barButton(name: "Select all" | "Clear selection" | "Selection actions"): HTMLButtonElement {
+  return within(selectionBar()!).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
+}
+
+/** The bar's parts in order: each button's name, or the count's text. */
+function barParts(): string[] {
+  return Array.from(selectionBar()!.querySelectorAll("button, .library-selection-count")).map((part) =>
+    part instanceof HTMLButtonElement ? part.getAttribute("aria-label") ?? "" : part.textContent ?? ""
+  );
+}
+
+function selectionMenu(): HTMLElement {
+  return document.getElementById("library-selection-menu") as HTMLElement;
+}
+
+/** The ids of the tiles shown selected, in grid order. */
+function selectedTiles(): string[] {
+  return Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-tile.is-selected")).map((tile) => tile.dataset.itemId!);
+}
+
+function selecting(): boolean {
+  return overlay().classList.contains("is-selecting") && selectionBar() !== null;
+}
+
+async function pressEscape(): Promise<void> {
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  await flush();
+}
+
+/** A finger resting on `element` for as long as `ms`, then lifting, with the click a browser sends after it. */
+async function fingerPress(element: Element, ms: number): Promise<void> {
+  fireEvent.pointerDown(element, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+  await vi.advanceTimersByTimeAsync(ms);
+  fireEvent.pointerUp(element, { pointerType: "touch", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+  await click(element);
+}
+
+/** The text inside each `@media {query} { ... }` block of `css`. */
+function mediaBlocks(css: string, query: string): string[] {
+  const blocks: string[] = [];
+  const opening = `@media ${query} {`;
+  for (let start = css.indexOf(opening); start >= 0; start = css.indexOf(opening, start + 1)) {
+    let depth = 1;
+    let index = start + opening.length;
+    while (depth > 0) {
+      const char = css[index++];
+      if (char === "{") depth++;
+      if (char === "}") depth--;
+    }
+    blocks.push(css.slice(start + opening.length, index - 1));
+  }
+  return blocks;
+}
+
+/** `css` with its comments and the `@media {query}` blocks taken out. */
+function outsideMedia(css: string, query: string): string {
+  let rest = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const block of mediaBlocks(rest, query)) {
+    rest = rest.replace(block, "");
+  }
+  return rest;
+}
+
+describe("selection", () => {
+  it("the check icon selects a tile and starts selection, showing every tile's icon and the bar", async () => {
+    useStylesheet();
+    const { server } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+    expect(within(overlay()).queryByRole("button", { name: /^Select/, hidden: true })).toBeNull();
+    expect(selectionBar()).toBeNull();
+    expect(["item-1", "item-2", "item-3"].map((id) => currentStyle(check(id)).display)).toEqual(["none", "none", "none"]);
+    expect(check("item-2").title).toBe("Select");
+
+    await click(check("item-2").firstElementChild!);
+
+    expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
+    expect(selecting()).toBe(true);
+    expect(selectedTiles()).toEqual(["item-2"]);
+    expect(check("item-2").title).toBe("Deselect");
+    expect(["item-1", "item-2", "item-3"].map((id) => currentStyle(check(id)).display)).toEqual(["flex", "flex", "flex"]);
+    expect([currentStyle(check("item-1")).opacity, currentStyle(check("item-2")).opacity]).toEqual(["0.6", "1"]);
+    expect(currentStyle(check("item-2")).color).toBe(currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim());
+    expect(currentStyle(check("item-1")).color).toBe("#fff");
+    const media = (id: string) => currentStyle(tile(id)!.querySelector(".library-grid-tile-media")!);
+    expect([media("item-1").transform, media("item-2").transform]).toEqual(["", "scale(0.86)"]);
+    expect(currentStyle(check("item-2").firstElementChild!).fontVariationSettings).toBe('"FILL" 1, "wght" 700, "GRAD" 0, "opsz" 20');
+
+    expect(barParts()).toEqual(["Select all", "Clear selection", "1 selected", "Selection actions"]);
+    expect(Array.from(selectionBar()!.querySelectorAll("button")).map((button) => [button.title, button.textContent])).toEqual([
+      ["Select all", "select_all"],
+      ["Clear selection", "deselect"],
+      ["Selection actions", "more_vert"]
+    ]);
+  });
+
+  it("shows the check icon and dims only the thumbnail on hover only where the device can hover", () => {
+    const css = stylesheetText();
+    const hover = mediaBlocks(css, "(hover: hover)").join("\n").replace(/\s+/g, " ");
+    expect(hover).toContain(".library-grid-tile:hover .library-grid-tile-check { display: flex; }");
+    expect(hover).toContain(".library-grid-tile-check:hover { opacity: 1; }");
+    expect(hover).toContain(".library-grid-tile:hover .library-grid-tile-media { opacity: 0.79; }");
+    expect(outsideMedia(css, "(hover: hover)")).not.toMatch(/library-grid-tile[\w-]*:hover/);
+  });
+
+  it("keeps a thumbnail from being dragged, so a long press selects its tile rather than lifting the picture", () => {
+    const rule = /\.library-grid-tile-image \{([^}]*)\}/.exec(stylesheetText())?.[1] ?? "";
+    expect(rule).toContain("-webkit-user-drag: none;");
+  });
+
+  it("once selecting, a click or a Ctrl or Cmd+click adds or removes a tile, and Shift+click adds a range, highlighting no text", async () => {
+    useStylesheet();
+    const { server } = await mountLibrary(libraryItems(6));
+    await openLibrary();
+    expect(currentStyle(gridScroll()).userSelect).toBe("none");
+
+    await click(check("item-2"));
+    await click(tile("item-3")!);
+    fireEvent.click(tile("item-4")!, { ctrlKey: true });
+    fireEvent.click(tile("item-3")!, { metaKey: true });
+    await flush();
+    expect(selectedTiles()).toEqual(["item-2", "item-4"]);
+
+    fireEvent.click(tile("item-6")!, { shiftKey: true });
+    await flush();
+    expect(selectedTiles()).toEqual(["item-2", "item-3", "item-4", "item-5", "item-6"]);
+    expect(barParts()[2]).toBe("5 selected");
+    expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
+  });
+
+  it("a Shift, Ctrl, or Cmd+click starts selection with its tile, a plain click plays, and deselecting the last tile ends it", async () => {
+    useOverlayWidth();
+    const { server } = await mountLibrary(libraryItems(3), (fake) => fake.playsItems(playResponse(3)));
+    await openLibrary();
+
+    for (const held of [{ shiftKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+      fireEvent.click(tile("item-1")!, held);
+      await flush();
+      expect([selecting(), selectedTiles(), isOpen()]).toEqual([true, ["item-1"], true]);
+      await click(tile("item-1")!);
+      expect([selecting(), selectedTiles()]).toEqual([false, []]);
+    }
+    expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
+
+    await click(tile("item-3")!);
+    await waitFor(() => expect(server.requests("POST", "/api/play/item-3")).toHaveLength(1));
+  });
+
+  it("Clear selection ends selection", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-2")!);
+
+    await click(barButton("Clear selection"));
+    expect([selecting(), selectedTiles()]).toEqual([false, []]);
+  });
+
+  it("Select all selects every item the search and filters match, loaded or not, and is then disabled", async () => {
+    const items = libraryItems(1234);
+    const { server } = await mountLibrary(items, (fake) => {
+      fake.on("POST", "/api/library/query-ids", () => json({ ids: items.map((item) => item.id) }));
+    });
+    await openLibrary();
+    expect(tile("item-1000")).toBeNull();
+    await click(check("item-1"));
+    expect([barButton("Select all").disabled, barButton("Select all").title]).toEqual([false, "Select all"]);
+
+    await click(barButton("Select all"));
+
+    expect(server.requests("POST", "/api/library/query-ids")).toHaveLength(1);
+    expect(barParts()[2]).toBe(`${(1234).toLocaleString()} selected`);
+    expect(selectedTiles()).toEqual(Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-tile")).map((tile) => tile.dataset.itemId!));
+    expect([barButton("Select all").disabled, barButton("Select all").title]).toEqual([true, "Everything is already selected"]);
+
+    await click(tile("item-2")!);
+    expect(barParts()[2]).toBe(`${(1233).toLocaleString()} selected`);
+    expect(barButton("Select all").disabled).toBe(false);
+  });
+
+  it("a search, filter, or preset change ends selection, and a sort change keeps it", async () => {
+    const { library } = await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+
+    fireEvent.change(sortSelect(), { target: { value: "LastPlayed" } });
+    await click(directionButton());
+    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
+
+    fireEvent.input(searchBox(), { target: { value: "clip" } });
+    await waitFor(() => expect(library.queries().at(-1)).toMatchObject({ search: "clip" }));
+    expect(selecting()).toBe(false);
+
+    await click(check("item-1"));
+    await pickPreset("preset-favorites");
+    expect(selecting()).toBe(false);
+  });
+
+  it("removed items leave the selection, which ends when none are left", async () => {
+    const { page, library } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-2")!);
+
+    library.items = [library.items[1]!, library.items[2]!];
+    page.stream().emit("itemsRemoved", 2, { itemIds: ["item-1"] });
+    await flush();
+    expect([barParts()[2], selectedTiles()]).toEqual(["1 selected", ["item-2"]]);
+
+    library.items = [library.items[1]!];
+    page.stream().emit("itemsRemoved", 3, { itemIds: ["item-2"] });
+    await flush();
+    expect(selecting()).toBe(false);
+  });
+
+  it("lasts while the panel shows another tab or is closed", async () => {
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/sources", () => json([]));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+
+    await click(panelTab("Filter"));
+    await openLibrary();
+    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
+    await closeLibrary();
+    await openLibrary();
+    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
+  });
+
+  it("a long press with a finger selects its tile without playing it, then a tap adds a tile and a long press takes one out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { server } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+
+    fireEvent.pointerDown(tile("item-1")!, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+    expect(fireEvent.contextMenu(tile("item-1")!)).toBe(false);
+    await vi.advanceTimersByTimeAsync(500);
+    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
+    fireEvent.pointerUp(tile("item-1")!, { pointerType: "touch", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    await click(tile("item-1")!);
+    expect(selectedTiles()).toEqual(["item-1"]);
+
+    await fingerPress(tile("item-2")!, 100);
+    expect(selectedTiles()).toEqual(["item-1", "item-2"]);
+    await fingerPress(tile("item-1")!, 500);
+    expect(selectedTiles()).toEqual(["item-2"]);
+    expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
+  });
+
+  it("Selection actions opens its menu above the bar, which a press outside it or a second press closes", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    await click(check("item-1"));
+    expect(selectionMenu().hidden).toBe(true);
+
+    await click(barButton("Selection actions"));
+    expect(selectionMenu().hidden).toBe(false);
+    fireEvent.pointerDown(barButton("Selection actions"));
+    await click(barButton("Selection actions"));
+    expect(selectionMenu().hidden).toBe(true);
+
+    await click(barButton("Selection actions"));
+    fireEvent.pointerDown(tile("item-2")!);
+    await flush();
+    expect(selectionMenu().hidden).toBe(true);
+  });
+});
+
+describe("selection and Escape", () => {
+  it("closes the Selection actions menu, then ends selection, then closes the panel", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    await click(check("item-1"));
+    await click(barButton("Selection actions"));
+
+    await pressEscape();
+    expect([selectionMenu().hidden, selecting(), isOpen()]).toEqual([true, true, true]);
+    await pressEscape();
+    expect([selecting(), isOpen()]).toEqual([false, true]);
+    await pressEscape();
+    expect(isOpen()).toBe(false);
+  });
+
+  it("leaves a selection the Library tab doesn't show, which shows again with the tab", async () => {
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/sources", () => json([]));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    await click(panelTab("Filter"));
+
+    await pressEscape();
+    expect(panel().hidden).toBe(true);
+    await pressEscape();
+    await openLibrary();
+    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
+  });
+
+  it("goes to an open dialog first, leaving the selection", async () => {
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("POST", "/api/library/query-ids", () => json({ error: "The library is busy." }, 503));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    await click(barButton("Select all"));
+    expect(openNotices()).toEqual(["Select all failed: The library is busy."]);
+
+    await pressEscape();
+    expect(selecting()).toBe(true);
+    await closeNotices();
+    await pressEscape();
+    expect([selecting(), isOpen()]).toEqual([false, true]);
   });
 });
 

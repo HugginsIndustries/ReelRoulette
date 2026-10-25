@@ -12,7 +12,8 @@
 html, body { height: 100%; }
 /* The page's height: the dynamic viewport in a browser tab, whose toolbars come and go, and the large viewport in an
    installed app, below. */
-:root { --page-height: 100dvh; }
+:root { --page-height: 100dvh; --tile-selected-bg: #333333; --tile-check-disc: #000; }
+html.theme-light { --tile-selected-bg: #e0e3e8; --tile-check-disc: #fff; }
 body { height: var(--page-height); overflow: hidden; display: flex; flex-direction: column; }
 #app {
   flex: 1;
@@ -325,33 +326,39 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 /* Sort, its direction, and search are disabled while the server fails the compatibility check, and the preset dropdown
    while it shows a message in place of the presets; each is dimmed to half then, as the app dims them. */
 #lib-preset:disabled, #lib-sort:disabled, #lib-dir:disabled, #lib-search:disabled { opacity: 0.5; cursor: not-allowed; }
-/* The grid's text isn't selectable, so Shift+click selects tiles and not the text across them. */
+/* The grid's text isn't selectable, so Shift+click selects tiles and not the text across them. The tiles sit on the
+   tab itself, with no border, corners, or background of the grid's own. */
 .lib-grid {
   user-select: none;
   -webkit-user-select: none;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
   overscroll-behavior: contain;
   /* The grid scrolls with one finger and claims pinches, which zoom its rows rather than the page. */
   touch-action: pan-y;
-  /* It always keeps its scrollbar's room, so the width its rows are laid out to stays the same as the scrollbar comes
-     and goes. */
+  /* A scrollbar that takes room always keeps it, in the tab's right margin (placeGridScrollbar), so the tiles stay
+     where they are as it comes and goes. */
   scrollbar-gutter: stable;
 }
-html.theme-light .lib-grid { background: #fff; }
+/* The grid's scrollbar is the thin one, which fits inside the tab's 12 px margin: Chrome's and Firefox's own thin
+   scrollbar where it takes room, and in Safari, which draws the page's own style, 12 px with a 2 px clear border, an
+   8 px thumb. */
+.lib-grid.themed-scrollbar { scrollbar-width: thin; }
+.lib-grid.themed-scrollbar::-webkit-scrollbar { width: 12px; }
 /* While a zoom gesture lasts, the rows scale as one picture. The layer around them clips what scales past the grid, so
    the gesture never adds a scrollbar or resizes the grid. */
 .lib-zoom { overflow: clip; min-height: 100%; }
 .lib-rows { transform-origin: 0 0; }
-/* Tiles sit one fixed gap apart, across a row and between rows (TILE_GAP). */
-.lib-row { display: flex; gap: 1px; margin-bottom: 1px; }
+/* Tiles sit one fixed gap apart, across a row and between rows, which the grid sets in whole device pixels
+   (tileGapPx). */
+.lib-grid { --tile-gap: 4px; }
+.lib-row { display: flex; gap: var(--tile-gap); margin-bottom: var(--tile-gap); }
 .lib-tile { position: relative; flex-shrink: 0; overflow: hidden; cursor: pointer; }
-/* The thumbnail and what sits on it. A selected tile's thumbnail shrinks inside the tile, so the selection icon, which
-   stays put, sits on its top-left corner. */
-.lib-tile-frame { position: absolute; inset: 0; overflow: hidden; transition: transform 0.15s ease, border-radius 0.15s ease; }
-.lib-tile-art { position: absolute; inset: 0; }
-/* Hovering dims the thumbnail, as it dims the whole tile today, and leaves the selection icon bright. */
+/* The thumbnail and what sits on it. A selected tile's thumbnail is inset by the same margin on every side and cropped to
+   fill it, as Google Photos does, so the selection icon, which stays put, sits over its top-left corner whatever the
+   photo's shape. Unselected, the picture fills its frame edge to edge; it is placed by its edges rather than shifted by
+   half its size, which would land an odd-sized picture on a half pixel and leave a pixel of its tile showing. */
+.lib-tile-frame { position: absolute; inset: 0; overflow: hidden; transition: inset 0.15s ease, border-radius 0.15s ease; }
+.lib-tile-art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transition: left 0.15s ease, top 0.15s ease, width 0.15s ease, height 0.15s ease; }
+/* Hovering dims the thumbnail and leaves the selection icon bright. */
 @media (hover: hover) { .lib-tile:hover .lib-tile-frame { opacity: 0.79; } }
 /* Tile icons: filled, with a soft drop shadow and no dark rectangle, so they stay readable on bright thumbnails. */
 .tile-icon { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5)); }
@@ -501,10 +508,23 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
   .select-mark:hover { opacity: 1; }
 }
 .lib-grid.selecting .select-mark { display: flex; }
-.lib-tile.is-selected { background: color-mix(in srgb, var(--huggins-orange) 22%, var(--surface)); }
-.lib-tile.is-selected .lib-tile-frame { transform: scale(0.86); border-radius: 4px; }
-.lib-tile.is-selected .select-mark { display: flex; opacity: 1; color: var(--huggins-orange); background: radial-gradient(circle, #fff 0 42%, transparent 44%); }
-@media (prefers-reduced-motion: reduce) { .lib-tile-frame { transition: none; } }
+/* A selected tile is grey around its inset thumbnail, whose picture keeps its shape, scaled to cover the inset and
+   centered, as object-fit: cover does; the grid works out each tile's place and size for it (--cover-x, --cover-y,
+   --cover-w, --cover-h), and the frame clips its edges. A black disc
+   behind the selected icon shows its check mark black inside the orange circle, whatever the tile behind it, and a white
+   one white in the light theme. The Mockup tab sets the inset (selectInset). */
+.lib-grid { --select-inset: 12px; }
+.lib-tile.is-selected { background: var(--tile-selected-bg); }
+.lib-tile.is-selected .lib-tile-frame { inset: var(--select-inset); border-radius: 4px; }
+/* The Mockup tab's rounded tiles: every tile's corners at the selected thumbnail's radius, selected or not. */
+html.mock-round-tiles .lib-tile { border-radius: 4px; }
+.lib-tile.is-selected .lib-tile-art { left: var(--cover-x); top: var(--cover-y); width: var(--cover-w); height: var(--cover-h); }
+.lib-tile.is-selected .select-mark { display: flex; opacity: 1; color: var(--huggins-orange); background: radial-gradient(circle closest-side, var(--tile-check-disc) 0 76%, transparent 80%); }
+/* Selected, the mark's soft shadow is drawn around the mark as a whole, its disc and the circle together, so none of it
+   falls inside the check mark, which would grey a white one. */
+.lib-tile.is-selected .select-mark { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5)); }
+.lib-tile.is-selected .select-mark .tile-icon { filter: none; }
+@media (prefers-reduced-motion: reduce) { .lib-tile-frame, .lib-tile-art { transition: none; } }
 .bulk-bar { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; position: relative; }
 .bulk-bar .btn { min-height: 40px; padding: 4px 10px; }
 .menu {
@@ -939,10 +959,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         </div>
         <div id="lib-grid" class="lib-grid scroll-y themed-scrollbar"></div>
         <div id="bulk-bar" class="bulk-bar" hidden>
-          <button class="icon-btn" type="button" id="bulk-exit" aria-label="Stop selecting" title="Stop selecting"><span class="material-symbol-icon">deselect</span></button>
-          <span id="bulk-count" class="grow">0 selected</span>
           <button class="icon-btn" type="button" id="bulk-all" aria-label="Select all" title="Select all"><span class="material-symbol-icon">select_all</span></button>
-          <button class="btn" type="button" id="bulk-actions" disabled><span class="btn-label">Actions</span><span class="material-symbol-icon" style="font-size:22px">expand_more</span></button>
+          <button class="icon-btn" type="button" id="bulk-clear" aria-label="Clear selection" title="Clear selection"><span class="material-symbol-icon">deselect</span></button>
+          <span id="bulk-count" class="grow">0 selected</span>
+          <button class="icon-btn" type="button" id="bulk-actions" aria-label="Selection actions" title="Selection actions"><span class="material-symbol-icon">more_vert</span></button>
           <div id="bulk-menu" class="menu" hidden>
             <button type="button" data-bulk="fav-add">Add to favorites</button>
             <button type="button" data-bulk="fav-remove">Remove from favorites</button>
@@ -1481,6 +1501,35 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <p class="mock-small mock-keep">What the Library tab's grid says in place of the tiles.</p>
       </fieldset>
       <fieldset>
+        <legend>Selected tile's inset</legend>
+        <label><input type="radio" name="mock-select-inset" value="8"> 8 px</label>
+        <label><input type="radio" name="mock-select-inset" value="9"> 9 px</label>
+        <label><input type="radio" name="mock-select-inset" value="10"> 10 px</label>
+        <label><input type="radio" name="mock-select-inset" value="11"> 11 px</label>
+        <label><input type="radio" name="mock-select-inset" value="12" checked> 12 px</label>
+        <p class="mock-small mock-keep">How far a selected tile's thumbnail is inset on every side. The check icon stays 4 px from the tile's corner.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Gap between tiles</legend>
+        <label><input type="radio" name="mock-tile-gap" value="1"> 1 px</label>
+        <label><input type="radio" name="mock-tile-gap" value="2"> 2 px</label>
+        <label><input type="radio" name="mock-tile-gap" value="3"> 3 px</label>
+        <label><input type="radio" name="mock-tile-gap" value="4" checked> 4 px</label>
+        <p class="mock-small mock-keep">How far apart the tiles sit, across a row and between rows, in whole device pixels.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Selected tile's background</legend>
+        <label><input type="radio" name="mock-selected-bg" value="grey" checked> Grey</label>
+        <label><input type="radio" name="mock-selected-bg" value="none"> None, the page behind the grid</label>
+        <p class="mock-small mock-keep">What shows around a selected tile's inset thumbnail, in both themes.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Tile corners</legend>
+        <label><input type="radio" name="mock-tile-corners" value="square" checked> Square</label>
+        <label><input type="radio" name="mock-tile-corners" value="rounded"> Rounded, 4 px, as a selected tile's thumbnail</label>
+        <p class="mock-small mock-keep">Every tile's corners, selected or not. Combines with the selected tile's background.</p>
+      </fieldset>
+      <fieldset>
         <legend>Stats load</legend>
         <label><input type="radio" name="mock-stats-load" value="loads" checked> Loads</label>
         <label><input type="radio" name="mock-stats-load" value="failed"> Fails, here without a reason from the server</label>
@@ -1564,8 +1613,16 @@ const ROW_HEIGHT = { initial: 160, min: 100, max: 300 };
 let rowHeight = ((kept) => (Number.isInteger(kept) && kept >= ROW_HEIGHT.min && kept <= ROW_HEIGHT.max ? kept : ROW_HEIGHT.initial))(
   store.get("rowHeight", ROW_HEIGHT.initial)
 );
-// Tiles sit this far apart, across a row and between rows, at every row height.
-const TILE_GAP = 1;
+// Tiles sit this far apart, across a row and between rows, at every row height, in CSS pixels, as the Mockup tab sets it.
+let tileGap = 4;
+// How far a selected tile's thumbnail is inset on every side, in CSS pixels, as the Mockup tab sets it.
+let selectInset = 12;
+// The screen's pixels per CSS pixel, which the grid's sizes snap to.
+const devicePixels = () => window.devicePixelRatio || 1;
+// A size in CSS pixels, rounded to whole device pixels.
+const snapToDevice = (value) => Math.round(value * devicePixels()) / devicePixels();
+// The gap in whole device pixels, at least one, so every gap draws the same width.
+const tileGapPx = () => Math.max(1, Math.round(tileGap * devicePixels())) / devicePixels();
 const tileSize = () => ({ target: rowHeight, min: rowHeight * 0.625, max: rowHeight * 1.5 });
 // The zoom gesture under way over the grid, if any.
 let gridZoom = null;
@@ -2443,6 +2500,8 @@ function applyLayout() {
 
 function showTab(tab) {
   if (tab !== "settings") leaveSettingFields();
+  // The Selection actions menu closes with the Library tab, and the selection stays.
+  if (tab !== "library") closeBulkMenu();
   state.tab = tab;
   store.set("tab", tab);
   document.querySelectorAll(".panel-tab").forEach((button) => {
@@ -2470,6 +2529,7 @@ function openPanel(tab) {
 // afterwards.
 function closePanel() {
   leaveSettingFields();
+  closeBulkMenu();
   const focused = document.activeElement;
   const hadFocus = $("panel").contains(focused);
   state.open = false;
@@ -3091,7 +3151,8 @@ document.addEventListener("keydown", (event) => {
     if (!autoTag.scanning) closeAutoTag();
   } else if (!$("bulk-menu").hidden) {
     closeBulkMenu();
-  } else if (selecting) {
+  } else if (selecting && state.open && state.tab === "library") {
+    // Only while the Library tab shows, so Esc never ends a selection nobody can see.
     setSelecting(false);
   } else if (!$("mock-sheet").hidden) {
     toggleSheet(false);
@@ -3265,20 +3326,33 @@ function showSummary(matching, total) {
   $("lib-summary").textContent = `${matching.toLocaleString()} / ${total.toLocaleString()}`;
 }
 
-// The WebUI's justified rows (buildRows), at the tile size and the even gap chosen with these mockups.
+// The WebUI's justified rows (buildRows), at the tile size and the gap chosen with these mockups. Each row's height and
+// each tile's edges land on whole device pixels, so every gap, across a row and between rows, draws exactly the gap's
+// width rather than a pixel more where rounding falls.
 function buildRows(aspects, width, size) {
   const rows = [];
+  const gap = tileGapPx();
+  width = Math.floor(width * devicePixels()) / devicePixels();
   let pending = [];
   let sum = 0;
   const flush = (last) => {
     if (!pending.length) return;
-    let height = last ? size.target : (width - (pending.length - 1) * TILE_GAP) / Math.max(0.01, sum);
-    height = Math.min(size.max, Math.max(size.min, height));
+    let height = last ? size.target : (width - (pending.length - 1) * gap) / Math.max(0.01, sum);
+    height = snapToDevice(Math.min(size.max, Math.max(size.min, height)));
     const widths = pending.map((p) => Math.max(1, p.aspect * height));
     if (!last) {
-      const delta = width - (pending.length - 1) * TILE_GAP - widths.reduce((a, b) => a + b, 0);
+      const delta = width - (pending.length - 1) * gap - widths.reduce((a, b) => a + b, 0);
       widths[widths.length - 1] = Math.max(1, widths[widths.length - 1] + delta);
     }
+    // Each tile's right edge, from the running total, rounded to a device pixel, so the widths still add up to the row's.
+    let edge = 0;
+    let total = 0;
+    widths.forEach((tileWidth, i) => {
+      total += tileWidth;
+      const next = snapToDevice(total);
+      widths[i] = next - edge;
+      edge = next;
+    });
     rows.push({ height, tiles: pending.map((p, i) => ({ index: p.index, width: widths[i] })) });
     pending = [];
     sum = 0;
@@ -3286,7 +3360,7 @@ function buildRows(aspects, width, size) {
   aspects.forEach((aspect, index) => {
     pending.push({ aspect, index });
     sum += aspect;
-    if (sum * size.target + (pending.length - 1) * TILE_GAP >= width) flush(false);
+    if (sum * size.target + (pending.length - 1) * gap >= width) flush(false);
   });
   flush(true);
   return rows;
@@ -3303,6 +3377,24 @@ function gridMessage(grid, text, error) {
   empty.textContent = text;
   grid.append(empty);
 }
+/** How wide a scrollbar drawn over the content is taken to be, which no browser reports, to center it in the margin. */
+const OVERLAY_SCROLLBAR = 8;
+/**
+ * The grid reaches into the tab's right margin, so its scrollbar sits centered in that margin, over the margin rather
+ * than beside the tiles. A scrollbar that takes room, which the gutter keeps, takes it from the margin, and a padding
+ * of the rest keeps the tiles to the same width either way, so they stay centered whether it shows or hides.
+ */
+function placeGridScrollbar(grid) {
+  const margin = parseFloat(getComputedStyle($("tab-library")).paddingRight) || 0;
+  // The room a scrollbar takes: the box's width less its content and padding, kept by the gutter while nothing scrolls.
+  const bar = Math.max(0, grid.offsetWidth - grid.clientWidth);
+  // Its middle at the margin's middle; one wider than the margin reaches past it, its clear border beyond the tab.
+  const reach = Math.max(bar, (margin + (bar || OVERLAY_SCROLLBAR)) / 2);
+  const marginRight = `${-reach}px`;
+  const paddingRight = `${reach - bar}px`;
+  if (grid.style.marginRight !== marginRight) grid.style.marginRight = marginRight;
+  if (grid.style.paddingRight !== paddingRight) grid.style.paddingRight = paddingRight;
+}
 function layoutGrid(force) {
   const grid = $("lib-grid");
   if (grid.offsetParent === null) {
@@ -3313,7 +3405,10 @@ function layoutGrid(force) {
     gridStale = true;
     return;
   }
-  const width = Math.max(280, grid.clientWidth);
+  placeGridScrollbar(grid);
+  grid.style.setProperty("--tile-gap", `${tileGapPx()}px`);
+  grid.style.setProperty("--select-inset", `${selectInset}px`);
+  const width = Math.max(280, grid.clientWidth - parseFloat(grid.style.paddingRight || "0"));
   if (!force && !gridStale && width === lastGridWidth && grid.childElementCount) return;
   gridStale = false;
   lastGridWidth = width;
@@ -3339,7 +3434,6 @@ function layoutGrid(force) {
       tileEl.className = "lib-tile" + (item.id === playback.item?.id ? " is-current" : "") +
         (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "");
       tileEl.dataset.id = String(item.id);
-      tileEl.setAttribute("aria-label", selecting ? item.name : `Play ${item.name}`);
       // With a mouse, hovering a tile shows its name, whether or not names show on tiles.
       tileEl.title = item.name;
       tileEl.style.width = `${tile.width}px`;
@@ -3349,6 +3443,12 @@ function layoutGrid(force) {
       const art = document.createElement("div");
       art.className = "lib-tile-art";
       art.style.setProperty("--h", item.hue);
+      // Selected, the picture covers the inset thumbnail: scaled by the larger of the two sides' shrink, and centered.
+      const cover = Math.max((tile.width - 2 * selectInset) / tile.width, (row.height - 2 * selectInset) / row.height);
+      art.style.setProperty("--cover-w", `${tile.width * cover}px`);
+      art.style.setProperty("--cover-h", `${row.height * cover}px`);
+      art.style.setProperty("--cover-x", `${(tile.width - 2 * selectInset - tile.width * cover) / 2}px`);
+      art.style.setProperty("--cover-y", `${(row.height - 2 * selectInset - row.height * cover) / 2}px`);
       frame.append(art);
       // Today's badges, favorite and blacklisted, as filled icons.
       if (item.favorite || item.blacklisted) {
@@ -3367,7 +3467,6 @@ function layoutGrid(force) {
       frame.append(playing, name);
       const mark = document.createElement("span");
       mark.className = "select-mark";
-      mark.setAttribute("aria-label", `Select ${item.name}`);
       mark.title = selected.has(item.id) ? "Deselect" : "Select";
       mark.append(iconSpan("check_circle", "is-filled tile-icon"));
       tileEl.append(frame, mark);
@@ -3555,9 +3654,9 @@ function chooseTile(event) {
     return;
   }
   const id = Number(tile.dataset.id);
-  // The selection icon selects its tile and starts selection. In selection, a click adds or removes a tile, and
-  // Shift+click adds the range from the last tile chosen.
-  if (event.target.closest(".select-mark") || selecting || event.shiftKey) {
+  // The selection icon, or a Shift, Ctrl, or Cmd+click, selects its tile and starts selection. In selection, a click or
+  // a Ctrl or Cmd+click adds or removes a tile, and Shift+click adds the range from the last tile chosen.
+  if (event.target.closest(".select-mark") || selecting || event.shiftKey || event.ctrlKey || event.metaKey) {
     selectTile(id, event.shiftKey);
     return;
   }
@@ -4423,7 +4522,7 @@ let savedTags = snapshotTags();
 // The Tags tab edits its item's tags. It follows the playing item, unless it has unsaved changes to its item's tags:
 // then it stays on its item, names it, and follows once those changes are saved or discarded. With nothing playing,
 // chips can't add or remove, as today.
-// Edit tags in the selection's Actions menu points it at the selected items instead. It edits the selection while
+// Edit tags in the Selection actions menu points it at the selected items instead. It edits the selection while
 // selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or
 // discarded, as it keeps an item that isn't playing.
 let tagTarget = playback.item;
@@ -4933,6 +5032,28 @@ document.querySelectorAll('input[name="mock-library-load"]').forEach((radio) => 
     layoutGrid(true);
   });
 });
+// None sets the selected tile's background to nothing over each theme's grey, so the page behind the grid shows.
+document.querySelectorAll('input[name="mock-selected-bg"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    if (radio.value === "none") document.documentElement.style.setProperty("--tile-selected-bg", "transparent");
+    else document.documentElement.style.removeProperty("--tile-selected-bg");
+  });
+});
+document.querySelectorAll('input[name="mock-select-inset"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    selectInset = Number(radio.value);
+    layoutGrid(true);
+  });
+});
+document.querySelectorAll('input[name="mock-tile-gap"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    tileGap = Number(radio.value);
+    layoutGrid(true);
+  });
+});
+document.querySelectorAll('input[name="mock-tile-corners"]').forEach((radio) => {
+  radio.addEventListener("change", () => document.documentElement.classList.toggle("mock-round-tiles", radio.value === "rounded"));
+});
 document.querySelectorAll('input[name="mock-stats-load"]').forEach((radio) => {
   radio.addEventListener("change", () => {
     state.statsLoad = radio.value;
@@ -5322,7 +5443,13 @@ $("lib-filters").addEventListener("click", () => showTab("filter"));
 
 // While a page of results loads, its tiles show as placeholders.
 let placeholderUntil = 0;
+// The search and the filter the grid last showed. A new search or filter ends selection, so an action never reaches an
+// item the grid doesn't show; a new sort keeps it.
+let shownMatch = null;
 function reloadGrid() {
+  const match = JSON.stringify([lib.search, appliedValue]);
+  if (shownMatch !== null && match !== shownMatch && selecting) setSelecting(false);
+  shownMatch = match;
   if (state.situation === "reconnecting") {
     // A failure, so not the Connection kind's check.
     notes.notify({ kind: "connection", icon: "sync_problem", text: "Library browse failed. Showing the tiles already loaded.", key: "browse" });
@@ -5340,8 +5467,11 @@ let swallowClick = false;
 const selected = new Set();
 function renderBulk() {
   $("bulk-bar").hidden = !selecting;
-  $("bulk-count").textContent = `${selected.size} selected`;
-  $("bulk-actions").disabled = selected.size === 0;
+  $("bulk-count").textContent = `${selected.size.toLocaleString()} selected`;
+  // Select all has nothing to add while as many items are selected as match.
+  const allSelected = selected.size === visibleItems().items.length;
+  $("bulk-all").disabled = allSelected;
+  $("bulk-all").title = allSelected ? "Everything is already selected" : "Select all";
   if (tagSelectionLive) followPlayingItem();
 }
 function setSelecting(on) {
@@ -5360,20 +5490,20 @@ function renderSelection() {
   grid.classList.toggle("selecting", selecting);
   grid.querySelectorAll(".lib-tile").forEach((tile) => {
     const id = Number(tile.dataset.id);
-    const name = ITEMS[id].name;
     const on = selected.has(id);
     tile.classList.toggle("is-selected", on);
-    tile.setAttribute("aria-label", selecting ? name : `Play ${name}`);
     tile.querySelector(".select-mark").title = on ? "Deselect" : "Select";
   });
 }
 function selectTile(id, range) {
   selecting = true;
-  if (range && lastSelected !== null) {
+  if (range) {
+    // Without a last tile in the grid, Shift+click adds only the tile clicked.
     const ids = visibleItems().items.map((item) => item.id);
-    const from = ids.indexOf(lastSelected);
+    const from = lastSelected === null ? -1 : ids.indexOf(lastSelected);
     const to = ids.indexOf(id);
     if (from >= 0 && to >= 0) ids.slice(Math.min(from, to), Math.max(from, to) + 1).forEach((x) => selected.add(x));
+    else selected.add(id);
   } else if (selected.has(id)) {
     selected.delete(id);
   } else {
@@ -5388,18 +5518,23 @@ function selectTile(id, range) {
   renderBulk();
   renderSelection();
 }
-$("bulk-exit").addEventListener("click", () => setSelecting(false));
+$("bulk-clear").addEventListener("click", () => setSelecting(false));
 $("bulk-all").addEventListener("click", () => {
   visibleItems().items.forEach((item) => selected.add(item.id));
   renderBulk();
   renderSelection();
 });
 
-// A long press on a tile starts selection on touch screens.
+// A long press on a tile starts selection on touch screens. A tile pressed with a finger or a pen opens no menu of the
+// browser's own.
 let pressTimer = 0;
+let touchPress = false;
 $("lib-grid").addEventListener("pointerdown", (event) => {
+  // A press that ended without a click, as when the finger moved after a long press, leaves no click to swallow.
+  swallowClick = false;
+  touchPress = event.pointerType !== "mouse";
   const tile = event.target.closest(".lib-tile");
-  if (!tile || event.pointerType === "mouse") return;
+  if (!tile || !touchPress) return;
   const start = { x: event.clientX, y: event.clientY };
   clearTimeout(pressTimer);
   pressTimer = setTimeout(() => {
@@ -5416,7 +5551,7 @@ $("lib-grid").addEventListener("pointerdown", (event) => {
   $("lib-grid").addEventListener("pointercancel", cancel, { once: true });
 });
 $("lib-grid").addEventListener("contextmenu", (event) => {
-  if (event.target.closest(".lib-tile") && swallowClick) event.preventDefault();
+  if (event.target.closest(".lib-tile") && touchPress) event.preventDefault();
 });
 
 function closeBulkMenu() {
@@ -6385,7 +6520,7 @@ const SHORTCUTS = [
   ["P", "Show or hide the panel"],
   ["Shift+F", "Fullscreen"],
   ["H", "These shortcuts"],
-  ["Esc", "Close the top dialog, the notifications list, the rating stars, or the panel, stop selecting, or leave fullscreen"]
+  ["Esc", "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
 ];
 function showShortcuts() {
   openPanel("settings");

@@ -1,4 +1,4 @@
-import { computed, signal, untracked, type ReadonlySignal } from "@preact/signals";
+import { computed, effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem } from "../api/coreApi";
 import { errorText, noticeRequestFailure, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
@@ -35,7 +35,7 @@ import {
 import { DEFAULT_TARGET_ROW_HEIGHT, isTargetRowHeight } from "./libraryGridLayout";
 import { libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
 import { playRefusalFailure } from "./libraryPlayModel";
-import { parseLibraryQueryPage } from "./libraryProjectionModel";
+import { parseLibraryIds, parseLibraryQueryPage } from "./libraryProjectionModel";
 import {
   LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
   createLibraryQuerySession,
@@ -43,6 +43,7 @@ import {
   type LibraryQuerySession,
   type LibraryQuerySessionSnapshot
 } from "./libraryQuerySession";
+import { createLibrarySelection, type LibrarySelection } from "./librarySelection";
 
 /**
  * What the Library tab's body shows: nothing before it first shows a message or tiles, a message, or the grid,
@@ -71,17 +72,29 @@ function isRememberedSort(value: unknown): value is RememberedSort {
   return (LIBRARY_SORT_MODES as readonly unknown[]).includes(record.mode) && typeof record.descending === "boolean";
 }
 
+/** Select all's tooltip while it is disabled. */
+export const ALL_SELECTED_REASON = "Everything is already selected";
+
+/** How a tile was clicked: on its check icon, and with which keys held. */
+export interface TileClick {
+  onCheck: boolean;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}
+
 /** The source list as loaded, null when its load failed, or "unauthorized" when the server answered 401. */
 type SourcesLoad = FilterSource[] | null | "unauthorized";
 
 export type CreateLibraryGrid = (host: HTMLElement, options: Required<LibraryGridOptions>) => LibraryGridController;
 
 /**
- * The Library tab's browse window, controls, Filters line, and tile play. The first page loads once the server is
- * ready, and the window keeps its tiles and scroll position while the tab is hidden. The panel shows and hides the
- * tab. The tab remembers on this device whether its controls are collapsed, its sort and direction, and the row height
- * a zoom over the grid set. A refresh that keeps a source's items because its folder listed no media files shows a
- * notice naming the folder, once per folder for the page's life.
+ * The Library tab's browse window, controls, Filters line, tile play, and selection. The first page loads once the
+ * server is ready, and the window keeps its tiles and scroll position while the tab is hidden. The panel shows and
+ * hides the tab. The tab remembers on this device whether its controls are collapsed, its sort and direction, and the
+ * row height a zoom over the grid set. A refresh that keeps a source's items because its folder listed no media files
+ * shows a notice naming the folder, once per folder for the page's life. Selection lasts while the tab is hidden, and a
+ * change to the search or the filter the grid shows ends it.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
@@ -99,6 +112,10 @@ export interface Library {
   /** The sort direction button's label. It changes when a page in the new order arrives. */
   readonly directionLabel: ReadonlySignal<string>;
   readonly body: ReadonlySignal<LibraryBody>;
+  /** The items picked in the grid, which the selection bar and the bulk actions work on. */
+  readonly selection: LibrarySelection;
+  /** As many items are selected as the search and the filter match, so Select all has nothing to add. */
+  readonly allSelected: ReadonlySignal<boolean>;
 
   /** The tab's view rendered, so the tab can open. */
   attach(): void;
@@ -133,10 +150,19 @@ export interface Library {
   /** Shows the Randomization tab, as the Random line does. */
   openRandomizationTab(): Promise<void>;
   /**
-   * Plays a tile's item through the server, closes the panel as the overlay, and hands the item to the player. A play
-   * that fails shows in the notice; one the server answers with 401 shows the pairing prompt.
+   * A click on a tile: on its check icon, with Shift, Ctrl, or Cmd held, or during selection, it picks the tile or takes
+   * it out, Shift+click picking the range from the last tile chosen. Otherwise it plays the tile's item through the
+   * server, closes the panel as the overlay, and hands the item to the player, resolving once the play ends. A play that
+   * fails shows in the notice; one the server answers with 401 shows the pairing prompt.
    */
-  play(itemId: string): Promise<void>;
+  clickTile(itemId: string, click: TileClick): Promise<void>;
+  /** A long press on a tile picks it or takes it out, as a click during selection does. */
+  longPressTile(itemId: string): void;
+  /**
+   * Picks every item the grid's search and filter match, loaded or not, from the server. A press while one is under way
+   * does nothing, an answer that comes after selection ended is dropped, and a failure shows in the notice.
+   */
+  selectAll(): Promise<void>;
 }
 
 export interface LibraryOptions {
@@ -180,8 +206,14 @@ export function createLibrary(options: LibraryOptions): Library {
   const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
   const randomLine = computed(() => randomLineText(store.randomOptions.value, spreadCategories(tagCatalog.catalog.value)));
   const summary = signal<string | null>(null);
+  /** How many items the search and the filter match, while the window is ready. */
+  const matchCount = signal<number | null>(null);
   const directionLabel = signal(getSortDirectionLabel(initialControls.sortMode, initialControls.sortDescending));
   const body = signal<LibraryBody>({ kind: "blank" });
+  const selection = createLibrarySelection();
+  const allSelected = computed(() => matchCount.value !== null && selection.count.value === matchCount.value);
+  /** Select all's request under way, which a selection ending aborts. */
+  let selectAllRequest: AbortController | null = null;
 
   let attached = false;
   let open = false;
@@ -247,6 +279,7 @@ export function createLibrary(options: LibraryOptions): Library {
     const current = controls.peek();
     directionLabel.value = getSortDirectionLabel(current.sortMode, current.sortDescending);
     summary.value = snap.summary;
+    matchCount.value = snap.totalCount;
   }
 
   /** Gives the grid the loaded tiles, or keeps the scroll reset for the grid about to be created. */
@@ -280,12 +313,14 @@ export function createLibrary(options: LibraryOptions): Library {
     const blockedBy = untracked(() => heldBackText(store));
     if (blockedBy !== null) {
       summary.value = null;
+      matchCount.value = null;
       body.value = { kind: "message", message: { text: blockedBy, error: true } };
       return;
     }
 
     if (!ready) {
       summary.value = null;
+      matchCount.value = null;
       const phase = snap.phase === "error" ? "error" : snap.phase === "empty" ? "empty" : "loading";
       body.value = { kind: "message", message: libraryOverlayMessage(phase, snap.failureText, snap.errorStatus) };
       return;
@@ -313,6 +348,10 @@ export function createLibrary(options: LibraryOptions): Library {
     }
     if (!serverReady || store.heldBack.peek()) {
       return Promise.resolve();
+    }
+    // A new search or filter would leave picked items the grid no longer shows, so selection ends; a new sort keeps it.
+    if (session.changesMatch(store.appliedFilter.peek(), controls.peek())) {
+      selection.clear();
     }
     return session.resetQuery(store.appliedFilter.peek(), controls.peek());
   }
@@ -414,9 +453,11 @@ export function createLibrary(options: LibraryOptions): Library {
     }
   }
 
+  // The Selection actions menu closes with the tab, so it never stays open where nobody can see it.
   function close(): void {
     open = false;
     session.setOverlayVisible(false);
+    selection.closeMenu();
   }
 
   /** The media type of the loaded tile with `itemId`, which a refusal's message names. */
@@ -425,12 +466,6 @@ export function createLibrary(options: LibraryOptions): Library {
   }
 
   async function play(itemId: string): Promise<void> {
-    const trimmedItemId = String(itemId || "").trim();
-    if (!trimmedItemId) {
-      void dialogs.notice("Playback unavailable: no library item was selected.");
-      return;
-    }
-
     const refusal = playRefusalNotice(store);
     if (refusal) {
       void dialogs.notice(refusal);
@@ -448,7 +483,7 @@ export function createLibrary(options: LibraryOptions): Library {
     try {
       const result = await requestPlayItem(
         { apiBaseUrl },
-        trimmedItemId,
+        itemId,
         { clientId: store.identity.clientId, sessionId: store.identity.sessionId },
         api.request
       );
@@ -458,7 +493,7 @@ export function createLibrary(options: LibraryOptions): Library {
           statusCode: result.refusal.status,
           code: result.refusal.code || "none"
         });
-        const { text, logText } = playRefusalFailure(result.refusal, tileMediaType(trimmedItemId));
+        const { text, logText } = playRefusalFailure(result.refusal, tileMediaType(itemId));
         void dialogs.notice(text, logText);
         return;
       }
@@ -487,6 +522,52 @@ export function createLibrary(options: LibraryOptions): Library {
       store.loading.release("play");
     }
   }
+
+  async function clickTile(itemId: string, click: TileClick): Promise<void> {
+    if (click.shiftKey) {
+      selection.addRange(itemId, session.snapshot().items.map((item) => item.id));
+    } else if (click.onCheck || click.ctrlKey || click.metaKey || selection.active.peek()) {
+      selection.toggle(itemId);
+    } else {
+      await play(itemId);
+    }
+  }
+
+  async function selectAll(): Promise<void> {
+    if (selectAllRequest || !selection.active.peek()) {
+      return;
+    }
+    const request = new AbortController();
+    selectAllRequest = request;
+    try {
+      const raw = await api.postJson("/api/library/query-ids", session.matchQuery(), { signal: request.signal });
+      if (request.signal.aborted) {
+        return;
+      }
+      selection.addAll(parseLibraryIds(raw));
+    } catch (error) {
+      if (!request.signal.aborted) {
+        noticeRequestFailure(dialogs, "Select all failed", error);
+      }
+    } finally {
+      if (selectAllRequest === request) {
+        selectAllRequest = null;
+      }
+    }
+  }
+
+  // Select all's answer would start selection over, so a selection ending drops it.
+  selection.active.subscribe((active) => {
+    if (!active && selectAllRequest) {
+      selectAllRequest.abort();
+      selectAllRequest = null;
+    }
+  });
+  // The tiles shown change their marks in place.
+  effect(() => {
+    selection.version.value;
+    grid?.setSelection(selection.has);
+  });
 
   // A preset picked in the dropdown, or the applied preset's new filter from another device, starts the library over.
   const appliedFilterChanged = () => {
@@ -530,8 +611,9 @@ export function createLibrary(options: LibraryOptions): Library {
   connection.on("refreshCompleted", () => {
     void session.reloadLoaded();
   });
-  // Removed items leave the window, which reloads once for them.
-  connection.on("itemsRemoved", () => {
+  // Removed items leave the window, which reloads once for them, and the selection.
+  connection.on("itemsRemoved", (payload) => {
+    selection.remove(payload?.itemIds ?? []);
     void session.reloadLoaded();
   });
   connection.on("resyncRequired", () => {
@@ -564,6 +646,8 @@ export function createLibrary(options: LibraryOptions): Library {
     summary,
     directionLabel,
     body,
+    selection,
+    allSelected,
 
     attach() {
       attached = true;
@@ -588,6 +672,7 @@ export function createLibrary(options: LibraryOptions): Library {
       });
       grid = created;
       created.setPlayingItemId(store.current.peek()?.itemId ?? null);
+      created.setSelection(selection.has);
       const resetScroll = pendingScrollTop;
       pendingScrollTop = false;
       const snap = session.snapshot();
@@ -683,6 +768,8 @@ export function createLibrary(options: LibraryOptions): Library {
       return panel.showTab("randomization");
     },
 
-    play
+    clickTile,
+    longPressTile: (itemId) => selection.toggle(itemId),
+    selectAll
   };
 }

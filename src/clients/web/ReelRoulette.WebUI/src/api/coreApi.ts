@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { DeviceStorage } from "../state/deviceStore";
-import { HttpStatusError, readJson, refusalError, sendRequest } from "./serverRequest";
+import { readJson, refusalError, sendRequest, type HttpStatusError } from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
 type PlaybackItemResponse = components["schemas"]["PlaybackItemResponse"];
@@ -116,12 +116,7 @@ export async function requestPlayItem(
   fetchImpl: typeof fetch = fetch,
   options: PlayItemOptions = {}
 ): Promise<PlayItemResult> {
-  const trimmedItemId = itemId.trim();
-  if (!trimmedItemId) {
-    return { ok: false, refusal: new HttpStatusError(400, "itemId is required", "play_item_id_invalid") };
-  }
-
-  const encodedItemId = encodeURIComponent(trimmedItemId);
+  const encodedItemId = encodeURIComponent(itemId);
   const response = await sendRequest(fetchImpl, buildApiUrl(config, `/api/play/${encodedItemId}`), {
     method: "POST",
     headers: {

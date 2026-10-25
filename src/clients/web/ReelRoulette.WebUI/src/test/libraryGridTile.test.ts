@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { within } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 import { buildThumbnailUrl, createGridTile, type GridTileView } from "../library/libraryGridTile";
 
@@ -56,6 +57,11 @@ describe("grid tile", () => {
     expect(element.style.height).toBe("200px");
   });
 
+  it("keeps the thumbnail from being dragged in any browser", () => {
+    const { element } = createGridTile("item-1", view, false);
+    expect(element.querySelector("img")?.getAttribute("draggable")).toBe("false");
+  });
+
   it("has no image without a thumbnail, keeping the scrim", () => {
     const { element } = createGridTile("item-1", { ...view, thumbnailUrl: null }, false);
 
@@ -91,6 +97,25 @@ describe("grid tile", () => {
     expect(other.element.className).toBe("library-grid-tile is-playing");
   });
 
+  it("gives every tile a filled check icon beside its thumbnail, whose tooltip says what a click does, which marks it selected", () => {
+    const tile = createGridTile("item-1", view, false);
+    const check = within(tile.element).getByTitle("Select");
+
+    expect(check.querySelector(".material-symbol-icon.is-filled")?.textContent).toBe("check_circle");
+    expect(check.parentElement).toBe(tile.element);
+    expect(tile.element.className).toBe("library-grid-tile");
+
+    tile.setSelected(true);
+    expect(within(tile.element).getByTitle("Deselect")).toBe(check);
+    expect(tile.element.className).toBe("library-grid-tile is-selected");
+    tile.setSelected(false);
+    expect(within(tile.element).getByTitle("Select")).toBe(check);
+    expect(tile.element.className).toBe("library-grid-tile");
+
+    const selected = createGridTile("item-2", view, true, true);
+    expect(selected.element.className).toBe("library-grid-tile is-playing is-selected");
+  });
+
   it("makes the file name the whole tile's tooltip and the name bar's text, as text", () => {
     const { element } = createGridTile("item-1", { ...view, fileName: 'a<b>"c"' }, false);
     const bar = element.querySelector(".library-grid-tile-filename")!;
@@ -106,6 +131,20 @@ describe("grid tile update", () => {
     const tile = createGridTile("item-1", { ...view, isFavorite: true }, false);
 
     expect(changesBy(tile.element, () => tile.update({ ...view, isFavorite: true }))).toHaveLength(0);
+    expect(changesBy(tile.element, () => tile.setSelected(false))).toHaveLength(0);
+    tile.setSelected(true);
+    expect(changesBy(tile.element, () => tile.setSelected(true))).toHaveLength(0);
+  });
+
+  it("changes only its mark and the check icon's tooltip when selected", () => {
+    const tile = createGridTile("item-1", view, false);
+    const check = within(tile.element).getByTitle("Select");
+
+    const records = changesBy(tile.element, () => tile.setSelected(true));
+    expect(records.map((record) => [record.target, record.attributeName])).toEqual([
+      [tile.element, "class"],
+      [check, "title"]
+    ]);
   });
 
   it("changes only the badge for a favorite or blacklist change", () => {

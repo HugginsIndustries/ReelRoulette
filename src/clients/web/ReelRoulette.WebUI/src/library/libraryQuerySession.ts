@@ -1,7 +1,8 @@
 import { requestFailure } from "../api/serverRequest";
-import type { ApiFilterState, FilterState, FlagFilterMode } from "../filter/filterStateModel";
+import type { FilterState, FlagFilterMode } from "../filter/filterStateModel";
 import { cloneFilterState, createDefaultFilterState, serializeFilterStateForApi } from "../filter/filterStateModel";
 import { parseRating } from "../rating/rating";
+import type { components } from "../types/openapi.generated";
 import type { ItemRatingChangedPayload } from "../types/serverContracts";
 import {
   createDefaultBrowseControls,
@@ -30,9 +31,15 @@ export type LibraryQueryTileEvent = "favorite" | "playback" | "tags" | "rating";
 export type LibraryQueryTileEffect = "patch" | "reload";
 export type LibraryWindowPhase = "idle" | "loading" | "ready" | "empty" | "error";
 
-export interface LibraryQueryRequest {
-  filterState: ApiFilterState;
-  search: string;
+type LibraryIdsQueryRequest = components["schemas"]["LibraryIdsQueryRequest"];
+
+/**
+ * What a query matches by: the filter and the search, without its sort or its page, as `POST /api/library/query-ids`
+ * takes it, always with both.
+ */
+export type LibraryMatchQuery = { [Key in keyof LibraryIdsQueryRequest]-?: NonNullable<LibraryIdsQueryRequest[Key]> };
+
+export interface LibraryQueryRequest extends LibraryMatchQuery {
   sortMode: LibrarySortMode;
   sortDescending: boolean;
   offset: number;
@@ -118,6 +125,10 @@ export type LibraryQueryFn = (request: LibraryQueryRequest, signal: AbortSignal)
 
 export interface LibraryQuerySession {
   snapshot(): LibraryQuerySessionSnapshot;
+  /** The filter and the search of the query the window shows, or of the one it is loading. */
+  matchQuery(): LibraryMatchQuery;
+  /** Whether a query with `filter` and `controls` would match by another filter or search than `matchQuery`'s. */
+  changesMatch(filter: FilterState, controls: LibraryBrowseControls): boolean;
   setListener(listener: (event: LibraryQuerySessionEvent) => void): void;
   ensureLoaded(filter: FilterState, controls: LibraryBrowseControls): Promise<void>;
   resetQuery(filter: FilterState, controls: LibraryBrowseControls): Promise<void>;
@@ -405,10 +416,17 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
     };
   }
 
+  function matchQueryFor(filter: FilterState, searchQuery: string): LibraryMatchQuery {
+    return { filterState: serializeFilterStateForApi(filter), search: searchQuery };
+  }
+
+  function matchQuery(): LibraryMatchQuery {
+    return matchQueryFor(filterState, controls.searchQuery);
+  }
+
   function requestFor(offset: number, limit: number): LibraryQueryRequest {
     return {
-      filterState: serializeFilterStateForApi(filterState),
-      search: controls.searchQuery,
+      ...matchQuery(),
       sortMode: controls.sortMode,
       sortDescending: controls.sortDescending,
       offset,
@@ -518,6 +536,11 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
 
   return {
     snapshot,
+    matchQuery,
+    // The requests compare as they would be sent.
+    changesMatch(filter, nextControls) {
+      return JSON.stringify(matchQueryFor(filter, nextControls.searchQuery)) !== JSON.stringify(matchQuery());
+    },
     setListener(next) {
       listener = next;
     },

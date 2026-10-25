@@ -399,6 +399,43 @@ describe("row reuse", () => {
     fresh.grid.destroy();
   });
 
+  it("marks the selected items' tiles in place, and the tiles that come into view later", () => {
+    const { container, grid } = createGrid();
+    grid.setBrowseContent({ visibleItems: thumbnailItems(400) });
+    const selected = new Set(["item-1", "item-3", "item-399"]);
+    const shownBefore = tilesById(container);
+
+    grid.setSelection((itemId) => selected.has(itemId));
+
+    const marked = () =>
+      Array.from(tilesById(container))
+        .filter(([, tile]) => tile.classList.contains("is-selected"))
+        .map(([id]) => id);
+    expect(marked()).toEqual(["item-1", "item-3"]);
+    for (const [id, tile] of tilesById(container)) {
+      expect(tile).toBe(shownBefore.get(id));
+    }
+
+    selected.delete("item-3");
+    grid.setSelection((itemId) => selected.has(itemId));
+    expect(marked()).toEqual(["item-1"]);
+
+    scrollTo(container, grid.measureCoverage()!.extentHeight - VIEWPORT_HEIGHT);
+    expect(tilesById(container).has("item-399")).toBe(true);
+    expect(marked()).toEqual(["item-399"]);
+    grid.destroy();
+  });
+
+  it("marks the tiles of a grid's rows built after the selection was set", () => {
+    const { container, grid } = createGrid();
+    grid.setSelection((itemId) => itemId === "item-2");
+    grid.setBrowseContent({ visibleItems: thumbnailItems(10) });
+
+    expect(tilesById(container).get("item-2")!.classList.contains("is-selected")).toBe(true);
+    expect(tilesById(container).get("item-1")!.classList.contains("is-selected")).toBe(false);
+    grid.destroy();
+  });
+
   it("shows an item loaded twice in each place, keeping both tiles", () => {
     const { container, grid } = createGrid();
     const items = thumbnailItems(12);

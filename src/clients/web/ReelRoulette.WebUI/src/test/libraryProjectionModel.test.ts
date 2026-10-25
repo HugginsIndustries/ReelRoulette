@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseLibraryIds,
   parseLibraryQueryPage,
   parseMediaType,
   parseUtcMs
@@ -128,6 +129,11 @@ describe("libraryProjectionModel", () => {
       thumbnailWidth: null,
       thumbnailHeight: null
     });
+  });
+
+  it("reads the ids a query-ids answer names, leaving out any that aren't text", () => {
+    expect(parseLibraryIds({ ids: ["a", 7, null, "b"] })).toEqual(["a", "b"]);
+    expect([parseLibraryIds({}), parseLibraryIds({ ids: "a" }), parseLibraryIds(null)]).toEqual([[], [], []]);
   });
 
   it("parses a list query page without dropping items for a missing source list", () => {

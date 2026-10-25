@@ -11,6 +11,10 @@ export function buildThumbnailUrl(apiBaseUrl: string, itemId: string, version: s
 
 /** The class that marks the playing item's tile. */
 const PLAYING_TILE_CLASS = "is-playing";
+/** The class that marks a selected item's tile. */
+const SELECTED_TILE_CLASS = "is-selected";
+/** The class of a tile's check icon, which selects it. */
+export const TILE_CHECK_CLASS = "library-grid-tile-check";
 
 /** What a tile shows. */
 export interface GridTileView {
@@ -29,6 +33,7 @@ export interface GridTile {
   /** Changes only what differs from what the tile shows, so an image already showing is never requested again. */
   update(view: GridTileView): void;
   setPlaying(playing: boolean): void;
+  setSelected(selected: boolean): void;
 }
 
 function block(className: string): HTMLDivElement {
@@ -48,6 +53,9 @@ function thumbnailImage(url: string): HTMLImageElement {
   const image = document.createElement("img");
   image.className = "library-grid-tile-image";
   image.alt = "";
+  // A thumbnail can't be dragged in any browser, so a long press selects its tile; the stylesheet's
+  // `-webkit-user-drag: none` covers Safari's own image drag too.
+  image.setAttribute("draggable", "false");
   // Set before the source, so the browser waits to load it until it nears the view.
   image.setAttribute("loading", "lazy");
   image.setAttribute("decoding", "async");
@@ -58,9 +66,11 @@ function thumbnailImage(url: string): HTMLImageElement {
 /**
  * Every tile has the playing icon, which the stylesheet shows only on the playing tile, so the grid can move it
  * without changing the tiles. The name is the whole tile's tooltip, and shows in the name bar with the Settings
- * tab's option.
+ * tab's option. The check icon sits beside the thumbnail rather than on it, so a selected tile's thumbnail shrinks
+ * and dims on its own while the icon stays put; the stylesheet shows it while selecting or with the pointer over the
+ * tile.
  */
-export function createGridTile(itemId: string, view: GridTileView, playing: boolean): GridTile {
+export function createGridTile(itemId: string, view: GridTileView, playing: boolean, selected = false): GridTile {
   const element = block("library-grid-tile");
   element.dataset.itemId = itemId;
   const media = block("library-grid-tile-media");
@@ -69,11 +79,15 @@ export function createGridTile(itemId: string, view: GridTileView, playing: bool
   playingIcon.append(filledIcon("play_circle"));
   const nameBar = block("library-grid-tile-filename");
   media.append(scrim, playingIcon, nameBar);
-  element.append(media);
+  const check = document.createElement("span");
+  check.className = TILE_CHECK_CLASS;
+  check.append(filledIcon("check_circle"));
+  element.append(media, check);
 
   let image: HTMLImageElement | null = null;
   let badge: HTMLDivElement | null = null;
   let shown: GridTileView | null = null;
+  let shownSelected: boolean | null = null;
 
   function showBadge(isFavorite: boolean, isBlacklisted: boolean): void {
     if (!isFavorite && !isBlacklisted) {
@@ -133,7 +147,17 @@ export function createGridTile(itemId: string, view: GridTileView, playing: bool
     element.classList.toggle(PLAYING_TILE_CLASS, isPlaying);
   }
 
+  function setSelected(isSelected: boolean): void {
+    if (shownSelected === isSelected) {
+      return;
+    }
+    shownSelected = isSelected;
+    element.classList.toggle(SELECTED_TILE_CLASS, isSelected);
+    check.title = isSelected ? "Deselect" : "Select";
+  }
+
   update(view);
   setPlaying(playing);
-  return { element, update, setPlaying };
+  setSelected(selected);
+  return { element, update, setPlaying, setSelected };
 }

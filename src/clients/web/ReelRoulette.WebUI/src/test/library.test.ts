@@ -56,6 +56,8 @@ function fakeGrid(options: Required<LibraryGridOptions>, page: FakePage) {
     contents: [] as Array<{ ids: string[]; resetScroll: boolean | undefined }>,
     /** Each playing item id the library marked, the first when the grid was created. */
     playing: [] as Array<string | null>,
+    /** Whether an item's tile shows as selected, as the library last marked the tiles. */
+    isSelected: (_itemId: string) => false,
     /** Whether the tab's page was shown or hidden each time the deferred layout was flushed. */
     flushes: [] as string[],
     destroyed: false,
@@ -65,6 +67,9 @@ function fakeGrid(options: Required<LibraryGridOptions>, page: FakePage) {
     },
     setPlayingItemId(itemId: string | null) {
       grid.playing.push(itemId);
+    },
+    setSelection(isSelected: (itemId: string) => boolean) {
+      grid.isSelected = isSelected;
     },
     measureCoverage: () => grid.coverage,
     flushDeferredLayout() {
@@ -647,13 +652,16 @@ describe("search and sort", () => {
   });
 });
 
+/** A click on a tile away from its check icon, with no keys held, which plays it outside selection. */
+const PLAIN = { onCheck: false, shiftKey: false, ctrlKey: false, metaKey: false };
+
 describe("play", () => {
   it("joins history, closes the panel as the overlay, and then plays as a library choice, which records no play again", async () => {
     const t = setup();
     t.replies.set("/api/play/item-1", () => json(PLAYED));
     t.showTab();
 
-    await t.library.play(" item-1 ");
+    await t.library.clickTile("item-1", PLAIN);
 
     expect(t.requests("/api/play/item-1")[0]!.body).toEqual({ clientId: "client-1", sessionId: "session-1" });
     expect(t.playCalls).toEqual(["current=item-1 closeIfOverlay=1 origin=library"]);
@@ -675,8 +683,8 @@ describe("play", () => {
         })
     );
 
-    const first = t.library.play("item-1");
-    await t.library.play("item-1");
+    const first = t.library.clickTile("item-1", PLAIN);
+    await t.library.clickTile("item-1", PLAIN);
     answer();
     await first;
 
@@ -694,7 +702,7 @@ describe("play", () => {
     let answer: () => void = () => {};
     t.replies.set("/api/play/item-1", () => new Promise<Response>((resolve) => (answer = () => resolve(json(PLAYED)))));
 
-    const play = t.library.play("item-1");
+    const play = t.library.clickTile("item-1", PLAIN);
     await vi.advanceTimersByTimeAsync(499);
     expect(t.store.loading.shown.value).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
@@ -714,7 +722,7 @@ describe("play", () => {
     const t = setup();
     for (const answer of [() => json({}, 500), () => json({}, 401), () => Promise.reject(new TypeError("Failed to fetch"))]) {
       t.replies.set("/api/play/item-1", answer);
-      const play = t.library.play("item-1");
+      const play = t.library.clickTile("item-1", PLAIN);
       await vi.advanceTimersByTimeAsync(500);
       await play;
       expect(t.store.loading.shown.value).toBe(false);
@@ -741,7 +749,7 @@ describe("play", () => {
     ];
     for (const [status, answer, notice] of plays) {
       t.replies.set("/api/play/item-1", answer);
-      await t.library.play("item-1");
+      await t.library.clickTile("item-1", PLAIN);
       expect(t.notices.at(-1)).toBe(notice);
       // The server's text can name a file, so the log names only the status.
       expect(t.noticeLogs.at(-1)).toBe(`Playback failed (HTTP ${status}).`);
@@ -749,18 +757,15 @@ describe("play", () => {
     expect(t.relayed).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=404 code=play_item_not_found");
 
     t.replies.set("/api/play/item-1", () => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }));
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
     expect([t.notices.at(-1), t.noticeLogs.at(-1)]).toEqual([
       "Playback failed: The server sent an unexpected response.",
       "Playback failed: The server sent an unexpected response (text/html)."
     ]);
 
     t.replies.set("/api/play/item-1", () => json({ itemId: "item-1" }));
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
     expect([t.notices.at(-1), t.noticeLogs.at(-1)]).toEqual(["Playback failed.", "Playback failed."]);
-
-    await t.library.play("  ");
-    expect(t.notices.at(-1)).toBe("Playback unavailable: no library item was selected.");
     expect(t.statuses).toEqual([]);
     expect(t.notified).toEqual([]);
 
@@ -776,7 +781,7 @@ describe("play", () => {
     await vi.waitFor(() => expect(t.library.session.snapshot().items).toHaveLength(1));
     t.replies.set("/api/play/item-1", () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503));
 
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
 
     expect(t.notices).toEqual(["This photo couldn't load. The server may be waiting on a slow or disconnected drive or share."]);
     expect(t.noticeLogs).toEqual(["Playback failed (HTTP 503)."]);
@@ -789,7 +794,7 @@ describe("play", () => {
       t.replies.set("/api/play/item-1", () => {
         throw new TypeError(wording);
       });
-      await t.library.play("item-1");
+      await t.library.clickTile("item-1", PLAIN);
       expect(t.notices).toEqual(["Playback failed: Couldn't reach the server."]);
       expect(t.relayed).toContain("playback=library-play-error attempt=0 hasCurrent=false message=Couldn't reach the server.");
       expect(t.statuses).toEqual([]);
@@ -800,7 +805,7 @@ describe("play", () => {
   it("shows only the pairing prompt for a play the server answers with 401, and still relays its line", async () => {
     const t = setup();
     t.replies.set("/api/play/item-1", () => json({}, 401));
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
 
     expect(t.store.pairingRequired.peek()).toBe(true);
     expect(t.notices).toEqual([]);
@@ -816,7 +821,7 @@ describe("play", () => {
     t.store.compatibilityBlocked.value = true;
 
     t.showTab();
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
     await settle();
 
     expect(t.library.isOpen()).toBe(true);
@@ -842,7 +847,7 @@ describe("without a library", () => {
     t.store.libraryState.value = "newer";
 
     t.showTab();
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
     await t.library.commitQuery();
     t.library.setSortMode("Duration");
     t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesMode: "only", includedSourceIds: ["source-1"] } }];
@@ -865,7 +870,7 @@ describe("without a library", () => {
     t.store.compatibilityBlocked.value = true;
 
     t.showTab();
-    await t.library.play("item-1");
+    await t.library.clickTile("item-1", PLAIN);
     expect(t.notices).toEqual(["Cannot play: server compatibility check failed."]);
     expect(t.library.body.peek()).toMatchObject({ message: { text: "Server API version 0 is not supported." } });
   });
@@ -1073,5 +1078,173 @@ describe("kept sources", () => {
     expect(t.requests("/api/sources")).toHaveLength(2);
     expect(t.relayed).not.toContain("library=filter-summary-sources-failed");
     expect(t.relayed).toContain("status=Unauthorized. Pair first. (GET /api/sources) hasCurrent=false attempt=0");
+  });
+});
+
+describe("selection", () => {
+  /** A library whose first page has loaded and whose tab shows, with its grid. */
+  async function shown(count = 3) {
+    const t = setup();
+    t.fakeLibrary.items = libraryItems(count);
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    const grid = t.mountGrid();
+    return { ...t, grid };
+  }
+
+  it("a click plays a tile, and one on its check icon or with Shift, Ctrl, or Cmd held selects it instead", async () => {
+    const t = await shown();
+    t.replies.set("/api/play/item-1", () => json(PLAYED));
+
+    for (const click of [{ onCheck: true }, { shiftKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+      t.library.clickTile("item-2", { ...PLAIN, ...click });
+      expect([t.library.selection.active.peek(), t.library.selection.ids()]).toEqual([true, ["item-2"]]);
+      t.library.selection.clear();
+    }
+    expect(t.requests("/api/play/item-2")).toHaveLength(0);
+
+    t.library.clickTile("item-1", PLAIN);
+    await settle();
+    expect(t.requests("/api/play/item-1")).toHaveLength(1);
+    expect(t.library.selection.active.peek()).toBe(false);
+  });
+
+  it("while selecting, a click, a Ctrl or Cmd+click, or a long press adds or removes a tile without playing it", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+
+    t.library.clickTile("item-2", PLAIN);
+    t.library.clickTile("item-3", { ...PLAIN, ctrlKey: true });
+    expect(t.library.selection.ids()).toEqual(["item-1", "item-2", "item-3"]);
+    t.library.clickTile("item-2", { ...PLAIN, metaKey: true });
+    t.library.longPressTile("item-3");
+    expect(t.library.selection.ids()).toEqual(["item-1"]);
+    t.library.longPressTile("item-2");
+    expect(t.library.selection.ids()).toEqual(["item-1", "item-2"]);
+    await settle();
+    expect(t.requests("/api/play/item-2")).toHaveLength(0);
+  });
+
+  it("Shift+click adds the range from the last tile chosen in the loaded order", async () => {
+    const t = await shown(6);
+    t.library.clickTile("item-5", { ...PLAIN, onCheck: true });
+    t.library.clickTile("item-2", { ...PLAIN, shiftKey: true });
+    expect(t.library.selection.ids().sort()).toEqual(["item-2", "item-3", "item-4", "item-5"]);
+  });
+
+  it("marks the selected tiles on the grid, and on a grid created again", async () => {
+    const t = await shown();
+    t.library.clickTile("item-2", { ...PLAIN, onCheck: true });
+    expect(["item-1", "item-2"].map(t.grid.isSelected)).toEqual([false, true]);
+
+    t.library.selection.clear();
+    expect(t.grid.isSelected("item-2")).toBe(false);
+    t.library.clickTile("item-3", { ...PLAIN, onCheck: true });
+    const again = t.mountGrid();
+    expect(["item-2", "item-3"].map(again.isSelected)).toEqual([false, true]);
+  });
+
+  it("Select all sends the search and filter the window shows, not text still being typed, and picks every id answered", async () => {
+    const t = await shown();
+    t.replies.set("/api/library/query-ids", () => json({ ids: ["item-1", "item-2", "item-3", "item-400"] }));
+    t.store.appliedFilter.value = { ...createDefaultFilterState(), favoritesMode: "only" };
+    t.library.setSearch("clip");
+    await t.library.commitQuery();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+
+    t.library.setSearch("clip 4");
+    await t.library.selectAll();
+
+    expect(t.requests("/api/library/query-ids").map((request) => request.body)).toEqual([
+      expect.objectContaining({ search: "clip", filterState: expect.objectContaining({ favoritesMode: "only" }) })
+    ]);
+    expect(Object.keys(t.requests("/api/library/query-ids")[0]!.body).sort()).toEqual(["filterState", "search"]);
+    expect(t.library.selection.count.peek()).toBe(4);
+    expect(t.library.selection.has("item-400")).toBe(true);
+  });
+
+  it("Select all is disabled while as many items are selected as match", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    t.library.clickTile("item-2", PLAIN);
+    expect(t.library.allSelected.peek()).toBe(false);
+    t.library.clickTile("item-3", PLAIN);
+    expect(t.library.allSelected.peek()).toBe(true);
+    t.library.clickTile("item-3", PLAIN);
+    expect(t.library.allSelected.peek()).toBe(false);
+  });
+
+  it("a press of Select all while one is under way sends nothing, and clearing selection drops its answer, even for a new selection", async () => {
+    const t = await shown();
+    let answer: () => void = () => {};
+    t.replies.set(
+      "/api/library/query-ids",
+      () => new Promise<Response>((resolve) => (answer = () => resolve(json({ ids: ["item-1", "item-2", "item-3"] }))))
+    );
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+
+    const first = t.library.selectAll();
+    await t.library.selectAll();
+    expect(t.requests("/api/library/query-ids")).toHaveLength(1);
+    t.library.selection.clear();
+    t.library.clickTile("item-2", { ...PLAIN, onCheck: true });
+    answer();
+    await first;
+
+    expect(t.library.selection.ids()).toEqual(["item-2"]);
+    expect(t.notices).toEqual([]);
+  });
+
+  it("a Select all that fails says so in the notice, with the server's reason, and logs its status", async () => {
+    const t = await shown();
+    t.replies.set("/api/library/query-ids", () => json({ error: "The library is busy." }, 503));
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+
+    await t.library.selectAll();
+
+    expect(t.notices).toEqual(["Select all failed: The library is busy."]);
+    expect(t.noticeLogs).toEqual(["Select all failed (HTTP 503)."]);
+    expect(t.library.selection.ids()).toEqual(["item-1"]);
+  });
+
+  it("a new search or filter ends selection, and a new sort or the same query keeps it", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+
+    t.library.setSortMode("PlayCount");
+    t.library.toggleSortDirection();
+    await t.library.commitQuery();
+    await settle();
+    expect(t.library.selection.active.peek()).toBe(true);
+
+    t.store.appliedFilter.value = { ...createDefaultFilterState(), onlyUnrated: true };
+    await t.library.commitQuery();
+    expect(t.library.selection.active.peek()).toBe(false);
+
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    t.library.setSearch("clip");
+    await t.library.commitQuery();
+    expect(t.library.selection.active.peek()).toBe(false);
+  });
+
+  it("removed items leave the selection, which ends when none are left", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    t.library.clickTile("item-2", PLAIN);
+
+    t.emit("itemsRemoved", { itemIds: ["item-1", "item-3"] });
+    expect(t.library.selection.ids()).toEqual(["item-2"]);
+    t.emit("itemsRemoved", { itemIds: ["item-2"] });
+    expect(t.library.selection.active.peek()).toBe(false);
+  });
+
+  it("hiding the tab closes the Selection actions menu and keeps the selection", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    t.library.selection.toggleMenu();
+
+    t.hideTab();
+    expect([t.library.selection.menuOpen.peek(), t.library.selection.ids()]).toEqual([false, ["item-1"]]);
   });
 });

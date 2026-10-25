@@ -1,4 +1,5 @@
 import { parseRating } from "../rating/rating";
+import type { components } from "../types/openapi.generated";
 
 export type LibraryMediaType = "video" | "photo";
 
@@ -144,6 +145,14 @@ export function parseLibraryQueryPage(raw: unknown): LibraryQueryPageParsed {
     totalCount: readCount(body.totalCount),
     searchBaselineCount: readCount(body.searchBaselineCount)
   };
+}
+
+type LibraryIdsQueryResponse = components["schemas"]["LibraryIdsQueryResponse"];
+
+/** The ids `POST /api/library/query-ids` answers, leaving out any that aren't text. */
+export function parseLibraryIds(raw: unknown): LibraryIdsQueryResponse["ids"] {
+  const body = raw && typeof raw === "object" ? (raw as Partial<Record<keyof LibraryIdsQueryResponse, unknown>>) : {};
+  return Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [];
 }
 
 function readCount(value: unknown): number {

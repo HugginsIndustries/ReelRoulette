@@ -23,6 +23,7 @@ import {
   tapPage,
   unauthorizedLogLine,
   status,
+  stubLayoutSize,
   stubRowLayout,
   stubScroller,
   useStylesheet,
@@ -2058,6 +2059,46 @@ describe("Auto Tag", () => {
     await settle();
     expect(findAutoTag()).toBeNull();
     expect(isOpen()).toBe(true);
+  });
+
+  it("keeps the Library tab's selection through Auto Tag's Escape, and Escape ends it once that tab shows, before the panel", async () => {
+    stubLayoutSize();
+    const tile = (id: string) => ({
+      id,
+      sourceId: "source-1",
+      fileName: `${id}.mp4`,
+      fullPath: `C:\\media\\${id}.mp4`,
+      relativePath: `${id}.mp4`,
+      mediaType: 0,
+      durationSeconds: 60,
+      playCount: 0,
+      isFavorite: false,
+      isBlacklisted: false,
+      tags: [],
+      hasThumbnail: false,
+      thumbnailWidth: 1920,
+      thumbnailHeight: 1080
+    });
+    await mountTags({
+      setup: (server) =>
+        server.on("POST", "/api/library/query", () => json({ items: [tile("item-a"), tile("item-b")], totalCount: 2, searchBaselineCount: 2 }))
+    });
+    await click(byId("panel-btn"));
+    await click(panelTab("Library"));
+    await click(within(document.querySelector<HTMLElement>('.library-grid-tile[data-item-id="item-a"]')!).getByTitle("Select"));
+    const selecting = () => document.getElementById("library-selection-bar") !== null;
+    expect(selecting()).toBe(true);
+    await openEditor();
+    await openAutoTag();
+
+    fireEvent.keyDown(autoTag(), { key: "Escape" });
+    await settle();
+    expect([findAutoTag(), isOpen(), selecting()]).toEqual([null, true, true]);
+
+    await click(panelTab("Library"));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await settle();
+    expect([selecting(), panel().hidden]).toEqual([false, false]);
   });
 
   it("shows a placeholder before any scan, and another when a scan finds nothing", async () => {

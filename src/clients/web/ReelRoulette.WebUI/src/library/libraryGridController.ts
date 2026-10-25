@@ -44,6 +44,8 @@ export interface LibraryGridController {
   setBrowseContent(input: { visibleItems: readonly LibraryProjectionItem[]; resetScroll?: boolean }): void;
   /** Marks the playing item's tile, or none, on the tiles shown and on those shown later. */
   setPlayingItemId(itemId: string | null): void;
+  /** Marks the selected items' tiles, as `isSelected` says, on the tiles shown and on those shown later. */
+  setSelection(isSelected: (itemId: string) => boolean): void;
   measureCoverage(): LibraryGridCoverage | null;
   flushDeferredLayout(): void;
   destroy(): void;
@@ -121,6 +123,7 @@ export function createLibraryGridController(
 
   let items: readonly LibraryProjectionItem[] = [];
   let playingItemId: string | null = null;
+  let isSelected: (itemId: string) => boolean = () => false;
   let targetRowHeight = options?.rowHeight ?? DEFAULT_TARGET_ROW_HEIGHT;
   let virtualizerState: LibraryGridVirtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
   let layoutWidth = computeAvailableLayoutWidth(container.clientWidth || MIN_FALLBACK_WIDTH);
@@ -173,6 +176,7 @@ export function createLibraryGridController(
     zoomEl.appendChild(rowsEl);
     gridRows = createLibraryGridRows(rowsEl, apiBaseUrl);
     gridRows.setPlayingItemId(playingItemId);
+    gridRows.setSelection(isSelected);
 
     bottomSpacerEl = document.createElement("div");
     bottomSpacerEl.className = "library-grid-spacer library-grid-spacer-bottom";
@@ -532,6 +536,12 @@ export function createLibraryGridController(
     gridRows?.setPlayingItemId(itemId);
   }
 
+  // Changes only the marks of the tiles shown.
+  function setSelection(next: (itemId: string) => boolean): void {
+    isSelected = next;
+    gridRows?.setSelection(next);
+  }
+
   function flushDeferredLayout(): void {
     if (!layoutStale || (browseRoot?.clientWidth ?? 0) < 1 || scrollEl?.hidden) {
       return;
@@ -582,6 +592,7 @@ export function createLibraryGridController(
   return {
     setBrowseContent,
     setPlayingItemId,
+    setSelection,
     measureCoverage,
     flushDeferredLayout,
     destroy

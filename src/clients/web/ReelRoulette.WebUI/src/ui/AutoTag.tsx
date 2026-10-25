@@ -3,10 +3,7 @@ import { autoTagFileChecked, type AutoTagResults, type AutoTagRowView } from "..
 import type { TagEditorView } from "../tags/tagEditor";
 import { useApp } from "./appContext";
 import { Dialog } from "./Dialog";
-
-function Icon({ name }: { name: string }) {
-  return <span class="material-symbol-icon">{name}</span>;
-}
+import { Icon } from "./Icon";
 
 /**
  * Auto Tag, over the whole page while it shows. It is rendered in the stage, beside the in-app dialogs, so it covers

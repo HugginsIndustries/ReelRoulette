@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { HttpStatusError, ServerUnreachableError } from "../api/serverRequest";
-import { createDefaultFilterState, filterStateFromApiObject, type ApiFilterState } from "../filter/filterStateModel";
+import { createDefaultFilterState, filterStateFromApiObject, type ApiFilterState, type FilterState } from "../filter/filterStateModel";
 import { createDefaultBrowseControls, type LibraryBrowseControls } from "../library/libraryBrowseModel";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 import {
@@ -113,6 +113,17 @@ describe("libraryQuerySession", () => {
     expect(snap.summary).toBe("10 / 25");
     expect(snap.items).toHaveLength(1);
     expect(snap.phase).toBe("ready");
+  });
+
+  it("matches by the filter and search of the query it shows, which a new sort doesn't change", async () => {
+    const session = createLibraryQuerySession(async () => page([item("a")], 1, 1));
+    const favorites: FilterState = { ...createDefaultFilterState(), favoritesMode: "only" };
+    await session.resetQuery(favorites, controls({ searchQuery: "clip" }));
+
+    expect(session.matchQuery()).toEqual({ filterState: expect.objectContaining({ favoritesMode: "only" }), search: "clip" });
+    expect(session.changesMatch({ ...favorites }, controls({ searchQuery: "clip", sortMode: "PlayCount", sortDescending: true }))).toBe(false);
+    expect(session.changesMatch(favorites, controls({ searchQuery: "clip 4" }))).toBe(true);
+    expect(session.changesMatch(createDefaultFilterState(), controls({ searchQuery: "clip" }))).toBe(true);
   });
 
   it("requests the next window once less than one page of loaded tiles is left below the screen", async () => {

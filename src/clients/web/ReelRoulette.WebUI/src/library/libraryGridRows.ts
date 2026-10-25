@@ -12,6 +12,8 @@ export interface LibraryGridRows {
   show(rows: readonly LibraryGridRowLayout[], first: number, end: number, items: readonly LibraryProjectionItem[]): void;
   /** Marks the playing item's tile, or none, on the tiles shown and on those created later. */
   setPlayingItemId(itemId: string | null): void;
+  /** Marks the selected items' tiles, as `isSelected` says, on the tiles shown and on those shown later. */
+  setSelection(isSelected: (itemId: string) => boolean): void;
   /** The tiles shown, in layout order. */
   shownTiles(): readonly ShownTile[];
   clear(): void;
@@ -58,6 +60,7 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
   let shownTiles = new Map<string, GridTile[]>();
   let shownList: ShownTile[] = [];
   let playingItemId: string | null = null;
+  let isSelected: (itemId: string) => boolean = () => false;
 
   function tileView(item: LibraryProjectionItem, tileWidth: number, tileHeight: number): GridTileView {
     return {
@@ -107,8 +110,9 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
         let tile = shownTiles.get(item.id)?.shift();
         if (tile) {
           tile.update(view);
+          tile.setSelected(isSelected(item.id));
         } else {
-          tile = createGridTile(item.id, view, item.id === playingItemId);
+          tile = createGridTile(item.id, view, item.id === playingItemId, isSelected(item.id));
         }
         const sameItem = nextTiles.get(item.id);
         if (sameItem) {
@@ -149,6 +153,17 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     markPlaying(itemId, true);
   }
 
+  // Changes only the tiles whose mark differs.
+  function setSelection(next: (itemId: string) => boolean): void {
+    isSelected = next;
+    for (const [itemId, tiles] of shownTiles) {
+      const selected = next(itemId);
+      for (const tile of tiles) {
+        tile.setSelected(selected);
+      }
+    }
+  }
+
   function clear(): void {
     container.replaceChildren();
     shownRows = new Map();
@@ -156,5 +171,5 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     shownList = [];
   }
 
-  return { show, setPlayingItemId, shownTiles: () => shownList, clear };
+  return { show, setPlayingItemId, setSelection, shownTiles: () => shownList, clear };
 }

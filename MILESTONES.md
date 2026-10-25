@@ -152,14 +152,22 @@ Last milestone completed: M12l
 - Removing items from the library always deletes their files from disk, and the action is named for what it does. An item removed with its file left on disk wouldn't stay removed: the refresh's source stage adds every file in a source folder that the catalog doesn't hold as a new item, with no tags, favorite, or play stats and a new date added. Blacklisting covers hiding a file and keeping it.
 - A bulk change's {n} is the `count` its route answers and its event carries, the named items in the library, so the device that made the change and other devices say the same number.
 - Item ids match exactly as the server generates them, so looking up the items a request names reads the id's primary key index instead of scanning it.
+- Selection starts from a tile's check icon, a long press on a touch screen or with a pen, or a Shift, Ctrl, or Cmd+click on a tile, and the Library tab has no Select button.
+- Once selection is on, a click, a Ctrl or Cmd+click, or a long press adds or removes a tile.
+- A search, filter, or preset change ends selection, so an action never reaches an item the grid doesn't show, and a sort change keeps it.
+- Selection lasts while the panel shows another tab or is closed, and Esc ends it only while the Library tab shows, so Esc never ends a selection nobody can see. The Selection actions menu closes when the Library tab hides.
+- Items the app removes by deleting their files leave the selection, and selection ends when none are left.
+- The selection bar reads, from the left, Select all (`select_all`), Clear selection (`deselect`), and "{n} selected", with {n} grouped as the count line groups it, and at its far right Selection actions, an icon button with `more_vert` and the tooltip "Selection actions", since it opens a menu rather than a dropdown.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Contract | ✅ Complete | An ids-only library query, bulk favorite and blacklist with one event, bulk rating with one event, a delete-files route with its event, the tag-count read for a selection, exact id matching, and the WebUI's handling of the bulk and removal events. |
-| Selection | ⏳ Planned | Selecting tiles by their check icon or a long press, the selection bar with Select all, and the Esc order. |
-| Bulk actions | ⏳ Planned | The Actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload, a resync in place of a bulk event too large to send, and favorite and blacklist answers applied to the item they were for. |
+| Selection | ✅ Complete | Selecting tiles by their check icon, a long press, or a Shift, Ctrl, or Cmd+click, the selection bar with Select all and Clear selection, and the Esc order. |
+| Grid look | ⏳ Planned | The library grid as the mockup shows it: the selected tile's look, no border or background, gaps snapped to device pixels, and the thin scrollbar in the tab's right margin. |
+| Bulk actions | ⏳ Planned | The Selection actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload, a resync in place of a bulk event too large to send, and favorite and blacklist answers applied to the item they were for. |
+| Context menu | ⏳ Planned | A right-click on a library tile opens an app-styled context menu with the Selection actions menu's options, built as a shared context menu component. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
 
 #### Contract slice
@@ -232,13 +240,18 @@ Last milestone completed: M12l
   - Selecting a tile turns the same icon filled orange, and the thumbnail shrinks inside the tile so the icon sits on its top-left corner.
   - Hovering dims only the thumbnail, so the icon stays bright.
   - On a touch screen a long press starts selection, and the icons then show on every tile.
-  - Its accessible name is "Select {file name}", and its tooltip reads "Select" or "Deselect".
-- Once selection is on, a click adds or removes a tile, and Shift+click adds the range from the last tile chosen. Ctrl or Cmd+click isn't used.
+  - Its tooltip reads "Select" or "Deselect".
 - The grid's text isn't selectable, so Shift+click selects only tiles and doesn't also highlight text across them.
-- While selecting, a bar at the bottom of the Library tab shows Stop selecting (the `deselect` icon), "{n} selected", Select all (an icon-only button with the `select_all` icon and "Select all" as its tooltip), and Actions, whose menu the Bulk actions slice fills.
-- Selection starts only from a tile's check icon or, on a touch screen, a long press, and the Library tab has no Select button.
+- Hovering dims a tile's thumbnail only on a device that can hover, so a tap no longer leaves a tile dimmed; a pressed tile still dims.
+- While selecting, the selection bar shows at the bottom of the Library tab, and the Selection actions menu opens above it, empty until the Bulk actions slice fills it.
+- Select all sends the search and filter the grid shows to `POST /api/library/query-ids`.
+- Shift+click adds every tile from the last one clicked or long-pressed, whether that selected or deselected it, to the one clicked, or only the one clicked when the last one isn't in the grid.
+- Select all only adds, and Shift+click keeps the tile it starts from. Select all is disabled, with the tooltip "Everything is already selected", while the selected count matches the grid's match count.
+- A press of Select all while its request is under way does nothing, Clear selection drops its answer, and a failure shows in the in-app notice as "Select all failed: {the server's reason}".
 - Deselecting the last tile ends selection.
-- Esc closes the Actions menu and then selection, after Auto Tag and before the panel, in the order WebUI Keyboard Shortcuts sets.
+- Esc closes the Selection actions menu and then selection, after Auto Tag and before the panel, in the order WebUI Keyboard Shortcuts sets.
+- Esc's row in the shortcut list reads "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen".
+- The selection, the long press, the tiles' marks, the bar, and the Esc step are built in `src/library/` (a selection model, a long-press handler, the tile, its rows and grid, the query session, and `library.ts`), `src/ui/LibraryOverlay.tsx`, `src/ui/Stage.tsx`, and `src/styles.css`, and the mockup shows them as shipped, apart from the Grid look slice's look, which it shows ahead of the app.
 
 **Traps**
 
@@ -252,18 +265,73 @@ Last milestone completed: M12l
 **Acceptance**
 
 - With a mouse, a tile's check icon shows faded on hover and selects the tile when clicked; during selection it shows on every tile, and a long press starts selection on a touch screen. A selected tile's icon is filled orange and its thumbnail shrinks inside the tile, in WebUI tests for selection.
-- The Library tab has no Select button, and deselecting the last tile ends selection, in WebUI tests for selection.
-- The selection bar shows Stop selecting with the `deselect` icon and Select all as an icon-only button with the `select_all` icon and its tooltip, in WebUI tests for selection.
-- Once selection is on, a click adds or removes a tile and Shift+click adds a range without highlighting text; Ctrl or Cmd+click doesn't select, in WebUI tests for selection.
+- The Library tab has no Select button, a Shift, Ctrl, or Cmd+click on a tile starts selection, and deselecting the last tile ends selection, in WebUI tests for selection.
+- The selection bar shows Select all, Clear selection, "{n} selected", and Selection actions, in that order, with their icons and tooltips, and Select all is disabled with its reason while everything that matches is selected, in WebUI tests for selection.
+- Once selection is on, a click or a Ctrl or Cmd+click adds or removes a tile, and Shift+click adds a range without highlighting text, in WebUI tests for selection.
 - Select all selects every item that matches the search and filters, including items not loaded, in WebUI tests for Select all over items not loaded.
-- Esc closes the Actions menu, then selection, after Auto Tag and before the panel, in WebUI tests for the Esc order.
+- A search, filter, or preset change ends selection, and a sort change keeps it, in WebUI tests for selection.
+- Esc closes the Selection actions menu, then selection while the Library tab shows, after Auto Tag and before the panel, in WebUI tests for the Esc order.
+- The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes with 2,248 tests in 93 files, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `librarySelection.test.ts` covers picking and taking out tiles, selection ending with the last one, Shift+click's range in either direction from a tile picked or taken out, or only the tile clicked without a last tile in the order, Select all's additions, removed items, clearing, and the menu.
+- `libraryTilePress.test.ts` covers a finger's and a pen's long press at half a second, none for a mouse, whose right-click keeps the browser's menu, the browser's menu kept off a tile pressed with a finger, the click a long press ends with used up and a tap's left alone, the press cancelled by moving 8 px, a second finger, a `pointercancel`, or lifting first, but not by moving less, and none started by a second finger, which the browser never makes the primary pointer, even when the first finger landed off a tile or its press was cancelled.
+- `libraryGridTile.test.ts` and `libraryGridController.test.ts` cover the filled `check_circle` beside the thumbnail, found by its tooltip, the thumbnail's `draggable="false"`, the selected mark changing only the tile's class and the tooltip, and the marks set on the tiles shown in place and on tiles that come into view or are built later.
+- `library.test.ts` covers a click playing a tile or, on its check icon or with Shift, Ctrl, or Cmd, selecting it, clicks and long presses during selection, Shift+click over the loaded order, the grid's marks and a grid created again, Select all sending the window's search and filter rather than text still being typed, its disabled state, a second press while one is under way, its answer dropped when selection is cleared even for a new selection, its failure in the notice with its log text, selection ending on a new search or filter and kept through a new sort, removed items leaving it, and the menu closing as the tab hides.
+- The page tests in `screens/library.test.ts` cover, with the stylesheet: no Select button; the check icon hidden outside selection, starting selection without a play, every tile's icon shown, faded or bright and orange, the selected thumbnail at `scale(0.86)`, the bar's parts in order with their icons and tooltips, the hover rules only under `@media (hover: hover)`, and a thumbnail that can't be dragged (`-webkit-user-drag: none`); clicks, Ctrl and Cmd+clicks, and a Shift+click range with the grid's text not selectable; each modifier starting selection in the overlay without closing it, a plain click playing, and the last deselect ending selection; Clear selection; Select all over 1,234 items with 200 loaded, its grouped count, and its disabled state; a search, a preset pick, and a sort; removed items; a selection kept across another tab and a closed panel; a long press, its click, a tap, and a long press taking a tile out; the menu opening and closing; and Escape closing the menu, then ending selection, then closing the panel, leaving a selection the tab doesn't show, and going to an open notice first. `screens/tags.test.ts` shows a selection kept through Auto Tag's Escape, and Escape then ending it once the Library tab shows, before the panel.
+- Each break failed its tests and passed once restored: removing the Esc step, letting Esc end a selection the tab doesn't show, Shift+click adding only the tile clicked, not using up a long press's click, a second finger not cancelling the press, the browser's menu not blocked, Select all sending the search box's text, Ctrl and Cmd not selecting, the last deselect leaving selection on, tiles coming into view unmarked, a new query keeping selection, a new sort ending it, Select all never disabled, removed items kept, the menu left open as the tab hides, an answer kept after Clear selection, the grid's text selectable, the hover dim outside `@media (hover: hover)`, the selected thumbnail not shrinking, the check icon's tooltip staying "Select", a second finger starting a press when the first started none, and the thumbnail left draggable by the stylesheet or by its `draggable` attribute (measured).
+- The Esc row's new text and the tiles' check icons and undraggable thumbnails changed the shortcut reference test and two snapshots, the foundation page's Esc row and the library tiles' markup, and nothing else in them.
+- The Selection actions menu opens empty until the Bulk actions slice fills it.
+- The mockup shows the bar as Select all, Clear selection, the count, and Selection actions with `more_vert`; a Shift, Ctrl, or Cmd+click starting selection and a Ctrl or Cmd+click toggling during it; Shift+click adding only the tile clicked without a last tile in the grid; Esc ending selection only while the Library tab shows, and the menu closing as the tab hides; a new search or filter ending selection; the grouped count; Select all disabled with its reason; the browser's menu kept off a tile from the start of a finger's press; a long press without a click forgotten at the next press; and the Esc row's new text. Its icon font gained `more_vert` (`build_font.py`, run with the user's approval), and its tiles' and check icons' screen-reader-only names ("Play {name}" and "Select {name}") are gone, since the app has none.
+- The mockup shows the Grid look slice's look ahead of the app: the selected tile's inset thumbnail, grey background, and black check, 4 px gaps snapped to device pixels, no grid border, and the scrollbar in the tab's right margin, with the slice's four choices in its Mockup tab. Until that slice lands, the app keeps the orange tint, the shrunk thumbnail, 1 px gaps, and the grid's border.
+- One `Icon` component, `src/ui/Icon.tsx`, replaces the copies in `AutoTag.tsx` and `TagEditor.tsx`.
+- The query session alone decides whether a query matches by another search or filter (`changesMatch`), Select all's request takes the generated `LibraryIdsQueryRequest` and its answer goes through `parseLibraryIds`, beside `parseLibraryQueryPage`, and the Library plays a tile only through `clickTile`, whose tests the play tests now are, and neither it nor `requestPlayItem` trims the id or refuses a blank one, which no tile or history step sends.
+- `CONTEXT.md`, `docs/domain-inventory.md`, `docs/architecture.md`, and `CHANGELOG.md` describe the selection, Select all, and the Esc order.
+
+#### Grid look slice
+
+**Scope**
+
+- Before the slice is built, the user picks four values from the mockup's Mockup tab: the selected tile's inset (8 to 12 px), the gap between tiles (1 to 4 px), the selected tile's background (grey or none), and the tile corners (square or rounded at 4 px). The slice builds those, and the four choices then leave the mockup.
+- A selected tile's thumbnail is inset by the same margin on every side and cropped to fill the inset, as `object-fit: cover` does, with 4 px corners, so every selected tile has the same margins and the check icon, 4 px from the tile's corner, sits over the thumbnail's top-left corner whatever its shape.
+- Around the inset thumbnail, a selected tile shows the background picked: grey, #333333 in the dark theme and #e0e3e8 in the light theme, or none, the page behind the grid. It replaces the orange tint.
+- The selected check icon shows its check mark black inside the orange circle in the dark theme and white in the light theme, from a disc of that color behind it, and its drop shadow is drawn around the whole mark, so none of it falls inside the check mark.
+- The grid has no border, rounded corners, or background of its own, and keeps the Library tab's margin around it.
+- Each row's height and each tile's edges land on whole device pixels, so every gap, across a row and between rows, draws exactly the gap picked (`libraryGridLayout.ts`).
+- The grid's scrollbar sits in the Library tab's right margin, centered in it, and the tiles keep the same width whether it shows or hides: the grid reaches into the margin, a scrollbar that takes room takes it from the margin, and a padding keeps the tiles' width.
+- The grid asks for the browser's thin scrollbar (`scrollbar-width: thin`), which fits the margin, in place of the `::-webkit-scrollbar` size current Chrome ignores.
+- The mockup matches what the slice shipped.
+
+**Traps**
+
+- The app's gap is `TILE_GAP`, 1 px, in `libraryGridLayout.ts`, which `libraryGridController.test.ts` and `screens/library.test.ts` use too, while the stylesheet's `.library-grid-row` sets its own `1px` gap and margin and names `TILE_GAP` only in a comment (`src/styles.css`).
+- The justified layout gives rows fractional heights and tiles fractional widths, so a gap can draw a pixel wider where rounding falls. The mockup snaps them to whole device pixels, and its gaps then measured exactly 4 px everywhere at 1x, unselected and selected (measured).
+- The grid's virtualizer works out each row's top from the row heights and the gap (`libraryGridVirtualizer.ts`), so snapped heights change its offsets, and its tests' expected positions (inferred).
+- A tile's picture centered by `left: 50%` and `translate(-50%, -50%)` lands a pixel short of an odd-sized tile's edge and shows that pixel of the tile behind it: in the mockup at 1x, 16 of 94 gaps drew 5 px (measured). The app's tile image fills its tile with `object-fit: cover`, which the inset thumbnail keeps, so it needs no such centering.
+- In the mockup review, a white check mark looked grey with the drop shadow on the check icon itself, which the shadow falling inside the check mark's cutout explains (inferred).
+- The tiles' icons take the drop shadow from `.library-grid-tile .material-symbol-icon.is-filled` (`src/styles.css`), so the selected check icon has to opt out of it to move the shadow onto the whole mark.
+- The app's `.themed-scrollbar` sets `scrollbar-color`, and current Chrome ignores `::-webkit-scrollbar` sizes once `scrollbar-width` or `scrollbar-color` is set (inferred).
+- A scrollbar that takes room reports its width as the grid's `offsetWidth` less its `clientWidth` while the gutter keeps its room; one that fades over the content reports none, so the mockup assumes 8 px to center it.
+- happy-dom lays nothing out, so tests stub the widths the scrollbar's placement reads, as the grid's tests stub `clientWidth`.
+
+**Acceptance**
+
+- A selected tile's thumbnail is inset by the picked margin on every side, its image covers the inset, and the tile shows the picked background, in WebUI tests with the stylesheet.
+- The selected check icon's disc is black in the dark theme and white in the light theme, and its shadow is on the whole mark, not the icon, in WebUI tests with the stylesheet.
+- The grid has no border, corners, or background of its own, in WebUI tests with the stylesheet.
+- Every row's height and every tile's edges are whole device pixels at 1x, 2x, and a fractional device pixel ratio, and each row's tiles and gaps add up to its width, in layout tests.
+- With a scrollbar that takes room and one that doesn't, the scrollbar's middle is at the margin's middle and the tiles keep the same width, in WebUI tests of the grid with stubbed scrollbar widths.
+- The mockup matches what the slice shipped, with the four choices gone from its Mockup tab, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Bulk actions slice
 
 **Scope**
 
-- Actions is a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and the delete action, in red, named for what it does: it deletes the selected items' files from disk and removes them from the library.
+- Selection actions opens a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and the delete action, in red, named for what it does: it deletes the selected items' files from disk and removes them from the library.
 - Add to and Remove from favorites and the blacklist send one request to `POST /api/bulk/item-state`, and Clear playback stats sends ids.
 - Rate… opens an in-app dialog with Item Ratings' star control, designed in the mockup, which sets the chosen rating on every selected item, or clears it, in one `POST /api/bulk/rating` request.
 - Bulk Add to favorites clears each item's blacklisting, and Add to blacklist clears its favorite, as the player's buttons do.
@@ -275,6 +343,7 @@ Last milestone completed: M12l
   - The token prompt is a dialog titled "Control token" that says "This is an admin action. Enter the server's control token.", with the token field under the field validation pattern and Continue.
   - The action's name, its confirmation, its Your actions popup, and what it says when some files couldn't be deleted (`failedItemIds`) are settled in the mockup review, starting from "Remove {n} items from the library and permanently delete their {n} files from disk? This can't be undone." with a red Remove and Delete, and "1 item" and "its file" for one.
 - The delete action ends selection.
+- Selected items that leave the results other than by the app deleting their files, as a rating under Only unrated or a favorite change under Favorites only takes them out, here or on another device, or a refresh removes them because their files are gone, leave the selection, so an action never reaches an item the grid doesn't show, and "{n} selected" and Select all's disabled state count only items that match.
 - Each Your actions popup's {n} is the `count` the bulk route answers.
 - Clear-stats publishes `resyncRequired` with the `lastEventId` and `currentRevision` its OpenAPI schema requires, in place of a payload with only its reason.
 - The slice measures the size of a bulk event that changes every item of the catalog, and a bulk change above the size it settles on publishes `resyncRequired` in place of its bulk event.
@@ -290,6 +359,9 @@ Last milestone completed: M12l
 - Clear-stats publishes `resyncRequired` with only `{ reason: "playbackStatsCleared" }` (`ClearPlaybackStats` in `ServerHostComposition.cs`), so every device does a full resync after a clear, and the WebUI never sent clear-stats before this milestone.
 - A bulk event lists every item it changed, about 147 bytes each, so one that changes every item of the 49,466-item catalog is about 7 MB (inferred).
 - Every open device gets each event, and the server keeps its last 256 events for replay (`EventHistoryCapacity` in `ServerStateService.cs`).
+- Selection drops items only on Clear selection, a deselect, a new search or filter, or `itemsRemoved`, and Select all is disabled while the selected count equals the window's `totalCount` (`allSelected` in `src/library/library.ts`), so a selected item that leaves the results some other way stays selected and counted, and Select all can read "Everything is already selected" while a matching tile isn't selected.
+- A refresh removes the items whose files are gone from their source folder and publishes only `refreshCompleted`, which reloads the window; the server publishes `itemsRemoved` only from delete files and duplicate apply (`ServerHostComposition.cs`), so items a refresh removes stay selected.
+- The WebUI loads only some pages of the results, so which selected items still match, among those not loaded, needs a read from the server, as `POST /api/library/query-ids` gives (inferred).
 
 **Acceptance**
 
@@ -304,6 +376,31 @@ Last milestone completed: M12l
 - The device that made a bulk change shows only its Your actions popup, with the count the server answered, in WebUI tests for each bulk action.
 - Clear-stats' `resyncRequired` carries `lastEventId` and `currentRevision` and matches its OpenAPI schema, in server tests for clear-stats.
 - The size of a bulk event that changes every item of the catalog is recorded, and a bulk change above the size settled on publishes `resyncRequired` in place of its bulk event, in server tests for the bulk routes.
+- A selected item that a bulk action, a single change, another device's change, or a refresh takes out of the results leaves the selection, loaded or not, and "{n} selected" and Select all's disabled state then follow the items that match, in WebUI tests for selection.
+- `npm run verify` passes.
+
+#### Context menu slice
+
+**Scope**
+
+- A right-click on a library tile with a mouse opens an app-styled context menu with the Selection actions menu's options.
+- Its actions apply to the selection when the tile is in it, and to that tile alone when nothing is selected.
+- It is for mouse pointers; touch screens keep the long press and the Selection actions menu.
+- Esc and a press outside close it, as they close the Selection actions menu.
+- It is built as a shared context menu component.
+- Its look, and what a right-click on a tile outside the selection does during a selection, are settled in its mockup review, which comes first.
+
+**Traps**
+
+- The Selection actions menu closes on a press outside it or Esc through `useLightDismiss` (`src/ui/LightDismiss.ts`), which the bell's list and the rating's popover use too.
+- A tile pressed with a finger or a pen blocks the browser's own menu, and a mouse's right-click is left to the browser (`src/library/libraryTilePress.ts`).
+- On a Mac, Ctrl+click sends `contextmenu`, while selection reads Ctrl+click as adding or removing a tile (inferred).
+
+**Acceptance**
+
+- A right-click on a tile in the selection opens the context menu, whose actions apply to the selection, and on a tile with no selection, to that tile alone, in WebUI tests of the context menu.
+- A long press on a touch screen doesn't open it, in WebUI tests of the context menu.
+- The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Tag edits slice
@@ -311,7 +408,7 @@ Last milestone completed: M12l
 **Scope**
 
 - The WebUI edits several items' tags in the Tags tab, with no dialog.
-- Edit tags in Actions opens the Tags tab with the line "Editing tags for {n} items", like the line WebUI Tags and Filter Tabs shows for an item that isn't playing.
+- Edit tags in Selection actions opens the Tags tab with the line "Editing tags for {n} items", like the line WebUI Tags and Filter Tabs shows for an item that isn't playing.
 - While the tab edits several items, a collapsed category's count is how many of its tags the selected items have, and a chip shows green for a tag all of them have and orange for a tag only some have, and Add or Remove applies to all of them. The counts come from the tag-editor model's `countsOnly` read.
 - Save applies the changes to every selected item and says "Updated tags on {n} items.".
 - The tab edits the selection while selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or discarded.
@@ -332,6 +429,8 @@ Last milestone completed: M12l
 
 - Manual: In the WebUI on a desktop browser and a phone, select several items, and every matching item with Select all, apply each bulk action but the delete action, and the tiles update.
 - Manual: Copy a throwaway video into a source folder and refresh the library, then in a desktop browser select its tile and delete it with the delete action: the file is gone from the folder and its tile from the grid.
+- Manual: On the iPad and the Android phone, a long press on a library tile selects it and starts selection, with no menu or text highlight of the browser's own.
+- Manual: On a desktop browser, the iPad, and the Android phone, every gap in the library grid looks the same, unselected and selected, and the grid's scrollbar sits in the tab's right margin.
 
 #### Not included
 
@@ -341,6 +440,7 @@ Last milestone completed: M12l
 - Loudness normalization, which is WebUI Loudness Normalization.
 - Removing a source with its items, which is Admin Source Management.
 - Removing items from the library while keeping their files, since the next refresh would add the files back as new items.
+- A context menu anywhere but on library tiles.
 
 ### M12n1 - WebUI Loop Range
 
@@ -547,7 +647,7 @@ Last milestone completed: M12l
 
 - The header renders only the logo, the pairing prompt, and now playing (`src/ui/Header.tsx`), with no right-hand group; the admin icon comes with WebUI Admin Section.
 - The header sits outside the fullscreen stage, and `body.short-screen .top-bar:not(.is-pairing)` hides it on a phone on its side (`src/styles.css`).
-- The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement, outside press, Escape, and focus written for the bell alone, and no popover primitive exists in `src/ui`, though WebUI Multi-Select and Bulk Actions' Actions menu may add one (inferred).
+- The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement under the bell and its focus handling written for the bell alone, and closes on an outside press and Escape through `useLightDismiss` (`src/ui/LightDismiss.ts`), which the rating's popover and WebUI Multi-Select and Bulk Actions' Selection actions menu use too.
 - The panel opening closes the bell's list in every mode (`src/state/appServices.ts`), while the picker closes only when the panel covers the screen, which is `panel.mode` `"overlay"` (`src/panel/panelHost.ts`).
 - `filter.applied` holds the filter and its preset, and an effect writes it only once presets have loaded and the record has changed (`src/state/appStore.ts`). A switch that doesn't set the applied filter and the preset in one batch, as `pickHeaderPreset` does, writes the old profile's record under the new profile's key (inferred).
 - Applying the remembered preset again as the server has it now runs only on the first preset load (`presetsLoaded` in `src/state/appStore.ts`).
@@ -3012,7 +3112,7 @@ Last milestone completed: M12l
 
 **Traps**
 
-- WebUI Multi-Select and Bulk Actions acts on a selection through its Actions menu, and its Select all selects every item that matches the search and filters, loaded or not.
+- WebUI Multi-Select and Bulk Actions acts on a selection through its Selection actions menu, and its Select all selects every item that matches the search and filters, loaded or not.
 
 **Acceptance**
 
@@ -3161,8 +3261,8 @@ Last milestone completed: M12l
 ### P57 - WebUI Grid Scrollbar Seek
 
 - **Status**: ⏳ Planned
-- **Goal**: Dragging the library grid's scrollbar reaches any part of the results without loading every page before it. Low priority, since filters, sorts, and search already find files without scrolling far down the grid.
-- **Depends on**: WebUI Grid Row Reuse and Zoom.
+- **Goal**: Dragging the library grid's scrollbar, or an optional timeline rail of the results' dates, letters, or ratings, reaches any part of the results without loading every page before it. Low priority, since filters, sorts, and search already find files without scrolling far down the grid.
+- **Depends on**: WebUI Grid Row Reuse and Zoom, and WebUI Multi-Select and Bulk Actions, whose Grid look slice puts the grid's scrollbar in the Library tab's right margin, where the timeline rail goes.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -3171,6 +3271,7 @@ Last milestone completed: M12l
 | --- | --- | --- |
 | Design note | ⏳ Planned | A reviewed design note on how the query session and grid work with pages loaded at the scroll position. |
 | Scrollbar seek | ⏳ Planned | A grid sized to the full result count with placeholder tiles, loading the page at the scroll position. |
+| Timeline rail | ⏳ Planned | An optional Google Photos-style timeline rail in the grid's right margin, with labels that follow the sort, and a custom-drawn scrollbar thumb while it is off. |
 
 #### Design note slice
 
@@ -3212,9 +3313,38 @@ Last milestone completed: M12l
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
+#### Timeline rail slice
+
+**Scope**
+
+- An option turns on a timeline rail, as Google Photos has, in place of the scrollbar, down the grid's right margin and with no thumb.
+- The rail shows major labels, such as years, and minor dots, such as months, each placed by where its first item falls in the whole filtered set, loaded or not.
+- A server read answers where each group starts in the whole filtered set for the current search, filter, and sort, as a new library route or an addition to one, in OpenAPI and the generated WebUI types.
+- With the pointer over the rail, a floating label with a line at the pointer names the point, such as "Apr 2026", and a click or drag there jumps the grid to it, loading the page at that position.
+- The rail's groups follow the current sort: years and months for Date added, Date created, and Last played, letters for Name, star levels for Rating, and fitting groups for Play count and Duration, which the mockup review settles.
+- With the rail off, the grid's scrollbar is a custom-drawn thumb centered in the right margin, about 3 px wide while the pointer is over the grid and 6 px with the pointer over the scrollbar itself, which seeks as the Scrollbar seek slice's scrollbar does.
+- Where the option lives, and the rail's look, are settled in the mockup review, which comes first.
+
+**Traps**
+
+- WebUI Multi-Select and Bulk Actions' Grid look slice makes the grid's scrollbar the browser's thin one, placed in the Library tab's right margin, so the tiles keep their width as it comes and goes.
+- The WebUI loads only some pages of the results, so where each group starts in the whole filtered set needs a read from the server for the current search, filter, and sort (inferred).
+- Browsers draw their own scrollbars differently: some take room and some fade over the content, and a fading one's width isn't reported, so a custom-drawn thumb looks the same everywhere and the native one has to be hidden (inferred).
+
+**Acceptance**
+
+- The server read answers where each group starts in the filtered set, for each sort, in server tests for the read.
+- The read is in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
+- The rail places each group's label or dot where its first item falls in the filtered set, for each sort, in WebUI tests of the timeline rail.
+- The pointer's floating label names the point under it, and a click or drag jumps the grid there, loading the page at that position, in WebUI tests of the timeline rail.
+- With the rail off, the custom thumb is centered in the right margin, about 3 px wide with the pointer over the grid and 6 px over the scrollbar, and dragging it seeks, in WebUI tests of the custom thumb.
+- The mockup matches what this slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
 #### Release checks
 
 - Manual: In a desktop browser and on a phone, dragging the library grid's scrollbar to the end of a large library shows its last tiles without loading every page before them.
+- Manual: In a desktop browser, the timeline rail's labels follow the sort, and dragging along it jumps the grid to that point.
 
 ### P58 - Sharper Thumbnails
 
