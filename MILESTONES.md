@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -332,6 +332,8 @@ Last milestone completed: M12l
 **Scope**
 
 - Selection actions opens a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and the delete action, in red, named for what it does: it deletes the selected items' files from disk and removes them from the library.
+- The menu's items are built as the shared context menu's item list in `src/ui/`, which the Context menu slice opens at the pointer and WebUI Context Menus reuses across the app, so every menu has one look.
+- An item has a label, may be red for a destructive action, and may be disabled with its reason as its tooltip, and items sit in groups with a divider between them.
 - Add to and Remove from favorites and the blacklist send one request to `POST /api/bulk/item-state`, and Clear playback stats sends ids.
 - Rate… opens an in-app dialog with Item Ratings' star control, designed in the mockup, which sets the chosen rating on every selected item, or clears it, in one `POST /api/bulk/rating` request.
 - Bulk Add to favorites clears each item's blacklisting, and Add to blacklist clears its favorite, as the player's buttons do.
@@ -352,6 +354,7 @@ Last milestone completed: M12l
 **Traps**
 
 - The desktop acted on selected items from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library.
+- The Selection actions menu is an empty container placed by CSS above its button, with no item markup or styles and no clamping to the window (`src/ui/LibraryOverlay.tsx`, `src/styles.css`).
 - `toggleFlag` in `src/playback/player.ts` clears the other flag when it sets one.
 - `src/playback/player.ts` applies a favorite or blacklist answer to the item playing when the answer arrives, so pressing Next before it does marks the new item locally and caches that state under its id until an event for it corrects it.
 - The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, the answer of `POST /api/favorite` and `POST /api/blacklist`).
@@ -387,19 +390,36 @@ Last milestone completed: M12l
 - Its actions apply to the selection when the tile is in it, and to that tile alone when nothing is selected.
 - It is for mouse pointers; touch screens keep the long press and the Selection actions menu.
 - Esc and a press outside close it, as they close the Selection actions menu.
-- It is built as a shared context menu component.
+- It is built as a shared context menu component in `src/ui/`, showing the Selection actions menu's item list.
+- It opens at a point with a list of items, and isn't tied to tiles or to the right-click that opened it, so WebUI Context Menus can open it from other surfaces and from a long press.
+- It is placed by script and kept inside the window near its edges, as the bell's list is, and renders inside the fullscreen stage, so it shows in fullscreen and iOS pseudo-fullscreen and the panel doesn't clip it.
+- One menu is open at a time: opening one closes any other, the Selection actions menu included.
+- It closes when its tile leaves the grid, when the Library tab hides, and before an action's dialog opens.
+- A right-click on a tile shows only this menu, never the browser's own.
+- Esc's row in the shortcut list reads "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen".
+- Test helpers open a menu at a point, list its items, pick one, and check that it stays inside the window.
 - Its look, and what a right-click on a tile outside the selection does during a selection, are settled in its mockup review, which comes first.
 
 **Traps**
 
 - The Selection actions menu closes on a press outside it or Esc through `useLightDismiss` (`src/ui/LightDismiss.ts`), which the bell's list and the rating's popover use too.
-- A tile pressed with a finger or a pen blocks the browser's own menu, and a mouse's right-click is left to the browser (`src/library/libraryTilePress.ts`).
-- On a Mac, Ctrl+click sends `contextmenu`, while selection reads Ctrl+click as adding or removing a tile (inferred).
+- `useLightDismiss` stops the press or Esc that closes a popover with `stopPropagation`, not `stopImmediatePropagation`, so two of its popovers open at once would both close on one Esc (inferred).
+- A tile pressed with a finger or a pen blocks the browser's own menu, and a mouse's right-click is left to the browser (`src/library/libraryTilePress.ts`), which `libraryTilePress.test.ts` asserts.
+- The bell's list is `position: fixed`, placed by script under the bell, kept 8 px inside the window, and placed again on resize (`NotificationList` in `src/ui/Notifications.tsx`).
+- The in-app dialogs and the bell's list render inside `#fullscreen-stage` (`src/ui/Stage.tsx`), and in pseudo-fullscreen the stage is `position: fixed` with `z-index: 9999` (`src/styles.css`).
+- The panel hides its overflow and is a size container (`.panel` in `src/styles.css`), so a menu rendered inside it could be clipped or stacked under other parts (inferred).
+- The Esc row's text is in `src/keyboard/shortcuts.ts`, and the shortcut reference test checks it.
+- happy-dom lays nothing out, so tests stub the sizes a menu's placement reads, as `stubLayoutSize` and `setViewport` in `src/test/screens/pageHarness.ts` do.
 
 **Acceptance**
 
 - A right-click on a tile in the selection opens the context menu, whose actions apply to the selection, and on a tile with no selection, to that tile alone, in WebUI tests of the context menu.
 - A long press on a touch screen doesn't open it, in WebUI tests of the context menu.
+- The menu opens at the pointer and stays inside the window when opened near an edge, in WebUI tests of the context menu with stubbed sizes.
+- The menu renders inside the fullscreen stage, and opening it closes the Selection actions menu, and opening that menu closes it, in WebUI tests of the context menu.
+- The menu closes when its tile leaves the grid, when the Library tab hides, and before an action's dialog opens, in WebUI tests of the context menu.
+- The context menu and the Selection actions menu show the same items, in WebUI tests of the context menu.
+- Esc's row reads "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen", in the shortcut reference test.
 - The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -440,9 +460,266 @@ Last milestone completed: M12l
 - Loudness normalization, which is WebUI Loudness Normalization.
 - Removing a source with its items, which is Admin Source Management.
 - Removing items from the library while keeping their files, since the next refresh would add the files back as new items.
-- A context menu anywhere but on library tiles.
+- A context menu anywhere but on library tiles, and turning the browser's own menu off across the app, which is WebUI Context Menus.
+- Ctrl+click selection on a Mac, where browsers send Ctrl+click as a right-click.
 
-### M12n1 - WebUI Loop Range
+### M12n1 - WebUI Context Menus
+
+- **Status**: ⏳ Planned
+- **Goal**: A right-click, or a long press on a touch screen, opens an app-styled menu of actions on the player, the now-playing name, tags, categories, presets, sources, notifications, and file paths across the WebUI, in place of the browser's own menu.
+- **Depends on**: WebUI Multi-Select and Bulk Actions, whose shared context menu, item list, and delete action the menus here use.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The browser's own right-click menu is off across the app, except in text fields, the inputs that take text and textareas, which keep it for copy, paste, and spell check.
+- Every menu is the shared context menu WebUI Multi-Select and Bulk Actions builds, with its look and item list.
+- A right-click opens a surface's menu anywhere on it, its buttons included, and a right-click where no menu exists opens nothing.
+- On a touch screen or with a pen, a long press opens a surface's menu wherever it has one, except on buttons, library tiles, which a long press selects, drag handles, the rating stars, and the panel's resize handle, so buttons stay free for Long-Press Tooltips on Touch Screens.
+- A long press uses up the click it ends with, so it never also presses, toggles, or plays what it opened on.
+- Copy items stand in for the browser's Copy on selected text, which goes with its menu: Copy name and Copy path for files, Copy text for notifications, and Copy for the Settings tab's diagnostics IDs.
+- Show in File Manager sits wherever Copy path does, shown while the version check lists `api.showInFileManager`, as the Stats tab's button is.
+- Menus hold actions on their item, not playback controls.
+- An item that can't act at the moment is disabled with its reason as its tooltip.
+- A menu item works as the control it repeats does, with the same confirmations, the same wait for Save or Apply, and the same popups.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | Every menu, its items, wording, and order, and the long press, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Foundation | ⏳ Planned | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, and menus closing on scroll, resize, and the browser tab hiding. |
+| Player | ⏳ Planned | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
+| Tags tab | ⏳ Planned | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
+| Filter tab | ⏳ Planned | Menus on the Filter tab's preset rows and sources. |
+| Notifications, Auto Tag, and Settings | ⏳ Planned | Menus on the bell's list entries, the popups, Auto Tag's file rows, and the Settings tab's diagnostics IDs, and the unused notification code removed. |
+
+#### Mockup slice
+
+**Scope**
+
+- The mockup shows every menu of this milestone in the shared menu's look:
+  - the player's picture, the header's now-playing name, and the Stats tab's file path;
+  - the library tiles' Copy path and Show in File Manager;
+  - the Tags tab's tags and categories, and the Stats tab's tags;
+  - the Filter tab's preset rows and sources;
+  - the bell's list entries and the popups;
+  - Auto Tag's file rows and the Settings tab's diagnostics IDs.
+- It shows a long press opening them on a touch screen, and a right-click where no menu exists opening nothing.
+- The review settles each menu's wording and order, and:
+  - what the player's menu does with nothing playing;
+  - what the player shows after Delete file removes the playing item;
+  - whether Filter by this tag replaces the applied filter or adds the tag to it, and whether it applies at once;
+  - whether New tag in this category opens a name dialog or sets the category in the Tags tab's footer;
+  - the name Duplicate gives a preset's copy;
+  - what Apply on a preset row does while the Filter tab holds unsaved changes;
+  - the wording of a tag's Add to item and Remove from item beside the footer's Add tag, which creates a tag.
+- Before the app is built, the user approves the design in Firefox on the desktop, on the iPad, and on an Android phone.
+
+**Traps**
+
+- The mockup has no context menu; its only `contextmenu` handler blocks the browser's menu after a touch press on a tile (`build/layout.src.html`).
+- The mockup's Selection actions menu is `#bulk-menu.menu`, plain buttons in groups split by `hr.menu-rule`, with `.menu-danger` for the delete action (`build/layout.src.html`).
+- `check.mjs` runs the pages in happy-dom with no layout, so where a menu lands and how a long press feels can only be judged on the devices.
+- New icons go in `ICONS` in `build_font.py`; one missing from the subset shows as the `error` glyph.
+
+**Acceptance**
+
+- The mockup shows the menus as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+#### Foundation slice
+
+**Scope**
+
+- A document-level `contextmenu` listener blocks the browser's own menu everywhere but in text fields: `input` elements that take text, and `textarea`.
+- The library tiles' long press (`src/library/libraryTilePress.ts`) becomes a shared long-press helper in `src/ui/`, with the same rules: it fires after 500 ms, moving 8 px, a second finger, a scroll the browser takes over, or lifting first cancels it, and the click it ends with is used up.
+- The tiles' selection and every menu's long press use that helper.
+- A surface with a menu sets `-webkit-touch-callout: none`, so Safari on iOS shows no callout of its own on a long press.
+- A menu closes on scroll, resize, and the browser tab hiding, as well as when WebUI Multi-Select and Bulk Actions closes it.
+
+**Traps**
+
+- `takesKeys` in `src/keyboard/shortcuts.ts` is the app's check for a field that takes keys, but it counts `<select>`, so it isn't the text-field test as it is.
+- The app's text fields are `type="text"` and `type="search"` inputs, its only `<textarea>` is Copy Path's short-lived fallback field, and it has no `contenteditable`.
+- The tiles' long press is tile-specific: it takes a `tileItemId` option and blocks the browser's menu only after a finger or pen press on a tile (`src/library/libraryTilePress.ts`).
+- Safari on iOS sends no `contextmenu` on a long press and shows its own callout, so a long press is timed from pointer events, as the tiles' is (inferred).
+- Chrome on Android sends `contextmenu` on a long press, so blocking it also stops its image menu and its long-press text selection (inferred).
+- Firefox opens its own menu on Shift+right-click whatever the page does (inferred).
+- The keyboard's Menu key and Shift+F10 send `contextmenu` from the focused element, often without a pointer position (inferred).
+- The browser's menu on the `<video>` offers Loop, which sets the video's `loop` without the app's Loop button following, since the app sets `video.loop` itself (`src/playback/player.ts`) (inferred).
+
+**Acceptance**
+
+- A right-click outside a text field opens no menu of the browser's own, and one in a text or search field leaves the browser's menu, in WebUI tests of the block.
+- The library tiles' long press selects as before through the shared helper, in `libraryTilePress.test.ts`'s tests moved to the shared helper.
+- The shared helper fires at 500 ms, is cancelled by moving 8 px, a second finger, or lifting first, and uses up the click it ends with, in tests of the shared long-press helper.
+- A menu closes on scroll, resize, and the browser tab hiding, in WebUI tests of the context menu.
+- The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Player slice
+
+**Scope**
+
+- The player's menu opens from its picture, not from its controls, buttons, or scrub bar, and holds the playing item's actions:
+  - Add to or Remove from favorites, and Add to or Remove from the blacklist, as the player's buttons do;
+  - Rate…, which opens the rating's stars as the star button does;
+  - Edit tags, which opens the Tags tab, and Show stats, which opens the Stats tab;
+  - Copy name, Copy path, and Show in File Manager;
+  - Clear playback stats…, which asks first and sends the item's id to `POST /api/playback/clear-stats`;
+  - Delete file…, WebUI Multi-Select and Bulk Actions' delete action for the one item, with its control-token prompt from another machine and its confirmation.
+- The player's controls stay shown while its menu is open, as they do for the bell's list and the rating's stars.
+- The header's now-playing name has a menu with Show stats, Copy name, Copy path, and Show in File Manager.
+- The Stats tab's file path has a menu with Copy name, Copy path, and Show in File Manager.
+- A library tile's menu gains Copy path and Show in File Manager, disabled with their reason while several items are selected.
+- Copy path works on every device, the server machine included, where the Stats tab shows only Show in File Manager today.
+- The now-playing name shortens with "…", as the rest of the app does, in place of "...".
+
+**Traps**
+
+- The player handles taps, double-taps, swipes of more than 50 px, and two-finger volume drags (`src/playback/mediaGestures.ts`), and times no hold, so a held touch that ends without moving counts as a tap.
+- The click a long press ends with would show or hide the controls or start the double-tap seek window, so the opener has to use it up and clear the tap the gestures noted (`tapX` in `src/playback/mediaGestures.ts`).
+- Hidden controls take no pointer events (`pointer-events: none` in `src/styles.css`), so a press where they hide lands on the picture.
+- The controls stay shown only while the bell's list or the rating's stars are open (`openFromControls` in `src/state/appServices.ts`).
+- The player claims its touches (`touch-action: none` on `.media-container` in `src/styles.css`), which doesn't stop the browser's own long-press callout on the photo (inferred).
+- `copyPath` puts its fallback field next to the element it's given (`src/stats/fileLocation.ts`), so a menu item passes its own element.
+- The Stats tab shows Show in File Manager while the version check lists `api.showInFileManager`, which the server lists only for a browser on the server machine while it has a desktop, and Copy Path otherwise (`src/ui/StatsTab.tsx`).
+- The header's now-playing name is a `<span>` whose click opens the Stats tab, with the full name and "Show stats" as its tooltip (`src/ui/Header.tsx`), and the header sits outside the fullscreen stage.
+- The player doesn't handle `itemsRemoved`; only the library window, the Stats tab, and the loudness baseline do (`src/library/library.ts`, `src/stats/statsTab.ts`, `src/stats/libraryBaseline.ts`).
+- `POST /api/playback/clear-stats` takes `itemIds`.
+- Library tiles carry their file's full path (`fullPath` in `src/library/libraryProjectionModel.ts`).
+- The now-playing name shortens with "..." (`src/playback/nowPlaying.ts`).
+
+**Acceptance**
+
+- A right-click or a long press on the player's picture opens its menu, and one on its controls or scrub bar doesn't, in Player screen tests.
+- Each of the player menu's items acts on the playing item as the control it repeats does, Clear playback stats and Delete file ask first, and Delete file asks for the control token from another machine, in Player screen tests.
+- The click a long press ends with neither shows nor hides the controls nor starts a double-tap seek, and a swipe or a two-finger drag opens no menu, in gesture tests.
+- The controls stay shown while the player's menu is open, in player controls tests.
+- The now-playing name's, the Stats path's, and a tile's menus copy the name or path and show the file in the file manager while the server lists it, and a tile's are disabled with their reason while several items are selected, in Header, Stats, and library screen tests.
+- The now-playing name shortens with "…", in now-playing tests.
+- The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Tags tab slice
+
+**Scope**
+
+- A tag's menu holds Add to item, Remove from item, Edit…, Delete…, and Filter by this tag.
+- A category's menu holds New tag in this category, Edit…, and Delete…, and Uncategorized's holds only New tag in this category.
+- Delete… asks first and waits for Save, as the Edit Tag and Edit Category dialogs' Delete does.
+- Filter by this tag works through the Filter tab's tag filter, as the mockup review settles.
+- The Stats tab's tags each have a menu with Filter by this tag.
+- A tag's Add and Remove buttons, disabled while no item is loaded, give their reason as their tooltip, as the menu's items do.
+
+**Traps**
+
+- The tag editor edits one item, the playing one or the one it holds (`src/tags/tagEditor.ts`), and every change waits for Save, deletes included.
+- A tag's Add and Remove are disabled while no item is loaded (`canChangeItems` in `src/tags/tagEditorModel.ts`) and keep the tooltips "Add tag" and "Remove tag" without a reason (`src/ui/TagEditor.tsx`).
+- A tag's "Add tag" tooltip is also the footer's Add tag, which creates a tag in the catalog.
+- A tag's rename, category, and Delete live only in the Edit Tag dialog, and a category's rename and Delete only in the Edit Category dialog, whose Delete moves the category's tags to Uncategorized (`src/tags/tagEditor.ts`).
+- The Filter tab's Tags section includes or excludes tags (`src/ui/FilterDialog.tsx`), and nothing in the Tags tab links to it.
+- A new tag's category is picked in the footer's dropdown (`src/ui/TagEditor.tsx`).
+- A category's drag handle starts a drag only after moving 5 px (`src/reorder/reorder.ts`), and its header notes where a press began without timing a hold (`src/ui/TagCategory.tsx`).
+- The Stats tab's tags are plain text (`src/ui/StatsTab.tsx`).
+
+**Acceptance**
+
+- A tag's menu adds the tag to or removes it from the item, opens Edit Tag, deletes the tag after asking, pending until Save, and filters the library by it, in Tags screen tests.
+- A category's menu starts a new tag in it, opens Edit Category, and deletes it after asking, pending until Save, and Uncategorized's holds only New tag in this category, in Tags screen tests.
+- The Stats tab's tag menu filters the library by the tag, in Stats screen tests.
+- A tag's disabled Add and Remove give their reason, in Tags screen tests.
+- A long press on a tag or a category's header opens its menu, and one on their buttons or a drag handle doesn't, in Tags screen tests with touch pointers.
+- The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Filter tab slice
+
+**Scope**
+
+- A preset row in the Presets section's list has a menu with Apply, Load into filter, Update from filter, Duplicate, Edit…, and Delete….
+- Apply applies the preset to the library at once, as picking it in the Library tab's preset dropdown does.
+- Load into filter and Update from filter do what Load preset and Update preset do for the preset chosen in the section's dropdown.
+- Duplicate adds a copy of the preset, pending until Apply as the list's other changes are.
+- Delete… asks first, as Edit Preset's Delete does, and waits for Apply.
+- A source in the Sources section has a menu with Only this source, which checks it and unchecks the others.
+- A disabled source's checkbox and its Only this source give the reason as their tooltip.
+
+**Traps**
+
+- The Presets section's list changes, rename, delete, and reorder, wait for Apply (`src/filter/filterDialog.ts`).
+- Load preset and Update preset work on the preset chosen in the section's dropdown (`src/ui/FilterDialog.tsx`).
+- Picking a preset in the Library tab's preset dropdown applies it at once (`#preset-select` in `src/ui/LibraryOverlay.tsx`).
+- A preset row's drag handle starts a drag on pointer down (`src/ui/Reorder.tsx`).
+- `filterWithGeneralDraft` writes an empty source list when every listed source is checked, and an empty list means every source (`src/filter/filterDialogModel.ts`).
+- A disabled source's checkbox has no tooltip (`src/ui/FilterDialog.tsx`).
+- Source rows are labels around their checkbox, so the click a long press ends with would toggle it unless it is used up (inferred).
+
+**Acceptance**
+
+- Each preset row menu item works as the control it repeats does, Duplicate adds a copy pending until Apply, and Delete asks first, in Filter screen tests.
+- Only this source checks only that source, and a disabled source's checkbox and menu item give their reason, in Filter screen tests.
+- A long press on a preset row outside its drag handle, or on a source, opens its menu without starting a drag or toggling the source, in Filter screen tests with touch pointers.
+- The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Notifications, Auto Tag, and Settings slice
+
+**Scope**
+
+- An entry in the bell's list has a menu with Copy text, Dismiss, which removes that entry, Clear all, and Notification settings.
+- A menu opened from the bell's list keeps the list open while it is used.
+- A popup has a menu with Copy text and Dismiss, and holds its timer while the menu is open, as hovering does.
+- An Auto Tag file row has a menu with Copy path, shown inside the Auto Tag dialog, and Escape closes it before the dialog.
+- Each of the Settings tab's diagnostics IDs has a menu with Copy.
+- The unused `toggleList` and `dismissAll` in `src/notifications/notifications.ts` go, with the test that calls `dismissAll`.
+
+**Traps**
+
+- The bell's list has Clear all, Close, and Notification settings, and no action on one entry (`src/ui/Notifications.tsx`).
+- The bell's list closes on a press outside it through `useLightDismiss` (`src/ui/LightDismiss.ts`), so a press in a menu rendered outside the list would close it (inferred).
+- Popups close with their Dismiss or a swipe on a touch screen (`touch-action: pan-y`), and hovering pauses their timer (`src/ui/Notifications.tsx`).
+- Auto Tag is a modal dialog opened with `showModal()` (`src/ui/Dialog.tsx`), so the rest of the page is inert and a menu for its rows has to render inside it (inferred).
+- `useLightDismiss` skips Escape while a dialog is open, and a dialog closes on its own Escape (`src/ui/Dialog.tsx`), so a menu inside one needs its own place before the dialog's.
+- Auto Tag's file rows are labels around their checkbox, with the full path as their tooltip (`src/ui/AutoTag.tsx`).
+- `toggleList` has no caller, and `dismissAll` is called only from `src/test/screens/notifications.test.ts` (measured).
+- The Settings tab's diagnostics IDs are plain text (`src/ui/SettingsTab.tsx`).
+
+**Acceptance**
+
+- An entry's menu copies its text, dismisses only it, clears all, and opens Notification settings, and the list stays open while the menu is used, in notifications screen tests.
+- A popup's menu copies its text and dismisses it, and its timer holds while the menu is open, in notifications screen tests.
+- An Auto Tag file row's menu shows inside the dialog and copies the path, and Escape closes the menu before the dialog, in Auto Tag screen tests.
+- Each diagnostics ID's menu copies it, in Settings screen tests.
+- A long press on an entry, a popup, an Auto Tag row, or a diagnostics ID opens its menu without dismissing, swiping, or toggling, in screen tests with touch pointers.
+- The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: In Firefox on the desktop, right-clicking the player, a tag, a preset, and a notification opens the app's menu, and right-clicking in the library search opens Firefox's own.
+- Manual: On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own, and a long press on a library tile still selects it.
+
+#### Not included
+
+- A context menu on dropdowns, the Library tab's preset dropdown included.
+- A log row's menu, which is Log Viewer Redesign.
+- A duplicate file card's menu, which is Admin Refresh, Backup, and Duplicate Review.
+- A source row's menu in the admin section, which is Admin Source Management.
+- A backup row's menu, which is Admin Library Catalog Transfer.
+- A menu on the profile picker's rows, which is Library Profiles.
+- Collapse all and Expand all for tag categories.
+- Resetting a setting or a filter control from a menu.
+- Moving the panel to the other side from a menu.
+- Frame steps from the player's menu.
+- Select all and Select none for sources, and clearing a filter tag or a category's filter tags from a menu.
+- Playing a file from Auto Tag's rows.
+- Playback controls in the player's menu.
+- Copy on selected text outside text fields, which the browser's menu gave; Ctrl+C still copies it.
+- Firefox's Shift+right-click, which always opens Firefox's own menu.
+- Opening a menu from the keyboard.
+
+### M12n2 - WebUI Loop Range
 
 - **Status**: ⏳ Planned
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
@@ -462,6 +739,7 @@ Last milestone completed: M12l
 - WebUI Autoplay Modes wraps the scrub bar in `seek-wrap`, with Timer mode's stretch, `seek-loop`, behind its track, inset by half the thumb's width at each end so it lines up with the thumb.
 - WebUI Player Controls keeps the controls shown while the scrub bar or volume is dragged, so dragging a marker has to keep them shown too (inferred).
 - The keyboard shortcuts WebUI Keyboard Shortcuts adds, listed in the mockup's shortcut reference, already take most of the keys a marker could use.
+- WebUI Context Menus opens the player's menu from its picture, not from its controls, so a right-click or a long press on the scrub bar is free for the markers.
 
 #### Acceptance
 
@@ -480,11 +758,11 @@ Last milestone completed: M12l
 
 - Markers on a photo, whose scrub bar is its timer.
 
-### M12n2 - Library Profiles
+### M12n3 - Library Profiles
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
-- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
+- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile, and WebUI Context Menus, whose menu and long press a picker row's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -524,6 +802,7 @@ Last milestone completed: M12l
 - Its picker, styled like the bell's list: the default profile first, then the others alphabetically, each with an edit icon, and Add Profile at the bottom.
   - It closes on Escape, a press outside it, a choice, and the panel opening, but only when the panel covers the screen.
   - It hides with the header in fullscreen and on a phone on its side.
+  - A row's context menu holds Edit… and Delete…, with Delete… disabled on the default profile and its reason as its tooltip.
 - Add Profile and Edit Profile, one tabbed in-app dialog:
   - General: the name, under the field validation pattern, flagged when another profile has it, ignoring case, and the color, from a basic palette or a hex field, random when none is chosen.
   - Sources: all of them, following newly added ones, or a chosen list.
@@ -628,7 +907,8 @@ Last milestone completed: M12l
 **Scope**
 
 - The header's profile button and its picker, as the Decisions and the approved mockup describe, first in a right-hand group that the admin icon later joins.
-- Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen.
+- A picker row has a context menu with Edit…, which opens Edit Profile, and Delete…, which asks first as Edit Profile's Delete does and is disabled on the default profile with its reason.
+- Escape closes a picker row's context menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen.
 - Add Profile and Edit Profile with their General and Sources tabs, and Delete. Profile Tag and Preset Visibility adds the Tags and Presets tabs.
 - The per-device store keeps the active profile as `profiles.active`, and each profile's applied filter and its preset as `filter.appliedByProfile`, which replaces `filter.applied` with no carry-over.
 - Every request the Decisions scope sends the active profile's `profileId`.
@@ -649,6 +929,7 @@ Last milestone completed: M12l
 - The header sits outside the fullscreen stage, and `body.short-screen .top-bar:not(.is-pairing)` hides it on a phone on its side (`src/styles.css`).
 - The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement under the bell and its focus handling written for the bell alone, and closes on an outside press and Escape through `useLightDismiss` (`src/ui/LightDismiss.ts`), which the rating's popover and WebUI Multi-Select and Bulk Actions' Selection actions menu use too.
 - The panel opening closes the bell's list in every mode (`src/state/appServices.ts`), while the picker closes only when the panel covers the screen, which is `panel.mode` `"overlay"` (`src/panel/panelHost.ts`).
+- WebUI Context Menus keeps the bell's list open while a menu opened from it is used, which the picker needs too, since a press in a row's menu is outside the picker.
 - `filter.applied` holds the filter and its preset, and an effect writes it only once presets have loaded and the record has changed (`src/state/appStore.ts`). A switch that doesn't set the applied filter and the preset in one batch, as `pickHeaderPreset` does, writes the old profile's record under the new profile's key (inferred).
 - Applying the remembered preset again as the server has it now runs only on the first preset load (`presetsLoaded` in `src/state/appStore.ts`).
 - The Stats tab loads again on events and a new playing item, never on a preset pick (`src/stats/statsTab.ts`), so a switch needs its own trigger.
@@ -659,7 +940,8 @@ Last milestone completed: M12l
 **Acceptance**
 
 - The button shows the active profile's circle and first letter in a readable color, the picker lists the default profile first and the others alphabetically, and it closes as the Decisions describe, in Header screen tests.
-- Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen, in keyboard tests.
+- Escape closes a picker row's context menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen, in keyboard tests.
+- A picker row's context menu opens Edit Profile and deletes the profile after asking, and its Delete is disabled with its reason on the default profile, in Header screen tests.
 - Add Profile and Edit Profile create, change, and delete a profile, a taken name is flagged with the field validation pattern, and the default profile's dialog has only the General tab, in profile dialog tests.
 - Each scoped request sends `profileId`, in WebUI tests of each request.
 - A switch asks "Discard changes?" while the Filter or Tags tab holds unsaved changes, applies the new profile's remembered filter or preset, loads the Library and Stats tabs again, starts the Filter tab over, ends a selection, and leaves the playing item playing, in WebUI tests of switching.
@@ -684,7 +966,7 @@ Last milestone completed: M12l
 - Switching profiles on a phone on its side, where the header hides.
 - Profiles in the admin section, which covers the whole library.
 
-### M12n3 - Profile Tag and Preset Visibility
+### M12n4 - Profile Tag and Preset Visibility
 
 - **Status**: ⏳ Planned
 - **Goal**: Each profile shows only the tags, categories, and presets chosen for it, and in a profile a filter or preset leaves out its conditions on the tags the profile hides.
@@ -785,7 +1067,7 @@ Last milestone completed: M12l
 **Scope**
 
 - Add and Edit Profile's Tags tab, with categories and their tags as checkboxes and a category's tags greyed while it is off, and its Presets tab, with a checkbox for each preset. Add Profile starts with the "All profiles" ones checked.
-- The creation question, a dialog with two choices, after Add tag, New Category, and Add Preset once a second profile exists.
+- The creation question, a dialog with two choices, after Add tag, New Category, Add Preset, and the context menus' New tag in this category and Duplicate, once a second profile exists.
 - Show in in Edit Tag, Edit Category, and Edit Preset.
 - In a profile, hidden tags, categories, and presets don't show:
   - in the Filter tab's tags and presets, where conditions on hidden tags stay out of its block of tags the catalog doesn't have;
@@ -812,7 +1094,7 @@ Last milestone completed: M12l
 **Acceptance**
 
 - The Tags and Presets tabs show and change which tags, categories, and presets a profile shows, with a category's tags greyed while it is off, and Add Profile starts with the "All profiles" ones checked, in profile dialog tests.
-- The creation question shows only once a second profile exists, and each answer creates the tag, category, or preset as it says, in Tags and Filter screen tests.
+- The creation question shows only once a second profile exists, after every way of creating a tag, category, or preset, the context menus' included, and each answer creates the tag, category, or preset as it says, in Tags and Filter screen tests.
 - Show in changes a tag's, category's, or preset's profiles with the dialog's Save or Apply, in Tags and Filter screen tests.
 - Hidden tags, categories, and presets show in no tab, a filter's conditions on hidden tags stay out of the Filter tab, and a remembered preset the profile hides shows **None\***, in Filter, Tags, Library, Random, and Stats screen tests.
 - Applying a filter or preset leaves out conditions on hidden tags as the shared fixture says, in WebUI tests of the fixture.
@@ -835,7 +1117,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
-- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses.
+- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses, and WebUI Context Menus, whose menus the admin view shows over itself.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -892,6 +1174,8 @@ Last milestone completed: M12l
 - On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow, its title, and the bell.
 - The admin view has no status line. Its acknowledgments, such as "Control settings saved.", pop up as Your actions popups, and its bell opens the same list as the player's, whose Now shows the lasting states, since the admin view has no player, as WebUI Notifications sets out.
 - Gating: opening admin from another machine asks for the control token first, in the control-token prompt that WebUI Multi-Select and Bulk Actions builds on `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly.
+- The admin view shows the app's context menus over itself, so the row menus the later admin milestones add show there.
+- The browser's own menu stays off in the admin view, except in its text fields, as it is across the app.
 
 **Traps**
 
@@ -902,6 +1186,8 @@ Last milestone completed: M12l
 - The Operator page's responsive layout is a 12-column grid that changes at 620 and 980 px wide.
 - The Operator page shows the control token as plain text and saves a change without asking (`adminSharedToken` in `Program.cs`).
 - The server keeps each event stream's client id, user agent, and connection time (`ConnectedClientTracker`), so connected clients need no contract change.
+- WebUI Context Menus renders its menus inside the fullscreen stage, which a full-page admin view may cover or replace (inferred).
+- The admin mockup's jump links and back arrow are links (`build/admin.src.html`), which lose the browser's Open in new tab with its menu off.
 
 **Acceptance**
 
@@ -915,6 +1201,7 @@ Last milestone completed: M12l
 - The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing, in admin section UI tests of the control token's Show, Copy, and change confirmation.
 - An admin settings field with a value the server would not accept, such as the port, is flagged with the field validation pattern as it is typed, and its Save can't proceed until it is corrected, in admin section UI tests of settings fields with the field validation pattern.
 - From another machine, opening admin asks for the control token first, and nothing in the admin section is shown until a valid token is entered; on the server machine it opens without one, in admin section UI tests of control-token gating.
+- A context menu opened in the admin view shows over it, and a right-click outside its text fields opens no menu of the browser's own, in admin section UI tests.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
@@ -939,7 +1226,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section's Log Viewer filters today's log by time, source, level, and text, in the design Admin Log Viewer later moves to structured entries.
-- **Depends on**: WebUI Admin Section.
+- **Depends on**: WebUI Admin Section and WebUI Context Menus, whose menu and long press a log row's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -987,6 +1274,7 @@ Last milestone completed: M12l
 - The Operator's Tail lines field goes.
 - It reads today's line format, `[timestamp] [source] [level] message`.
 - It filters by time window; by source (the second bracket: `server` and `webui`); by level, with one checkbox per level found (today `info`, `warn`, and `error`); and by contained text.
+- A log row's context menu holds Copy line, which copies the full line.
 
 **Traps**
 
@@ -997,6 +1285,7 @@ Last milestone completed: M12l
 - The interface names the logs section Log Viewer in the admin section, and nowhere Server Logs; the route is still `GET /control/logs/server`, in admin section UI tests.
 - The Log Viewer filters by time window, by several sources and several levels, and by contained text, with its filters in a collapsed panel with chips, a live indicator that pauses away from the newest lines, and rows that expand to the full line, in admin section UI tests for the Log Viewer's filters, chips, and live indicator.
 - The Log Viewer has no Tail lines field: it fetches the newest matching lines once, up to 5000, and shows older ones as the list scrolls without another request, in admin section UI tests for showing older lines.
+- A log row's context menu copies its full line, in admin section UI tests for the Log Viewer.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
@@ -1157,7 +1446,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so each works from any device.
-- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares.
+- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares, and WebUI Context Menus, whose menu and long press a file card's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1272,6 +1561,7 @@ Last milestone completed: M12l
 - The confirmation says "This permanently deletes the duplicate files you didn't keep from disk.", then "Groups to process: {n}" and "Files to delete: {n}", with a red Delete {n} Files.
 - Afterwards the card says "Deleted {n} files." and a Your actions popup "Deleted {n} duplicate files.".
 - A count of one is singular, such as "Delete 1 File".
+- A file card's context menu holds Keep this one, Copy path, and Show in File Manager while the version check lists `api.showInFileManager`.
 
 **Traps**
 
@@ -1279,6 +1569,7 @@ Last milestone completed: M12l
 - `POST /api/duplicates/apply` takes the `/control` routes' check, as delete files does: from another machine without a control session it answers 403 with `control_token_required`, not 401. It publishes `itemsRemoved` for the items it removed.
 - The scan request's `scope` already takes `CurrentSource`, `AllEnabledSources`, and `AllSources` (`DuplicateScanRequest`) (measured).
 - The desktop decided Select Best in `DuplicateGroupViewModel` (`DuplicatesDialog.axaml.cs`, in git history from before Desktop Client Removal): the file with the most plays, then the newest. The server and the WebUI have no keep rule.
+- Each group's files carry their `fullPath` (`DuplicateGroupItemResponse` in `shared/api/openapi.yaml`).
 
 **Acceptance**
 
@@ -1287,6 +1578,7 @@ Last milestone completed: M12l
 - Duplicate apply deletes only the files not kept, from disk, after a confirmation that names the groups and files to delete and asks for nothing to be typed, and Keep All deletes nothing in that group, in admin section UI tests.
 - The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh, in admin section UI tests.
 - Each file's card shows its rating, and Select Best keeps the highest-rated file, then the most played, then the newest, with an unrated file below any rating, in admin section UI tests.
+- A file card's context menu keeps that file, copies its path, and shows it in the file manager while the server lists it, in admin section UI tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check of a duplicate scan.
 
@@ -1298,7 +1590,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
-- **Depends on**: WebUI Admin Section, Browser-Playable Filter, whose Filter tab reload on `sourceStateChanged` the new source events reuse, and WebUI Multi-Select and Bulk Actions, whose Core item removal (`DeleteItems`) and `itemsRemoved` event removing a source reuses, but not its delete-files route, which deletes the files from disk, and Library Profiles, whose profiles' source lists a removed source leaves.
+- **Depends on**: WebUI Admin Section, Browser-Playable Filter, whose Filter tab reload on `sourceStateChanged` the new source events reuse, and WebUI Multi-Select and Bulk Actions, whose Core item removal (`DeleteItems`) and `itemsRemoved` event removing a source reuses, but not its delete-files route, which deletes the files from disk, and Library Profiles, whose profiles' source lists a removed source leaves, and WebUI Context Menus, whose menu and long press a source row's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1379,6 +1671,7 @@ Last milestone completed: M12l
 - The path field uses the field validation pattern. A path that is already a source is flagged with "That folder is already a source.", one inside a source with `That folder is inside the source "{name}".`, and one holding a source with `That folder contains the source "{name}".`. An empty path is not flagged.
 - Add Source sits beside the path field, so it is disabled while the path is empty or flagged, with no icon on the button, as WebUI In-App Dialogs sets out for an action whose fields sit right next to it.
 - A Your actions popup acknowledges each change: "Source renamed.", "Source added. Refreshing the library…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
+- A source row's context menu holds Edit…, Enable or Disable, and Remove…, which act as the row's Edit button, its switch, and Edit Source's Remove do.
 
 **Traps**
 
@@ -1394,6 +1687,7 @@ Last milestone completed: M12l
 - A typed path that is not a folder on the server, is already a source, is inside one, or holds one, is flagged with the field validation pattern as it is typed, and Add Source is disabled without an icon on it until the path is corrected, as it is while the path is empty, in admin section UI tests for Manage Sources.
 - An Edit Source name another source has, ignoring case, is flagged with the field validation pattern, and Save is disabled without an icon on it while the name is taken or empty, in admin section UI tests for Manage Sources.
 - Edit Source's button and its confirmation's button say Remove, not Delete, in admin section UI tests for Manage Sources.
+- A source row's context menu opens Edit Source, enables or disables the source, and removes it after the same confirmation, in admin section UI tests for Manage Sources.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -1434,7 +1728,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog while it runs.
-- **Depends on**: WebUI Admin Section, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one, and Admin Source Management, whose server path check the remap fields use, and Admin Refresh, Backup, and Duplicate Review, whose daily retention marks the backups the restore list labels daily.
+- **Depends on**: WebUI Admin Section, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one, and Admin Source Management, whose server path check the remap fields use, and Admin Refresh, Backup, and Duplicate Review, whose daily retention marks the backups the restore list labels daily, and WebUI Context Menus, whose menu and long press a backup row's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1541,6 +1835,7 @@ Last milestone completed: M12l
 - The Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "Today 06:00", "Yesterday 18:00", or "3 days ago (daily)", with a Restore… button.
 - A backup kept only by daily retention is labeled "(daily)".
 - Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and a Your actions popup then says "Restored the backup from {when}.".
+- A backup row's context menu holds Restore…, which asks first, as the row's button does.
 
 **Traps**
 
@@ -1549,6 +1844,7 @@ Last milestone completed: M12l
 **Acceptance**
 
 - The Backups card lists the server's backups, and restoring one asks first and then replaces the library with it, in admin section UI tests for restore.
+- A backup row's context menu restores the backup after the same confirmation, in admin section UI tests for restore.
 - Before a restore replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
 - The backup taken before an import or a restore shows first in the restore list, labeled "(before import)" or "(before restore)", in admin section UI tests of the safety backup's place and label.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -2988,7 +3284,7 @@ Last milestone completed: M12l
 - On a touch screen, long-pressing any element with a tooltip shows it as a tip beside the element, icon names and disabled buttons' reasons alike.
 - The tip shows while the press is held and for about 1.5 seconds after release.
 - A long press never also presses the button.
-- Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, and the player's taps.
+- Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, the player's taps, selecting library tiles, and opening context menus.
 - Desktop hover is unchanged.
 - The blocked Apply keeps its press-to-show notice.
 - The mockup comes first, and the user reviews it on the iPad and an Android phone before the app is built.
@@ -3002,12 +3298,13 @@ Last milestone completed: M12l
 - Reordering presets and tag categories starts a drag on pointer down on a row's handle (`src/ui/Reorder.tsx`).
 - The player's taps and swipes are handled in `src/playback/mediaGestures.ts`, which ignores the click the browser sends after a swipe or a handled tap.
 - WebUI Multi-Select and Bulk Actions starts a selection with a long press on a tile.
+- WebUI Context Menus opens a surface's menu on a long press wherever it has one but on buttons, so some elements with a tooltip, such as the header's now-playing name and Auto Tag's file rows, open a menu instead.
 
 #### Acceptance
 
 - On a touch screen, a long press on an element with a tooltip shows its tip beside it while held and for about 1.5 seconds after release, without pressing it, in WebUI tests of long-press tips with touch pointers.
 - A long press on a disabled button shows its reason, in WebUI tests of long-press tips on disabled buttons.
-- Dragging presets and tag categories, the player's taps, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
+- Dragging presets and tag categories, the player's taps, selecting library tiles, opening context menus, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
 - A mouse shows no tip on a long press, in WebUI tests with a mouse pointer.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the iPad and an Android phone.
@@ -3218,6 +3515,7 @@ Last milestone completed: M12l
 - WebUI Keyboard Shortcuts adds double-tap seeking on either half of the player, so panning must not clash with it.
 - When the zoom resets, such as on the next item, isn't settled.
 - The player claims its touches (`touch-action: none` on `.media-container` in `src/styles.css`) and turns away Safari's pinch by cancelling `gesturestart` (`src/ui/Player.tsx`), so a pinch over it never zooms the page.
+- WebUI Context Menus opens the player's menu on a long press on its picture, so a pan that starts by holding still would open it (inferred).
 
 #### Acceptance
 

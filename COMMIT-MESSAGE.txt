@@ -20,6 +20,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Run headless browsers only with approval and networking cut off
+Docs: Plan right-click menus across the app as WebUI Context Menus
 
-- AGENTS.md says an agent runs a headless browser only with the user's approval for that run, with a throwaway profile under artifacts/scratch/, and with networking cut off at the system level, since a browser's own offline settings still let it reach the network.
+- MILESTONES.md adds WebUI Context Menus as M12n1, after WebUI Multi-Select and Bulk Actions: the browser's own menu off except in text fields, and app menus on the player, file paths, tags, categories, presets, sources, notifications, Auto Tag's rows, and the diagnostics IDs, opened by a long press on touch screens except on buttons, tiles, drag handles, the stars, and the resize handle.
+- Its slices: a mockup approved in Firefox on the desktop, the iPad, and an Android phone; the block and a long press shared with the tiles; then the player and file paths, the Tags tab, the Filter tab, and notifications, Auto Tag, and Settings.
+- WebUI Loop Range, Library Profiles, and Profile Tag and Preset Visibility move to M12n2, M12n3, and M12n4, and the v0.15.0 outline lists the new IDs.
+- WebUI Multi-Select and Bulk Actions builds the Selection actions menu's items as the shared item list, and its context menu to be reused: opened at a point, kept in the window, rendered in the fullscreen stage, one at a time, and named in Esc's shortcut row. A Mac's Ctrl+click is out of scope.
+- The admin milestones gain row menus for log lines, duplicate file cards, sources, and backups, the admin view shows menus over itself, and Library Profiles gains a menu on the picker's rows with its place in the Esc order.
+- Profile Tag and Preset Visibility's creation question covers the menus' New tag in this category and Duplicate, and Long-Press Tooltips on Touch Screens, Player Zoom and Pan, and WebUI Loop Range note the menus' long press.
