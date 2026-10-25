@@ -20,11 +20,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan right-click menus across the app as WebUI Context Menus
+M12m: Settle the Library tab's look in the mockup, and start the grid's zoom at 120 px
 
-- MILESTONES.md adds WebUI Context Menus as M12n1, after WebUI Multi-Select and Bulk Actions: the browser's own menu off except in text fields, and app menus on the player, file paths, tags, categories, presets, sources, notifications, Auto Tag's rows, and the diagnostics IDs, opened by a long press on touch screens except on buttons, tiles, drag handles, the stars, and the resize handle.
-- Its slices: a mockup approved in Firefox on the desktop, the iPad, and an Android phone; the block and a long press shared with the tiles; then the player and file paths, the Tags tab, the Filter tab, and notifications, Auto Tag, and Settings.
-- WebUI Loop Range, Library Profiles, and Profile Tag and Preset Visibility move to M12n2, M12n3, and M12n4, and the v0.15.0 outline lists the new IDs.
-- WebUI Multi-Select and Bulk Actions builds the Selection actions menu's items as the shared item list, and its context menu to be reused: opened at a point, kept in the window, rendered in the fullscreen stage, one at a time, and named in Esc's shortcut row. A Mac's Ctrl+click is out of scope.
-- The admin milestones gain row menus for log lines, duplicate file cards, sources, and backups, the admin view shows menus over itself, and Library Profiles gains a menu on the picker's rows with its place in the Esc order.
-- Profile Tag and Preset Visibility's creation question covers the menus' New tag in this category and Duplicate, and Long-Press Tooltips on Touch Screens, Player Zoom and Pan, and WebUI Loop Range note the menus' long press.
+- Every tile has rounded 4 px corners, and a selected tile is grey around its thumbnail, inset 8 px at every zoom, so the Mockup tab has no grid look choices left.
+- The gap between tiles follows the row height the zoom sets, the same in every row: 2 px from 120 to 179 px, 3 px from 180 to 239 px, and 4 px from 240 to 300 px, in whole device pixels.
+- The zoom's smallest row height is 120 px in place of 100, in the mockup now and in the app with the Library look slice.
+- The count line reads "{matching} / {total} shown", the closed preset dropdown reads "Preset: {name}", with a bold "Preset:" in its padding, its options' plain names, and "Loading…", the Filters and Random lines end with a chevron, with a faint tint on hover, the Play count sort reads "Most → Least" and "Least → Most", and the selection bar reads "{n} / {matching} selected".
+- The preset dropdown, search, Sort, and its direction are the lines' 32 px height, with 16 px text, and the preset and search share a row only once the controls are 520 px wide, in place of 414.
+- MILESTONES.md renames the Grid look slice the Library look slice and records the approved mockup's look, the gap rule, the zoom's new minimum, and the Library tab changes, with their traps, the docs, tests, and changelog entry that still give the old values among them, and their acceptance.
+- Long-Press Tooltips on Touch Screens becomes WebUI Tooltips: the app draws every tooltip in its own theme, on desktop hover too, and a long press shows the same tip, with traps for the title attributes it replaces and the tests that read them.
+- MILESTONES.md's Maintenance Rules add that work the user wants done later goes into the Scope of the milestone that will do it, never only into a Not included section.

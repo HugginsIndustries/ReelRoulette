@@ -44,6 +44,7 @@ Do not use this file for detailed architecture explanation or current capability
 - Record future work found during a milestone as its own backlog item in `## Planned Milestones`, or as an addition to the existing milestone that will do it. Check existing items first so the work is not recorded twice.
 - Known bugs live in `ISSUES.md`, not here. A milestone that fixes one names it by its title in its Scope.
 - Record scope boundaries as bullets in the entry's Not included section. When another milestone covers the boundary, name it by its exact title after "which is" (for example `- Rebinding, which is Customizable Keyboard Shortcuts.`), which `check-milestones.ps1` enforces.
+- Anything the user wants done later goes into the Scope of the milestone that will do it, an existing related one or a new backlog item, never only into a Not included section. A Not included bullet then names that milestone after "which is".
 - Organize milestone sections as:
   - `## Planned Releases`: the release outline at the top of this file; keep it in sync when milestones are added, moved, promoted, completed, or removed.
   - `## Active Milestones`: milestones currently being worked, using `M*` IDs in historical order.
@@ -157,7 +158,7 @@ Last milestone completed: M12l
 - A search, filter, or preset change ends selection, so an action never reaches an item the grid doesn't show, and a sort change keeps it.
 - Selection lasts while the panel shows another tab or is closed, and Esc ends it only while the Library tab shows, so Esc never ends a selection nobody can see. The Selection actions menu closes when the Library tab hides.
 - Items the app removes by deleting their files leave the selection, and selection ends when none are left.
-- The selection bar reads, from the left, Select all (`select_all`), Clear selection (`deselect`), and "{n} selected", with {n} grouped as the count line groups it, and at its far right Selection actions, an icon button with `more_vert` and the tooltip "Selection actions", since it opens a menu rather than a dropdown.
+- The selection bar reads, from the left, Select all (`select_all`), Clear selection (`deselect`), and "{n} / {matching} selected", such as "15 / 615 selected", with both numbers grouped as the count line groups them, to match its "{matching} / {total} shown", and at its far right Selection actions, an icon button with `more_vert` and the tooltip "Selection actions", since it opens a menu rather than a dropdown.
 
 #### Slices
 
@@ -165,7 +166,7 @@ Last milestone completed: M12l
 | --- | --- | --- |
 | Contract | ✅ Complete | An ids-only library query, bulk favorite and blacklist with one event, bulk rating with one event, a delete-files route with its event, the tag-count read for a selection, exact id matching, and the WebUI's handling of the bulk and removal events. |
 | Selection | ✅ Complete | Selecting tiles by their check icon, a long press, or a Shift, Ctrl, or Cmd+click, the selection bar with Select all and Clear selection, and the Esc order. |
-| Grid look | ⏳ Planned | The library grid as the mockup shows it: the selected tile's look, no border or background, gaps snapped to device pixels, and the thin scrollbar in the tab's right margin. |
+| Library look | ⏳ Planned | The Library tab as the mockup shows it: the selected tile's look, rounded tiles, no border or background, gaps set by the zoom's row height and snapped to device pixels, the zoom from 120 px, the thin scrollbar in the tab's right margin, the count line's "shown", the preset dropdown's "Preset:", and the Filters and Random lines' chevrons. |
 | Bulk actions | ⏳ Planned | The Selection actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload, a resync in place of a bulk event too large to send, and favorite and blacklist answers applied to the item they were for. |
 | Context menu | ⏳ Planned | A right-click on a library tile opens an app-styled context menu with the Selection actions menu's options, built as a shared context menu component. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
@@ -251,7 +252,7 @@ Last milestone completed: M12l
 - Deselecting the last tile ends selection.
 - Esc closes the Selection actions menu and then selection, after Auto Tag and before the panel, in the order WebUI Keyboard Shortcuts sets.
 - Esc's row in the shortcut list reads "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen".
-- The selection, the long press, the tiles' marks, the bar, and the Esc step are built in `src/library/` (a selection model, a long-press handler, the tile, its rows and grid, the query session, and `library.ts`), `src/ui/LibraryOverlay.tsx`, `src/ui/Stage.tsx`, and `src/styles.css`, and the mockup shows them as shipped, apart from the Grid look slice's look, which it shows ahead of the app.
+- The selection, the long press, the tiles' marks, the bar, and the Esc step are built in `src/library/` (a selection model, a long-press handler, the tile, its rows and grid, the query session, and `library.ts`), `src/ui/LibraryOverlay.tsx`, `src/ui/Stage.tsx`, and `src/styles.css`, and the mockup shows them as shipped, apart from the Library look slice's look, which it shows ahead of the app.
 
 **Traps**
 
@@ -286,23 +287,37 @@ Last milestone completed: M12l
 - The Esc row's new text and the tiles' check icons and undraggable thumbnails changed the shortcut reference test and two snapshots, the foundation page's Esc row and the library tiles' markup, and nothing else in them.
 - The Selection actions menu opens empty until the Bulk actions slice fills it.
 - The mockup shows the bar as Select all, Clear selection, the count, and Selection actions with `more_vert`; a Shift, Ctrl, or Cmd+click starting selection and a Ctrl or Cmd+click toggling during it; Shift+click adding only the tile clicked without a last tile in the grid; Esc ending selection only while the Library tab shows, and the menu closing as the tab hides; a new search or filter ending selection; the grouped count; Select all disabled with its reason; the browser's menu kept off a tile from the start of a finger's press; a long press without a click forgotten at the next press; and the Esc row's new text. Its icon font gained `more_vert` (`build_font.py`, run with the user's approval), and its tiles' and check icons' screen-reader-only names ("Play {name}" and "Select {name}") are gone, since the app has none.
-- The mockup shows the Grid look slice's look ahead of the app: the selected tile's inset thumbnail, grey background, and black check, 4 px gaps snapped to device pixels, no grid border, and the scrollbar in the tab's right margin, with the slice's four choices in its Mockup tab. Until that slice lands, the app keeps the orange tint, the shrunk thumbnail, 1 px gaps, and the grid's border.
+- The mockup shows the Library look slice's look ahead of the app: the selected tile's inset thumbnail, grey background, and black check, rounded tiles, gaps set by the zoom's row height and snapped to device pixels, the zoom from 120 px, no grid border, the scrollbar in the tab's right margin, the count line's "shown", the preset dropdown's "Preset:", and the Filters and Random lines' chevrons. Until that slice lands, the app keeps the orange tint, the shrunk thumbnail, square tiles, 1 px gaps, the zoom from 100 px, the grid's border, the count line without "shown", the preset's plain name, and the lines without chevrons.
 - One `Icon` component, `src/ui/Icon.tsx`, replaces the copies in `AutoTag.tsx` and `TagEditor.tsx`.
 - The query session alone decides whether a query matches by another search or filter (`changesMatch`), Select all's request takes the generated `LibraryIdsQueryRequest` and its answer goes through `parseLibraryIds`, beside `parseLibraryQueryPage`, and the Library plays a tile only through `clickTile`, whose tests the play tests now are, and neither it nor `requestPlayItem` trims the id or refuses a blank one, which no tile or history step sends.
 - `CONTEXT.md`, `docs/domain-inventory.md`, `docs/architecture.md`, and `CHANGELOG.md` describe the selection, Select all, and the Esc order.
 
-#### Grid look slice
+#### Library look slice
 
 **Scope**
 
-- Before the slice is built, the user picks four values from the mockup's Mockup tab: the selected tile's inset (8 to 12 px), the gap between tiles (1 to 4 px), the selected tile's background (grey or none), and the tile corners (square or rounded at 4 px). The slice builds those, and the four choices then leave the mockup.
-- A selected tile's thumbnail is inset by the same margin on every side and cropped to fill the inset, as `object-fit: cover` does, with 4 px corners, so every selected tile has the same margins and the check icon, 4 px from the tile's corner, sits over the thumbnail's top-left corner whatever its shape.
-- Around the inset thumbnail, a selected tile shows the background picked: grey, #333333 in the dark theme and #e0e3e8 in the light theme, or none, the page behind the grid. It replaces the orange tint.
+- The user approved the mockup's Library tab in their review on their devices, and the slice builds it as the mockup shows it.
+- A selected tile's thumbnail is inset 8 px on every side, at every zoom, and cropped to fill the inset, as `object-fit: cover` does, with 4 px corners, so every selected tile has the same margins and the check icon, 4 px from the tile's corner, sits over the thumbnail's top-left corner whatever its shape.
+- Around the inset thumbnail, a selected tile is grey, #333333 in the dark theme and #e0e3e8 in the light theme, in place of the orange tint.
+- Every tile has rounded 4 px corners, selected or not, as a selected tile's thumbnail has.
 - The selected check icon shows its check mark black inside the orange circle in the dark theme and white in the light theme, from a disc of that color behind it, and its drop shadow is drawn around the whole mark, so none of it falls inside the check mark.
 - The grid has no border, rounded corners, or background of its own, and keeps the Library tab's margin around it.
-- Each row's height and each tile's edges land on whole device pixels, so every gap, across a row and between rows, draws exactly the gap picked (`libraryGridLayout.ts`).
+- The gap between tiles, across a row and between rows, is set by the row height the zoom sets, the one the rows aim for, not by each row's own height, so every gap on screen is the same: 2 px from 120 to 179 px, 3 px from 180 to 239 px, and 4 px from 240 to 300 px.
+- The gap, each row's height, and each tile's edges land on whole device pixels, so every gap draws exactly the same width (`libraryGridLayout.ts`).
+- The zoom's smallest row height is 120 px in place of 100 (`MIN_TARGET_ROW_HEIGHT`), and its largest stays 300 px.
 - The grid's scrollbar sits in the Library tab's right margin, centered in it, and the tiles keep the same width whether it shows or hides: the grid reaches into the margin, a scrollbar that takes room takes it from the margin, and a padding keeps the tiles' width.
 - The grid asks for the browser's thin scrollbar (`scrollbar-width: thin`), which fits the margin, in place of the `::-webkit-scrollbar` size current Chrome ignores.
+- The count line reads "{matching} / {total} shown", such as "615 / 49,106 shown".
+- The Play count sort's direction reads "Most → Least" and "Least → Most", without "Plays" (`LIBRARY_SORTS` in `libraryBrowseModel.ts`, and `src/test/fixtures/sort-direction-labels.json`).
+- The selection bar's count reads "{n} / {matching} selected", such as "15 / 615 selected", with both numbers grouped, to match the count line's "{matching} / {total} shown".
+- The Library tab's preset dropdown shows "Preset: {name}" while closed, with "Preset:" drawn inside the field before the chosen name, and its options keep their plain names. A press anywhere in the field still opens it.
+  - The dropdown draws the chosen name, its "…", and its arrow itself, and "Preset:" sits in its left padding, inside its border, lined up with the Sort dropdown's and the search field's text.
+  - "Preset:" is bold in the name's color, as the Filters line's "Filters:" is.
+  - A message the dropdown shows in place of the presets reads the same way, such as "Preset: Loading…", and "Preset:" dims with the disabled dropdown.
+  - Its loading message reads "Loading…" in place of "Loading..." (`PRESET_MENU_LOADING` in `appStore.ts`).
+- The Filters line and the Random line each end with a small `chevron_right` icon at their right edge, inside their border, with the text cut off with "…" before it, and a subtle hover style, a faint grey tint, on devices that can hover (`@media (hover: hover)`).
+- The preset dropdown, the search field, the Sort dropdown, and the sort direction button are the Filters and Random lines' height, 32 px, on a phone on its side too. It is set as a height, on the lines too, which every browser keeps, rather than a minimum, which Safari ignores on a dropdown. Their text stays 16 px, since Safari on iOS can zoom the page when a field with smaller text is focused, and only their padding shrinks.
+- The preset dropdown and search share a row only once the Library tab's controls are 520 px wide, a panel about 546 px wide, in place of 414 px, since "Preset:" takes room from the preset's name. Narrower, a phone held upright included, they stack.
 - The mockup matches what the slice shipped.
 
 **Traps**
@@ -310,21 +325,50 @@ Last milestone completed: M12l
 - The app's gap is `TILE_GAP`, 1 px, in `libraryGridLayout.ts`, which `libraryGridController.test.ts` and `screens/library.test.ts` use too, while the stylesheet's `.library-grid-row` sets its own `1px` gap and margin and names `TILE_GAP` only in a comment (`src/styles.css`).
 - The justified layout gives rows fractional heights and tiles fractional widths, so a gap can draw a pixel wider where rounding falls. The mockup snaps them to whole device pixels, and its gaps then measured exactly 4 px everywhere at 1x, unselected and selected (measured).
 - The grid's virtualizer works out each row's top from the row heights and the gap (`libraryGridVirtualizer.ts`), so snapped heights change its offsets, and its tests' expected positions (inferred).
+- `getGridRowMeasuredHeight` and `getTileLeftOffsets` add `TILE_GAP` to one row alone, with no row height the rows aim for to work the gap out from (`libraryGridLayout.ts`).
+- While a zoom gesture lasts, the rows scale as one picture, gaps included, so a gap takes its new width in the one reflow when the gesture settles, as the mockup's does.
+- A row height a device remembers below 120 px fails `isTargetRowHeight`, so that device's grid starts at 160 px again (`device.read` in `library.ts`), as the mockup's does.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and the comments in `libraryGridController.ts` give the zoom as 100 to 300 px, and the first two give the gap as 1 px.
+- `CHANGELOG.md`'s `[Unreleased]` zoom entry, Zoom the library grid, still says the row height settles from 100 to 300 px and tiles sit 1 px apart.
 - A tile's picture centered by `left: 50%` and `translate(-50%, -50%)` lands a pixel short of an odd-sized tile's edge and shows that pixel of the tile behind it: in the mockup at 1x, 16 of 94 gaps drew 5 px (measured). The app's tile image fills its tile with `object-fit: cover`, which the inset thumbnail keeps, so it needs no such centering.
 - In the mockup review, a white check mark looked grey with the drop shadow on the check icon itself, which the shadow falling inside the check mark's cutout explains (inferred).
 - The tiles' icons take the drop shadow from `.library-grid-tile .material-symbol-icon.is-filled` (`src/styles.css`), so the selected check icon has to opt out of it to move the shadow onto the whole mark.
 - The app's `.themed-scrollbar` sets `scrollbar-color`, and current Chrome ignores `::-webkit-scrollbar` sizes once `scrollbar-width` or `scrollbar-color` is set (inferred).
 - A scrollbar that takes room reports its width as the grid's `offsetWidth` less its `clientWidth` while the gutter keeps its room; one that fades over the content reports none, so the mockup assumes 8 px to center it.
 - happy-dom lays nothing out, so tests stub the widths the scrollbar's placement reads, as the grid's tests stub `clientWidth`.
+- The count line's text comes from `formatBrowseResultSummary` (`libraryBrowseModel.ts`), and `libraryBrowseModel.test.ts`, `libraryQuerySession.test.ts`, `library.test.ts`, `screens/library.test.ts`, and its snapshot expect it without "shown". `CONTEXT.md` gives it as "{matching} / {total}".
+- In the mockup review, a dropdown whose own text was transparent, with "Preset: {name}" drawn over it, lost its arrow in Firefox on the desktop and Chrome on Android, which draw the arrow in the text color, and kept it in Safari on the iPad. So the dropdown draws its own name, and only "Preset:" is drawn, in its padding, in a label a press passes through (`pointer-events: none`).
+- In the mockup review, Firefox drew a dropdown's text at its padding, lined up with the search field's text, so "Preset:" starts at the dropdown's padding too.
+- A padding can't follow another element's width in CSS, and the font decides how wide "Preset:" is, so the mockup measures it with a `ResizeObserver` and sets the dropdown's left padding from it.
+- The preset dropdown is styled by `.library-controls select`, whose padding and the search field's are 12 px where the mockup's are 10 px, and sized in its row by `.library-controls-pair > *`, so an element around it takes its place in the row (`src/styles.css`).
+- The controls take their height from a 44 px `min-height`: the dropdowns and the search field from `.library-controls select, .library-overlay-search`, with 8 px padding above and below, and the sort direction button from `.library-overlay button`. On a phone on its side, `body.short-screen` sets their `min-height` to 38 px (`src/styles.css`).
+- The preset dropdown and search share a row from `@container library-controls (min-width: 414px)` (`src/styles.css`), and `CONTEXT.md` and `docs/domain-inventory.md` say they do from a panel about 440 px wide.
+- In the mockup review, Safari on the iPad drew the preset dropdown at the lines' height on its own row while the other controls kept their 44 px minimum, since Safari ignores `min-height` on a dropdown.
+- The lines' content is the 18 px chevron, taller than their 13.6 px text, so with 6 px padding and a 1 px border above and below they come to about 32 px, the height the mockup sets on them and the controls (inferred).
+- `appStore.test.ts`, `serverConnection.test.ts`, `screens/foundation.test.ts`, and `screens/library.test.ts` expect the preset dropdown's "Loading...", and `CONTEXT.md` names it.
+- `library.test.ts` expects the Play count direction's "Most Plays → Least Plays" and "Least Plays → Most Plays".
+- The selection bar's text is built from `selection.count` in `LibraryOverlay.tsx`, and the matching number is `matchCount` in `library.ts`, the query's `totalCount`, which Select all's disabled state compares with and `library.ts` doesn't expose yet. `screens/library.test.ts` expects "5 selected" and the grouped 1,234 and 1,233 forms.
+- At the panel's 360 px minimum, the selection bar leaves its count 184 px beside its three 44 px buttons, and a 360 px phone 186 px. "49,466 / 49,466 selected", the whole library at 16 px, measures 181 px in Noto Sans, which Firefox uses on the Linux desktop, and 175 px in Roboto, Android's font, so it fits on one line (measured). SF, the iPad's font, wasn't measured, and the count has no cut-off, so it would wrap if it ran wider.
+- The Filters and Random lines (`FilterSummary` and `RandomLine` in `LibraryOverlay.tsx`) hold their label and text directly, in a button cut off with `text-overflow: ellipsis` (`.library-overlay button.library-line` in `src/styles.css`), so the text needs an element of its own for "…" to fall before the chevron. `html.theme-light .library-overlay button.library-line` sets their background, and outranks a plain `:hover` rule.
+- The app's `Icon` writes the icon's name as its text, so the chevron adds "chevron_right" to each line's `textContent`, which `randomization.test.ts` and `tags.test.ts` read.
 
 **Acceptance**
 
-- A selected tile's thumbnail is inset by the picked margin on every side, its image covers the inset, and the tile shows the picked background, in WebUI tests with the stylesheet.
+- A selected tile's thumbnail is inset 8 px on every side at every row height, its image covers the inset, and the tile is grey around it in both themes, and every tile has 4 px corners, in WebUI tests with the stylesheet.
 - The selected check icon's disc is black in the dark theme and white in the light theme, and its shadow is on the whole mark, not the icon, in WebUI tests with the stylesheet.
 - The grid has no border, corners, or background of its own, in WebUI tests with the stylesheet.
 - Every row's height and every tile's edges are whole device pixels at 1x, 2x, and a fractional device pixel ratio, and each row's tiles and gaps add up to its width, in layout tests.
+- The gap is 2 px while the rows aim for 120 to 179 px, 3 px for 180 to 239 px, and 4 px for 240 to 300 px, the same in every row whatever its own height, in layout tests.
+- The zoom keeps the row height the rows aim for from 120 to 300 px, in the zoom's tests.
 - With a scrollbar that takes room and one that doesn't, the scrollbar's middle is at the margin's middle and the tiles keep the same width, in WebUI tests of the grid with stubbed scrollbar widths.
-- The mockup matches what the slice shipped, with the four choices gone from its Mockup tab, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The count line reads "{matching} / {total} shown", in WebUI tests of the Library tab.
+- The Play count sort's direction reads "Most → Least" and "Least → Most", in the direction label tests against `sort-direction-labels.json`.
+- The selection bar's count reads "{n} / {matching} selected" with both numbers grouped, in WebUI tests for selection.
+- The closed preset dropdown shows a bold "Preset:" in its left padding before the name it draws itself, a message included, its options keep their plain names, a press on "Preset:" reaches the dropdown, and its loading message reads "Loading…", in WebUI tests with the stylesheet.
+- The Filters and Random lines end with `chevron_right` after their text, which is cut off with "…", and tint on hover only under `@media (hover: hover)`, in WebUI tests with the stylesheet.
+- The preset dropdown, the search field, the Sort dropdown, the sort direction button, and the Filters and Random lines share one `height`, on a phone on its side too, and the controls' text stays 16 px, in WebUI tests with the stylesheet.
+- The preset dropdown and search share a row once the controls are 520 px wide and stack narrower, in WebUI tests with the stylesheet.
+- The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Bulk actions slice
@@ -345,7 +389,7 @@ Last milestone completed: M12l
   - The token prompt is a dialog titled "Control token" that says "This is an admin action. Enter the server's control token.", with the token field under the field validation pattern and Continue.
   - The action's name, its confirmation, its Your actions popup, and what it says when some files couldn't be deleted (`failedItemIds`) are settled in the mockup review, starting from "Remove {n} items from the library and permanently delete their {n} files from disk? This can't be undone." with a red Remove and Delete, and "1 item" and "its file" for one.
 - The delete action ends selection.
-- Selected items that leave the results other than by the app deleting their files, as a rating under Only unrated or a favorite change under Favorites only takes them out, here or on another device, or a refresh removes them because their files are gone, leave the selection, so an action never reaches an item the grid doesn't show, and "{n} selected" and Select all's disabled state count only items that match.
+- Selected items that leave the results other than by the app deleting their files, as a rating under Only unrated or a favorite change under Favorites only takes them out, here or on another device, or a refresh removes them because their files are gone, leave the selection, so an action never reaches an item the grid doesn't show, and "{n} / {matching} selected" and Select all's disabled state count only items that match.
 - Each Your actions popup's {n} is the `count` the bulk route answers.
 - Clear-stats publishes `resyncRequired` with the `lastEventId` and `currentRevision` its OpenAPI schema requires, in place of a payload with only its reason.
 - The slice measures the size of a bulk event that changes every item of the catalog, and a bulk change above the size it settles on publishes `resyncRequired` in place of its bulk event.
@@ -379,7 +423,7 @@ Last milestone completed: M12l
 - The device that made a bulk change shows only its Your actions popup, with the count the server answered, in WebUI tests for each bulk action.
 - Clear-stats' `resyncRequired` carries `lastEventId` and `currentRevision` and matches its OpenAPI schema, in server tests for clear-stats.
 - The size of a bulk event that changes every item of the catalog is recorded, and a bulk change above the size settled on publishes `resyncRequired` in place of its bulk event, in server tests for the bulk routes.
-- A selected item that a bulk action, a single change, another device's change, or a refresh takes out of the results leaves the selection, loaded or not, and "{n} selected" and Select all's disabled state then follow the items that match, in WebUI tests for selection.
+- A selected item that a bulk action, a single change, another device's change, or a refresh takes out of the results leaves the selection, loaded or not, and "{n} / {matching} selected" and Select all's disabled state then follow the items that match, in WebUI tests for selection.
 - `npm run verify` passes.
 
 #### Context menu slice
@@ -475,7 +519,7 @@ Last milestone completed: M12l
 - The browser's own right-click menu is off across the app, except in text fields, the inputs that take text and textareas, which keep it for copy, paste, and spell check.
 - Every menu is the shared context menu WebUI Multi-Select and Bulk Actions builds, with its look and item list.
 - A right-click opens a surface's menu anywhere on it, its buttons included, and a right-click where no menu exists opens nothing.
-- On a touch screen or with a pen, a long press opens a surface's menu wherever it has one, except on buttons, library tiles, which a long press selects, drag handles, the rating stars, and the panel's resize handle, so buttons stay free for Long-Press Tooltips on Touch Screens.
+- On a touch screen or with a pen, a long press opens a surface's menu wherever it has one, except on buttons, library tiles, which a long press selects, drag handles, the rating stars, and the panel's resize handle, so buttons stay free for WebUI Tooltips' long press.
 - A long press uses up the click it ends with, so it never also presses, toggles, or plays what it opened on.
 - Copy items stand in for the browser's Copy on selected text, which goes with its menu: Copy name and Copy path for files, Copy text for notifications, and Copy for the Settings tab's diagnostics IDs.
 - Show in File Manager sits wherever Copy path does, shown while the version check lists `api.showInFileManager`, as the Stats tab's button is.
@@ -3273,26 +3317,29 @@ Last milestone completed: M12l
 
 - Manual: With Enhanced audio on, a quiet video played above 100% is louder without distortion, in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
 
-### P52 - Long-Press Tooltips on Touch Screens
+### P52 - WebUI Tooltips
 
 - **Status**: ⏳ Planned
-- **Goal**: On a touch screen, long-pressing an element with a tooltip shows the tooltip as a tip beside the element, so icon names and disabled buttons' reasons can be read without a mouse. Low priority, after Animations.
+- **Goal**: The app draws every tooltip itself, in the app's theme, so desktop hover tooltips follow the theme instead of the browser's, and a long press on a touch screen shows the same tip, so icon names and disabled buttons' reasons can be read without a mouse. Low priority, after Animations.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
 
+- The app draws every tooltip itself, in the app's theme, so desktop hover tooltips follow the theme instead of the browser's, and a long press on a touch screen shows the same tip.
 - On a touch screen, long-pressing any element with a tooltip shows it as a tip beside the element, icon names and disabled buttons' reasons alike.
 - The tip shows while the press is held and for about 1.5 seconds after release.
 - A long press never also presses the button.
 - Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, the player's taps, selecting library tiles, and opening context menus.
-- Desktop hover is unchanged.
 - The blocked Apply keeps its press-to-show notice.
-- The mockup comes first, and the user reviews it on the iPad and an Android phone before the app is built.
+- The mockup comes first, and the user reviews it in Firefox on the desktop, on the iPad, and on an Android phone before the app is built.
 
 #### Traps
 
 - Tooltips are `title` attributes, which a phone or tablet doesn't show, so the blocked Apply shows its reason in a notice when pressed instead (`blockedReason` on `HeldButton` in `src/ui/FieldValidation.tsx`).
 - `HeldButton` gives a disabled or held action's reason as its `title`.
+- The app's tooltips are 71 `title` attributes in 14 components under `src/ui/`, and two the library grid sets itself: a tile's file name and its check icon's "Select" or "Deselect" (`libraryGridTile.ts`) (measured).
+- A `title` is also an element's accessible name when it has no other, and AGENTS.md keeps controls' accessible names, so an element named only by its `title` needs its name kept another way.
+- Tests read tooltips through `title`, with Testing Library's `getByTitle`, `getAttribute("title")`, and `.title`, 71 times in 10 test files, most in `screens/filter.test.ts` (28) and `screens/tags.test.ts` (12), and the filter, foundation, library, and tags screen snapshots hold `title` attributes (measured).
 - A disabled button gets no pointer or click events in some browsers, so its long press has to be caught around it (inferred).
 - Safari on iOS and Chrome on Android show their own callout, menu, or text selection on a long press (inferred).
 - Reordering presets and tag categories starts a drag on pointer down on a row's handle (`src/ui/Reorder.tsx`).
@@ -3306,12 +3353,13 @@ Last milestone completed: M12l
 - A long press on a disabled button shows its reason, in WebUI tests of long-press tips on disabled buttons.
 - Dragging presets and tag categories, the player's taps, selecting library tiles, opening context menus, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
 - A mouse shows no tip on a long press, in WebUI tests with a mouse pointer.
+- On a desktop, hovering an element with a tooltip shows the app's tip in the app's theme, and the browser shows none of its own, in WebUI tests of hover tips.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the iPad and an Android phone.
 
 #### Release checks
 
-- Manual: On the iPad and an Android phone, long-pressing an icon button and a disabled button shows its tip without pressing it.
+- Manual: In Firefox on the desktop, hovering an icon button shows the app's tip in the dark and light themes, and on the iPad and an Android phone, long-pressing an icon button and a disabled button shows the same tip without pressing it.
 
 ### P53a - Animations
 
@@ -3560,7 +3608,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: Dragging the library grid's scrollbar, or an optional timeline rail of the results' dates, letters, or ratings, reaches any part of the results without loading every page before it. Low priority, since filters, sorts, and search already find files without scrolling far down the grid.
-- **Depends on**: WebUI Grid Row Reuse and Zoom, and WebUI Multi-Select and Bulk Actions, whose Grid look slice puts the grid's scrollbar in the Library tab's right margin, where the timeline rail goes.
+- **Depends on**: WebUI Grid Row Reuse and Zoom, and WebUI Multi-Select and Bulk Actions, whose Library look slice puts the grid's scrollbar in the Library tab's right margin, where the timeline rail goes.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -3625,7 +3673,7 @@ Last milestone completed: M12l
 
 **Traps**
 
-- WebUI Multi-Select and Bulk Actions' Grid look slice makes the grid's scrollbar the browser's thin one, placed in the Library tab's right margin, so the tiles keep their width as it comes and goes.
+- WebUI Multi-Select and Bulk Actions' Library look slice makes the grid's scrollbar the browser's thin one, placed in the Library tab's right margin, so the tiles keep their width as it comes and goes.
 - The WebUI loads only some pages of the results, so where each group starts in the whole filtered set needs a read from the server for the current search, filter, and sort (inferred).
 - Browsers draw their own scrollbars differently: some take room and some fade over the content, and a fading one's width isn't reported, so a custom-drawn thumb looks the same everywhere and the native one has to be hidden (inferred).
 
