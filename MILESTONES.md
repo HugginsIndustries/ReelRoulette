@@ -149,7 +149,7 @@ Last milestone completed: M12l
 #### Decisions
 
 - Select all selects every item that matches the search and filters, loaded or not, and each bulk action applies to all of them.
-- Each bulk action acknowledges itself in a Your actions popup: "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Rated {n} items {rating}.", "Cleared the rating on {n} items.", "Updated tags on {n} items.", and "Cleared playback stats for {n} items.", with "1 item" for one, and {rating} as Item Ratings words it, such as "3.5 stars".
+- Each bulk action acknowledges itself in a Your actions popup: "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Rated {n} items {rating}.", "Cleared the rating on {n} items.", "Updated tags on {n} items.", "Cleared playback stats for {n} items.", and "Deleted {n} files.", with "1 item" and "1 file" for one, and {rating} as Item Ratings words it, such as "3.5 stars".
 - Removing items from the library always deletes their files from disk, and the action is named for what it does. An item removed with its file left on disk wouldn't stay removed: the refresh's source stage adds every file in a source folder that the catalog doesn't hold as a new item, with no tags, favorite, or play stats and a new date added. Blacklisting covers hiding a file and keeping it.
 - A bulk change's {n} is the `count` its route answers and its event carries, the named items in the library, so the device that made the change and other devices say the same number.
 - Item ids match exactly as the server generates them, so looking up the items a request names reads the id's primary key index instead of scanning it.
@@ -159,6 +159,7 @@ Last milestone completed: M12l
 - Selection lasts while the panel shows another tab or is closed, and Esc ends it only while the Library tab shows, so Esc never ends a selection nobody can see. The Selection actions menu closes when the Library tab hides.
 - Items the app removes by deleting their files leave the selection, and selection ends when none are left.
 - The selection bar reads, from the left, Select all (`select_all`), Clear selection (`deselect`), and "{n} / {matching} selected", such as "15 / 615 selected", with both numbers grouped as the count line groups them, to match its "{matching} / {total} shown", and at its far right Selection actions, an icon button with `more_vert` and the tooltip "Selection actions", since it opens a menu rather than a dropdown.
+- An event that would list more than 1,000 items publishes `resyncRequired` in its place: at about 147 bytes an item, a change to every item of a 49,466-item catalog would send each device 7.2 MB, and the server keeps its last 256 events, as objects, for replay.
 
 #### Slices
 
@@ -167,7 +168,8 @@ Last milestone completed: M12l
 | Contract | ✅ Complete | An ids-only library query, bulk favorite and blacklist with one event, bulk rating with one event, a delete-files route with its event, the tag-count read for a selection, exact id matching, and the WebUI's handling of the bulk and removal events. |
 | Selection | ✅ Complete | Selecting tiles by their check icon, a long press, or a Shift, Ctrl, or Cmd+click, the selection bar with Select all and Clear selection, and the Esc order. |
 | Library look | ✅ Complete | The Library tab as the mockup shows it: the selected tile's look, rounded tiles, no border or background, gaps set by the zoom's row height and snapped to device pixels, the zoom from 120 px, the thin scrollbar in the tab's right margin, the count line's "shown", the preset dropdown's "Preset:", and the Filters and Random lines' chevrons. |
-| Bulk actions | ⏳ Planned | The Selection actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload, a resync in place of a bulk event too large to send, and favorite and blacklist answers applied to the item they were for. |
+| Bulk actions | ⏳ Planned | The Selection actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload and count, a resync in place of an event too large to send, the player's read of the playing item after a resync, and favorite and blacklist answers applied to the item they were for. |
+| Selection follows results | ⏳ Planned | Selected items that leave the results leave the selection, loaded or not, through a check of the selected ids after each reload of the window, and an item that leaves the results reloads the window, so the counts follow. |
 | Context menu | ⏳ Planned | A right-click on a library tile opens an app-styled context menu with the Selection actions menu's options, built as a shared context menu component. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
 
@@ -394,24 +396,33 @@ Last milestone completed: M12l
 
 **Scope**
 
-- Selection actions opens a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and the delete action, in red, named for what it does: it deletes the selected items' files from disk and removes them from the library.
+- The user approved the mockup's Selection actions menu, Rate… dialog, control-token prompt, and delete action's wording in their review on their devices, and the slice builds them as the mockup shows them.
+- Selection actions opens a menu in three groups: Add to favorites, Remove from favorites, Add to blacklist, and Remove from blacklist; Rate…, Edit tags…, and Clear playback stats…; and Delete files…, the delete action, in red, named for what it does: it deletes the selected items' files from disk and removes them from the library.
 - The menu's items are built as the shared context menu's item list in `src/ui/`, which the Context menu slice opens at the pointer and WebUI Context Menus reuses across the app, so every menu has one look.
 - An item has a label, may be red for a destructive action, and may be disabled with its reason as its tooltip, and items sit in groups with a divider between them.
 - Add to and Remove from favorites and the blacklist send one request to `POST /api/bulk/item-state`, and Clear playback stats sends ids.
-- Rate… opens an in-app dialog with Item Ratings' star control, designed in the mockup, which sets the chosen rating on every selected item, or clears it, in one `POST /api/bulk/rating` request.
+- Rate… opens an in-app dialog titled "Rate {n} items" with Item Ratings' star control, empty at first, the chosen rating in words under it, or "Choose a rating" before one is chosen, and Clear rating at its left, then Cancel and Rate.
+- A tap, click, or drag on the dialog's stars only chooses a rating, so a stray tap can't rate the whole selection. Rate sets the chosen rating on every selected item, and is disabled with the tooltip "Choose a rating first" until one is chosen, and Clear rating clears every selected item's rating, each in one `POST /api/bulk/rating` request.
 - Bulk Add to favorites clears each item's blacklisting, and Add to blacklist clears its favorite, as the player's buttons do.
 - Clear playback stats… asks "Clear playback stats for {n} items?", with Cancel focused and a red Clear.
+- Edit tags… joins the app's menu in the Tag edits slice, which builds what it does.
 - The delete action is an admin action. From another machine it asks for the control token first, in a control-token prompt that this milestone builds on `POST /control/pair`; on the server machine, which the merged localhost helper decides, it asks for none. It then asks to confirm, naming the count, and sends the selection to `POST /api/library/delete-files`.
-- WebUI Admin Section's gate reuses the control-token prompt.
+- Before the prompt, the WebUI asks `GET /control/access`, which this slice adds: it answers 204 to a caller the `/control` routes accept, the server machine, a control session, or the control token, and the `/control` routes' 401 otherwise, and only a 401 opens the prompt, so a device that holds a control session isn't asked again.
+- The WebUI's requests to `/control` routes go around the reading of a 401 as a device that needs pairing, as pairing's own request does.
+- A wrong token keeps the prompt open with the server's reason in the token field, which `POST /control/pair` gives as "The control token is wrong." in place of "Unauthorized".
+- WebUI Admin Section's gate reuses the control-token prompt and `GET /control/access`.
 - The delete action's confirmation always says the files will be permanently deleted from disk, with no choice to keep them.
 - The wording of the delete action:
   - The token prompt is a dialog titled "Control token" that says "This is an admin action. Enter the server's control token.", with the token field under the field validation pattern and Continue.
-  - The action's name, its confirmation, its Your actions popup, and what it says when some files couldn't be deleted (`failedItemIds`) are settled in the mockup review, starting from "Remove {n} items from the library and permanently delete their {n} files from disk? This can't be undone." with a red Remove and Delete, and "1 item" and "its file" for one.
+  - The confirmation reads "Permanently delete {n} files from disk and remove them from the library? This can't be undone.", with Cancel focused and a red "Delete {n} Files", and for one, "Permanently delete 1 file from disk and remove it from the library? This can't be undone." with "Delete 1 File". {n} is grouped as the count line groups it.
+  - The Your actions popup reads "Deleted {n} files.", with {n} the answer's `deletedCount`, and shows only when some files were deleted.
+  - When some files couldn't be deleted (`failedItemIds`), an in-app notice says "{m} files couldn't be deleted, so their items stay in the library.", or "1 file couldn't be deleted, so its item stays in the library."
 - The delete action ends selection.
-- Selected items that leave the results other than by the app deleting their files, as a rating under Only unrated or a favorite change under Favorites only takes them out, here or on another device, or a refresh removes them because their files are gone, leave the selection, so an action never reaches an item the grid doesn't show, and "{n} / {matching} selected" and Select all's disabled state count only items that match.
 - Each Your actions popup's {n} is the `count` the bulk route answers.
-- Clear-stats publishes `resyncRequired` with the `lastEventId` and `currentRevision` its OpenAPI schema requires, in place of a payload with only its reason.
-- The slice measures the size of a bulk event that changes every item of the catalog, and a bulk change above the size it settles on publishes `resyncRequired` in place of its bulk event.
+- Clear-stats answers `count`, the named items in the library, in place of `clearedCount`, the items whose stats changed, so its popup's {n} follows the Decisions. It still publishes only when some stats changed, and writes one `last.log` line with its counts and elapsed time, as the bulk routes do.
+- Every published `resyncRequired` carries the `lastEventId` and `currentRevision` its OpenAPI schema requires, the revision before it and its own, taken together under the event lock (`ServerStateService.cs`), and clear-stats publishes it so, in place of a payload with only its reason.
+- Bulk favorite and blacklist, bulk rating, and `itemsRemoved`, from delete files and duplicate apply, publish `resyncRequired` in place of an event that would list more than 1,000 items, as the Decisions say, with a `last.log` line saying so. Other devices then reload and show no Other devices popup for that change.
+- On `resyncRequired`, the player drops its item-state cache and reads the playing item again (`POST /api/library/item`), taking its favorite, blacklist, and rating, so a resync in place of a bulk event leaves no stale buttons or star. The Stats tab already reads that item on a resync, and the two share one read where that fits.
 - A favorite or blacklist answer applies to the item it was for. The fix is straightforward: cache the answer under its `itemId` and apply it only when that item is still playing.
 
 **Traps**
@@ -423,11 +434,18 @@ Last milestone completed: M12l
 - The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, the answer of `POST /api/favorite` and `POST /api/blacklist`).
 - The WebUI's requests read every 401 as a device that needs pairing (`createServerRequester` in `src/api/serverRequest.ts`), so delete files refuses with 403 and `control_token_required`, and the control-token prompt posts `/control/pair` without that handling, as pairing posts `/api/pair` (`serverConnection.ts`).
 - Clear-stats publishes `resyncRequired` with only `{ reason: "playbackStatsCleared" }` (`ClearPlaybackStats` in `ServerHostComposition.cs`), so every device does a full resync after a clear, and the WebUI never sent clear-stats before this milestone.
-- A bulk event lists every item it changed, about 147 bytes each, so one that changes every item of the 49,466-item catalog is about 7 MB (inferred).
-- Every open device gets each event, and the server keeps its last 256 events for replay (`EventHistoryCapacity` in `ServerStateService.cs`).
-- Selection drops items only on Clear selection, a deselect, a new search or filter, or `itemsRemoved`, and Select all is disabled while the selected count equals the window's `totalCount` (`allSelected` in `src/library/library.ts`), so a selected item that leaves the results some other way stays selected and counted, and Select all can read "Everything is already selected" while a matching tile isn't selected.
-- A refresh removes the items whose files are gone from their source folder and publishes only `refreshCompleted`, which reloads the window; the server publishes `itemsRemoved` only from delete files and duplicate apply (`ServerHostComposition.cs`), so items a refresh removes stay selected.
-- The WebUI loads only some pages of the results, so which selected items still match, among those not loaded, needs a read from the server, as `POST /api/library/query-ids` gives (inferred).
+- A bulk event lists every item it changed: one costs about 147 bytes in `bulkItemStateChanged` and 85 in `bulkItemRatingChanged`, so a change to all 49,466 items is 7.2 MB and 4.2 MB, and at 1,000 items 147 KB and 85 KB (measured).
+- Every open device gets each event, and the server keeps its last 256 events for replay (`EventHistoryCapacity` in `ServerStateService.cs`) as objects, not text: one 49,466-item event holds about 6.7 to 7.9 MB of heap there, and each open stream serializes each event on its own, 45 MB of allocations for the 7.2 MB one (measured).
+- `ClearPlaybackStats` in `LibraryCatalogSession.cs` answers how many rows its `UPDATE` changed, leaving out items with no stats to clear, and the route writes no `last.log` line.
+- The SSE replay's own `resyncRequired`, for a revision gap, goes to its one stream through `CreateEnvelope` and never enters the history, and `Publish` builds its envelope from a payload made before the revision is taken (`ServerStateService.cs`), so a published resync's fields need the revision taken inside the lock. The WebUI never reads `lastEventId` or `currentRevision` (measured).
+- The player has no `resyncRequired` handler, and its item-state cache (`createItemStateCache` in `src/library/currentItemState.ts`) is never cleared, so after a resync the playing item's favorite and blacklist stay as they were (measured).
+- The control cookie, `rr_admin`, is HttpOnly with `Path=/`, and control sessions last 720 hours and live in memory, so a server restart ends them. No route tells a caller whether it is local or holds a control session, and `GET /control/status`, which the `/control` gate guards, reads every session and client and 100 events each way (measured).
+- `POST /control/pair` refuses a wrong or missing token with 401 and `Unauthorized` (`HandleControlPairRequest` in `ServerHostComposition.cs`).
+- `NameDialog` in `src/ui/Dialog.tsx` has a text field, Save, and no message, the dialogs' CSS styles only `input[type="text"]`, and the WebUI has no password field.
+- `.btn-danger` is styled only inside `.app-dialog`, and `.rating` has the Stats row's `margin-left: auto`, which the player's popover takes back (`src/styles.css`).
+- `requestWithNotice` answers only whether the request succeeded (`src/api/serverRequest.ts`), and tests stub `/api/favorite` with an empty answer in `player.test.ts`, `screens/player.test.ts`, and `screens/keyboard.test.ts`.
+- The library is handed only the dialogs' `notice` (`Pick<Dialogs, "notice">` in `src/library/library.ts`).
+- None of the WebUI's code sends `POST /api/bulk/item-state`, `POST /api/bulk/rating`, `POST /api/playback/clear-stats`, `POST /api/library/delete-files`, or `POST /control/pair` yet (measured).
 
 **Acceptance**
 
@@ -440,10 +458,43 @@ Last milestone completed: M12l
 - Rate… sets or clears the rating on every selected item, including items Select all selected that aren't loaded, in one request, and says so in its Your actions popup, in WebUI tests for each bulk action.
 - A favorite or blacklist answer that arrives after Next applies to the item it was for, not the item now playing, in WebUI tests for a favorite answer after Next.
 - The device that made a bulk change shows only its Your actions popup, with the count the server answered, in WebUI tests for each bulk action.
-- Clear-stats' `resyncRequired` carries `lastEventId` and `currentRevision` and matches its OpenAPI schema, in server tests for clear-stats.
-- The size of a bulk event that changes every item of the catalog is recorded, and a bulk change above the size settled on publishes `resyncRequired` in place of its bulk event, in server tests for the bulk routes.
+- Clear-stats answers `count`, the named items in the library, and its `resyncRequired` carries `lastEventId` and `currentRevision`, the revision before it and its own, and matches its OpenAPI schema, in server tests for clear-stats.
+- Bulk favorite and blacklist, bulk rating, and `itemsRemoved` publish their event for 1,000 items and `resyncRequired` in its place for 1,001, with a `last.log` line, in server tests for the bulk routes.
+- `GET /control/access` answers 204 to the server machine, a LAN caller with a control session, and the bearer token, and 401 to a LAN caller without them, and `POST /control/pair` refuses a wrong token with "The control token is wrong.", in server tests of the routes.
+- A wrong token keeps the prompt open with the server's reason in its field, and a device that holds a control session isn't asked again, in WebUI tests of the control-token prompt.
+- On `resyncRequired`, the player shows the playing item's favorite, blacklist, and rating as the server reads them, in WebUI tests of the player.
+- The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Selection follows results slice
+
+**Scope**
+
+- Selected items that leave the results other than by the app deleting their files, as a rating under Only unrated or a favorite change under Favorites only takes them out, here or on another device, or a refresh removes them because their files are gone, leave the selection, so an action never reaches an item the grid doesn't show, and "{n} / {matching} selected" and Select all's disabled state count only items that match. Selection ends when none are left.
+- `POST /api/library/query-ids` takes an optional `itemIds` and, with it, answers only those of them that match the search and filter, so checking a selection costs about what its ids weigh rather than every matching id.
+- After each reload of the library window while selection lasts, the WebUI sends the selected ids with the window's search and filter to `POST /api/library/query-ids` and keeps only the ids it answers. Ids selected while the answer is on its way stay, and Clear selection drops the answer.
+- An item that leaves the results reloads the window, loaded or not, so the count line's and the selection bar's {matching} follow it, in place of only a loaded item doing so (`libraryQueryTileEffect` in `src/library/libraryQuerySession.ts`, locked to `src/test/fixtures/library-tile-effect.json`).
+- The mockup's selection drops items that leave the results, as the app's does.
+
+**Traps**
+
+- Selection drops items only on Clear selection, a deselect, a new search or filter, or `itemsRemoved`, and Select all is disabled while the selected count equals the window's `totalCount` (`allSelected` in `src/library/library.ts`), so a selected item that leaves the results some other way stays selected and counted, and Select all can read "Everything is already selected" while a matching tile isn't selected.
+- The default filter leaves blacklisted items out (`blacklistedMode` `"excluded"` in `src/filter/filterStateModel.ts`), so bulk Add to blacklist takes every selected item out of the results.
+- A refresh removes the items whose files are gone from their source folder and publishes only `refreshCompleted`, which reloads the window; the server publishes `itemsRemoved` only from delete files and duplicate apply (`ServerHostComposition.cs`), so items a refresh removes stay selected.
+- The WebUI loads only some pages of the results, so which selected items still match, among those not loaded, needs a read from the server (inferred).
+- The tile effect rule reloads for an item that isn't loaded only when it enters the results, so one that leaves changes neither a tile nor the window's `totalCount`, and the count line's {matching} goes stale.
+- The query session's listener fires only when the window reloads or a loaded tile changes, so a selected item that isn't loaded and leaves fires nothing.
+- `itemTagsChanged` reaches the window through `src/tags/tagEditor.ts`, which calls `applyTags` or `reloadLoaded` on the session, not through `library.ts`.
+- `POST /api/library/query-ids` goes through `QueryLibraryIds` in `LibraryOperationsService.cs` to `QueryListIds` in `LibraryCatalogSession.cs`, which builds the browse query's `WHERE`. An id costs about 40 bytes in its answer: 1.98 MB for 49,466 ids (measured before promotion).
+- The library doesn't reload on `sourceStateChanged`, and nothing in the WebUI changes a source's enabled state yet (measured).
+
+**Acceptance**
+
+- With the `itemIds` it is sent, `POST /api/library/query-ids` answers only those that match the search and filter, in server tests for the ids-only query, and the request is in OpenAPI.
+- An item that leaves the results reloads the window whether it is loaded or not, in the tile effect fixture's tests.
 - A selected item that a bulk action, a single change, another device's change, or a refresh takes out of the results leaves the selection, loaded or not, and "{n} / {matching} selected" and Select all's disabled state then follow the items that match, in WebUI tests for selection.
-- `npm run verify` passes.
+- The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Context menu slice
 
@@ -494,6 +545,8 @@ Last milestone completed: M12l
 - Edit tags in Selection actions opens the Tags tab with the line "Editing tags for {n} items", like the line WebUI Tags and Filter Tabs shows for an item that isn't playing.
 - While the tab edits several items, a collapsed category's count is how many of its tags the selected items have, and a chip shows green for a tag all of them have and orange for a tag only some have, and Add or Remove applies to all of them. The counts come from the tag-editor model's `countsOnly` read.
 - Save applies the changes to every selected item and says "Updated tags on {n} items.".
+- An `itemTagsChanged` that would name more than 1,000 items publishes `resyncRequired` in its place, as the Decisions say, through the Bulk actions slice's code for the bulk events.
+- Edit tags… joins the Selection actions menu.
 - The tab edits the selection while selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or discarded.
 - Choosing Edit tags while the tab holds unsaved changes to another item's tags asks "Discard changes?" first.
 

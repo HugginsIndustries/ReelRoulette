@@ -20,13 +20,11 @@ Instructions:
 
 Commit Message:
 
-M12m: Build the Library tab's approved look
+M12m: Settle the bulk actions in the mockup, and split off Selection follows results
 
-- WebUI: A selected tile's thumbnail is inset 8 px with 4 px corners in a grey frame, #333333 or #e0e3e8 by theme, and its check mark shows black, or white in the light theme, with the shadow around the whole mark. Every tile has 4 px corners, and the grid has no border, corners, or background of its own.
-- WebUI: Tiles sit 2 px apart while the rows aim for 120 to 179 px, 3 px to 239 px, and 4 px to 300 px, with the gap, each row's height, and each tile's edges on whole device pixels, laid out again after a browser zoom, so every gap draws the same width. The zoom's smallest row height is 120 px.
-- WebUI: The grid's thin scrollbar sits centered in the tab's right margin, and the tiles keep their width whether a scrollbar takes room or not.
-- WebUI: The count line reads "{matching} / {total} shown", the selection bar "{n} / {matching} selected", the Play count sort "Most → Least" and "Least → Most", and the preset dropdown "Preset: {name}", with a bold label in its padding, and "Loading…".
-- WebUI: The Filters and Random lines end with a chevron and tint faintly on hover with a mouse, and they and the controls are 32 px high, on a phone on its side too, with the controls' text at 16 px. The preset and search share a row from a panel about 546 px wide.
-- WebUI: The Library tab takes the other tabs' header, field, button, and icon button styles, as the mockup does, so its fields are lighter in the dark theme, the sort direction button takes their 16 px text, and the count line is the muted grey, and its error messages take the app's error red.
-- Cleanup: The Library tab's own copies of those styles, its unused result-list styles, and the theme tokens nothing read are gone.
-- Docs: CONTEXT.md, docs/domain-inventory.md, the changelog, and the testing checklist describe the new look, the mockup's selection count cuts off with "…" as the app's does, and MILESTONES.md records the slice's evidence.
+- The Selection actions menu reads Add to and Remove from favorites and the blacklist, then Rate…, Edit tags…, and Clear playback stats…, then a red Delete files….
+- Rate… opens "Rate {n} items" with the Stats tab's stars, empty at first: the stars only choose, Rate sets the rating on every selected item and waits, disabled with its reason, until one is chosen, and Clear rating clears them all.
+- Delete files… always deletes the files, with no choice to keep them: "Permanently delete {n} files from disk and remove them from the library? This can't be undone." with a red "Delete {n} Files", then "Deleted {n} files.", and a notice for files that couldn't be deleted.
+- From another machine, the control token prompt asks once a session, and a wrong token stays in its field with "The control token is wrong."; the mockup's name dialog can stay open when the server refuses a value.
+- MILESTONES.md records the approved wording and the plan's choices for the Bulk actions slice: a route that says whether a caller needs the control token, clear-stats' count and resync fields, a resync in place of an event that would list more than 1,000 items, the player's read of the playing item after a resync, and Edit tags… waiting for the Tag edits slice.
+- MILESTONES.md moves keeping the selection to matching items into a new Selection follows results slice, right after Bulk actions, with its scope, traps, and acceptance.

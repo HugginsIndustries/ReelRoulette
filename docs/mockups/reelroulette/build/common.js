@@ -607,10 +607,14 @@ function nameDialog({ title, label, value, check, onSave, deleteMessage, onDelet
   });
   field.reset(value || "");
   holdAction(save, () => [field], { beside: () => [field] });
+  // `onSave` answering false keeps the dialog open, as for a value the server refused, which `check` then flags.
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (field.holds) return;
-    onSave(input.value.trim(), form);
+    if (onSave(input.value.trim(), form) === false) {
+      field.update();
+      return;
+    }
     close(true);
   });
   cancel.addEventListener("click", () => close(false));
