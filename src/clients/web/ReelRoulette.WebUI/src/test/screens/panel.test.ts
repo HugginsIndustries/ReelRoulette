@@ -53,7 +53,9 @@ const LIBRARY_ITEM = {
 const TAG_MODEL = {
   categories: [{ id: "cat-people", name: "People", sortOrder: 0 }],
   tags: [{ name: "Alice", categoryId: "cat-people" }],
-  items: [{ itemId: "item-1", tags: [] as string[] }]
+  // The playing item holds none of the tags.
+  tagCounts: [],
+  itemCount: 1
 };
 
 /** A server with one library item, which random picks and tile plays return, the filter's data, and the tags. */
@@ -64,7 +66,7 @@ function panelServer(): FakeServer {
   server.on("POST", "/api/play/item-1", () => json(VIDEO_ITEM));
   server.on("GET", "/api/sources", () => json([]));
   server.on("POST", "/api/tag-editor/model", () => json(TAG_MODEL));
-  server.on("POST", "/api/tag-editor/apply-item-tags", () => json({}));
+  server.on("POST", "/api/tag-editor/apply-item-tags", () => json({ count: 1 }));
   return server;
 }
 

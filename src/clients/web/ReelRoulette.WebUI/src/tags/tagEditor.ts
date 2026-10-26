@@ -3,6 +3,7 @@ import { noticeRequestFailure, refusalError, requestFailure, UnauthorizedError }
 import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
+import type { BulkTarget } from "../library/bulkActions";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
 import { failureLine } from "../logging/relayLogLines";
@@ -21,6 +22,8 @@ import type { AppStore } from "../state/appStore";
 import type { DeviceStorage, DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import { createCoalescedRefresh } from "../stats/coalescedRefresh";
+import { countText } from "../text/countText";
+import type { components } from "../types/openapi.generated";
 import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
 import {
   AUTO_TAG_SCANNING,
@@ -74,6 +77,17 @@ import {
 const EXPANDED_CATEGORIES_KEY = "tags.expandedCategories";
 const SCAN_FULL_LIBRARY_KEY = "rr_autoTagScanFullLibrary";
 const SAVE_SUCCEEDED = "Tag editor changes applied";
+/** The question Edit tags… asks before it drops adds and removes held for other items. */
+const DISCARD_ITEM_CHANGES = "Discard changes?";
+
+/**
+ * What the tab edits: the playing item, which it follows; a tile's item chosen through Edit tags…, which it keeps until
+ * another item plays, a save lands, or Discard changes; or the selected items, chosen through Edit tags…, which it
+ * follows while selection lasts (`live`), and once selection ends keeps as a chosen tile's item.
+ */
+export type TagEditTarget = { kind: "playing" } | { kind: "item" } | { kind: "selection"; live: boolean };
+
+const PLAYING: TagEditTarget = { kind: "playing" };
 
 /** The Edit Tag dialog: the tag as it was, and the name and category typed and chosen. */
 export interface TagEditDraft {
@@ -102,12 +116,14 @@ interface AutoTagState {
 interface TagEditorState {
   /** The last tag model loaded, kept while a new one loads and while the editor is closed. */
   model: TagEditorModel | null;
+  /** What the tab edits, which says when `itemIds` changes. */
+  target: TagEditTarget;
   /**
-   * The items being edited: the item playing, which the editor follows unless it holds changes to the item's tags or
-   * a save hasn't landed yet.
+   * The items being edited: the target's, which the editor keeps while it holds changes to their tags or a save hasn't
+   * landed yet.
    */
   itemIds: string[];
-  /** The file name of the item being edited, for the line that names it while it isn't the one playing. */
+  /** The file name of the one item being edited, for the line that names it while it isn't the one playing. */
   itemName: string;
   order: string[];
   orderChanged: boolean;
@@ -141,8 +157,15 @@ export interface TagEditorView extends TagEditorState {
   results: AutoTagResults;
   /** Auto Tag's Apply is enabled while a file is selected and no scan runs. */
   autoTagApplyPending: boolean;
-  /** The file name of the item being edited while it isn't the one playing, which the tab then names, or null. */
-  heldName: string | null;
+  /**
+   * The bold part of the line "Editing tags for …": how many items, for the selected items, or the file name of the
+   * item being edited while it isn't the one playing; null hides the line.
+   */
+  editingFor: string | null;
+  /** The line's tooltip: the item's name, or null for the selected items. */
+  editingForTitle: string | null;
+  /** The tab edits the selected items, however many. */
+  editsSeveral: boolean;
   /** The Edit Tag name's problem, which disables its Save, or null. */
   editNameProblem: FieldProblem | null;
   editNameFlagged: boolean;
@@ -160,10 +183,10 @@ export interface TagEditorView extends TagEditorState {
 }
 
 /**
- * The Tags tab's tag editor: the playing item's tags and the tag catalog, with Save, which sends their changes in the
- * background; and Auto Tag, which opens over the whole page from the tab to find files whose names hold a tag's name,
- * with its own Apply. The panel shows and hides the tab, and the editor keeps its changes while it is hidden. It
- * follows the playing item unless it holds changes to its item's tags.
+ * The Tags tab's tag editor: the tags of the items it edits and the tag catalog, with Save, which sends their changes
+ * in the background; and Auto Tag, which opens over the whole page from the tab to find files whose names hold a tag's
+ * name, with its own Apply. The panel shows and hides the tab, and the editor keeps its changes while it is hidden. It
+ * follows the playing item unless it holds changes to its items' tags or Edit tags… chose a tile or the selection.
  */
 export interface TagEditor {
   /** Whether the Tags tab shows. */
@@ -186,15 +209,21 @@ export interface TagEditor {
   /** The tab hides: closes the editor's dialogs, keeping the changes. */
   close(): void;
   /**
+   * Edit tags… in a library menu: points the tab at the selected items or at one tile's item. While the tab holds adds
+   * or removes for other items, it first asks to discard them, keeping its catalog changes. Says whether it pointed the
+   * tab, which the library then shows; Cancel changes nothing.
+   */
+  editTags(target: BulkTarget): Promise<boolean>;
+  /**
    * Discard changes: drops the changes at once, without asking, closes the editor's dialogs, puts the categories back in
-   * the order of the tags about to load, follows the playing item, and loads the tags again, or once a save on its way
-   * lands. Disabled while there are no changes.
+   * the order of the tags about to load, follows the playing item unless it edits a selection that lasts, and loads the
+   * tags again, or once a save on its way lands. Disabled while there are no changes.
    */
   discardChanges(): void;
   /**
    * Shows the changes as saved and sends them in the background, leaving the panel open. Once the save lands, the
-   * editor follows the playing item and loads the tags again. Not while the server fails the compatibility check or
-   * runs without a library.
+   * editor follows the playing item, unless it edits a selection that lasts or Edit tags… chose new items since, and
+   * loads the tags again. Not while the server fails the compatibility check or runs without a library.
    */
   save(): void;
 
@@ -263,7 +292,8 @@ export interface TagEditorOptions {
   store: AppStore;
   api: AppApi;
   connection: Pick<ServerConnection, "on">;
-  library: Pick<Library, "session">;
+  /** The library's tiles, which a save changes, and its selection, which Edit tags… can point the tab at. */
+  library: Pick<Library, "session" | "selection">;
   /** The Filter tab, whose unsaved changes take a tag renamed or deleted. */
   filter: Pick<FilterDialog, "reviseTags">;
   /** This device's memory, for the categories expanded. */
@@ -297,6 +327,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   const view = signal<TagEditorView | null>(null);
   let state: TagEditorState = {
     model: null,
+    target: PLAYING,
     itemIds: [],
     itemName: "",
     order: [],
@@ -336,7 +367,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     if (next.model) {
       const display = tagEditorDisplay(next.model, next.pending, next.order);
       tags = display.tags;
-      categories = tagCategoryRows(display, next.expanded, next.selections, next.model);
+      categories = tagCategoryRows(display, next.expanded, next.selections, next.model, next.target.kind === "selection");
       options = categoryOptions(display.categories);
       const newTagCategoryId = options.some((option) => option.id === next.newTagCategoryId)
         ? next.newTagCategoryId
@@ -352,6 +383,12 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     const newCategoryProblem = next.newCategory ? categoryNameProblem(next.newCategory.name, categories ?? [], null) : null;
     const newTagProblem = newTagNameProblem(next.newTagName, tags);
     const playingId = store.current.peek()?.itemId || "";
+    const editsSeveral = next.target.kind === "selection";
+    const editingFor = editsSeveral
+      ? countText(next.itemIds.length, "item")
+      : next.itemIds.length > 0 && next.itemIds[0] !== playingId
+        ? next.itemName
+        : null;
     view.value = {
       ...next,
       categories,
@@ -360,7 +397,9 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       savePending: hasChanges(next),
       results: autoTagResults(next.autoTag.rows, next.autoTag.viewAll, next.autoTag.hasRun),
       autoTagApplyPending: !next.autoTag.scanning && autoTagApplyPending(next.autoTag.rows, next.autoTag.hasRun),
-      heldName: next.itemIds.length > 0 && next.itemIds[0] !== playingId ? next.itemName : null,
+      editingFor,
+      editingForTitle: editsSeveral ? null : editingFor,
+      editsSeveral,
       editNameProblem,
       editNameFlagged: isFlagged(editNameProblem),
       categoryEditProblem,
@@ -422,26 +461,54 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
   }
 
-  /**
-   * Takes the playing item as the item being edited, unless the editor holds changes to its item's tags or a save
-   * hasn't landed. Says whether the item changed. Before the editor first opens, it only notes the item.
-   */
-  function follow(): boolean {
-    if (state.selections.size > 0 || savesInFlight > 0) {
-      return false;
-    }
-    const current = store.current.peek();
-    const itemIds = current?.itemId ? [current.itemId] : [];
-    if (itemIds.length === state.itemIds.length && itemIds.every((id, index) => id === state.itemIds[index])) {
-      return false;
-    }
-    const change = { itemIds, itemName: current?.displayName || "" };
+  /** Takes `change`; before the editor first opens, it only notes it. */
+  function note(change: Partial<TagEditorState>): void {
     if (view.peek()) {
       update(change);
     } else {
       state = { ...state, ...change };
     }
-    return true;
+  }
+
+  /**
+   * Settles what the tab edits, and says whether the items changed. Nothing moves while a save hasn't landed. A
+   * selection that lasts gives its items; once it ends, the tab keeps them as chosen. Held adds or removes keep the
+   * items, and so does a chosen tile or ended selection unless `mayLeaveChosen`, as when another item plays, a save
+   * lands, or Discard changes. Otherwise the tab takes the playing item.
+   */
+  function settleTarget(mayLeaveChosen: boolean): boolean {
+    if (savesInFlight > 0) {
+      return false;
+    }
+    let target = state.target;
+    if (target.kind === "selection" && target.live) {
+      if (library.selection.active.peek()) {
+        return take({ target, itemIds: library.selection.ids(), itemName: "" });
+      }
+      target = { kind: "selection", live: false };
+    }
+    if (state.selections.size > 0 || (target.kind !== "playing" && !mayLeaveChosen)) {
+      if (target !== state.target) {
+        note({ target });
+      }
+      return false;
+    }
+    const current = store.current.peek();
+    return take({ target: PLAYING, itemIds: current?.itemId ? [current.itemId] : [], itemName: current?.displayName || "" });
+  }
+
+  /** Whether `itemIds` are the items being edited, in the same order. */
+  function editsItems(itemIds: readonly string[]): boolean {
+    return itemIds.length === state.itemIds.length && itemIds.every((id, index) => id === state.itemIds[index]);
+  }
+
+  /** Takes a target and its items, and says whether the items changed. */
+  function take(change: Pick<TagEditorState, "target" | "itemIds" | "itemName">): boolean {
+    const same = editsItems(change.itemIds);
+    if (!same || change.target !== state.target || change.itemName !== state.itemName) {
+      note(same ? { target: change.target, itemName: change.itemName } : change);
+    }
+    return !same;
   }
 
   /**
@@ -454,7 +521,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
     const load = ++loads;
     const loaded = (await api.postJson("/api/tag-editor/model", { itemIds: state.itemIds.slice() })) as TagEditorModel | null;
-    const model = loaded || { categories: [], tags: [], items: [] };
+    const model = loaded || { categories: [], tags: [], tagCounts: [], itemCount: 0 };
     options.tagCatalog?.take(loaded);
     if (load === loads) {
       update({ model, order: state.order.length > 0 ? state.order : initialCategoryOrder(model) });
@@ -473,9 +540,12 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     loadModel().catch((error) => noticeRequestFailure(dialogs, failure, error));
   }
 
-  /** Follows the playing item, as `follow` does, and while the tab shows, loads its tags. Says whether the item changed. */
-  function followAndLoad(): boolean {
-    if (!follow()) {
+  /**
+   * Settles what the tab edits, as `settleTarget` does, and while the tab shows, loads the tags when the items changed.
+   * Says whether they changed.
+   */
+  function settleAndLoad(mayLeaveChosen: boolean): boolean {
+    if (!settleTarget(mayLeaveChosen)) {
       return false;
     }
     if (isOpen.peek()) {
@@ -490,10 +560,13 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     update({ autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll) });
   }
 
-  /** A save or Auto Tag apply landed: the editor follows the playing item, and while it shows, loads the tags again. */
-  function saveLanded(): void {
+  /**
+   * A save or Auto Tag apply landed: the editor follows the playing item, unless it edits a selection that lasts or the
+   * target changed since `sent` went, and while it shows, loads the tags again.
+   */
+  function saveLanded(sent: TagEditTarget): void {
     savesInFlight -= 1;
-    follow();
+    settleTarget(state.target === sent);
     if (isOpen.peek()) {
       reload("Tag load failed");
     }
@@ -572,21 +645,27 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       update(held);
     }
     // A deleted tag's add or remove may have been the last one holding the item.
-    if (!followAndLoad() && isOpen.peek()) {
+    if (!settleAndLoad(false) && isOpen.peek()) {
       reload("Tag load failed");
     }
   }
 
-  async function postStep(handle: TagSaveHandle, step: TagSaveStep): Promise<void> {
+  /** Sends one step. Answers the count Tag apply answered, the named items in the library, and otherwise null. */
+  async function postStep(handle: TagSaveHandle, step: TagSaveStep): Promise<number | null> {
     const request = tagSaveRequest(step);
     const response = await api.post(request.path, request.body);
     if (!response.ok) {
       throw await refusalError(response);
     }
+    let count: number | null = null;
     if (step.kind === "apply-auto-tag") {
       saves.noteAutoTagResult(handle, autoTagAppliedFromResponse(await response.json().catch(() => null)));
+    } else if (step.kind === "apply-item-tags") {
+      const answer = (await response.json().catch(() => null)) as components["schemas"]["BulkChangeResponse"] | null;
+      count = typeof answer?.count === "number" ? answer.count : null;
     }
     retargetTag(step);
+    return count;
   }
 
   function projectLoadedTagItems(): void {
@@ -602,17 +681,22 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return rolledBack;
   }
 
-  function savedMessage(): void {
-    notifications.notify({ kind: "actions", text: SAVE_SUCCEEDED, key: "tags" });
-  }
-
   /**
    * Sends the save's steps, and says whether the server took them all. A failed save shows its own error in the
-   * in-app notice. A landed save says so, even when the library's reload after it fails, which the library reports.
+   * in-app notice. A landed save says so, even when the library's reload after it fails, which the library reports:
+   * one sent for the selected items whose Tag apply answered says how many items the server counted, and any other
+   * says the changes applied.
    */
-  async function saveInBackground(handle: TagSaveHandle, steps: TagSaveStep[]): Promise<boolean> {
+  async function saveInBackground(handle: TagSaveHandle, steps: TagSaveStep[], several: boolean): Promise<boolean> {
+    let applied: number | null = null;
+    const savedMessage = () => {
+      const text = several && applied !== null ? `Updated tags on ${countText(applied, "item")}.` : SAVE_SUCCEEDED;
+      notifications.notify({ kind: "actions", text, key: "tags" });
+    };
     const result = await runTagEditorSave(steps, {
-      post: (step) => postStep(handle, step),
+      async post(step) {
+        applied = (await postStep(handle, step)) ?? applied;
+      },
       label: (step) => tagSaveRequest(step).label
     });
     if (!result.ok) {
@@ -742,13 +826,25 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
   });
 
-  // Events missed can leave the tab's tags out of date, so it loads again as for a catalog change.
-  connection.on("resyncRequired", requestEventLoad);
+  // Events missed can leave the tab's tags out of date, so it loads again as for a catalog change. The resync may have
+  // replaced item-tags events this page's saves wait for, such as one past 1,000 items, so they stop waiting.
+  connection.on("resyncRequired", () => {
+    saves.forgetEchoes();
+    requestEventLoad();
+  });
 
   // The editor follows the playing item, and the line naming a held item follows it too.
   store.current.subscribe(() => {
-    if (!followAndLoad() && view.peek()) {
+    if (!settleAndLoad(true) && view.peek()) {
       update({});
+    }
+  });
+
+  // While the tab edits a selection that lasts, it follows the selection's changes, and once selection ends, the
+  // playing item, unless it holds adds or removes.
+  library.selection.version.subscribe(() => {
+    if (state.target.kind === "selection" && state.target.live) {
+      settleAndLoad(true);
     }
   });
 
@@ -771,7 +867,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       selections
     });
     // A deleted tag's add or remove may have been the last one holding the item.
-    followAndLoad();
+    settleAndLoad(false);
   }
 
   /**
@@ -796,7 +892,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     view,
 
     open() {
-      follow();
+      settleTarget(false);
       // A moved category keeps its place; otherwise the categories take the order of the tags about to load.
       update({ order: state.orderChanged ? state.order : [] });
       isOpen.value = true;
@@ -811,13 +907,42 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       isOpen.value = false;
     },
 
+    async editTags(bulk) {
+      const several = bulk.kind === "selection";
+      // Adds and removes held for other items would land on these, so they go first, after asking.
+      const same = several
+        ? state.target.kind === "selection" && state.target.live
+        : state.target.kind !== "selection" && state.itemIds.length === 1 && state.itemIds[0] === bulk.itemId;
+      if (state.selections.size > 0 && !same) {
+        if (!(await dialogs.confirm({ message: DISCARD_ITEM_CHANGES, confirmLabel: "Discard", danger: true }))) {
+          return false;
+        }
+        // The catalog changes and the category order stay.
+        update({ selections: new Map() });
+      }
+      const itemIds = several ? library.selection.ids() : [bulk.itemId];
+      const tile = several ? undefined : library.session.snapshot().items.find((item) => item.id === bulk.itemId);
+      const change: Partial<TagEditorState> = {
+        target: several ? { kind: "selection", live: true } : { kind: "item" },
+        itemIds,
+        itemName: tile?.fileName ?? ""
+      };
+      // Until the new items' counts load, which waits for a save on its way, their chips show no tag and Add and Remove
+      // stay disabled, rather than show the last items' states.
+      if (state.model && !editsItems(itemIds)) {
+        change.model = { ...state.model, tagCounts: [], itemCount: 0 };
+      }
+      note(change);
+      return true;
+    },
+
     discardChanges() {
       update({
         ...cleared(),
         ...dialogsClosed(),
         order: []
       });
-      follow();
+      settleTarget(true);
       reload("Tag load failed");
     },
 
@@ -833,9 +958,9 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         itemIds: state.itemIds.slice()
       });
       if (steps.length === 0) {
-        // The changes cancel out, so they are dropped, and their dots go.
+        // The changes cancel out, so they are dropped, and their dots go, as an undo of the last one would.
         update(cleared());
-        followAndLoad();
+        settleAndLoad(false);
         void dialogs.notice("No tag changes to save.");
         return;
       }
@@ -846,15 +971,16 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       // answers with the tags as they were, so its reply is dropped.
       const before = state.model;
       const model = savedTagModel(state.model, state.pending, state.order, state.selections);
+      const sent = state.target;
       loads += 1;
       update({ model, order: initialCategoryOrder(model), ...cleared() });
       savesInFlight += 1;
-      void saveInBackground(handle, steps).then((saved) => {
+      void saveInBackground(handle, steps, sent.kind === "selection").then((saved) => {
         // A refused save shows the tags as they were, unless they have loaded since, in case they can't load again.
         if (!saved && state.model === model) {
           update({ model: before, order: before ? initialCategoryOrder(before) : [] });
         }
-        saveLanded();
+        saveLanded(sent);
       });
     },
 
@@ -944,8 +1070,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     toggleTag(tagName, action) {
       update({ selections: toggleTagSelection(state.selections, tagName, action) });
-      // Undoing the last add or remove ends the hold on the item.
-      followAndLoad();
+      // Undoing the last add or remove ends the hold on the playing item; a chosen tile or selection stays.
+      settleAndLoad(false);
     },
 
     typeNewTag(text) {
@@ -1081,17 +1207,18 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       const handle = saves.begin(loaded, steps, false, tagFilterCanChangeMembership());
       writeLoadedTagItems(loaded);
       const sent = autoTag.rows;
+      const target = state.target;
       const scan = scans;
       const applied = autoTagRowsAfterApply(sent, autoTag.viewAll);
       update({ autoTag: { ...autoTag, rows: applied, status: autoTagSummary(applied, autoTag.viewAll) } });
       savesInFlight += 1;
-      void saveInBackground(handle, steps).then((saved) => {
+      void saveInBackground(handle, steps, false).then((saved) => {
         // Unless a new scan has replaced them, a refused apply shows the files it sent as without their tag again.
         if (!saved && scans === scan) {
           const rows = autoTagRowsAfterRefusal(state.autoTag.rows, sent);
           update({ autoTag: { ...state.autoTag, rows, status: autoTagSummary(rows, state.autoTag.viewAll) } });
         }
-        saveLanded();
+        saveLanded(target);
       });
     },
 

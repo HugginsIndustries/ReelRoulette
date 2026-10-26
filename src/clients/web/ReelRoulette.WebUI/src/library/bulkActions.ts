@@ -142,8 +142,8 @@ export interface BulkActions {
   targetIds(target: BulkTarget): string[];
   /**
    * A menu's items for `target`, in their groups: the favorite and blacklist actions that apply to the items `summary`
-   * describes, or all four while it is null, as when its read failed; Rate…; Clear playback stats…, disabled with its
-   * reason while none has stats to clear; and Delete files…, which names one file for one item.
+   * describes, or all four while it is null, as when its read failed; Rate…; Edit tags…; Clear playback stats…,
+   * disabled with its reason while none has stats to clear; and Delete files…, which names one file for one item.
    */
   menuGroups(target: BulkTarget, summary: BulkSummary | null): MenuGroups;
   setFlag(action: BulkFlagAction, target: BulkTarget): Promise<void>;
@@ -172,6 +172,8 @@ export interface BulkActionsOptions {
   notifications: Pick<Notifications, "notify">;
   controlAccess: Pick<ControlAccess, "ensure">;
   selection: LibrarySelection;
+  /** Edit tags…: points the Tags tab at the items and shows it. */
+  editTags(target: BulkTarget): Promise<void>;
 }
 
 export function createBulkActions(options: BulkActionsOptions): BulkActions {
@@ -219,6 +221,7 @@ export function createBulkActions(options: BulkActionsOptions): BulkActions {
         })),
         [
           { label: "Rate…", icon: "star", onPick: () => actions.openRate(target) },
+          { label: "Edit tags…", icon: "tag", onPick: () => void options.editTags(target) },
           {
             label: "Clear playback stats…",
             icon: "delete_history",

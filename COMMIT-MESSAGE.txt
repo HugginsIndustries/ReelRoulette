@@ -20,10 +20,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan a library refresh's progress line and plain summary as Library Refresh Progress and Summary
+M12m: Edit several items' tags from the library's menus, completing WebUI Multi-Select and Bulk Actions
 
-- MILESTONES.md adds Library Refresh Progress and Summary as M12n1, after WebUI Multi-Select and Bulk Actions: the server sends each refresh stage's counts as numbers in one typed object per stage, the bell's Now entry shows the running stage's progress as a second line, such as "1,234 of 17,840 files", and a finished refresh names only what changed, or "No changes".
-- An automatic refresh that changes nothing goes to the bell's list without a popup, durations and loudness count only the videos still to scan, a failure that repeats shows every time, and a failed refresh is worded plainly with its exception in last.log.
-- Its slices: a mockup approved in Firefox on the desktop, the iPad, and an Android phone, which also replaces the samples the server can't produce; the server, which fixes "Thumbnail cleanup sends a refresh message per removed thumbnail" and corrects Server Instrumentation's Trap about failures in the log; the contract, which drops the stage messages, the dead source "updated" count, and the WebUI's message parsers, and counts failed duration probes; then the progress line and popups.
-- WebUI Context Menus, WebUI Loop Range, Library Profiles, and Profile Tag and Preset Visibility move to M12n2, M12n3, M12n4, and M12n5, and the v0.15.0 outline lists the new IDs and the refresh's progress and summary.
-- Admin Refresh, Backup, and Duplicate Review depends on the new milestone, and its Library refresh card shows the progress line while a refresh runs and the last refresh's summary afterwards.
+- Edit tags… in the Selection actions menu and a tile's menu opens the Tags tab on the selection, "Editing tags for {n} items", which it follows while selection lasts, or on that tile alone. Chips are green for a tag every item has and orange for one only some have, and Save applies the adds and removes to every selected item, loaded or not, saying "Updated tags on {n} items." with the server's count.
+- Picking Edit tags… while the tab holds adds or removes for other items asks "Discard changes?", keeping its catalog changes.
+- The Tags tab reads its items' tags as counts, one item's too, so the tag model drops its per-item answer and countsOnly. Add and Remove are disabled, with their reason as the tooltip, where they would change nothing, which fixes "Add or Remove on a tag the file already matches fails Save".
+- Item-tag writes find an item's rows by its primary key, through statements prepared once per write, so adding a tag to all 49,455 items takes 0.6-0.7 s instead of 79 s, and Auto Tag apply speeds up too.
+- apply-item-tags answers count and writes a last.log line. Its itemTagsChanged becomes resyncRequired past 1,000 items, and Auto Tag apply sends one resyncRequired in place of every tag's past it, while a tag rename's or delete's still lists every item, and the WebUI's tag save session stops waiting for events a resync replaced and looks ids up in a set.
+- WebUI Multi-Select and Bulk Actions moves to MILESTONES-COMPLETED.md, its release checks join the testing checklist, and Tag Rename and Delete Events (P59) records capping a rename's or delete's event.
+- OpenAPI, the generated types, the mockup, CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and CHANGELOG.md follow, and CONTEXT.md gives the Esc row's shipped text.

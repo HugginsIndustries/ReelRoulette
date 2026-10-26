@@ -1701,6 +1701,8 @@ public sealed class LibraryCatalogSession
                 ("$name", trimmed),
                 ("$fold", newFold),
                 ("$old", oldFold)) > 0;
+            // The unary plus keeps the lookup of each item's kept row on the primary key, never on
+            // idx_item_tags_name_fold, which would scan every row holding the tag for each row.
             changed |= LibraryCatalogStore.Execute(
                 connection,
                 transaction,
@@ -1710,7 +1712,7 @@ public sealed class LibraryCatalogSession
                   AND position > (
                     SELECT MIN(keep.position)
                     FROM item_tags AS keep
-                    WHERE keep.item_id = item_tags.item_id AND keep.name_fold = item_tags.name_fold);
+                    WHERE keep.item_id = item_tags.item_id AND +keep.name_fold = item_tags.name_fold);
                 """,
                 ("$fold", newFold)) > 0;
             return changed;
@@ -1783,10 +1785,10 @@ public sealed class LibraryCatalogSession
     }
 
     /// <summary>
-    /// The tag catalog and the tags of each named item, or with <paramref name="countsOnly"/>, in place of each item's
-    /// tags, how many of the named items hold each tag and how many of them are in the library.
+    /// The tag catalog, how many of the named items hold each tag, and how many of them are in the library. No named
+    /// items reads the catalog alone, with no counts and an item count of 0.
     /// </summary>
-    public CatalogTagEditorRead ReadTagEditor(IReadOnlyList<string>? identifiers, bool countsOnly = false)
+    public CatalogTagEditorRead ReadTagEditor(IReadOnlyList<string>? identifiers)
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         using var transaction = connection.BeginTransaction();
@@ -1824,32 +1826,12 @@ public sealed class LibraryCatalogSession
             }
         }
 
-        var requested = DistinctIds(identifiers);
-        var items = new List<CatalogItemTagRead>();
-        List<CatalogTagItemCount>? tagCounts = null;
-        int? itemCount = null;
-        if (countsOnly)
-        {
-            (tagCounts, itemCount) = ReadTagItemCounts(connection, transaction, requested);
-        }
-        else
-        {
-            foreach (var id in requested)
-            {
-                items.Add(new CatalogItemTagRead
-                {
-                    ItemId = id,
-                    Tags = ResolveItemId(connection, transaction, id) == null ? [] : ReadItemTagNames(connection, transaction, id)
-                });
-            }
-        }
-
+        var (tagCounts, itemCount) = ReadTagItemCounts(connection, transaction, DistinctIds(identifiers));
         transaction.Rollback();
         return new CatalogTagEditorRead
         {
             Categories = categories,
             Tags = tags,
-            Items = items,
             TagCounts = tagCounts,
             ItemCount = itemCount
         };
@@ -1900,22 +1882,25 @@ public sealed class LibraryCatalogSession
         IReadOnlyList<string> removeTags,
         out bool catalogChanged)
     {
-        return ApplyItemTagEdits(identifiers, addTags, removeTags, out catalogChanged, out _);
+        return ApplyItemTagEdits(identifiers, addTags, removeTags, out catalogChanged, out _, out _);
     }
 
     /// <summary>
     /// <paramref name="resolvedItemIds"/> is the catalog id of each named item that is in the catalog, in request order,
     /// also when nothing changed, so a caller can tell items that already had the tags from items no longer there.
+    /// <paramref name="changedItemCount"/> is how many of them gained or lost a tag.
     /// </summary>
     public bool ApplyItemTagEdits(
         IReadOnlyList<string> identifiers,
         IReadOnlyList<string> addTags,
         IReadOnlyList<string> removeTags,
         out bool catalogChanged,
-        out List<string> resolvedItemIds)
+        out List<string> resolvedItemIds,
+        out int changedItemCount)
     {
         catalogChanged = false;
         resolvedItemIds = [];
+        changedItemCount = 0;
         var ids = DistinctIds(identifiers);
         var adds = DistinctTagNames(addTags);
         var removes = DistinctTagNames(removeTags);
@@ -1926,46 +1911,45 @@ public sealed class LibraryCatalogSession
 
         var insertedCatalog = false;
         var resolved = new List<string>();
+        var changedItems = 0;
         var committed = Commit((connection, transaction) =>
         {
-            var changed = false;
             foreach (var add in adds)
             {
-                if (InsertCatalogTagIfMissing(connection, transaction, add))
-                {
-                    insertedCatalog = true;
-                    changed = true;
-                }
+                insertedCatalog |= InsertCatalogTagIfMissing(connection, transaction, add);
             }
 
+            using var writer = new ItemTagWriter(connection, transaction);
             foreach (var itemId in ids)
             {
-                if (ResolveItemId(connection, transaction, itemId) == null)
+                if (!writer.IsInCatalog(itemId))
                 {
                     continue;
                 }
 
                 resolved.Add(itemId);
+                var itemChanged = false;
                 foreach (var remove in removes)
                 {
-                    changed |= LibraryCatalogStore.Execute(
-                        connection,
-                        transaction,
-                        "DELETE FROM item_tags WHERE item_id = $item AND name_fold = $fold;",
-                        ("$item", itemId),
-                        ("$fold", LibraryCatalogStore.Fold(remove))) > 0;
+                    itemChanged |= writer.RemoveTag(itemId, remove);
                 }
 
                 foreach (var add in adds)
                 {
-                    changed |= InsertItemTagIfMissing(connection, transaction, itemId, add);
+                    itemChanged |= writer.AddTagIfMissing(itemId, add);
+                }
+
+                if (itemChanged)
+                {
+                    changedItems++;
                 }
             }
 
-            return changed;
+            return insertedCatalog || changedItems > 0;
         });
         catalogChanged = committed && insertedCatalog;
         resolvedItemIds = resolved;
+        changedItemCount = committed ? changedItems : 0;
         return committed;
     }
 
@@ -1975,6 +1959,7 @@ public sealed class LibraryCatalogSession
         var committed = Commit((connection, transaction) =>
         {
             var changed = false;
+            using var writer = new ItemTagWriter(connection, transaction);
             foreach (var assignment in assignments)
             {
                 if (string.IsNullOrWhiteSpace(assignment.TagName))
@@ -1999,7 +1984,7 @@ public sealed class LibraryCatalogSession
                         continue;
                     }
 
-                    if (!InsertItemTagIfMissing(connection, transaction, itemId, tagName))
+                    if (!writer.AddTagIfMissing(itemId, tagName))
                     {
                         continue;
                     }
@@ -2031,29 +2016,110 @@ public sealed class LibraryCatalogSession
         };
     }
 
-    private static bool InsertItemTagIfMissing(SqliteConnection connection, SqliteTransaction transaction, string itemId, string name)
+    /// <summary>
+    /// The per-item statements of a tag write, each created once for the write and run with each item's values, since
+    /// preparing them anew for every item took about half of a write to every item.
+    /// </summary>
+    private sealed class ItemTagWriter : IDisposable
     {
-        var fold = LibraryCatalogStore.Fold(name);
-        var existing = ScalarInt(
-            connection,
-            transaction,
-            "SELECT position FROM item_tags WHERE item_id = $item AND name_fold = $fold;",
-            ("$item", itemId),
-            ("$fold", fold));
-        if (existing != null)
+        private readonly SqliteCommand _findItem;
+        private readonly SqliteCommand _deleteTag;
+        private readonly SqliteCommand _findTag;
+        private readonly SqliteCommand _lastPosition;
+        private readonly SqliteCommand _insertTag;
+
+        public ItemTagWriter(SqliteConnection connection, SqliteTransaction transaction)
         {
-            return false;
+            _findItem = Create(connection, transaction, "SELECT id FROM items WHERE id = $item LIMIT 1;", ("$item", SqliteType.Text));
+
+            // The unary plus keeps SQLite on the primary key: without sqlite_stat1 it picks idx_item_tags_name_fold,
+            // which scans every row holding the tag for each item.
+            _deleteTag = Create(
+                connection,
+                transaction,
+                "DELETE FROM item_tags WHERE item_id = $item AND +name_fold = $fold;",
+                ("$item", SqliteType.Text),
+                ("$fold", SqliteType.Text));
+            _findTag = Create(
+                connection,
+                transaction,
+                "SELECT position FROM item_tags WHERE item_id = $item AND +name_fold = $fold;",
+                ("$item", SqliteType.Text),
+                ("$fold", SqliteType.Text));
+            _lastPosition = Create(connection, transaction, "SELECT MAX(position) FROM item_tags WHERE item_id = $item;", ("$item", SqliteType.Text));
+            _insertTag = Create(
+                connection,
+                transaction,
+                "INSERT INTO item_tags (item_id, position, name, name_fold) VALUES ($item, $position, $name, $fold);",
+                ("$item", SqliteType.Text),
+                ("$position", SqliteType.Integer),
+                ("$name", SqliteType.Text),
+                ("$fold", SqliteType.Text));
         }
 
-        var position = NextItemTagPosition(connection, transaction, itemId);
-        return LibraryCatalogStore.Execute(
-            connection,
-            transaction,
-            "INSERT INTO item_tags (item_id, position, name, name_fold) VALUES ($item, $position, $name, $fold);",
-            ("$item", itemId),
-            ("$position", position),
-            ("$name", name),
-            ("$fold", fold)) > 0;
+        /// <summary>
+        /// Whether an item has exactly this catalog id, which the server generates and clients send back as they got
+        /// it, so the lookup reads the id's primary key index. Another casing or a full path names no item.
+        /// </summary>
+        public bool IsInCatalog(string itemId)
+        {
+            _findItem.Parameters["$item"].Value = itemId.Trim();
+            return _findItem.ExecuteScalar() != null;
+        }
+
+        /// <summary>Removes the tag, compared ignoring case, from the item, and returns whether it had it.</summary>
+        public bool RemoveTag(string itemId, string name)
+        {
+            _deleteTag.Parameters["$item"].Value = itemId;
+            _deleteTag.Parameters["$fold"].Value = LibraryCatalogStore.Fold(name);
+            return _deleteTag.ExecuteNonQuery() > 0;
+        }
+
+        /// <summary>Adds the tag after the item's other tags unless it has it, compared ignoring case, and returns whether it added it.</summary>
+        public bool AddTagIfMissing(string itemId, string name)
+        {
+            var fold = LibraryCatalogStore.Fold(name);
+            _findTag.Parameters["$item"].Value = itemId;
+            _findTag.Parameters["$fold"].Value = fold;
+            if (_findTag.ExecuteScalar() != null)
+            {
+                return false;
+            }
+
+            _lastPosition.Parameters["$item"].Value = itemId;
+            var last = _lastPosition.ExecuteScalar();
+            _insertTag.Parameters["$item"].Value = itemId;
+            _insertTag.Parameters["$position"].Value = last is null or DBNull ? 0 : Convert.ToInt32(last, CultureInfo.InvariantCulture) + 1;
+            _insertTag.Parameters["$name"].Value = name;
+            _insertTag.Parameters["$fold"].Value = fold;
+            return _insertTag.ExecuteNonQuery() > 0;
+        }
+
+        public void Dispose()
+        {
+            _findItem.Dispose();
+            _deleteTag.Dispose();
+            _findTag.Dispose();
+            _lastPosition.Dispose();
+            _insertTag.Dispose();
+        }
+
+        private static SqliteCommand Create(
+            SqliteConnection connection,
+            SqliteTransaction transaction,
+            string sql,
+            params (string Name, SqliteType Type)[] parameters)
+        {
+            var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = sql;
+            foreach (var (name, type) in parameters)
+            {
+                command.Parameters.Add(name, type);
+            }
+
+            return command;
+        }
     }
 
     private LibraryCatalogSource? FindSourceByRootPath(string rootPath)
@@ -2125,19 +2191,6 @@ public sealed class LibraryCatalogSession
         string RelativePath,
         string FileName,
         int MediaType);
-
-    /// <summary>
-    /// The item with exactly this catalog id, which the server generates and clients send back as they got it, so the
-    /// lookup reads the id's primary key index. Another casing or a full path names no item.
-    /// </summary>
-    private static string? ResolveItemId(SqliteConnection connection, SqliteTransaction transaction, string identifier)
-    {
-        return ScalarString(
-            connection,
-            transaction,
-            "SELECT id FROM items WHERE id = $id LIMIT 1;",
-            ("$id", identifier.Trim()));
-    }
 
     /// <summary>The named ids, trimmed, without blank ones, and each once, in request order.</summary>
     private static List<string> DistinctIds(IEnumerable<string>? identifiers)
@@ -2284,28 +2337,6 @@ public sealed class LibraryCatalogSession
 
         ids.Sort(StringComparer.Ordinal);
         return ids;
-    }
-
-    private static List<string> ReadItemTagNames(SqliteConnection connection, SqliteTransaction transaction, string itemId)
-    {
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = "SELECT name FROM item_tags WHERE item_id = $item ORDER BY position;";
-        command.Parameters.AddWithValue("$item", itemId);
-        using var reader = command.ExecuteReader();
-        var tags = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (reader.Read())
-        {
-            var name = reader.GetString(0);
-            if (seen.Add(name))
-            {
-                tags.Add(name);
-            }
-        }
-
-        tags.Sort(StringComparer.OrdinalIgnoreCase);
-        return tags;
     }
 
     private bool Commit(Func<SqliteConnection, SqliteTransaction, bool> mutate)
@@ -2477,12 +2508,6 @@ public sealed class LibraryCatalogSession
     private static int NextPosition(SqliteConnection connection, SqliteTransaction transaction, string table)
     {
         var current = ScalarInt(connection, transaction, $"SELECT MAX(position) FROM {table};");
-        return (current ?? -1) + 1;
-    }
-
-    private static int NextItemTagPosition(SqliteConnection connection, SqliteTransaction transaction, string itemId)
-    {
-        var current = ScalarInt(connection, transaction, "SELECT MAX(position) FROM item_tags WHERE item_id = $item;", ("$item", itemId));
         return (current ?? -1) + 1;
     }
 
@@ -2973,22 +2998,15 @@ public sealed class CatalogTagEditorRead
 {
     public List<LibraryCatalogCategory> Categories { get; init; } = [];
     public List<LibraryCatalogTag> Tags { get; init; } = [];
-    public List<CatalogItemTagRead> Items { get; init; } = [];
 
-    /// <summary>With counts only, each tag the named items hold and how many of them hold it; otherwise null.</summary>
-    public List<CatalogTagItemCount>? TagCounts { get; init; }
+    /// <summary>Each tag the named items hold and how many of them hold it.</summary>
+    public List<CatalogTagItemCount> TagCounts { get; init; } = [];
 
-    /// <summary>With counts only, how many of the named items are in the library; otherwise null.</summary>
-    public int? ItemCount { get; init; }
+    /// <summary>How many of the named items are in the library.</summary>
+    public int ItemCount { get; init; }
 }
 
 public readonly record struct CatalogTagItemCount(string Name, int ItemCount);
-
-public sealed class CatalogItemTagRead
-{
-    public string ItemId { get; init; } = string.Empty;
-    public List<string> Tags { get; init; } = [];
-}
 
 public sealed class CatalogLibraryStats
 {

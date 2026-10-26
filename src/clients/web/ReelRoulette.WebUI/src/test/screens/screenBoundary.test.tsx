@@ -289,7 +289,7 @@ describe("ScreenBoundary", () => {
       })
     );
     server.on("GET", "/api/sources", () => json([]));
-    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     const page = mountPage({ server });
     // The library's body shows the failure, which only relays, and the library overlay has failed.
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Library load failed (HTTP 500).", null, 0)));
@@ -331,7 +331,7 @@ describe("ScreenBoundary", () => {
       })
     );
     server.on("GET", "/api/sources", () => json([]));
-    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     const page = mountPage({ server });
     await pageReady(server);
     expect(page.root.querySelector("#fullscreen-stage #filter-dialog")).not.toBeNull();
@@ -373,7 +373,7 @@ describe("ScreenBoundary", () => {
     );
     server.on("GET", "/api/sources", () => json([]));
     server.on("POST", "/api/tag-editor/model", () =>
-      json({ categories: [{ id: "cat-places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "cat-places" }], items: [] })
+      json({ categories: [{ id: "cat-places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "cat-places" }], tagCounts: [], itemCount: 0 })
     );
     const page = mountPage({ server });
     await pageReady(server);

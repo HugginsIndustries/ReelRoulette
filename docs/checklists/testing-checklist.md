@@ -133,6 +133,11 @@ These need a person, real devices, or the Windows VM.
 - [ ] In a desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
 - [ ] In a desktop browser, Ctrl+scroll over the library grid scales it smoothly, then settles into the new row height with the tiles moving to their places and the tile under the pointer keeping its vertical place, without zooming the page.
 - [ ] On the iPad and an Android phone, a pinch over the library grid scales it smoothly and settles into the new row height without zooming the page.
+- [ ] In the WebUI on a desktop browser and a phone, select several items, and every matching item with Select all, apply each bulk action but the delete action, Edit tags… included, and the tiles update, and items an action takes out of the results, such as blacklisted ones, leave the selection.
+- [ ] Copy two throwaway videos into a source folder and refresh the library. In Firefox on the desktop, select one's tile and delete it with Delete files…, which asks for no control token; on the iPad, delete the other, which asks for the control token once first. Each file is gone from the folder and its tile from the grid.
+- [ ] On the iPad and the Android phone, a long press on a library tile selects it and starts selection, with no menu or text highlight of the browser's own.
+- [ ] On Firefox on the desktop, the iPad, and the Android phone, every gap in the library grid looks the same, unselected and selected, the grid's scrollbar sits in the tab's right margin, and the preset dropdown reads "Preset: {name}" with its arrow.
+- [ ] In Firefox on the desktop, right-clicking a library tile opens the app's menu at the pointer, never Firefox's own, with only the items that apply, and its actions reach the selection or that tile alone.
 
 ## Release Flow
 

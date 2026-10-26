@@ -406,12 +406,14 @@ public sealed class LibraryOperationsService
         };
     }
 
+    /// <summary>
+    /// The tag catalog, how many of the requested items hold each tag, and how many of them are in the library.
+    /// </summary>
     public TagEditorModelResponse GetTagEditorModel(TagEditorModelRequest? request)
     {
         lock (_lock)
         {
-            var countsOnly = request?.CountsOnly == true;
-            var read = _catalog.Session.ReadTagEditor(request?.ItemIds, countsOnly);
+            var read = _catalog.Session.ReadTagEditor(request?.ItemIds);
             var categories = read.Categories
                 .Select(MapCategory)
                 .Where(category => !string.IsNullOrWhiteSpace(category.Name))
@@ -432,14 +434,7 @@ public sealed class LibraryOperationsService
                     .Where(tag => !string.IsNullOrWhiteSpace(tag.Name))
                     .OrderBy(tag => tag.Name, TagNameComparer.Instance)
                     .ToList(),
-                Items = read.Items
-                    .Select(item => new ItemTagsSnapshot
-                    {
-                        ItemId = item.ItemId,
-                        Tags = item.Tags
-                    })
-                    .ToList(),
-                TagCounts = read.TagCounts?
+                TagCounts = read.TagCounts
                     .Select(tag => new TagItemCount { Name = tag.Name, ItemCount = tag.ItemCount })
                     .OrderBy(tag => tag.Name, TagNameComparer.Instance)
                     .ToList(),
@@ -458,12 +453,30 @@ public sealed class LibraryOperationsService
         return ApplyItemTags(request, out catalogChanged, out _);
     }
 
+    /// <summary>
+    /// Adds and removes tags on every named item in one write. <paramref name="resolvedItemIds"/> is each named item in
+    /// the library, also when nothing changed. It writes one <c>last.log</c> line with the counts and the elapsed time.
+    /// </summary>
     public bool ApplyItemTags(ApplyItemTagsRequest request, out bool catalogChanged, out List<string> resolvedItemIds)
     {
+        var stopwatch = Stopwatch.StartNew();
+        bool committed;
+        int changedItemCount;
         lock (_lock)
         {
-            return _catalog.Session.ApplyItemTagEdits(request.ItemIds, request.AddTags, request.RemoveTags, out catalogChanged, out resolvedItemIds);
+            committed = _catalog.Session.ApplyItemTagEdits(
+                request.ItemIds,
+                request.AddTags,
+                request.RemoveTags,
+                out catalogChanged,
+                out resolvedItemIds,
+                out changedItemCount);
         }
+
+        _serverLog.Append(
+            "info",
+            $"Apply item tags adds={request.AddTags.Count} removes={request.RemoveTags.Count} count={resolvedItemIds.Count} changed={changedItemCount} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        return committed;
     }
 
     public bool UpsertCategory(UpsertCategoryRequest request)

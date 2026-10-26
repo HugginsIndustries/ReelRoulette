@@ -400,8 +400,7 @@ public sealed class LibraryCatalogSessionTests
         ]);
 
         Assert.Equal(["item-1"], Assert.Single(applied.Applied).ChangedItemIds);
-        var model = session.ReadTagEditor(["item-1"]);
-        Assert.Equal(["Auto"], Assert.Single(model.Items).Tags);
+        Assert.Equal(["Auto"], session.ReadListedItem("item-1")!.Tags);
     }
 
     [Fact]
@@ -753,12 +752,14 @@ public sealed class LibraryCatalogSessionTests
         Assert.Null(session.ReadListedItem(path));
         Assert.Null(session.ReadItemState(path));
         Assert.Null(session.ReadPlaybackItem(path));
-        Assert.Empty(Assert.Single(session.ReadTagEditor([path]).Items).Tags);
+        var tagRead = session.ReadTagEditor([path]);
+        Assert.Equal(0, tagRead.ItemCount);
+        Assert.Empty(tagRead.TagCounts);
         Assert.Empty(session.SetItemsFlag([path], CatalogItemFlag.Favorite, true));
         Assert.Empty(session.SetItemsFlag([path], CatalogItemFlag.Blacklist, true));
         Assert.Null(session.RecordPlayback(path));
         Assert.Equal(new CatalogPlaybackStatsClear(0, 0), session.ClearPlaybackStats([path]));
-        Assert.False(session.ApplyItemTagEdits([path], [], ["Night"], out _, out var resolved));
+        Assert.False(session.ApplyItemTagEdits([path], [], ["Night"], out _, out var resolved, out _));
         Assert.Empty(resolved);
 
         Assert.Equal(revision, session.Revision);

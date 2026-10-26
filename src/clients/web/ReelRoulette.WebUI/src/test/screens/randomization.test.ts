@@ -38,7 +38,8 @@ const CATALOG = {
     { name: "Beach", categoryId: "places" },
     { name: "Alice", categoryId: "people" }
   ],
-  items: []
+  tagCounts: [],
+  itemCount: 0
 };
 
 const DEFAULT_REQUEST_OPTIONS = {
@@ -484,7 +485,7 @@ describe("Spread by tags", () => {
 
   it("says when there are no tags yet, and what failed when the tags can't load", async () => {
     const empty = serverPicking();
-    empty.on("POST", "/api/tag-editor/model", () => json({ categories: [{ id: "moods", name: "Moods", sortOrder: 0 }], tags: [], items: [] }));
+    empty.on("POST", "/api/tag-editor/model", () => json({ categories: [{ id: "moods", name: "Moods", sortOrder: 0 }], tags: [], tagCounts: [], itemCount: 0 }));
     const page = await mount(empty);
     await openTab();
     await click(checkbox("Spread by tags"));

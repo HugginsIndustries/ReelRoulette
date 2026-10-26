@@ -60,7 +60,8 @@ const TAG_MODEL = {
     { name: "Alice", categoryId: "cat-people" },
     { name: "Calm", categoryId: "cat-mood" }
   ],
-  items: []
+  tagCounts: [],
+  itemCount: 0
 };
 
 const FAVORITES_PRESET = { id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only" } };
@@ -886,7 +887,7 @@ describe("opening and closing", () => {
   it("says when there are no sources, tags, or presets", async () => {
     await mountFilter([], (server) => {
       server.on("GET", "/api/sources", () => json([]));
-      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     });
     await openDialog();
 
@@ -3127,7 +3128,7 @@ describe("names and storage", () => {
     await mountFilter([{ id: "preset-mine", name: "<u>Mine</u>", filterState: { favoritesMode: "only" } }], (server) => {
       server.on("GET", "/api/sources", () => json([{ id: "source-x", displayName: "<b>Movies</b>", rootPath: "C:\\m", isEnabled: true }]));
       server.on("POST", "/api/tag-editor/model", () =>
-        json({ categories: [{ id: "cat-x", name: "<em>Places</em>", sortOrder: 0 }], tags: [{ name: "<i>Beach</i>", categoryId: "cat-x" }], items: [] })
+        json({ categories: [{ id: "cat-x", name: "<em>Places</em>", sortOrder: 0 }], tags: [{ name: "<i>Beach</i>", categoryId: "cat-x" }], tagCounts: [], itemCount: 0 })
       );
     });
     await openDialog();

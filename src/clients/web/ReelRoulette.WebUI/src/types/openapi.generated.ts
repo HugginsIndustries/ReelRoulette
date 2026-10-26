@@ -968,9 +968,8 @@ export interface paths {
         put?: never;
         /**
          * Get tag editor model snapshot
-         * @description The tag catalog, and the tags of the items in `itemIds`, each item's in `items`. With `countsOnly`, `items` is
-         *     empty and `tagCounts` counts how many of the items hold each tag, with `itemCount` the number of them in the
-         *     library, so editing many items' tags doesn't need each item's tags.
+         * @description The tag catalog, with `tagCounts` counting how many of the items in `itemIds` hold each tag and `itemCount` the
+         *     number of them in the library. No item ids read the catalog alone, with no counts and an `itemCount` of 0.
          */
         post: operations["postTagEditorModel"];
         delete?: never;
@@ -988,7 +987,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply batch add/remove tag deltas to items */
+        /**
+         * Apply batch add/remove tag deltas to items
+         * @description Adds `addTags` to and removes `removeTags` from every named item in one write, adding a new added tag to the
+         *     catalog. An id no item has is skipped. It publishes one `itemTagsChanged` listing every named item in the
+         *     library, or, when that event would list more than 1,000 items, `resyncRequired` with the reason
+         *     `itemTagsChanged` in its place, and writes a `last.log` line saying so. An added tag new to the catalog also
+         *     publishes `tagCatalogChanged`. Each apply writes a `last.log` line with its counts and elapsed time.
+         */
         post: operations["postTagEditorApplyItemTags"];
         delete?: never;
         options?: never;
@@ -1039,7 +1045,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rename tag and optionally move category */
+        /**
+         * Rename tag and optionally move category
+         * @description Renames the tag in the catalog and on every item, merging it into a tag with the new name, and publishes one
+         *     `itemTagsChanged` listing every item that held it, however many, since other devices retarget their filters
+         *     from it.
+         */
         post: operations["postTagEditorRenameTag"];
         delete?: never;
         options?: never;
@@ -1056,7 +1067,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete a tag */
+        /**
+         * Delete a tag
+         * @description Deletes the tag from the catalog and every item, and publishes one `itemTagsChanged` listing every item that
+         *     held it, however many, since other devices retarget their filters from it.
+         */
         post: operations["postTagEditorDeleteTag"];
         delete?: never;
         options?: never;
@@ -1224,7 +1239,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply auto-tag assignments */
+        /**
+         * Apply auto-tag assignments
+         * @description Adds each assignment's tag to the files it names. For each tag that gained a file, it publishes one
+         *     `itemTagsChanged` listing the files that gained it, except that one `resyncRequired` with the reason
+         *     `itemTagsChanged`, published after the others, stands in for every tag's event that would list more than
+         *     1,000 items, with a `last.log` line saying so.
+         */
         post: operations["postAutoTagApply"];
         delete?: never;
         options?: never;
@@ -2195,12 +2216,14 @@ export interface components {
         /**
          * @description Tells a client that events it needs were missed or not sent, so it reads its state again. Sent to one stream
          *     for a revision gap, and published to every stream when clear-stats clears stats, or in place of a
-         *     `bulkItemStateChanged`, `bulkItemRatingChanged`, or `itemsRemoved` that would list more than 1,000 items.
+         *     `bulkItemStateChanged`, `bulkItemRatingChanged`, `itemsRemoved`, or tag apply's or Auto Tag apply's
+         *     `itemTagsChanged` that would list more than 1,000 items. A tag rename's or delete's `itemTagsChanged` is
+         *     never replaced.
          */
         ResyncRequiredPayload: {
             /**
              * @description `revisionGap`, `playbackStatsCleared`, or the type of the event it replaces: `bulkItemStateChanged`,
-             *     `bulkItemRatingChanged`, or `itemsRemoved`.
+             *     `bulkItemRatingChanged`, `itemsRemoved`, or `itemTagsChanged`.
              * @example revisionGap
              */
             reason: string;
@@ -2281,27 +2304,20 @@ export interface components {
             name: string;
             categoryId: string;
         };
-        ItemTagsSnapshot: {
-            itemId: string;
-            tags: string[];
-        };
         TagEditorModelRequest: {
+            /** @description The items to count tags across. None, or an empty list, reads the tag catalog alone. */
             itemIds?: string[];
-            /** @description True answers `tagCounts` and `itemCount` for the items in place of each item's tags, and `items` is empty. Defaults to false. */
-            countsOnly?: boolean;
         };
         TagEditorModelResponse: {
             categories: components["schemas"]["TagCategorySnapshot"][];
             tags: components["schemas"]["TagSnapshot"][];
-            /** @description Each requested item's tags, empty with `countsOnly`. */
-            items: components["schemas"]["ItemTagsSnapshot"][];
-            /** @description With `countsOnly`, each tag the items hold and how many of them hold it. */
-            tagCounts?: components["schemas"]["TagItemCount"][];
+            /** @description Each tag the requested items hold and how many of them hold it. */
+            tagCounts: components["schemas"]["TagItemCount"][];
             /**
              * Format: int32
-             * @description With `countsOnly`, how many of the requested items are in the library.
+             * @description How many of the requested items are in the library.
              */
-            itemCount?: number;
+            itemCount: number;
         };
         TagItemCount: {
             /** @description The tag's name as the items hold it. */
@@ -4888,12 +4904,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tag delta applied */
+            /** @description Every named item in the library has the added tags and none of the removed ones */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["BulkChangeResponse"];
+                };
             };
             /** @description Invalid request */
             400: {

@@ -597,9 +597,8 @@ public sealed class LibraryListQueryTests
             Add(session, id, "on", $"{id}.mp4", $"{id}.mp4", tags: tags);
         }
 
-        var model = session.ReadTagEditor(ids);
         var catalogTags = session.ReadTagEditor(null).Tags;
-        var itemTags = model.Items.ToDictionary(item => item.ItemId, item => item.Tags, StringComparer.Ordinal);
+        var itemTags = ids.ToDictionary(id => id, id => session.ReadListedItem(id)!.Tags.ToList(), StringComparer.Ordinal);
         string[] modeKeys = ["people", "PLACE", "uncategorized", string.Empty, "missing"];
         string[] extras = ["Nobody", " ", "ann", "PARK"];
         for (var run = 0; run < 400; run++)

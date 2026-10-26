@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createDefaultFilterState } from "../filter/filterStateModel";
+import { createLibrarySelection } from "../library/librarySelection";
 import type { NotifyRequest } from "../notifications/notifications";
 import { statusLogLine } from "../logging/relayLogLines";
 import { createAppApi } from "../state/appApi";
@@ -15,7 +16,8 @@ import { noTagNamed, REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 /** A landed save's message, Auto Tag's Apply's too. */
 const APPLIED: NotifyRequest = { kind: "actions", text: "Tag editor changes applied", key: "tags" };
 
-const MODEL: TagEditorModel = {
+/** The tag catalog, as the tag model answers it. */
+const CATALOG: Pick<TagEditorModel, "categories" | "tags"> = {
   categories: [
     { id: "places", name: "Places", sortOrder: 0 },
     { id: "people", name: "People", sortOrder: 1 }
@@ -23,9 +25,25 @@ const MODEL: TagEditorModel = {
   tags: [
     { name: "Beach", categoryId: "places" },
     { name: "Bob", categoryId: "people" }
-  ],
-  items: [{ itemId: "item-1", tags: ["Beach"] }]
+  ]
 };
+
+/** Each item's tags, which the fake tag model counts across the items a load names. */
+const ITEM_TAGS: Array<{ itemId: string; tags: string[] }> = [{ itemId: "item-1", tags: ["Beach"] }];
+
+/** The tag model's answer for the items `ids` names: how many of them hold each tag, and how many there are. */
+function countedModel(catalog: Pick<TagEditorModel, "categories" | "tags">, items: typeof ITEM_TAGS, ids: readonly string[]): TagEditorModel {
+  const named = items.filter((item) => ids.includes(item.itemId));
+  const counts = new Map<string, { name: string; itemCount: number }>();
+  for (const item of named) {
+    for (const tag of item.tags) {
+      const row = counts.get(tag.toLowerCase()) ?? { name: tag, itemCount: 0 };
+      row.itemCount += 1;
+      counts.set(tag.toLowerCase(), row);
+    }
+  }
+  return { ...catalog, tagCounts: [...counts.values()], itemCount: named.length };
+}
 
 const ITEM = { itemId: "item-1", id: "C:\\clip.mp4", displayName: "clip.mp4", mediaType: "video" } as PlayingItem;
 const OTHER = { itemId: "item-2", id: "C:\\other.mp4", displayName: "other.mp4", mediaType: "video" } as PlayingItem;
@@ -53,7 +71,10 @@ function memoryStorage() {
 function setup(options: { scanFullLibrary?: string } = {}) {
   const steps: string[] = [];
   const server = {
-    model: structuredClone(MODEL),
+    model: structuredClone(CATALOG),
+    items: structuredClone(ITEM_TAGS),
+    /** The count Tag apply answers, or null for the number of ids it named. */
+    applyCount: null as number | null,
     modelStatus: 200,
     scan: { rows: [] as unknown[] } as unknown,
     /** The scan's status, or 0 for a scan that can't reach the server. */
@@ -91,7 +112,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     steps.push(`post ${path}`);
     if (path === "/api/tag-editor/model") {
       const ids: string[] = body?.itemIds ?? [];
-      const reply = { ...server.model, items: server.model.items.filter((item) => ids.includes(item.itemId)) };
+      const reply = countedModel(server.model, server.items, ids);
       if (holdModels) {
         await new Promise<void>((resolve) => heldModels.push(resolve));
       }
@@ -111,7 +132,10 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     if (failure === 0) {
       throw new TypeError("Failed to fetch");
     }
-    return failure ? refused(failure) : json({ applied: [] });
+    if (failure !== undefined) {
+      return refused(failure);
+    }
+    return path === "/api/tag-editor/apply-item-tags" ? json({ count: server.applyCount ?? body.itemIds.length }) : json({ applied: [] });
   }) as typeof fetch;
 
   /** The one-off messages, which pop up and which the list keeps. */
@@ -144,7 +168,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     }
   };
 
-  const tiles = [{ id: "item-1", tags: ["Beach"] }];
+  const tiles = [{ id: "item-1", fileName: "clip.mp4", tags: ["Beach"] }];
   const storedFilter = { selectedTags: [] as string[], excludedTags: [] as string[] };
   const session = {
     snapshot: () => ({ items: tiles.map((tile) => ({ ...tile, tags: tile.tags.slice() })), inFlight: null }),
@@ -175,6 +199,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     localStorage.setItem("rr_autoTagScanFullLibrary", options.scanFullLibrary);
   }
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
+  const selection = createLibrarySelection();
   /** The messages shown in the in-app notice, in order, and the line each sent to the log. */
   const notices: string[] = [];
   const noticeLogs: string[] = [];
@@ -186,7 +211,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     store,
     api,
     connection,
-    library: { session } as never,
+    library: { session, selection } as never,
     filter: { reviseTags: vi.fn() },
     device: createDeviceStore(remembered),
     localStorage,
@@ -212,7 +237,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   };
   /** The item ids each tag model request asked for. */
   const modelRequests = () => server.posts.filter((post) => post.path === "/api/tag-editor/model").map((post) => post.body.itemIds);
-  return { editor, view, titles, store, server, notified, notices, noticeLogs, statuses, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
+  return { editor, view, titles, store, server, notified, notices, noticeLogs, statuses, steps, listeners, tiles, storedFilter, session, selection, remembered, localStorage, confirm, models, modelRequests };
 }
 
 /** Lets fetch replies finish. */
@@ -481,7 +506,7 @@ describe("following the playing item", () => {
   it("follows the playing item, loading its tags while it shows and when it next shows while hidden", async () => {
     const context = setup();
     const { editor, store } = context;
-    context.server.model.items.push({ itemId: "item-2", tags: ["Bob"] });
+    context.server.items.push({ itemId: "item-2", tags: ["Bob"] });
     await openOn(context);
     expect(context.view().itemIds).toEqual(["item-1"]);
 
@@ -489,8 +514,8 @@ describe("following the playing item", () => {
     await settle();
     expect(context.modelRequests().at(-1)).toEqual(["item-2"]);
     expect(context.view().itemIds).toEqual(["item-2"]);
-    expect(context.view().model?.items).toEqual([{ itemId: "item-2", tags: ["Bob"] }]);
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().model).toMatchObject({ tagCounts: [{ name: "Bob", itemCount: 1 }], itemCount: 1 });
+    expect(context.view().editingFor).toBeNull();
 
     // The same item again, as a replay, loads nothing.
     store.current.value = { ...OTHER };
@@ -525,49 +550,49 @@ describe("following the playing item", () => {
     store.current.value = OTHER;
     await settle();
     expect(context.view().itemIds).toEqual(["item-1"]);
-    expect(context.view().heldName).toBe("clip.mp4");
+    expect(context.view().editingFor).toBe("clip.mp4");
     expect(context.modelRequests()).toHaveLength(1);
 
     // Playing the held item again ends the line, and playing another brings it back.
     store.current.value = ITEM;
     await settle();
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().editingFor).toBeNull();
     store.current.value = OTHER;
     await settle();
-    expect(context.view().heldName).toBe("clip.mp4");
+    expect(context.view().editingFor).toBe("clip.mp4");
 
     editor.discardChanges();
     await settle();
     expect(context.view().itemIds).toEqual(["item-2"]);
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().editingFor).toBeNull();
     expect(context.modelRequests().at(-1)).toEqual(["item-2"]);
   });
 
   it("follows the playing item once its last add or remove is undone, or its tag deleted", async () => {
     const context = setup();
     const { editor, store } = context;
-    context.server.model.items.push({ itemId: "item-2", tags: [] });
+    context.server.items.push({ itemId: "item-2", tags: [] });
     await openOn(context);
     editor.toggleTag("Bob", "add");
     store.current.value = OTHER;
     await settle();
-    expect(context.view().heldName).toBe("clip.mp4");
+    expect(context.view().editingFor).toBe("clip.mp4");
 
     editor.toggleTag("Bob", "add");
     await settle();
     expect(context.view().itemIds).toEqual(["item-2"]);
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().editingFor).toBeNull();
     expect(context.modelRequests().at(-1)).toEqual(["item-2"]);
 
     editor.toggleTag("Bob", "add");
     store.current.value = ITEM;
     await settle();
-    expect(context.view().heldName).toBe("other.mp4");
+    expect(context.view().editingFor).toBe("other.mp4");
     editor.editTag("Bob");
     await editor.deleteEditedTag();
     await settle();
     expect(context.view().itemIds).toEqual(["item-1"]);
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().editingFor).toBeNull();
     expect(context.modelRequests().at(-1)).toEqual(["item-1"]);
   });
 
@@ -599,11 +624,11 @@ describe("following the playing item", () => {
     ]);
 
     server.model.tags = [{ name: "Robert", categoryId: "people" }];
-    server.model.items = [{ itemId: "item-1", tags: [] }];
+    server.items = [{ itemId: "item-1", tags: [] }];
     listeners.itemTagsChanged!({ resolvedItemIds: ["item-1"], addedTags: [], removedTags: ["Beach"], catalogReplacedTag: "Beach" });
     await settle();
     expect(places()).toEqual([["Robert", "add"]]);
-    expect(context.view().heldName).toBe("clip.mp4");
+    expect(context.view().editingFor).toBe("clip.mp4");
 
     editor.save();
     await settle();
@@ -626,13 +651,13 @@ describe("following the playing item", () => {
     expect(context.view().selections.size).toBe(0);
     // Until the save lands, the editor stays on its item.
     expect(context.view().itemIds).toEqual(["item-1"]);
-    expect(context.view().heldName).toBe("clip.mp4");
+    expect(context.view().editingFor).toBe("clip.mp4");
     await settle();
     const applyAt = server.posts.findIndex((post) => post.path === "/api/tag-editor/apply-item-tags");
     expect(server.posts[applyAt]!.body.itemIds).toEqual(["item-1"]);
     expect(server.posts.slice(applyAt + 1).map((post) => post.body.itemIds)).toEqual([["item-2"]]);
     expect(context.view().itemIds).toEqual(["item-2"]);
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().editingFor).toBeNull();
   });
 
   it("isn't held by catalog changes or a category reorder", async () => {
@@ -646,7 +671,7 @@ describe("following the playing item", () => {
     store.current.value = OTHER;
     await settle();
     expect(context.view().itemIds).toEqual(["item-2"]);
-    expect(context.view().heldName).toBeNull();
+    expect(context.view().editingFor).toBeNull();
     expect(context.titles()).toEqual(["People", "Spots"]);
     expect(context.view().savePending).toBe(true);
   });
@@ -654,7 +679,7 @@ describe("following the playing item", () => {
   it("takes only the latest tag load, so a slow reply for an earlier item can't land on a later one", async () => {
     const context = setup();
     const { store, models } = context;
-    context.server.model.items.push({ itemId: "item-2", tags: ["Bob"] });
+    context.server.items.push({ itemId: "item-2", tags: ["Bob"] });
     await openOn(context);
     models.hold();
     store.current.value = OTHER;
@@ -664,7 +689,235 @@ describe("following the playing item", () => {
     // The later load answers first, then the earlier one.
     await models.answer(1, 0);
     expect(context.view().itemIds).toEqual(["item-1"]);
-    expect(context.view().model?.items).toEqual([{ itemId: "item-1", tags: ["Beach"] }]);
+    expect(context.view().model).toMatchObject({ tagCounts: [{ name: "Beach", itemCount: 1 }], itemCount: 1 });
+  });
+});
+
+describe("Edit tags…", () => {
+  const THIRD = { itemId: "item-3", id: "C:\\third.mp4", displayName: "third.mp4", mediaType: "video" } as PlayingItem;
+
+  /** The editor shown on the playing item, with item-2 holding Beach and Bob and item-3 holding Bob. */
+  async function withItems(playing: PlayingItem = ITEM) {
+    const context = setup();
+    context.server.items.push({ itemId: "item-2", tags: ["Beach", "Bob"] }, { itemId: "item-3", tags: ["Bob"] });
+    await openOn(context, playing);
+    return context;
+  }
+
+  /** Edit tags… as the library runs it: the editor is pointed at `target`, then the Tags tab shows. */
+  async function editTags(context: ReturnType<typeof setup>, target: { kind: "selection" } | { kind: "item"; itemId: string }) {
+    context.editor.close();
+    const pointed = await context.editor.editTags(target);
+    if (pointed) {
+      context.editor.open();
+    }
+    await settle();
+    return pointed;
+  }
+
+  /** Picks the items, as clicks on their tiles do. */
+  function select(context: ReturnType<typeof setup>, ...ids: string[]) {
+    ids.forEach((id) => context.selection.toggle(id));
+  }
+
+  const chip = (context: ReturnType<typeof setup>, name: string) =>
+    context.view().categories?.flatMap((category) => category.chips).find((candidate) => candidate.name === name);
+
+  it("on the selection names how many items it edits and loads their counts in one request with every selected id", async () => {
+    const context = await withItems();
+    select(context, "item-2", "item-3");
+    expect(await editTags(context, { kind: "selection" })).toBe(true);
+    expect(context.view()).toMatchObject({ editingFor: "2 items", editingForTitle: null, editsSeveral: true, itemIds: ["item-2", "item-3"] });
+    expect(context.modelRequests()).toEqual([["item-1"], ["item-2", "item-3"]]);
+    expect(context.confirm).not.toHaveBeenCalled();
+    // Bob is on both, and Beach on only one.
+    expect(chip(context, "Bob")).toMatchObject({ state: "state-all", addDisabledReason: "Every selected item has this tag" });
+    expect(chip(context, "Beach")).toMatchObject({ state: "state-some", addDisabledReason: null, removeDisabledReason: null });
+  });
+
+  it("follows the selection's changes while it shows, and once selection ends without adds or removes, the playing item", async () => {
+    const context = await withItems();
+    select(context, "item-2");
+    await editTags(context, { kind: "selection" });
+    expect(context.view().editingFor).toBe("1 item");
+
+    context.selection.toggle("item-3");
+    await settle();
+    expect(context.view()).toMatchObject({ editingFor: "2 items", itemIds: ["item-2", "item-3"] });
+    expect(context.modelRequests().at(-1)).toEqual(["item-2", "item-3"]);
+
+    // A new playing item, a save, and Discard changes leave a selection that lasts.
+    context.store.current.value = OTHER;
+    await settle();
+    context.editor.toggleTag("Beach", "add");
+    context.editor.save();
+    await settle();
+    context.editor.editTag("Beach");
+    context.editor.typeEditName("Shore");
+    context.editor.saveEdit();
+    context.editor.discardChanges();
+    await settle();
+    expect(context.view().itemIds).toEqual(["item-2", "item-3"]);
+
+    context.selection.clear();
+    await settle();
+    expect(context.view()).toMatchObject({ target: { kind: "playing" }, itemIds: ["item-2"], editingFor: null, editsSeveral: false });
+    expect(context.modelRequests().at(-1)).toEqual(["item-2"]);
+  });
+
+  it("keeps the selected items once selection ends with adds or removes, until they are discarded", async () => {
+    const context = await withItems();
+    select(context, "item-2", "item-3");
+    await editTags(context, { kind: "selection" });
+    context.editor.toggleTag("Beach", "add");
+    const loads = context.modelRequests().length;
+
+    context.selection.clear();
+    await settle();
+    expect(context.view()).toMatchObject({ target: { kind: "selection", live: false }, itemIds: ["item-2", "item-3"], editingFor: "2 items" });
+    // Ended, the selection no longer follows changes, and another item playing leaves the items held.
+    context.selection.toggle("item-1");
+    context.store.current.value = OTHER;
+    await settle();
+    expect(context.view().itemIds).toEqual(["item-2", "item-3"]);
+    expect(context.modelRequests()).toHaveLength(loads);
+
+    context.editor.discardChanges();
+    await settle();
+    expect(context.view()).toMatchObject({ itemIds: ["item-2"], editingFor: null });
+  });
+
+  it("on a tile alone names it, stays through an undo, leaves for a new playing item without adds or removes, and stays with them", async () => {
+    const context = await withItems(OTHER);
+    expect(await editTags(context, { kind: "item", itemId: "item-1" })).toBe(true);
+    expect(context.view()).toMatchObject({ editingFor: "clip.mp4", editingForTitle: "clip.mp4", editsSeveral: false, itemIds: ["item-1"] });
+    expect(context.modelRequests().at(-1)).toEqual(["item-1"]);
+    expect(chip(context, "Beach")?.addDisabledReason).toBe("This item already has this tag");
+    expect(chip(context, "Bob")?.removeDisabledReason).toBe("This item doesn't have this tag");
+
+    // Undoing the last add leaves the tab on the tile, as it does a catalog change.
+    context.editor.toggleTag("Bob", "add");
+    context.editor.toggleTag("Bob", "add");
+    await settle();
+    expect(context.view().itemIds).toEqual(["item-1"]);
+
+    // With an add held, another item playing leaves it on the tile.
+    context.editor.toggleTag("Bob", "add");
+    context.store.current.value = THIRD;
+    await settle();
+    expect(context.view()).toMatchObject({ itemIds: ["item-1"], editingFor: "clip.mp4" });
+
+    context.editor.toggleTag("Bob", "add");
+    context.store.current.value = OTHER;
+    await settle();
+    expect(context.view()).toMatchObject({ target: { kind: "playing" }, itemIds: ["item-2"], editingFor: null });
+    expect(context.modelRequests().at(-1)).toEqual(["item-2"]);
+  });
+
+  it("asks to discard adds and removes held for other items, Cancel keeps everything, and Discard keeps the catalog changes", async () => {
+    const context = await withItems();
+    context.editor.typeNewTag("Sunset");
+    context.editor.addTag();
+    // Catalog changes alone, or adds held for the same tile, ask nothing.
+    expect(await editTags(context, { kind: "item", itemId: "item-1" })).toBe(true);
+    context.editor.toggleTag("Bob", "add");
+    expect(await editTags(context, { kind: "item", itemId: "item-1" })).toBe(true);
+    expect(context.confirm).not.toHaveBeenCalled();
+
+    select(context, "item-2", "item-3");
+    context.confirm.mockResolvedValueOnce(false);
+    expect(await context.editor.editTags({ kind: "selection" })).toBe(false);
+    expect(context.confirm.mock.calls).toEqual([[asked("Discard changes?", "Discard")]]);
+    expect(context.view()).toMatchObject({ target: { kind: "item" }, itemIds: ["item-1"] });
+    expect([...context.view().selections.keys()]).toEqual(["bob"]);
+
+    expect(await editTags(context, { kind: "selection" })).toBe(true);
+    expect(context.confirm).toHaveBeenCalledTimes(2);
+    expect(context.view().selections.size).toBe(0);
+    expect(context.view().itemIds).toEqual(["item-2", "item-3"]);
+    expect(chip(context, "Sunset")).toBeDefined();
+    expect(context.view().savePending).toBe(true);
+
+    // Adds held for a selection that lasts are for the same items, so Edit tags… on it asks nothing.
+    context.editor.toggleTag("Beach", "add");
+    expect(await editTags(context, { kind: "selection" })).toBe(true);
+    expect(context.confirm).toHaveBeenCalledTimes(2);
+    expect([...context.view().selections.keys()]).toEqual(["beach"]);
+  });
+
+  it("follows the playing item once a save for the chosen tile lands, but not one sent before Edit tags… chose another", async () => {
+    const context = await withItems(OTHER);
+    await editTags(context, { kind: "item", itemId: "item-1" });
+    context.editor.toggleTag("Bob", "add");
+    context.editor.save();
+    await settle();
+    expect(context.view()).toMatchObject({ target: { kind: "playing" }, itemIds: ["item-2"] });
+
+    // A save of the playing item's tags is on its way when Edit tags… chooses item-3's tile.
+    context.tiles.push({ id: "item-3", fileName: "third.mp4", tags: ["Bob"] });
+    const replies: Array<() => void> = [];
+    context.server.held.set("/api/tag-editor/apply-item-tags", replies);
+    context.editor.toggleTag("Beach", "remove");
+    context.editor.save();
+    await settle();
+    await editTags(context, { kind: "item", itemId: "item-3" });
+    replies.forEach((reply) => reply());
+    await settle();
+    expect(context.view()).toMatchObject({ target: { kind: "item" }, itemIds: ["item-3"], editingFor: "third.mp4" });
+    expect(context.modelRequests().at(-1)).toEqual(["item-3"]);
+  });
+
+  it("shows no tag on the new items' chips, with Add and Remove disabled, until their counts load after a save on its way", async () => {
+    const context = await withItems();
+    context.tiles.push({ id: "item-3", fileName: "third.mp4", tags: ["Bob"] });
+    // The playing item-1 has Beach, and a save adding Bob to it is on its way when Edit tags… chooses item-3's tile.
+    const replies: Array<() => void> = [];
+    context.server.held.set("/api/tag-editor/apply-item-tags", replies);
+    context.editor.toggleTag("Bob", "add");
+    context.editor.save();
+    await settle();
+    await editTags(context, { kind: "item", itemId: "item-3" });
+    expect(context.view()).toMatchObject({ itemIds: ["item-3"], editingFor: "third.mp4" });
+    for (const name of ["Beach", "Bob"]) {
+      expect(chip(context, name)).toMatchObject({ state: "state-none", canChangeItems: false, addDisabledReason: null, removeDisabledReason: null });
+    }
+
+    replies.forEach((reply) => reply());
+    await settle();
+    expect(context.modelRequests().at(-1)).toEqual(["item-3"]);
+    expect(chip(context, "Bob")).toMatchObject({ state: "state-all", canChangeItems: true, addDisabledReason: "This item already has this tag" });
+    expect(chip(context, "Beach")).toMatchObject({ state: "state-none", canChangeItems: true, removeDisabledReason: "This item doesn't have this tag" });
+  });
+
+  it("says how many items the server updated for a selection, and that the changes applied for one item or catalog changes alone", async () => {
+    const context = await withItems();
+    select(context, "item-2", "item-3");
+    await editTags(context, { kind: "selection" });
+    context.server.applyCount = 1234;
+    context.editor.toggleTag("Beach", "add");
+    context.editor.save();
+    await settle();
+    expect(context.notified).toEqual([{ kind: "actions", text: "Updated tags on 1,234 items.", key: "tags" }]);
+
+    context.server.applyCount = 1;
+    context.editor.toggleTag("Beach", "remove");
+    context.editor.save();
+    await settle();
+    expect(context.notified.at(-1)?.text).toBe("Updated tags on 1 item.");
+
+    context.editor.editCategory("places");
+    context.editor.typeCategoryName("Spots");
+    context.editor.saveCategoryEdit();
+    context.editor.save();
+    await settle();
+    expect(context.notified.at(-1)).toEqual(APPLIED);
+
+    context.selection.clear();
+    await settle();
+    context.editor.toggleTag("Bob", "add");
+    context.editor.save();
+    await settle();
+    expect(context.notified.at(-1)).toEqual(APPLIED);
   });
 });
 
@@ -904,7 +1157,16 @@ describe("saving", () => {
     expect(context.view().savePending).toBe(false);
     expect(context.titles()).toEqual(["Places", "People"]);
     expect(context.view().categories?.map((category) => category.chips)).toEqual([
-      [{ name: "Beach", state: "state-none", pending: null, canChangeItems: true }],
+      [
+        {
+          name: "Beach",
+          state: "state-none",
+          pending: null,
+          canChangeItems: true,
+          addDisabledReason: null,
+          removeDisabledReason: "This item doesn't have this tag"
+        }
+      ],
       []
     ]);
     await settle();
@@ -1081,6 +1343,23 @@ describe("saving", () => {
     context.listeners.itemTagsChanged!({ resolvedItemIds: ["item-1"], addedTags: ["Shore"], removedTags: ["Beach"] });
     await settle();
     expect(session.reloadLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops waiting for its own item-tags event once a resync comes, so a later save doesn't put its tags back on a tile another device changed", async () => {
+    const context = setup();
+    await openOn(context);
+    context.editor.toggleTag("Bob", "add");
+    context.editor.save();
+    await settle();
+    expect(context.tiles[0]!.tags).toEqual(["Beach", "Bob"]);
+    // The save's event, past 1,000 items, comes as a resync in its place, and another device then takes Bob off.
+    context.listeners.resyncRequired!({ reason: "itemTagsChanged" });
+    context.tiles[0]!.tags = ["Beach"];
+
+    context.editor.toggleTag("Beach", "remove");
+    context.editor.save();
+    await settle();
+    expect(context.tiles[0]!.tags).toEqual([]);
   });
 
   it("does not patch tiles again for its own item-tags event, but does for another client's", async () => {

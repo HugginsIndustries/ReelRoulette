@@ -142,7 +142,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <button aria-label="Add tag alps" class="icon-btn is-selected" title="Add tag" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag alps" class="icon-btn" title="Remove tag" type="button">
+          <button aria-label="Remove tag alps" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
             <span class="material-symbol-icon">
               "remove"
           <button aria-label="Edit tag alps" class="icon-btn" title="Edit tag" type="button">
@@ -151,7 +151,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
         <div class="tag-chip state-all">
           <span class="tag-chip-label">
             "Beach"
-          <button aria-label="Add tag Beach" class="icon-btn" title="Add tag" type="button">
+          <button aria-label="Add tag Beach" class="icon-btn" disabled="" title="This item already has this tag" type="button">
             <span class="material-symbol-icon">
               "add"
           <button aria-label="Remove tag Beach" class="icon-btn" title="Remove tag" type="button">
@@ -181,7 +181,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <button aria-label="Add tag Calm" class="icon-btn" title="Add tag" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag Calm" class="icon-btn" title="Remove tag" type="button">
+          <button aria-label="Remove tag Calm" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
             <span class="material-symbol-icon">
               "remove"
           <button aria-label="Edit tag Calm" class="icon-btn" title="Edit tag" type="button">
@@ -208,7 +208,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <button aria-label="Add tag Alice" class="icon-btn" title="Add tag" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag Alice" class="icon-btn" title="Remove tag" type="button">
+          <button aria-label="Remove tag Alice" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
             <span class="material-symbol-icon">
               "remove"
           <button aria-label="Edit tag Alice" class="icon-btn" title="Edit tag" type="button">
@@ -217,7 +217,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
         <div class="tag-chip state-all">
           <span class="tag-chip-label">
             "Bob"
-          <button aria-label="Add tag Bob" class="icon-btn" title="Add tag" type="button">
+          <button aria-label="Add tag Bob" class="icon-btn" disabled="" title="This item already has this tag" type="button">
             <span class="material-symbol-icon">
               "add"
           <button aria-label="Remove tag Bob" class="icon-btn is-selected" title="Remove tag" type="button">
@@ -244,7 +244,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <button aria-label="Add tag Loose" class="icon-btn" title="Add tag" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag Loose" class="icon-btn" title="Remove tag" type="button">
+          <button aria-label="Remove tag Loose" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
             <span class="material-symbol-icon">
               "remove"
           <button aria-label="Edit tag Loose" class="icon-btn" title="Edit tag" type="button">

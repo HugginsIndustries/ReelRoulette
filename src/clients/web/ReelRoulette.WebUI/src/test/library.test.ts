@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDefaultFilterState } from "../filter/filterStateModel";
+import type { BulkTarget } from "../library/bulkActions";
 import { createLibrary } from "../library/library";
 import { LIBRARY_LOAD_TIMEOUT_MESSAGE } from "../library/libraryOverlayModel";
 import type { LibraryGridController, LibraryGridCoverage, LibraryGridOptions } from "../library/libraryGridController";
@@ -189,6 +190,8 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     // No test here confirms a bulk action.
     confirm: () => Promise.resolve(false)
   };
+  /** The tag editor's Edit tags…, which says whether it pointed the tab, as after Discard, or not, as after Cancel. */
+  const editTags = vi.fn(async (_target: BulkTarget) => true);
   const service = createLibrary({
     config: { apiBaseUrl: "http://server/", sseUrl: "http://server/api/events" },
     store,
@@ -202,6 +205,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     device: createDeviceStore(options.storage ?? null),
     tagCatalog: createTagCatalog({ api, connection }),
     contextMenu,
+    editTags,
     createGrid(_host, gridOptions) {
       const grid = fakeGrid(gridOptions, page);
       grids.push(grid);
@@ -213,6 +217,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
   return {
     library: service,
     contextMenu,
+    editTags,
     fakeLibrary: library,
     store,
     page,
@@ -1394,7 +1399,7 @@ describe("menus", () => {
 
     await t.library.openTileMenu("item-3", POINT);
     expect(t.contextMenu.view.peek()!.point).toEqual(POINT);
-    expect(tileMenuItems(t)).toEqual(["Remove from favorites", "Add to blacklist", "Rate…", "Clear playback stats…", "Delete file…"]);
+    expect(tileMenuItems(t)).toEqual(["Remove from favorites", "Add to blacklist", "Rate…", "Edit tags…", "Clear playback stats…", "Delete file…"]);
     expect(t.grid.ringed.at(-1)).toBe("item-3");
     expect(t.requests("/api/library/item-summary")).toEqual([]);
 
@@ -1404,7 +1409,7 @@ describe("menus", () => {
 
     // A tile never played has no stats to clear.
     await t.library.openTileMenu("item-1", POINT);
-    expect(tileMenuItems(t)).toEqual(["Add to favorites", "Add to blacklist", "Rate…", "Clear playback stats… (No playback stats to clear)", "Delete file…"]);
+    expect(tileMenuItems(t)).toEqual(["Add to favorites", "Add to blacklist", "Rate…", "Edit tags…", "Clear playback stats… (No playback stats to clear)", "Delete file…"]);
   });
 
   it("on a selected tile acts on the selection, without a ring, and on a tile outside it acts on that tile alone, leaving the selection", async () => {
@@ -1427,6 +1432,22 @@ describe("menus", () => {
       flagBody(["item-3"], "blacklist", true)
     ]);
     expect(t.library.selection.ids()).toEqual(["item-1", "item-2"]);
+  });
+
+  it("Edit tags… points the tag editor at the selection or the tile alone, and shows the Tags tab unless it was cancelled", async () => {
+    const t = await shown();
+    await t.library.openTileMenu("item-3", POINT);
+    await pick(t, "Edit tags…");
+    expect(t.editTags.mock.calls.map(([target]) => target)).toEqual([{ kind: "item", itemId: "item-3" }]);
+    expect(t.panel.showTab.mock.calls).toEqual([["tags"]]);
+
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    await t.library.openTileMenu("item-1", POINT);
+    t.editTags.mockResolvedValueOnce(false);
+    await pick(t, "Edit tags…");
+    expect(t.editTags.mock.calls.at(-1)?.[0]).toEqual({ kind: "selection" });
+    // Cancel on "Discard changes?" leaves the Library tab showing.
+    expect(t.panel.showTab.mock.calls).toEqual([["tags"]]);
   });
 
   it("shows one menu at a time: a tile's menu closes the Selection actions menu, and that menu closes a tile's", async () => {
@@ -1521,6 +1542,7 @@ describe("menus", () => {
       "Remove from favorites",
       "Add to blacklist",
       "Rate…",
+      "Edit tags…",
       "Clear playback stats… (No playback stats to clear)",
       "Delete files…"
     ]);
@@ -1572,6 +1594,7 @@ describe("menus", () => {
       "Add to blacklist",
       "Remove from blacklist",
       "Rate…",
+      "Edit tags…",
       "Clear playback stats…",
       "Delete files…"
     ]);

@@ -44,17 +44,6 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `LibraryCatalogSession.UpsertTag` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` takes an existing name as that tag, moving it to the given category, or refusing when it is already there, which `/api/tag-editor/upsert-tag` answers with 409.
 - **Intended fix**: The Tags tab blocks adding a tag named after one whose rename isn't saved yet, with a clear reason, such as a disabled Add tag with a tooltip. The server's behavior stays.
 
-### Add or Remove on a tag the file already matches fails Save
-
-- **What goes wrong**: Add on a tag the playing file already has, or Remove on one it doesn't have, is sent as a change. When every add and remove in the save changes nothing, the server refuses it with 409, and Save fails with "Tag apply failed: The tags were already that way." A save that also changes something takes it all (inferred).
-- **How to make it happen**: In the Tags tab, press Add on a green tag, or Remove on one that isn't green, and press Save. The WebUI posts `apply-item-tags` with that add or remove (measured), and the server refuses an apply that changes nothing (measured, in `TagEditorRouteTests`).
-- **How much it matters**: Low. Nothing is lost, but one tap on a lit chip's Add gives an error for a change that does nothing.
-- **Since**: v0.11.0, when the server began refusing an apply that changes nothing.
-- **Where**:
-  - `Chip` in `src/clients/web/ReelRoulette.WebUI/src/ui/TagEditor.tsx` enables Add and Remove whatever the item has, disabling them only when the items can't change.
-  - `LibraryCatalogSession.ApplyItemTagEdits` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` returns false when nothing changes, which `/api/tag-editor/apply-item-tags` answers with 409.
-- **Intended fix**: The Tags tab blocks Add on a tag every file has and Remove on one none has, with a clear reason, such as a disabled button with a tooltip. The server's refusal stays.
-
 ### Deleting a tag and adding it back before a save fails Save
 
 - **What goes wrong**: Adding a tag deleted since the last save, in its own category, drops the held delete, so Save sends only a new tag that is already there. The server refuses it with 409, and the save stops with 'Tag update failed: A tag named "{name}" already exists.': renames, deletes, and the item's adds and removes, sent after it, don't land (inferred).

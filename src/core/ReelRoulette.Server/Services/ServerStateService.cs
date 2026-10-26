@@ -449,7 +449,45 @@ public sealed class ServerStateService
             return Publish(eventType, payload());
         }
 
-        _serverLog?.Append("info", $"Published resyncRequired in place of {eventType}, which would have listed {itemCount} items.");
+        return PublishResyncInPlaceOf(eventType, 1, itemCount);
+    }
+
+    /// <summary>
+    /// Publishes one write's events of one type, each listing its item count of items, as
+    /// <see cref="PublishListingItems"/> does, except that one <c>resyncRequired</c>, published after the others, stands
+    /// in for every event past <see cref="MaxEventItems"/>, since one resync already reloads everything on every device.
+    /// Each payload is built only when its event is published.
+    /// </summary>
+    public void PublishEachListingItems(string eventType, IReadOnlyList<(int ItemCount, Func<object> Payload)> events)
+    {
+        var replacedEvents = 0;
+        var replacedItems = 0;
+        foreach (var (itemCount, payload) in events)
+        {
+            if (itemCount <= MaxEventItems)
+            {
+                Publish(eventType, payload());
+                continue;
+            }
+
+            replacedEvents++;
+            replacedItems += itemCount;
+        }
+
+        if (replacedEvents > 0)
+        {
+            PublishResyncInPlaceOf(eventType, replacedEvents, replacedItems);
+        }
+    }
+
+    /// <summary>
+    /// Publishes <c>resyncRequired</c>, with <paramref name="eventType"/> as its reason, in place of events that would
+    /// have listed <paramref name="itemCount"/> items in all, and a <c>last.log</c> line saying so.
+    /// </summary>
+    private ServerEventEnvelope PublishResyncInPlaceOf(string eventType, int eventCount, int itemCount)
+    {
+        var replaced = eventCount == 1 ? eventType : $"{eventCount} {eventType} events";
+        _serverLog?.Append("info", $"Published resyncRequired in place of {replaced}, which would have listed {itemCount} items.");
         return PublishResyncRequired(eventType);
     }
 

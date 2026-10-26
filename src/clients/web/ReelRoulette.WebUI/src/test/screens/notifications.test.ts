@@ -592,7 +592,7 @@ describe("the bell", () => {
     localStorage.setItem(`rr_device.${HIDE_CONTROLS_KEY}`, JSON.stringify("click"));
     const server = new FakeServer();
     server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
-    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     const services = await mountWithServices(server);
     await click(document.getElementById("empty-state")!);
     await waitFor(() => expect(services.store.current.value).not.toBeNull());

@@ -99,7 +99,8 @@ const CATALOG = {
     { name: "Calm", categoryId: "cat-mood" },
     { name: "Loose", categoryId: "" }
   ],
-  items: []
+  tagCounts: [],
+  itemCount: 0
 };
 
 /** The server's item read for `played`, as the server keeps it once this play is recorded. */

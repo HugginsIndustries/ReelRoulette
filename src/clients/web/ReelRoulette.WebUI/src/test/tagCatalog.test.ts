@@ -4,7 +4,8 @@ import { createTagCatalog } from "../tags/tagCatalog";
 const CATALOG = {
   categories: [{ id: "cat-places", name: "Places", sortOrder: 0 }],
   tags: [{ name: "Beach", categoryId: "cat-places" }],
-  items: []
+  tagCounts: [],
+  itemCount: 0
 };
 
 /** A catalog with a fake model route and a fake connection whose events the test sends. */

@@ -30,10 +30,25 @@ import {
   type MountedPage
 } from "./pageHarness";
 
+/** The fake server's catalog and each item's tags, which its tag model counts across the items a load names. */
 interface TagModel {
   categories: Array<{ id: string; name: string; sortOrder: number }>;
   tags: Array<{ name: string; categoryId: string }>;
   items: Array<{ itemId: string; tags: string[] }>;
+}
+
+/** The tag model's answer for the items `ids` names: how many of them hold each tag, and how many there are. */
+function countedModel(model: TagModel, ids: readonly string[]) {
+  const named = model.items.filter((item) => ids.includes(item.itemId));
+  const counts = new Map<string, { name: string; itemCount: number }>();
+  for (const item of named) {
+    for (const tag of item.tags) {
+      const row = counts.get(tag.toLowerCase()) ?? { name: tag, itemCount: 0 };
+      row.itemCount += 1;
+      counts.set(tag.toLowerCase(), row);
+    }
+  }
+  return { categories: model.categories, tags: model.tags, tagCounts: [...counts.values()], itemCount: named.length };
 }
 
 /** Categories in the server's order. "Loose" has no category, so the editor shows Uncategorized last. */
@@ -165,7 +180,7 @@ function serveTags(server: FakeServer): FakeTags {
       return status(tags.modelStatus);
     }
     const ids: string[] = call.body?.itemIds ?? [];
-    return json({ ...tags.model, items: tags.model.items.filter((item) => ids.includes(item.itemId)) });
+    return json(countedModel(tags.model, ids));
   });
   server.on("POST", "/api/autotag/scan", async () => {
     await hold();
@@ -181,10 +196,12 @@ function serveTags(server: FakeServer): FakeTags {
       if (failure) {
         return tags.failureReason ? json({ error: tags.failureReason }, failure) : status(failure);
       }
-      // The catalog takes item tag changes, so the tags the tab loads again once a save lands show them.
+      // The catalog takes item tag changes, so the tags the tab loads again once a save lands show them, and Tag apply
+      // answers how many of the named items the catalog holds.
       if (path === "/api/tag-editor/apply-item-tags") {
         const ids: string[] = call.body?.itemIds ?? [];
-        for (const item of tags.model.items.filter((candidate) => ids.includes(candidate.itemId))) {
+        const named = tags.model.items.filter((candidate) => ids.includes(candidate.itemId));
+        for (const item of named) {
           const removed = new Set((call.body?.removeTags ?? []).map((tag: string) => tag.toLowerCase()));
           item.tags = item.tags.filter((tag) => !removed.has(tag.toLowerCase()));
           for (const tag of call.body?.addTags ?? []) {
@@ -193,6 +210,7 @@ function serveTags(server: FakeServer): FakeTags {
             }
           }
         }
+        return json({ count: named.length });
       }
       if (path === "/api/autotag/apply") {
         const assignments: Array<{ tagName: string; itemPaths: string[] }> = call.body?.assignments ?? [];
@@ -394,8 +412,13 @@ function chip(name: string): HTMLElement {
   return found;
 }
 
+/** A chip's button, by its name, which stays the action's while a disabled one's tooltip gives its reason. */
 function chipButton(name: string, label: "Add tag" | "Remove tag" | "Edit tag"): HTMLButtonElement {
-  return within(chip(name)).getByTitle(label) as HTMLButtonElement;
+  const button = Array.from(chip(name).querySelectorAll("button")).find((candidate) => candidate.getAttribute("aria-label") === `${label} ${name}`);
+  if (!button) {
+    throw new Error(`Tag chip ${name} has no ${label} button.`);
+  }
+  return button;
 }
 
 /** Whether the playing item has the tag, and the change the editor holds for it. */
@@ -1050,20 +1073,34 @@ describe("Edit Tags", () => {
     expect(chipState("Beach").has).toBe("all");
     expect(chipState("Bob").has).toBe("all");
     expect(chipState("Alice").has).toBe("none");
-    expect(chipButton("Beach", "Add tag").disabled).toBe(false);
+    expect(chipButton("Beach", "Remove tag").disabled).toBe(false);
+    expect(chipButton("Alice", "Add tag").disabled).toBe(false);
   });
 
-  it("add and remove toggle and replace each other, and Save applies them to the playing item", async () => {
+  it("disables Add on a tag the item has and Remove on one it doesn't, each with its reason as its tooltip", async () => {
+    await mountTags();
+    await openEditor();
+    const add = chipButton("Beach", "Add tag");
+    expect([add.disabled, add.title, add.getAttribute("aria-label")]).toEqual([true, "This item already has this tag", "Add tag Beach"]);
+    const remove = chipButton("Alice", "Remove tag");
+    expect([remove.disabled, remove.title, remove.getAttribute("aria-label")]).toEqual([true, "This item doesn't have this tag", "Remove tag Alice"]);
+    expect([chipButton("Alice", "Add tag").disabled, chipButton("Alice", "Add tag").title]).toEqual([false, "Add tag"]);
+    expect([chipButton("Beach", "Remove tag").disabled, chipButton("Beach", "Remove tag").title]).toEqual([false, "Remove tag"]);
+  });
+
+  it("add and remove toggle, and Save applies them to the playing item", async () => {
     const { tags } = await mountTags();
     await openEditor();
 
     await click(chipButton("Calm", "Add tag"));
     expect(chipState("Calm")).toEqual({ has: "none", pending: "add" });
     expect(savePending()).toBe(true);
-    await click(chipButton("Calm", "Remove tag"));
-    expect(chipState("Calm").pending).toBe("remove");
-    await click(chipButton("Calm", "Remove tag"));
+    await click(chipButton("Calm", "Add tag"));
     expect(chipState("Calm").pending).toBe(null);
+    await click(chipButton("Bob", "Remove tag"));
+    expect(chipState("Bob").pending).toBe("remove");
+    await click(chipButton("Bob", "Remove tag"));
+    expect(chipState("Bob").pending).toBe(null);
     expect(savePending()).toBe(false);
 
     await click(chipButton("Calm", "Add tag"));
@@ -1210,7 +1247,7 @@ describe("Edit Tags", () => {
     await mountTags();
     await openEditor();
     const titles = (element: HTMLElement) => Array.from(element.querySelectorAll("button")).map((button) => button.title);
-    expect(titles(chip("Beach"))).toEqual(["Add tag", "Remove tag", "Edit tag"]);
+    expect(titles(chip("Alice"))).toEqual(["Add tag", "This item doesn't have this tag", "Edit tag"]);
     expect(within(chip("Beach")).queryByTitle("Delete tag")).toBeNull();
     const header = (title: string) => category(title).querySelector(".tag-category-header") as HTMLElement;
     expect(titles(header("Places"))).toEqual(["Drag to reorder", "Expand category", "Edit category"]);

@@ -172,7 +172,9 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     panel,
     device,
     tagCatalog,
-    contextMenu
+    contextMenu,
+    // The tag editor, created after the library, which it reads, takes Edit tags… from the library's menus.
+    editTags: (target) => tagEditor.editTags(target)
   });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications, tagCatalog });
   const tagEditor = createTagEditor({

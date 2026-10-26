@@ -488,6 +488,29 @@ describe("tag save apply", () => {
     });
   });
 
+  it("stops waiting for events a resync replaced, so a later save's projection leaves a tile another device changed", () => {
+    const session = createTagSaveSession();
+    const first = session.begin([item("a", ["Day"])], [add("Night")], false);
+    session.succeed(first, false);
+    // The save's event, past 1,000 items, came as a resync in its place.
+    session.forgetEchoes();
+
+    // Another device took Night off, and a later save projects every save this page still waits for.
+    const current = [item("a", ["Day"]), item("b", [])];
+    session.begin(current, [{ kind: "apply-item-tags", itemIds: ["b"], addTags: ["Cat"], removeTags: [] }], false);
+    session.project(current);
+    expect(current.map((entry) => entry.tags)).toEqual([["Day"], ["Cat"]]);
+  });
+
+  it("rolls back a save still on its way when it fails after a resync, since the forgotten event confirmed nothing", () => {
+    const items = [item("a", ["Day"])];
+    const session = createTagSaveSession();
+    const handle = session.begin(items, [add("Night")], false);
+    session.forgetEchoes();
+    expect(session.fail(handle, items, [])).toBe(true);
+    expect(items[0]?.tags).toEqual(["Day"]);
+  });
+
   it("copies a live empty tag list over the optimistic tags", () => {
     const loaded = [item("a", ["Day", "Night"])];
     replaceWithLiveTags(loaded, [item("a", [])]);

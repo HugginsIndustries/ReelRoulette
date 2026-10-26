@@ -1,6 +1,7 @@
 import { compareTagNames } from "../library/tagNameOrder";
 import { planTagEditorSave, type AutoTagSaveAssignment, type TagSaveStep } from "../library/tagSave";
 import { moveEntry } from "../reorder/reorder";
+import type { components } from "../types/openapi.generated";
 import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 
 export const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
@@ -16,17 +17,20 @@ export interface CatalogTag {
   categoryId: string;
 }
 
-export interface ItemTags {
-  itemId: string;
-  tags: string[];
-}
+/**
+ * The tag catalog, how many of the items being edited hold each tag, and how many of them are in the library, as
+ * `POST /api/tag-editor/model` returns them.
+ */
+export type TagEditorModel = components["schemas"]["TagEditorModelResponse"];
 
-/** The tag catalog and the tags of the items being edited, as `POST /api/tag-editor/model` returns them. */
-export interface TagEditorModel {
-  categories: TagCategory[];
-  tags: CatalogTag[];
-  items: ItemTags[];
-}
+/** Add's tooltip while the one item being edited already has the tag. */
+export const ITEM_HAS_TAG_REASON = "This item already has this tag";
+/** Remove's tooltip while the one item being edited doesn't have the tag. */
+export const ITEM_LACKS_TAG_REASON = "This item doesn't have this tag";
+/** Add's tooltip while every selected item being edited has the tag. */
+export const EVERY_ITEM_HAS_TAG_REASON = "Every selected item has this tag";
+/** Remove's tooltip while no selected item being edited has the tag. */
+export const NO_ITEM_HAS_TAG_REASON = "No selected item has this tag";
 
 export type TagAction = "add" | "remove";
 
@@ -56,7 +60,13 @@ export interface PendingTagEdits {
 export interface TagEditorDisplay {
   categories: TagCategory[];
   tags: CatalogTag[];
-  items: ItemTags[];
+  /**
+   * How many of the items being edited hold each tag, by its normalized name, with renames applied. A tag renamed into
+   * another one's name takes the larger count, which is as many as the merged tag surely has.
+   */
+  counts: ReadonlyMap<string, number>;
+  /** How many items are being edited that the library holds. */
+  itemCount: number;
   /** The category order with categories that no longer show dropped and new ones added, kept for the next change. */
   order: string[];
 }
@@ -69,6 +79,10 @@ export interface TagChipRow {
   pending: TagAction | null;
   /** Adding and removing need at least one item being edited. */
   canChangeItems: boolean;
+  /** Why Add is disabled, its tooltip: every item being edited has the tag and no add is held, or null. */
+  addDisabledReason: string | null;
+  /** Why Remove is disabled, its tooltip: no item being edited has the tag and no remove is held, or null. */
+  removeDisabledReason: string | null;
 }
 
 export interface TagCategoryRow {
@@ -296,11 +310,13 @@ function orderCategories(categories: readonly TagCategory[], order: readonly str
 
 /**
  * The catalog with the pending edits applied: renamed and new categories, deleted ones gone with their tags under
- * Uncategorized, new, renamed, moved, and deleted tags, and renamed tags renamed on the items. Categories follow
- * `order` and get their place as their sort order; Uncategorized shows last, and only while a tag has no category.
+ * Uncategorized, new, renamed, moved, and deleted tags, and renamed tags' counts under their new names. Categories
+ * follow `order` and get their place as their sort order; Uncategorized shows last, and only while a tag has no
+ * category.
  */
 export function tagEditorDisplay(model: TagEditorModel | null, pending: PendingTagEdits, order: readonly string[]): TagEditorDisplay {
-  const source = model ?? { categories: [], tags: [], items: [] };
+  // A field the answer leaves out reads as empty, or 0.
+  const source: Partial<TagEditorModel> = model ?? {};
   let categories = canonicalizeCategories(source.categories ?? []);
   pending.upsertCategories.forEach((category, id) => {
     const existing = categories.find((candidate) => candidate.id === id);
@@ -333,23 +349,25 @@ export function tagEditorDisplay(model: TagEditorModel | null, pending: PendingT
     }
   });
 
-  const items: ItemTags[] = (source.items ?? []).map((item) => ({
-    itemId: String(item?.itemId || ""),
-    tags: Array.isArray(item?.tags) ? item.tags.slice() : []
-  }));
+  const counts = new Map<string, number>();
+  for (const row of source.tagCounts ?? []) {
+    const key = normalizeTagKey(row?.name);
+    const count = Number(row?.itemCount ?? 0);
+    if (key && count > 0) {
+      counts.set(key, Math.max(count, counts.get(key) ?? 0));
+    }
+  }
+  // A renamed tag's count moves to its new name. Merged into a tag the items already hold, the union can't be known
+  // from counts, so it takes the larger of the two, as many as surely hold it.
   pending.renameTags.forEach((rename) => {
     const oldKey = normalizeTagKey(rename.oldName);
-    const newName = String(rename.newName || rename.oldName || "");
-    const newKey = normalizeTagKey(newName);
-    for (const item of items) {
-      if (!item.tags.some((tag) => normalizeTagKey(tag) === oldKey)) {
-        continue;
-      }
-      item.tags = item.tags.filter((tag) => normalizeTagKey(tag) !== oldKey);
-      if (!item.tags.some((tag) => normalizeTagKey(tag) === newKey)) {
-        item.tags.push(newName);
-      }
+    const newKey = normalizeTagKey(rename.newName || rename.oldName);
+    const moved = counts.get(oldKey);
+    if (moved === undefined) {
+      return;
     }
+    counts.delete(oldKey);
+    counts.set(newKey, Math.max(moved, counts.get(newKey) ?? 0));
   });
 
   pending.deleteTags.forEach((_, key) => {
@@ -374,13 +392,13 @@ export function tagEditorDisplay(model: TagEditorModel | null, pending: PendingT
     category.sortOrder = isUncategorizedCategoryId(category.id) ? Number.MAX_SAFE_INTEGER : index;
   });
   tags.sort((a, b) => compareTagNames(a.name, b.name));
-  return { categories: arranged.ordered, tags, items, order: arranged.order };
+  return { categories: arranged.ordered, tags, counts, itemCount: Number(source.itemCount ?? 0), order: arranged.order };
 }
 
 /**
  * The tag model as it will be once a save of these changes lands: the catalog with the pending edits applied, in the
- * editor's order, and the items with the held adds and removes applied and deleted tags gone. The editor shows it
- * until the tags load again.
+ * editor's order, and the counts with the held adds, which every item then has, and removes, which none has, applied
+ * and deleted tags gone. The editor shows it until the tags load again.
  */
 export function savedTagModel(
   model: TagEditorModel | null,
@@ -389,35 +407,31 @@ export function savedTagModel(
   selections: ReadonlyMap<string, TagSelection>
 ): TagEditorModel {
   const display = tagEditorDisplay(model, pending, order);
-  const items = display.items.map((item) => {
-    let tags = item.tags.filter((tag) => !pending.deleteTags.has(normalizeTagKey(tag)));
-    for (const selection of selections.values()) {
-      const key = normalizeTagKey(selection.name);
-      if (selection.action === "remove") {
-        tags = tags.filter((tag) => normalizeTagKey(tag) !== key);
-      } else if (!tags.some((tag) => normalizeTagKey(tag) === key)) {
-        tags.push(selection.name);
-      }
-    }
-    return { itemId: item.itemId, tags };
-  });
+  const counts = new Map(display.counts);
+  pending.deleteTags.forEach((_, key) => counts.delete(key));
+  for (const selection of selections.values()) {
+    counts.set(normalizeTagKey(selection.name), selection.action === "add" ? display.itemCount : 0);
+  }
+  const names = new Map(display.tags.map((tag) => [normalizeTagKey(tag.name), tag.name]));
+  const tagCounts = [...counts]
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => ({ name: names.get(key) ?? key, itemCount: count }));
   return {
     categories: display.categories
       .filter((category) => !isUncategorizedCategoryId(category.id))
       .map((category) => ({ id: category.id, name: category.name, sortOrder: category.sortOrder })),
     tags: display.tags.map((tag) => ({ name: tag.name, categoryId: isUncategorizedCategoryId(tag.categoryId) ? "" : tag.categoryId })),
-    items
+    tagCounts,
+    itemCount: display.itemCount
   };
 }
 
-/** Whether all, some, or none of the items have the tag. */
-export function chipState(tagName: string, items: readonly ItemTags[]): ChipState {
-  if (items.length === 0) {
+/** Whether all, some, or none of the `itemCount` items being edited have a tag `count` of them hold. */
+export function chipState(count: number, itemCount: number): ChipState {
+  if (count <= 0) {
     return "state-none";
   }
-  const key = normalizeTagKey(tagName);
-  const withTag = items.filter((item) => item.tags.some((tag) => normalizeTagKey(tag) === key)).length;
-  return withTag === 0 ? "state-none" : withTag === items.length ? "state-all" : "state-some";
+  return itemCount > 0 && count >= itemCount ? "state-all" : "state-some";
 }
 
 /** Each category's name and its tags' names in order, as the model saved them. */
@@ -435,26 +449,38 @@ function categoryShape(category: TagCategory, tags: readonly CatalogTag[]): stri
 
 /**
  * The Tags tab's categories, each with its controls and its tags by name. A category is collapsed unless `expanded`
- * holds it, and the saved `model` tells which ones hold unsaved changes.
+ * holds it, and the saved `model` tells which ones hold unsaved changes. `several` is whether the tab edits the
+ * selected items, which the disabled Add's and Remove's reasons name.
  */
 export function tagCategoryRows(
   display: TagEditorDisplay,
   expanded: ReadonlySet<string>,
   selections: ReadonlyMap<string, TagSelection>,
-  model: TagEditorModel | null
+  model: TagEditorModel | null,
+  several: boolean
 ): TagCategoryRow[] {
-  const canChangeItems = display.items.length > 0;
+  const canChangeItems = display.itemCount > 0;
   const saved = savedCategoryShapes(model);
+  const hasReason = several ? EVERY_ITEM_HAS_TAG_REASON : ITEM_HAS_TAG_REASON;
+  const lacksReason = several ? NO_ITEM_HAS_TAG_REASON : ITEM_LACKS_TAG_REASON;
   return display.categories.map((category) => {
     const isUncategorized = isUncategorizedCategoryId(category.id);
     const chips = display.tags
       .filter((tag) => (isUncategorizedCategoryId(tag.categoryId) ? UNCATEGORIZED_CATEGORY_ID : tag.categoryId) === category.id)
-      .map((tag) => ({
-        name: tag.name,
-        state: chipState(tag.name, display.items),
-        pending: selections.get(normalizeTagKey(tag.name))?.action ?? null,
-        canChangeItems
-      }));
+      .map((tag): TagChipRow => {
+        const state = chipState(display.counts.get(normalizeTagKey(tag.name)) ?? 0, display.itemCount);
+        const pending = selections.get(normalizeTagKey(tag.name))?.action ?? null;
+        // Add on a tag every item has, or Remove on one none has, would change nothing, unless its own change is held,
+        // which it then undoes.
+        return {
+          name: tag.name,
+          state,
+          pending,
+          canChangeItems,
+          addDisabledReason: canChangeItems && state === "state-all" && pending !== "add" ? hasReason : null,
+          removeDisabledReason: canChangeItems && state === "state-none" && pending !== "remove" ? lacksReason : null
+        };
+      });
     return {
       id: category.id,
       name: category.name,

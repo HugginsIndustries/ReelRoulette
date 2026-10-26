@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace ReelRoulette.Server.Contracts;
 
@@ -341,33 +340,22 @@ public sealed class TagSnapshot
     public string CategoryId { get; set; } = string.Empty;
 }
 
-public sealed class ItemTagsSnapshot
-{
-    public string ItemId { get; set; } = string.Empty;
-    public List<string> Tags { get; set; } = [];
-}
-
 public sealed class TagEditorModelRequest
 {
+    /// <summary>The items to count tags across; none reads the tag catalog alone.</summary>
     public List<string> ItemIds { get; set; } = [];
-
-    /// <summary>Answers how many of the items hold each tag in place of each item's tags.</summary>
-    public bool CountsOnly { get; set; }
 }
 
 public sealed class TagEditorModelResponse
 {
     public List<TagCategorySnapshot> Categories { get; set; } = [];
     public List<TagSnapshot> Tags { get; set; } = [];
-    public List<ItemTagsSnapshot> Items { get; set; } = [];
 
-    /// <summary>With counts only, each tag the items hold and how many of them hold it; left out otherwise.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<TagItemCount>? TagCounts { get; set; }
+    /// <summary>Each tag the requested items hold and how many of them hold it.</summary>
+    public List<TagItemCount> TagCounts { get; set; } = [];
 
-    /// <summary>With counts only, how many of the requested items are in the library; left out otherwise.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? ItemCount { get; set; }
+    /// <summary>How many of the requested items are in the library.</summary>
+    public int ItemCount { get; set; }
 }
 
 public sealed class TagItemCount

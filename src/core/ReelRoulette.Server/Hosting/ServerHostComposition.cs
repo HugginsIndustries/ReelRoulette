@@ -1095,6 +1095,7 @@ public static class ServerHostComposition
         var newName = request.NewName.Trim();
         if (changedItemIds.Count > 0 && !string.Equals(oldName, newName, StringComparison.Ordinal))
         {
+            // Every item, past the event cap too, since other devices retarget their filters from this event.
             state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
             {
                 ResolvedItemIds = changedItemIds,
@@ -1125,6 +1126,7 @@ public static class ServerHostComposition
         _ = state.RemoveTagFromPresetCatalogOnly(request.Name);
         if (changedItemIds.Count > 0)
         {
+            // Every item, past the event cap too, since other devices retarget their filters from this event.
             state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
             {
                 ResolvedItemIds = changedItemIds,
@@ -1177,6 +1179,11 @@ public static class ServerHostComposition
             Tags = model.Tags
         });
 
+    /// <summary>
+    /// Adds and removes tags on every named item in one write, answers how many of them are in the library, and
+    /// publishes <c>itemTagsChanged</c> listing them, or <c>resyncRequired</c> in its place past
+    /// <see cref="ServerStateService.MaxEventItems"/> of them, and <c>tagCatalogChanged</c> when an added tag is new.
+    /// </summary>
     internal static IResult ApplyItemTags(ApplyItemTagsRequest request, ServerStateService state, LibraryOperationsService operations)
     {
         if (request.ItemIds.Count == 0)
@@ -1193,41 +1200,41 @@ public static class ServerHostComposition
                 : TagChangeRefused("The tags were already that way.");
         }
 
-        var itemTagsEnvelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+        state.PublishListingItems("itemTagsChanged", resolvedItemIds.Count, () => new ItemTagsChangedPayload
         {
             ResolvedItemIds = resolvedItemIds,
             AddedTags = request.AddTags,
             RemovedTags = request.RemoveTags
         });
-        var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-        var catalogEnvelope = catalogChanged ? PublishTagCatalog(state, model, "applyItemTags") : null;
-
-        return Results.Ok(new
+        if (catalogChanged)
         {
-            accepted = true,
-            itemTagsRevision = itemTagsEnvelope.Revision,
-            tagCatalogRevision = catalogEnvelope?.Revision,
-            categories = model.Categories,
-            tags = model.Tags
-        });
+            PublishTagCatalog(state, operations.GetTagEditorModel(new TagEditorModelRequest()), "applyItemTags");
+        }
+
+        return Results.Ok(new BulkChangeResponse { Count = resolvedItemIds.Count });
     }
 
+    /// <summary>
+    /// Applies Auto Tag's assignments and publishes, for each tag that gained a file, <c>itemTagsChanged</c> listing the
+    /// files that gained it, with one <c>resyncRequired</c> in place of every tag's past
+    /// <see cref="ServerStateService.MaxEventItems"/> files, then the tag catalog.
+    /// </summary>
     internal static IResult ApplyAutoTags(AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state)
     {
         var response = operations.ApplyAutoTags(request, out var applied);
         // Each applied entry is a tag that gained at least one file.
         if (applied.Count > 0)
         {
-            foreach (var assignment in applied)
-            {
-                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
-                {
-                    ResolvedItemIds = assignment.ChangedItemIds,
-                    AddedTags = [assignment.TagName],
-                    RemovedTags = []
-                });
-            }
-
+            state.PublishEachListingItems(
+                "itemTagsChanged",
+                applied
+                    .Select(assignment => (assignment.ChangedItemIds.Count, (Func<object>)(() => new ItemTagsChangedPayload
+                    {
+                        ResolvedItemIds = assignment.ChangedItemIds,
+                        AddedTags = [assignment.TagName],
+                        RemovedTags = []
+                    })))
+                    .ToList());
             PublishTagCatalog(state, operations.GetTagEditorModel(new TagEditorModelRequest()), "autotagApply");
         }
 

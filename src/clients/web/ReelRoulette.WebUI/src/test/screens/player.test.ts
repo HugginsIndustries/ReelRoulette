@@ -101,7 +101,7 @@ function answerRandom(server: FakeServer, ...items: unknown[]): void {
 function serverPicking(...items: unknown[]): FakeServer {
   const server = new FakeServer().playsItems(...items);
   answerRandom(server, ...items);
-  server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+  server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
   server.on("GET", "/api/sources", () => json([]));
   return server;
 }

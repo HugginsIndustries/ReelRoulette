@@ -30,11 +30,11 @@ export function TagEditor() {
           <h2>Tag Editor</h2>
           <button id="tag-editor-autotag-btn" class="icon-btn" type="button" title="Auto Tag" aria-label="Auto Tag" onClick={() => tagEditor.openAutoTag()}><Icon name="auto_awesome" /></button>
         </div>
-        <p id="tag-editor-target" class="tags-target" title={view?.heldName ?? undefined} hidden={!view?.heldName}>
-          {view?.heldName ? <>Editing tags for <b>{view.heldName}</b></> : null}
+        <p id="tag-editor-target" class="tags-target" title={view?.editingForTitle ?? undefined} hidden={!view?.editingFor}>
+          {view?.editingFor ? <>Editing tags for <b>{view.editingFor}</b></> : null}
         </p>
         <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
-          {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} reorder={reorder} />) : view?.noModel ? "No tag model available." : null}
+          {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} reorder={reorder} several={view.editsSeveral} />) : view?.noModel ? "No tag model available." : null}
         </div>
         <div class="tag-editor-footer">
           <div class="tag-editor-footer-row">
@@ -91,8 +91,11 @@ function CategoryOptions({ options }: { options: readonly CatalogCategory[] }) {
   );
 }
 
-/** A category, which moves by its drag handle. Uncategorized's handle is dimmed, since it stays last, and it has no Edit. */
-function Category({ category, reorder }: { category: TagCategoryRow; reorder: Reorder }) {
+/**
+ * A category, which moves by its drag handle. Uncategorized's handle is dimmed, since it stays last, and it has no
+ * Edit. Its count's tooltip says whose tags they are: the selected items' while `several`, or the item's.
+ */
+function Category({ category, reorder, several }: { category: TagCategoryRow; reorder: Reorder; several: boolean }) {
   const { tagEditor } = useApp();
   const fixed = category.uncategorized;
   return (
@@ -100,7 +103,7 @@ function Category({ category, reorder }: { category: TagCategoryRow; reorder: Re
       name={category.name}
       collapsed={category.collapsed}
       inUse={category.inUse}
-      inUseTitle={tagsInUse(category.inUse, "on this item")}
+      inUseTitle={tagsInUse(category.inUse, several ? "on the selected items" : "on this item")}
       unsaved={category.unsaved}
       onToggle={() => tagEditor.toggleCategory(category.id)}
       handle={fixed ? <DragHandle fixed="Uncategorized stays last" /> : <DragHandle control={reorder.handle(category.id)} />}
@@ -119,14 +122,17 @@ function Category({ category, reorder }: { category: TagCategoryRow; reorder: Re
   );
 }
 
-/** A tag: green when the item has it, its add, remove, and Edit. */
+/**
+ * A tag: green when every item being edited has it and orange when only some do, its add, remove, and Edit. An add or
+ * remove that would change nothing is disabled, with its reason as its tooltip; its name stays the action's.
+ */
 function Chip({ chip }: { chip: TagChipRow }) {
   const { tagEditor } = useApp();
   return (
     <div class={`tag-chip ${chip.state}`}>
       <span class="tag-chip-label">{chip.name}</span>
-      <button class={chip.pending === "add" ? "icon-btn is-selected" : "icon-btn"} type="button" title="Add tag" aria-label={`Add tag ${chip.name}`} disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
-      <button class={chip.pending === "remove" ? "icon-btn is-selected" : "icon-btn"} type="button" title="Remove tag" aria-label={`Remove tag ${chip.name}`} disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
+      <button class={chip.pending === "add" ? "icon-btn is-selected" : "icon-btn"} type="button" title={chip.addDisabledReason ?? "Add tag"} aria-label={`Add tag ${chip.name}`} disabled={!chip.canChangeItems || chip.addDisabledReason !== null} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
+      <button class={chip.pending === "remove" ? "icon-btn is-selected" : "icon-btn"} type="button" title={chip.removeDisabledReason ?? "Remove tag"} aria-label={`Remove tag ${chip.name}`} disabled={!chip.canChangeItems || chip.removeDisabledReason !== null} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
       <button class="icon-btn" type="button" title="Edit tag" aria-label={`Edit tag ${chip.name}`} onClick={() => tagEditor.editTag(chip.name)}><Icon name="edit_note" /></button>
     </div>
   );

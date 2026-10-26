@@ -186,10 +186,9 @@ export async function runTagEditorSave(steps: readonly TagSaveStep[], client: Ta
   return { ok: true, accepted, failed: null, failure: null };
 }
 
-/** Item ids match exactly, as the server sends them. */
-function itemMatches(item: TaggedItem, itemId: string): boolean {
-  const id = itemId.trim();
-  return id !== "" && item.id.trim() === id;
+/** The ids, trimmed, without blank ones, to look tiles up in. Item ids match exactly, as the server sends them. */
+function idSet(ids: readonly string[]): Set<string> {
+  return new Set(ids.map((id) => id.trim()).filter(Boolean));
 }
 
 function hasTag(tags: readonly string[], name: string): boolean {
@@ -240,8 +239,9 @@ function recordTagStep(items: TaggedItem[], step: TagSaveStep): TagUndo[] {
     return undos;
   }
   if (step.kind === "apply-item-tags") {
+    const ids = idSet(step.itemIds);
     for (const item of items) {
-      if (!step.itemIds.some((id) => itemMatches(item, id))) {
+      if (!ids.has(item.id.trim())) {
         continue;
       }
       const before = item.tags.slice();
@@ -252,8 +252,9 @@ function recordTagStep(items: TaggedItem[], step: TagSaveStep): TagUndo[] {
   }
   if (step.kind === "apply-auto-tag") {
     for (const assignment of step.assignments) {
+      const ids = idSet(assignment.itemIds);
       for (const item of items) {
-        if (!assignment.itemIds.some((id) => itemMatches(item, id))) {
+        if (!ids.has(item.id.trim())) {
           continue;
         }
         const before = item.tags.slice();
@@ -568,10 +569,25 @@ export function createTagSaveSession() {
     return best;
   }
 
+  /** A save is finished once it has landed and every event it waits for has come or been given up on. */
+  function finished(save: PendingSave): boolean {
+    return save.httpDone && save.echoes.every((slot) => slot.seen);
+  }
+
   function dropIfFinished(save: PendingSave): void {
-    if (save.httpDone && save.echoes.every((slot) => slot.seen)) {
+    if (finished(save)) {
       const index = saves.indexOf(save);
       if (index >= 0) {
+        saves.splice(index, 1);
+      }
+    }
+  }
+
+  /** Drops every finished save, so later projections no longer apply it. */
+  function sweep(): void {
+    for (let index = saves.length - 1; index >= 0; index -= 1) {
+      const save = saves[index];
+      if (save && finished(save)) {
         saves.splice(index, 1);
       }
     }
@@ -644,13 +660,20 @@ export function createTagSaveSession() {
       return rolledBack;
     },
     project,
-    sweep(): void {
-      for (let index = saves.length - 1; index >= 0; index -= 1) {
-        const save = saves[index];
-        if (save && save.httpDone && save.echoes.every((slot) => slot.seen)) {
-          saves.splice(index, 1);
+    sweep,
+    /**
+     * Stops waiting for every event not yet come, as after a resync, which may have replaced them, such as an
+     * item-tags event past 1,000 items, and drops the saves that have landed. A forgotten event isn't confirmed, so a
+     * save that then fails still rolls its change back. Without this, a landed save whose event never comes would stay,
+     * and each later projection would put its tags back on tiles another device has since changed.
+     */
+    forgetEchoes(): void {
+      for (const save of saves) {
+        for (const slot of save.echoes) {
+          slot.seen = true;
         }
       }
+      sweep();
     },
     noteAutoTagResult(handle: TagSaveHandle, applied: readonly TagSaveAppliedTag[]): void {
       const save = find(handle);

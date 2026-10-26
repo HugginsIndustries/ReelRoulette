@@ -68,7 +68,7 @@ function serverPicking(...items: unknown[]): FakeServer {
   server.on("POST", "/api/random", () => randomAnswer(items[Math.min(next++, items.length - 1)]));
   server.on("POST", "/api/favorite", flagAnswer);
   server.on("POST", "/api/blacklist", flagAnswer);
-  server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+  server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
   server.on("GET", "/api/sources", () => json([]));
   return server;
 }

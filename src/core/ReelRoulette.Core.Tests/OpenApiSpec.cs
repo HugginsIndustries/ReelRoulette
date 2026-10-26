@@ -201,6 +201,32 @@ internal static class OpenApiSpec
     }
 
     /// <summary>
+    /// Returns the property names listed under <c>components.schemas.{name}.required</c>, written inline or as a list.
+    /// </summary>
+    public static SortedSet<string> ReadSchemaRequired(string schemaName)
+    {
+        var required = new SortedSet<string>(StringComparer.Ordinal);
+        var inRequired = false;
+        foreach (var line in ReadSchemaLines(schemaName))
+        {
+            if (Indent(line) == 6)
+            {
+                inRequired = line == "      required:";
+                if (line.StartsWith("      required: [", StringComparison.Ordinal))
+                {
+                    required.UnionWith(line.TrimStart()["required: [".Length..].TrimEnd(']').Split(',').Select(name => name.Trim()));
+                }
+            }
+            else if (inRequired && line.TrimStart().StartsWith("- ", StringComparison.Ordinal))
+            {
+                required.Add(line.TrimStart()[2..]);
+            }
+        }
+
+        return required;
+    }
+
+    /// <summary>
     /// Returns the values listed under <c>components.schemas.{name}.properties.{property}.enum</c>, in order, without the
     /// quotes a value such as <c>"off"</c> needs so older YAML readers don't take it for a boolean.
     /// </summary>

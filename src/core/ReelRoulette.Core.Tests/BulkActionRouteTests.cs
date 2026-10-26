@@ -12,8 +12,8 @@ namespace ReelRoulette.Core.Tests;
 
 /// <summary>
 /// The routes that act on many items at once: every matching id for select all, bulk favorite, blacklist, and rating,
-/// deleting files and duplicate apply, which deletes through the same code, and the tag counts across many items, each
-/// checked against shared/api/openapi.yaml.
+/// deleting files and duplicate apply, which deletes through the same code, tag apply, and the tag counts across many
+/// items, each checked against shared/api/openapi.yaml.
 /// </summary>
 public sealed class BulkActionRouteTests : IDisposable
 {
@@ -607,7 +607,153 @@ public sealed class BulkActionRouteTests : IDisposable
     }
 
     [Fact]
-    public void TagCounts_CountEachTagAcrossTheItems_IgnoringCase_InPlaceOfEachItemsTags()
+    public void ApplyItemTags_AnswersTheNamedItemsInTheLibrary_AndLogsItsCounts_MatchingItsSchema()
+    {
+        CatalogSeed.Write(
+            _dataDir,
+            items:
+            [
+                new SeedItem("one", "/media/one.mp4") { Tags = ["Night"] },
+                new SeedItem("two", "/media/two.mp4"),
+                new SeedItem("three", "/media/three.mp4") { Tags = ["Night", "Day"] }
+            ],
+            tags: [new SeedTag("Night"), new SeedTag("Day")]);
+        var state = new ServerStateService();
+
+        var result = ServerHostComposition.ApplyItemTags(
+            new ApplyItemTagsRequest { ItemIds = ["one", "two", "three", "missing", "two"], AddTags = ["Night"], RemoveTags = ["Day"] },
+            state,
+            CreateOperations());
+
+        // "one" already has Night and lacks Day, so two of the three items change, and the count is all three.
+        var json = OpenApiSpec.SerializeAsServer(Assert.IsType<BulkChangeResponse>(Value(result)));
+        Assert.Equal(3, json.GetProperty("count").GetInt32());
+        Assert.Equal(["count"], json.EnumerateObject().Select(property => property.Name));
+        OpenApiSpec.AssertMatchesSchema(json, "BulkChangeResponse");
+        Assert.Equal(["count"], OpenApiSpec.ReadSchemaRequired("BulkChangeResponse"));
+        var operation = OpenApiSpec.ReadOperationText("POST /api/tag-editor/apply-item-tags");
+        var ok = operation[operation.IndexOf("\"200\":", StringComparison.Ordinal)..operation.IndexOf("\"400\":", StringComparison.Ordinal)];
+        Assert.Contains("$ref: \"#/components/schemas/BulkChangeResponse\"", ok);
+
+        var line = Assert.Single(LogLines(), line => line.Contains("Apply item tags", StringComparison.Ordinal));
+        Assert.Contains("[info] Apply item tags adds=1 removes=1 count=3 changed=2 elapsedMs=", line);
+        Assert.DoesNotContain("Night", line);
+        Assert.DoesNotContain("Day", line);
+    }
+
+    [Fact]
+    public void ApplyItemTags_LogsAnApplyThatChangesNothing()
+    {
+        CatalogSeed.Write(_dataDir, items: [new SeedItem("one", "/media/one.mp4") { Tags = ["Night"] }], tags: [new SeedTag("Night")]);
+
+        var result = ServerHostComposition.ApplyItemTags(
+            new ApplyItemTagsRequest { ItemIds = ["one"], AddTags = ["Night"] },
+            new ServerStateService(),
+            CreateOperations());
+
+        Assert.Equal(StatusCodes.Status409Conflict, Status(result));
+        var line = Assert.Single(LogLines(), line => line.Contains("Apply item tags", StringComparison.Ordinal));
+        Assert.Contains("[info] Apply item tags adds=1 removes=0 count=1 changed=0 elapsedMs=", line);
+    }
+
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(1001)]
+    public void ApplyItemTags_PublishesItemTagsChangedUpToTheCap_AndResyncRequiredInItsPlacePastIt(int named)
+    {
+        var ids = SeedItems(named, tags: ["Night"]);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+
+        var result = ServerHostComposition.ApplyItemTags(
+            new ApplyItemTagsRequest { ItemIds = ids, AddTags = ["Day"], RemoveTags = ["Night"] },
+            state,
+            CreateOperations());
+
+        Assert.Equal(named, BulkCount(result));
+        AssertListedOrReplaced(state, "itemTagsChanged", named, payload =>
+            Assert.Equal(ids, Assert.IsType<ItemTagsChangedPayload>(payload).ResolvedItemIds));
+    }
+
+    [Theory]
+    [InlineData(1000)]
+    [InlineData(1001)]
+    public void AutoTagApply_PublishesItemTagsChangedUpToTheCap_AndResyncRequiredInItsPlacePastIt(int changed)
+    {
+        SeedItems(changed, tags: ["Night"]);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+        var paths = Enumerable.Range(0, changed).Select(index => Path.Combine(_mediaDir, $"clip-{index}.mp4")).ToList();
+
+        var result = ServerHostComposition.ApplyAutoTags(
+            new AutoTagApplyRequest { Assignments = [new AutoTagAssignment { TagName = "Day", ItemPaths = paths }] },
+            CreateOperations(),
+            state);
+
+        Assert.Equal(changed, Assert.Single(Assert.IsType<AutoTagApplyResponse>(Value(result)).Applied).ChangedItemIds.Count);
+        AssertListedOrReplaced(state, "itemTagsChanged", changed, payload =>
+            Assert.Equal(changed, Assert.IsType<ItemTagsChangedPayload>(payload).ResolvedItemIds.Count));
+    }
+
+    // A resync makes every device reload everything, so one stands in for every tag past the cap, while a tag within it
+    // still lists its files.
+    [Fact]
+    public void AutoTagApply_PublishesOneResyncRequired_InPlaceOfEveryTagPastTheCap()
+    {
+        SeedItems(1001, tags: ["Night"]);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+        var paths = Enumerable.Range(0, 1001).Select(index => Path.Combine(_mediaDir, $"clip-{index}.mp4")).ToList();
+
+        ServerHostComposition.ApplyAutoTags(
+            new AutoTagApplyRequest
+            {
+                Assignments =
+                [
+                    new AutoTagAssignment { TagName = "Day", ItemPaths = paths },
+                    new AutoTagAssignment { TagName = "Dawn", ItemPaths = paths.Take(2).ToList() },
+                    new AutoTagAssignment { TagName = "Dusk", ItemPaths = paths }
+                ]
+            },
+            CreateOperations(),
+            state);
+
+        var events = state.GetReplayAfter(0).Events.Where(envelope => envelope.EventType != "tagCatalogChanged").ToList();
+        Assert.Equal(["itemTagsChanged", "resyncRequired"], events.Select(envelope => envelope.EventType));
+        var dawn = Assert.IsType<ItemTagsChangedPayload>(events[0].Payload);
+        Assert.Equal("Dawn", Assert.Single(dawn.AddedTags));
+        Assert.Equal(2, dawn.ResolvedItemIds.Count);
+        Assert.Equal("itemTagsChanged", Assert.IsType<ResyncRequiredPayload>(events[1].Payload).Reason);
+        var line = Assert.Single(LogLines(), line => line.Contains("in place of", StringComparison.Ordinal));
+        Assert.Contains("[info] Published resyncRequired in place of 2 itemTagsChanged events, which would have listed 2002 items.", line);
+    }
+
+    // Other devices retarget their filters from a rename's or delete's itemTagsChanged, so it lists every item.
+    [Fact]
+    public void RenameTag_ListsEveryItemThatHeldTheTag_PastTheCap()
+    {
+        var ids = SeedItems(1001, tags: ["Night"]);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+
+        ServerHostComposition.RenameTag(new RenameTagRequest { OldName = "Night", NewName = "Evening" }, state, CreateOperations());
+
+        var renamed = SingleItemTagsChanged(state);
+        Assert.Equal(ids, renamed.ResolvedItemIds);
+        Assert.Equal(("Night", "Evening"), (renamed.CatalogReplacedTag, renamed.CatalogReplacementTag));
+    }
+
+    [Fact]
+    public void DeleteTag_ListsEveryItemThatHeldTheTag_PastTheCap()
+    {
+        var ids = SeedItems(1001, tags: ["Night"]);
+        var state = new ServerStateService(serverLog: new ServerLogService(_dataDir));
+
+        ServerHostComposition.DeleteTag(new DeleteTagRequest { Name = "Night" }, state, CreateOperations());
+
+        var deleted = SingleItemTagsChanged(state);
+        Assert.Equal(ids, deleted.ResolvedItemIds);
+        Assert.Equal("Night", deleted.CatalogReplacedTag);
+    }
+
+    [Fact]
+    public void TagModel_CountsEachTagAcrossTheItems_IgnoringCase_MatchingItsSchemas()
     {
         CatalogSeed.Write(
             _dataDir,
@@ -620,33 +766,34 @@ public sealed class BulkActionRouteTests : IDisposable
             ],
             tags: [new SeedTag("Night"), new SeedTag("Ann"), new SeedTag("Other")]);
         var operations = CreateOperations();
+        var request = new TagEditorModelRequest { ItemIds = ["one", "two", "three", "missing", "one", "ONE"] };
 
-        var counts = operations.GetTagEditorModel(new TagEditorModelRequest
-        {
-            ItemIds = ["one", "two", "three", "missing", "one", "ONE"],
-            CountsOnly = true
-        });
+        var counts = operations.GetTagEditorModel(request);
 
-        Assert.Empty(counts.Items);
         Assert.Equal(3, counts.ItemCount);
         // "Night" and "night" are one tag, named as one of the items holds it.
-        Assert.Equal([("Ann", 2), ("Night", 2)], counts.TagCounts!.Select(tag => (tag.Name, tag.ItemCount)));
+        Assert.Equal([("Ann", 2), ("Night", 2)], counts.TagCounts.Select(tag => (tag.Name, tag.ItemCount)));
         Assert.Equal(3, counts.Tags.Count);
         var json = OpenApiSpec.SerializeAsServer(counts);
         OpenApiSpec.AssertMatchesSchema(json, "TagEditorModelResponse");
         OpenApiSpec.AssertMatchesSchema(json.GetProperty("tagCounts")[0], "TagItemCount");
-        OpenApiSpec.AssertMatchesSchema(
-            OpenApiSpec.SerializeAsServer(new TagEditorModelRequest { ItemIds = ["one"], CountsOnly = true }),
-            "TagEditorModelRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(request), "TagEditorModelRequest");
 
-        // Without counts only, the answer is each item's tags, without the counts.
-        var model = operations.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["one", "missing"] });
-        Assert.Null(model.TagCounts);
-        Assert.Null(model.ItemCount);
-        Assert.Equal(["Ann", "Night"], model.Items.Single(item => item.ItemId == "one").Tags);
+        // One item's tags are counts too, each held by the one item.
+        var single = operations.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["one"] });
+        Assert.Equal(1, single.ItemCount);
+        Assert.Equal([("Ann", 1), ("Night", 1)], single.TagCounts.Select(tag => (tag.Name, tag.ItemCount)));
+
+        // No item ids, as the Filter tab and the tag catalog send, read the catalog with no counts.
+        var catalog = operations.GetTagEditorModel(new TagEditorModelRequest { ItemIds = [] });
+        Assert.Equal((0, 0, 3), (catalog.ItemCount, catalog.TagCounts.Count, catalog.Tags.Count));
+        var catalogJson = OpenApiSpec.SerializeAsServer(catalog);
+        OpenApiSpec.AssertMatchesSchema(catalogJson, "TagEditorModelResponse");
         Assert.Equal(
-            ["categories", "items", "tags"],
-            OpenApiSpec.SerializeAsServer(model).EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
+            ["categories", "itemCount", "tagCounts", "tags"],
+            catalogJson.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(new TagEditorModelRequest { ItemIds = [] }), "TagEditorModelRequest");
+        Assert.Equal(["categories", "itemCount", "tagCounts", "tags"], OpenApiSpec.ReadSchemaRequired("TagEditorModelResponse"));
     }
 
     [Fact]
@@ -659,13 +806,12 @@ public sealed class BulkActionRouteTests : IDisposable
 
         var counts = CreateOperations().GetTagEditorModel(new TagEditorModelRequest
         {
-            ItemIds = [.. items.Select(item => item.Id), "missing"],
-            CountsOnly = true
+            ItemIds = [.. items.Select(item => item.Id), "missing"]
         });
 
         Assert.Equal(1203, counts.ItemCount);
-        Assert.Equal(1203, Assert.Single(counts.TagCounts!, tag => tag.Name.Equals("all", StringComparison.OrdinalIgnoreCase)).ItemCount);
-        Assert.Equal(602, Assert.Single(counts.TagCounts!, tag => tag.Name == "Even").ItemCount);
+        Assert.Equal(1203, Assert.Single(counts.TagCounts, tag => tag.Name.Equals("all", StringComparison.OrdinalIgnoreCase)).ItemCount);
+        Assert.Equal(602, Assert.Single(counts.TagCounts, tag => tag.Name == "Even").ItemCount);
     }
 
     [Fact]
@@ -723,8 +869,11 @@ public sealed class BulkActionRouteTests : IDisposable
         Assert.Contains("requested=0 count=0 favorites=0 blacklisted=0 played=0 elapsedMs=", logLines[1]);
     }
 
-    /// <summary>Seeds <paramref name="count"/> items, with files on disk when asked, and returns their ids.</summary>
-    private List<string> SeedItems(int count, bool withFiles = false)
+    /// <summary>
+    /// Seeds <paramref name="count"/> items, with files on disk when asked, each holding <paramref name="tags"/>, which
+    /// the tag catalog holds too, and returns their ids.
+    /// </summary>
+    private List<string> SeedItems(int count, bool withFiles = false, IReadOnlyList<string>? tags = null)
     {
         var items = Enumerable.Range(0, count)
             .Select(index =>
@@ -735,20 +884,20 @@ public sealed class BulkActionRouteTests : IDisposable
                     File.WriteAllBytes(path, [0x01]);
                 }
 
-                return new SeedItem($"item-{index:D4}", path);
+                return new SeedItem($"item-{index:D4}", path) { Tags = [.. tags ?? []] };
             })
             .ToList();
-        CatalogSeed.Write(_dataDir, items: items);
+        CatalogSeed.Write(_dataDir, items: items, tags: (tags ?? []).Select(tag => new SeedTag(tag)));
         return items.Select(item => item.Id).ToList();
     }
 
     /// <summary>
-    /// The one published event is <paramref name="eventType"/> for at most 1,000 items, and otherwise resyncRequired
-    /// in its place, with the revision before it and its own, and a last.log line saying so.
+    /// The one published event, besides the tag catalog, is <paramref name="eventType"/> for at most 1,000 items, and
+    /// otherwise resyncRequired in its place, with the revision before it and its own, and a last.log line saying so.
     /// </summary>
     private void AssertListedOrReplaced(ServerStateService state, string eventType, int itemCount, Action<object> assertListed)
     {
-        var envelope = Assert.Single(state.GetReplayAfter(0).Events);
+        var envelope = Assert.Single(state.GetReplayAfter(0).Events, envelope => envelope.EventType != "tagCatalogChanged");
         var replacedLines = LogLines().Where(line => line.Contains("in place of", StringComparison.Ordinal)).ToList();
         if (itemCount <= 1000)
         {
@@ -764,6 +913,15 @@ public sealed class BulkActionRouteTests : IDisposable
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(resync), "ResyncRequiredPayload");
         var line = Assert.Single(replacedLines);
         Assert.Contains($"[info] Published resyncRequired in place of {eventType}, which would have listed {itemCount} items.", line);
+    }
+
+    /// <summary>The one published event besides the tag catalog, an itemTagsChanged, with no resyncRequired in its place.</summary>
+    private ItemTagsChangedPayload SingleItemTagsChanged(ServerStateService state)
+    {
+        var envelope = Assert.Single(state.GetReplayAfter(0).Events, envelope => envelope.EventType != "tagCatalogChanged");
+        Assert.Equal("itemTagsChanged", envelope.EventType);
+        Assert.DoesNotContain(LogLines(), line => line.Contains("in place of", StringComparison.Ordinal));
+        return Assert.IsType<ItemTagsChangedPayload>(envelope.Payload);
     }
 
     private IResult DeleteFiles(

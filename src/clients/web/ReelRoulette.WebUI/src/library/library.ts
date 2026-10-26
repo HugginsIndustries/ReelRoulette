@@ -211,6 +211,11 @@ export interface LibraryOptions {
   tagCatalog: Pick<TagCatalog, "catalog" | "ensureLoaded">;
   /** The app's context menu, which a tile's menu opens in. */
   contextMenu: ContextMenu;
+  /**
+   * Edit tags… in the menus: points the tag editor at the items, after it asks to discard changes held for others, and
+   * says whether it did, so the Tags tab shows.
+   */
+  editTags: (target: BulkTarget) => Promise<boolean>;
   /** Defaults to the grid controller. */
   createGrid?: CreateLibraryGrid;
   /** Defaults to `requestAnimationFrame`. */
@@ -242,7 +247,19 @@ export function createLibrary(options: LibraryOptions): Library {
   const body = signal<LibraryBody>({ kind: "blank" });
   const selection = createLibrarySelection();
   const allSelected = computed(() => matchCount.value !== null && selection.count.value === matchCount.value);
-  const bulk = createBulkActions({ store, api, dialogs, notifications, controlAccess, selection });
+  const bulk = createBulkActions({
+    store,
+    api,
+    dialogs,
+    notifications,
+    controlAccess,
+    selection,
+    async editTags(target) {
+      if (await options.editTags(target)) {
+        await panel.showTab("tags");
+      }
+    }
+  });
   /** Select all's request under way, which a selection ending aborts. */
   let selectAllRequest: AbortController | null = null;
   /** The check of the selected items under way, which a later check or a selection ending aborts. */

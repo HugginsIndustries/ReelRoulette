@@ -4425,11 +4425,12 @@ function chipEl(name, buttons, stateClass) {
   label.className = "tag-chip-label";
   label.textContent = name;
   chip.append(label);
-  buttons.forEach(([icon, title, selected, onClick, disabled]) => {
+  // A disabled button's reason, when it has one, is its tooltip; its name stays the action's.
+  buttons.forEach(([icon, title, selected, onClick, disabled, reason]) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "icon-btn" + (selected ? " is-selected" : "");
-    button.title = title;
+    button.title = reason || title;
     button.disabled = !!disabled;
     button.setAttribute("aria-label", `${title} ${name}`);
     button.append(iconSpan(icon));
@@ -4616,7 +4617,7 @@ function renderTags() {
   const target = document.createElement("b");
   if (tagSelection) {
     line.hidden = false;
-    target.textContent = items.length === 1 ? "1 item" : `${items.length} items`;
+    target.textContent = items.length === 1 ? "1 item" : `${items.length.toLocaleString()} items`;
     line.title = "";
   } else {
     line.hidden = !tagTarget || tagTarget === playback.item;
@@ -4660,10 +4661,19 @@ function renderTags() {
       pending = pending || !!chip.pending;
       // Green: every item being edited has the tag. Orange: only some do. Add or Remove applies to all of them.
       const count = items.filter((item) => item.tags.has(chip.key)).length;
+      // Add does nothing on a tag every item has, and Remove on one none has, so each is disabled with its reason as its
+      // tooltip, unless its change is held, so it can be undone.
+      const several = !!tagSelection;
+      const addReason = items.length && count === items.length && chip.pending !== "add"
+        ? (several ? "Every selected item has this tag" : "This item already has this tag")
+        : null;
+      const removeReason = items.length && count === 0 && chip.pending !== "remove"
+        ? (several ? "No selected item has this tag" : "This item doesn't have this tag")
+        : null;
       grid.append(
         chipEl(chip.name, [
-          ["add", "Add tag", chip.pending === "add", () => { chip.pending = chip.pending === "add" ? null : "add"; renderTags(); }, !items.length],
-          ["remove", "Remove tag", chip.pending === "remove", () => { chip.pending = chip.pending === "remove" ? null : "remove"; renderTags(); }, !items.length],
+          ["add", "Add tag", chip.pending === "add", () => { chip.pending = chip.pending === "add" ? null : "add"; renderTags(); }, !items.length || !!addReason, addReason],
+          ["remove", "Remove tag", chip.pending === "remove", () => { chip.pending = chip.pending === "remove" ? null : "remove"; renderTags(); }, !items.length || !!removeReason, removeReason],
           ["edit_note", "Edit tag", false, () => openEditTag(category, chip)]
         ], count && count === items.length ? "state-all" : count ? "state-some" : "")
       );
@@ -4729,7 +4739,7 @@ $("tags-save").addEventListener("click", () => {
   // A tag change can move items into or out of a tag filter's results.
   layoutGrid(true);
   // Saving for the selection acknowledges itself as the other bulk actions do.
-  acknowledge(several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied", "tags");
+  acknowledge(several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length.toLocaleString()} items`}.` : "Tag editor changes applied", "tags");
 });
 // Discard changes puts back the saved tags at once, as the Filter tab's does, and the tab then follows the playing item.
 $("tags-discard").addEventListener("click", () => {

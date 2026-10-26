@@ -535,20 +535,19 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(["item-2"], appliedRow.ChangedItemIds);
 
             var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["item-1", "missing"] });
-            var item = Assert.Single(model.Items, candidate => candidate.ItemId == "item-1");
-            Assert.Equal(["Newer"], item.Tags);
+            Assert.Equal(["Newer"], host.Session.ReadListedItem("item-1")!.Tags);
             Assert.Contains(model.Categories, category => category.Id == "places" && category.Name == "Places");
             Assert.Contains(model.Tags, tag => tag.Name == "Newer" && tag.CategoryId == "places");
             Assert.Contains(model.Tags, tag => tag.Name == "Old");
-            var missing = Assert.Single(model.Items, candidate => candidate.ItemId == "missing");
-            Assert.Empty(missing.Tags);
+            // The missing id isn't counted.
+            Assert.Equal(1, model.ItemCount);
 
             Assert.True(service.DeleteTag(new DeleteTagRequest { Name = "Newer" }));
             Assert.True(service.DeleteCategory(new DeleteCategoryRequest { CategoryId = "places" }));
             var afterDelete = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["item-1"] });
             Assert.DoesNotContain(afterDelete.Tags, tag => tag.Name == "Newer");
             Assert.DoesNotContain(afterDelete.Categories, category => category.Id == "places");
-            Assert.Empty(Assert.Single(afterDelete.Items).Tags);
+            Assert.Empty(host.Session.ReadListedItem("item-1")!.Tags);
         }
         finally
         {

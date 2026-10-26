@@ -910,7 +910,7 @@ describe("starting over", () => {
   it("applying the Filter tab starts over from the first page with the new filter", async () => {
     const { library } = await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/sources", () => json([]));
-      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     });
     await openLibrary();
 
@@ -1713,7 +1713,7 @@ describe("Filters line", () => {
     await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
       server.on("GET", "/api/sources", () => json([]));
-      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     });
     await openLibrary();
     await pickPreset("preset-favorites");
@@ -1737,7 +1737,8 @@ describe("Random line", () => {
       { name: "Alice", categoryId: "people" },
       { name: "Beach", categoryId: "places" }
     ],
-    items: []
+    tagCounts: [],
+    itemCount: 0
   };
 
   it("always shows, naming the options after a bold Random:, Shuffle and Spread by folder until they change", async () => {
@@ -2133,7 +2134,7 @@ describe("selection", () => {
   it("lasts while the panel shows another tab or is closed", async () => {
     await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/sources", () => json([]));
-      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     });
     await openLibrary();
     await click(check("item-1"));
@@ -2203,7 +2204,7 @@ describe("selection and Escape", () => {
   it("leaves a selection the Library tab doesn't show, which shows again with the tab", async () => {
     await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/sources", () => json([]));
-      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
     });
     await openLibrary();
     await click(check("item-1"));
@@ -2279,6 +2280,53 @@ async function selectAllItems(
 
 /** The count the fake server answers the bulk routes with. */
 const ANSWERED = 1200;
+
+/**
+ * Serves the tag model as the server counts it across the items a load names: every item holds Beach, the first ten
+ * hold Calm, and none holds Sunset; and Tag apply, which answers `ANSWERED`.
+ */
+function serveTagCounts(server: FakeServer): void {
+  server.on("POST", "/api/tag-editor/model", (call) => {
+    const ids: string[] = call.body?.itemIds ?? [];
+    const calm = ids.filter((id) => Number(id.replace("item-", "")) <= 10).length;
+    return json({
+      categories: [{ id: "cat-places", name: "Places", sortOrder: 0 }],
+      tags: ["Beach", "Calm", "Sunset"].map((name) => ({ name, categoryId: "cat-places" })),
+      tagCounts: [
+        { name: "Beach", itemCount: ids.length },
+        { name: "Calm", itemCount: calm }
+      ].filter((row) => row.itemCount > 0),
+      itemCount: ids.length
+    });
+  });
+  server.on("POST", "/api/tag-editor/apply-item-tags", () => json({ count: ANSWERED }));
+}
+
+/** The Tags tab's line naming the items it edits while they aren't the playing item. */
+function tagTargetLine(): HTMLElement {
+  return document.getElementById("tag-editor-target") as HTMLElement;
+}
+
+/** A tag's chip in the Tags tab. */
+function tagChip(name: string): HTMLElement {
+  const found = Array.from(document.querySelectorAll<HTMLElement>("#tag-editor .tag-chip")).find(
+    (chip) => chip.querySelector(".tag-chip-label")?.textContent === name
+  );
+  if (!found) {
+    throw new Error(`No tag chip ${name}.`);
+  }
+  return found;
+}
+
+/** A tag chip's Add or Remove, by its name, which stays the action's. */
+function tagChipButton(name: string, label: "Add tag" | "Remove tag"): HTMLButtonElement {
+  return tagChip(name).querySelector<HTMLButtonElement>(`button[aria-label="${label} ${name}"]`)!;
+}
+
+/** The Tags tab shows. */
+function tagsTabShown(): boolean {
+  return !panel().hidden && !(document.getElementById("panel-page-tags") as HTMLElement).hidden;
+}
 
 /** The Selection actions menu's items and rules in order: each item's label, or "—" for a rule. */
 function menuParts(): string[] {
@@ -2384,6 +2432,7 @@ describe("bulk actions", () => {
       "Remove from blacklist",
       "—",
       "Rate…",
+      "Edit tags…",
       "Clear playback stats…",
       "—",
       "Delete files…"
@@ -2399,11 +2448,47 @@ describe("bulk actions", () => {
       "thumb_down Add to blacklist",
       "thumb_up Remove from blacklist",
       "star Rate…",
+      "tag Edit tags…",
       "delete_history Clear playback stats…",
       "delete_forever Delete files…"
     ]);
     const icon = menuItem("Rate…").querySelector(".material-symbol-icon")!;
     expect([currentStyle(menuItem("Rate…")).display, currentStyle(menuItem("Rate…")).gap, currentStyle(icon).fontSize]).toEqual(["flex", "12px", "20px"]);
+  });
+
+  it("Edit tags… opens the Tags tab on every selected item, loaded or not, and Save applies a change to all of them in one request", async () => {
+    const { server, ids } = await selectAllItems(serveTagCounts);
+    await pickAction("Edit tags…");
+    expect(shownDialogs()).toEqual([]);
+    await waitFor(() => expect(tagsTabShown()).toBe(true));
+    await waitFor(() => expect(tagChip("Beach").classList.contains("state-all")).toBe(true));
+    expect(server.requests("POST", "/api/tag-editor/model").map((call) => call.body)).toEqual([{ itemIds: ids }]);
+    expect([tagTargetLine().hidden, tagTargetLine().textContent, tagTargetLine().title]).toEqual([
+      false,
+      `Editing tags for ${grouped(MATCHING)} items`,
+      ""
+    ]);
+    expect(tagTargetLine().querySelector("b")?.textContent).toBe(`${grouped(MATCHING)} items`);
+    // Every item has Beach, only some have Calm, and none has Sunset.
+    expect(["Beach", "Calm", "Sunset"].map((name) => tagChip(name).className)).toEqual([
+      "tag-chip state-all",
+      "tag-chip state-some",
+      "tag-chip state-none"
+    ]);
+    expect(document.querySelector("#tag-editor .category-count")?.getAttribute("title")).toBe("2 tags on the selected items");
+    const reason = (button: HTMLButtonElement) => [button.disabled, button.title];
+    expect(reason(tagChipButton("Beach", "Add tag"))).toEqual([true, "Every selected item has this tag"]);
+    expect(reason(tagChipButton("Sunset", "Remove tag"))).toEqual([true, "No selected item has this tag"]);
+    expect(reason(tagChipButton("Calm", "Add tag"))).toEqual([false, "Add tag"]);
+    expect(reason(tagChipButton("Calm", "Remove tag"))).toEqual([false, "Remove tag"]);
+
+    await click(tagChipButton("Calm", "Add tag"));
+    await click(tagChipButton("Beach", "Remove tag"));
+    await click(document.getElementById("tag-editor-apply-btn")!);
+    await waitFor(() => expect(popupsShown()).toContain(`Updated tags on ${grouped(ANSWERED)} items.`));
+    expect(server.requests("POST", "/api/tag-editor/apply-item-tags").map((call) => call.body)).toEqual([
+      { itemIds: ids, addTags: ["Calm"], removeTags: ["Beach"] }
+    ]);
   });
 
   it("picking an action closes the menu before the action asks anything", async () => {
@@ -3060,6 +3145,7 @@ describe("a tile's menu", () => {
       "heart_minus Remove from favorites",
       "thumb_down Add to blacklist",
       "star Rate…",
+      "tag Edit tags…",
       "delete_history Clear playback stats…",
       "delete_forever Delete file…"
     ]);
@@ -3128,6 +3214,22 @@ describe("a tile's menu", () => {
     expect([selecting(), selectedTiles()]).toEqual([true, ["item-1", "item-2"]]);
   });
 
+  it("Edit tags… on a tile alone opens the Tags tab on its item, naming it", async () => {
+    const { server } = await mountLibrary(libraryItems(3), serveTagCounts);
+    await openLibrary();
+
+    rightClick(tile("item-2")!);
+    await flush();
+    await click(menuItemIn(contextMenuShown()!, "Edit tags…"));
+    await waitFor(() => expect(tagsTabShown()).toBe(true));
+    await waitFor(() => expect(server.requests("POST", "/api/tag-editor/model").map((call) => call.body)).toContainEqual({ itemIds: ["item-2"] }));
+    expect([tagTargetLine().hidden, tagTargetLine().textContent, tagTargetLine().title]).toEqual([false, "Editing tags for clip 2.mp4", "clip 2.mp4"]);
+    await waitFor(() => expect(tagChip("Calm").classList.contains("state-all")).toBe(true));
+    expect([tagChipButton("Calm", "Add tag").disabled, tagChipButton("Calm", "Add tag").title]).toEqual([true, "This item already has this tag"]);
+    expect([tagChipButton("Sunset", "Remove tag").disabled, tagChipButton("Sunset", "Remove tag").title]).toEqual([true, "This item doesn't have this tag"]);
+    expect(document.querySelector("#tag-editor .category-count")?.getAttribute("title")).toBe("2 tags on this item");
+  });
+
   it("shows the Selection actions menu's items for the same items, and each of the two closes the other", async () => {
     await mountLibrary(itemsInEveryState(3));
     await openLibrary();
@@ -3188,7 +3290,7 @@ describe("a tile's menu", () => {
     rightClick(tile("item-2")!);
     await flush();
     expect(server.requests("POST", "/api/library/item-summary").map((call) => call.body)).toEqual([{ itemIds: ids }]);
-    expect(partsOf(contextMenuShown()!)).toEqual(["Add to favorites", "Add to blacklist", "—", "Rate…", "Clear playback stats…", "—", "Delete files…"]);
+    expect(partsOf(contextMenuShown()!)).toEqual(["Add to favorites", "Add to blacklist", "—", "Rate…", "Edit tags…", "Clear playback stats…", "—", "Delete files…"]);
     expect(menuItemIn(contextMenuShown()!, "Clear playback stats…").title).toBe("No playback stats to clear");
   });
 });
