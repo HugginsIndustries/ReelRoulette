@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a library refresh's progress in the bell's list and a plain summary of what it changed, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -657,7 +657,218 @@ Last milestone completed: M12l
 - Ctrl+click selection on a Mac, where browsers send Ctrl+click as a right-click.
 - Selected items that a source change takes out of the results, which is Admin Source Management.
 
-### M12n1 - WebUI Context Menus
+### M12n1 - Library Refresh Progress and Summary
+
+- **Status**: ⏳ Planned
+- **Goal**: While a library refresh runs, the bell's list shows how far its stage has got, and a finished refresh says in plain words what it changed, from counts the server sends as numbers.
+- **Depends on**: WebUI Notifications, whose bell list's Now entry and Library refresh popup this milestone rewords.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The server sends each stage's counts as plain numbers and no wording of its own, and the WebUI, the only client, words them.
+- The refresh status carries one typed object per stage in place of the stages array and its messages, so every count is typed in OpenAPI and the generated WebUI types.
+- The status carries only the counts that the progress line, the finished summary, and the admin view's Library refresh card use.
+- While a refresh runs, the bell's Now entry shows the current stage's progress as its second line, such as "1,234 of 17,840 files", as Reconnecting…, Server not compatible, and Running without a library show theirs.
+- The player's indicator stays "Library refresh: {stage} ({percent}%)".
+- The duration and loudness stages count only the videos they still have to scan, and every video in a forced rescan.
+- A stage's percent follows the count its second line shows, so in a stage with two phases it starts again at 0 when the second phase starts, as the count does.
+- The duration and loudness stages count in videos, since they read only videos, and the other stages in files, videos and photos together.
+- Numbers are grouped as the count line groups them, through `countText` and an "X of Y" helper beside it.
+- The progress line names no source, so it never shows one the active profile hides.
+- The finished summary names only what changed: "No changes" when nothing did, and otherwise the nonzero library changes, then any problems, joined by " · ", such as "12 added, 3 removed · 2 thumbnails failed".
+- The summary leaves out the work done for new files, their fingerprints, durations, loudness, and thumbnails, since "added" covers it.
+- A failure that happens again on every refresh, such as a video whose loudness can't be measured, shows in every summary.
+- While ffmpeg or ffprobe isn't found, the stages that need it count no failures for it, and the summary names the missing tool once.
+- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, and a refresh the user starts pops up "No changes".
+- A failed refresh's second line names what failed in plain words, and the exception's own message goes only to `last.log`.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The progress line of each stage, the finished summary of each kind of run, a failed refresh's wording, which refreshes pop up, and the admin view's Library refresh card text, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Server | ⏳ Planned | The thumbnail cleanup's progress counted over the thumbnails it removes and sent at most every 500 ms, and a failed refresh worded in plain words with its exception in `last.log`. |
+| Contract | ⏳ Planned | One typed object per stage in the refresh status, with the counts the progress line and the summary need, in place of the stages array and its messages, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`, and the WebUI's finished summary built from them. |
+| Progress line and popups | ⏳ Planned | The Now entry's second line while a refresh runs, and an automatic refresh that changes nothing going to the bell's list without a popup. |
+
+#### Mockup slice
+
+**Scope**
+
+- The bell's Now entry shows the refresh's second line at each stage, starting from this wording:
+  - Starting: no second line;
+  - Refreshing sources: "Source 2 of 3", and "Source 2 of 3 · 120 of 400 new files" while it fingerprints a source's new files;
+  - Sorting names: "1,234 of 49,455 files";
+  - Fingerprinting files: "Checking 12,000 of 49,455 files", then "1,234 of 2,000 files" while it hashes;
+  - Scanning durations and Scanning loudness: "12 of 40 videos";
+  - Generating thumbnails: "12,000 of 49,455 files", then "Removing 120 of 5,000 old thumbnails".
+- The finished popup's second line for each kind of run, starting from this wording:
+  - nothing changed: "No changes";
+  - library changes: "12 added, 3 removed, 2 renamed, 1 moved";
+  - a file changed on disk: "1 changed";
+  - problems: "12 added · 2 thumbnails failed";
+  - moves left unmatched: "3 removed · 2 left unmatched";
+  - a forced rescan that changed values: "Loudness rescanned: 3 changed";
+  - ffmpeg not found: "12 added · ffmpeg not found".
+- An automatic refresh that changes nothing lands in the bell's list without a popup, from a Mockup-tab button beside Refresh finished and Refresh failed.
+- A failed refresh's second line in plain words, in place of the sample `Source "Videos" is unavailable: /media/videos was not found.`, which the server never sends.
+- The admin view's Library refresh card shows its stage, percent, and progress line while a refresh runs, its last refresh's time and summary afterwards, and its own text when the server has run no refresh since it started.
+- The samples the server can't produce, or that disagree, go:
+  - the layout page's `REFRESH_SUMMARY`, whose "Fingerprint: ready 72" the server never reports, since a run with nothing to hash reports skipped files and no ready ones;
+  - the admin page's "Source: 2 added" and "3 added, 1 removed, 0 renamed";
+  - the "Core refresh complete | …" log lines on the admin and recovery pages, which match no line the app writes, in favor of the "Library refresh finished: {summary}" line the WebUI relays.
+- The review settles:
+  - each line's wording;
+  - the failed refresh's wording;
+  - whether an automatic refresh that changes nothing counts as unread on the bell.
+- Before the app is built, the user approves the design in Firefox on the desktop, on the iPad, and on an Android phone.
+
+**Traps**
+
+- The mockup's Now entry renders a lasting state's `detail` as its second line (`entryRow` in `build/common.js`), and the refresh's `setLasting` passes none (`build/layout.src.html`).
+- The mockup's refresh steps through `REFRESH_STAGES`, the indicator's labels with sample percents (`build/layout.src.html`), and the admin page's steps through four stages of its own (`build/admin.src.html`).
+- The Mockup tab's Lasting states fieldset starts and ends a refresh, and its Test notifications fieldset has Refresh finished and Refresh failed (`build/layout.src.html`).
+- A popup shows its second line on one line, cut off with an ellipsis, while the bell's list wraps it (`.toast-detail` in `build/common.css` and in the app's `src/styles.css`), so a long summary is cut off on a phone.
+- `check.mjs` runs the pages in happy-dom with no layout, so where a summary is cut off can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the progress line, the summaries, the failed refresh, the popup rule, and the admin card as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+#### Server slice
+
+**Scope**
+
+- Fixes "Thumbnail cleanup sends a refresh message per removed thumbnail": the cleanup lists the thumbnails outside the catalog first, counts its progress over those, and sends it at most every 500 ms, as the stage's other progress is sent, with its last always sent.
+- A failed refresh's `lastError` is a plain sentence naming what failed, worded as the mockup review settles, in place of the exception's message.
+- A failed refresh writes the exception to `last.log` as an error line.
+- Server Instrumentation's Trap that refresh failures reach `last.log` only as `status=` lines relayed by connected WebUI clients is corrected once this slice writes them.
+
+**Traps**
+
+- The cleanup calls `UpdateStage` for each thumbnail it removes, with no throttle, and its percent counts every `.jpg` in the thumbnail folder (`RemoveThumbnailsOutsideCatalog` in `RefreshPipelineService.cs`).
+- `UpdateStage` publishes `refreshStatusChanged` with the whole status on every call, and the server keeps its last 256 events for replay, so a client that reconnects after more than 256 of them gets `resyncRequired`.
+- The stages' other progress goes through `RefreshProgressThrottle`, at 400 or 500 ms.
+- A failure sets `LastError` to the exception's `Message` and logs the exception only through `ILogger` (`RefreshPipelineService.cs`), which writes no `last.log` line (inferred).
+- The WebUI shows `lastError` as the failed popup's second line and leaves it out of the log relay, since it could name a file (`showRefreshOutcome` in `src/state/serverConnection.ts`).
+- A cancelled run, such as one that shutdown stops, sets neither `CompletedUtc` nor `LastError`.
+
+**Acceptance**
+
+- A cleanup that removes many thumbnails publishes at most one status every 500 ms and its last, and counts only the thumbnails it removes, in refresh pipeline tests of the cleanup.
+- A failed refresh's `lastError` is the plain sentence, and `last.log` gets the exception, in refresh pipeline tests of a failure.
+- Server Instrumentation's Trap no longer says that failures reach `last.log` only through the WebUI, checked by reading it.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- `RefreshStatusSnapshot.stages` becomes an object with one typed member per stage, `sourceRefresh`, `nameSortKeys`, `fingerprintScan`, `durationScan`, `loudnessScan`, and `thumbnailGeneration`, in place of the array of `RefreshStageProgress`.
+- Each member carries `percent`, `isComplete`, and its current phase's `processed` and `total`, with `phase` in the fingerprint stage, checking or hashing, and in the thumbnail stage, generating or cleanup.
+- Each member carries the counts the Decisions call for:
+  - source refresh: the source it is on and how many there are, the source's new files it has fingerprinted and how many it has to, and added, removed, renamed, moved, and left unmatched;
+  - name sort keys: none beyond its progress;
+  - fingerprint scan: files changed on disk, and failed;
+  - duration scan and loudness scan: values changed, failed, and whether the rescan was forced;
+  - thumbnail generation: failed.
+- The status says when ffmpeg or ffprobe isn't found, once for the run, in place of the loudness stage's "unavailable" message.
+- The duration and loudness stages count only the videos they have to scan, and every video in a forced rescan.
+- A duration probe that fails counts as failed, as a loudness error does.
+- The fingerprint stage counts files changed on disk, which it hashes again after a size or write time change, apart from new files.
+- The duration and loudness stages count a value that changed apart from a first measurement, so a new file's first scan isn't a change.
+- The source stage's `updated` count goes, since it can't rise.
+- Each stage's `message`, and the text the server built for it, go.
+- `CloneStatus` copies the new members.
+- OpenAPI, the generated WebUI types, and `docs/api.md`'s refresh section describe the status.
+- The WebUI reads the new status in `coerceRefreshSnapshot`, `refreshProgress`, `settledKeptSources`, and `newRefreshCompletionRunId` (`src/events/refreshStatusProjection.ts`).
+- The WebUI builds the finished summary from the counts, in the wording the mockup review settles, in place of its message parsers, whose unused "evicted" count goes with them.
+- `CONTEXT.md` describes the finished summary.
+
+**Traps**
+
+- The user's catalog holds 17,840 videos and 31,615 photos, 49,455 files (measured).
+- Fingerprints and thumbnails cover every file, while durations and loudness cover only videos (`MediaType == 0`), deduplicated by path, which is why the summary reads 49,455 for the first and 17,840 for the second.
+- The duration and loudness stages start `processed` at the count already scanned, so their percent starts near 100 on a refresh with little to scan.
+- The source stage counts `updated` for a fingerprint match in the same folder with the same name ignoring case, and it compares the discovered and stored paths ignoring case (`StringComparer.OrdinalIgnoreCase`), so a file is never both missing and newly found under one name, and `updated` never rises.
+- Ordinal Path Identity on Linux reports a case-only rename as a rename, so `updated` has no later use.
+- `unresolved` adds up missing items kept because the files that might be them matched no fingerprint, and new files left out because their fingerprint failed.
+- Fingerprint, duration, and loudness skip a file missing on disk without counting it. Only items from a source the refresh kept reach them, and the kept-folder notice covers those.
+- A duration probe that fails leaves the duration empty, so the next refresh probes the video again.
+- A loudness error is stored, and the next refresh scans the video again.
+- A file replaced at the same path is hashed again but keeps its old duration and loudness, which `ISSUES.md` records as "A video replaced at the same path keeps its old duration and loudness", so its change shows only in the fingerprint stage's count.
+- Only the loudness stage reports a missing ffmpeg. The duration stage counts nothing, and the thumbnail stage counts each video needing a thumbnail as failed.
+- Linux AppImages don't bundle ffmpeg (`docs/dev-setup.md`), so a missing ffmpeg happens in normal use.
+- In the user's catalog, no video lacks a duration, none has a loudness error, none lacks a thumbnail, and every fingerprint is ready (measured), so a refresh that changes nothing has nothing else to report.
+- `TryReserveRun` creates all six stages when a run starts (`RefreshPipelineService.cs`).
+- `CloneStatus` copies each field by hand (`RefreshPipelineService.cs`).
+- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, and a refresh pipeline test checks a published status against `RefreshStatusSnapshot`.
+- About 27 assertions in `RefreshPipelineServiceTests.cs` check stage messages.
+- The WebUI's summary tests use message formats the server never sends, such as "Fingerprint (5 hashed, 10 ready)" (`src/test/eventsHelpers.test.ts`).
+- `coerceRefreshSnapshot` accepts PascalCase and missing fields.
+- Removing `message` leaves the WebUI's summary parsers nothing to read, so the summary moves to the counts in this slice.
+- No shared fixture covers refresh, and the wording lives only in the WebUI, so none is needed.
+- The Operator page reads no refresh status and records only each event's type (`ApiTelemetryService.cs`), so it needs no change.
+
+**Acceptance**
+
+- Each stage's member carries its progress and counts through a run, in refresh pipeline tests of each stage.
+- The duration and loudness stages count only the videos they scan, and every video in a forced rescan, with their percent following, in refresh pipeline tests of both stages.
+- A two-phase stage's percent starts again at 0 with its second phase, in refresh pipeline tests of the fingerprint and thumbnail stages.
+- A failed duration probe counts as failed, a changed value counts apart from a first measurement, and a file changed on disk apart from a new one, in refresh pipeline tests.
+- A missing ffmpeg or ffprobe is reported once, with no failures counted for it, in refresh pipeline tests with the tools missing.
+- The status matches its OpenAPI schema, in contract tests, and `npm run verify:contracts` passes.
+- The finished summary reads "No changes" for a run that changed nothing, and otherwise names only the nonzero changes and problems, in WebUI tests of the summary.
+- `docs/api.md` describes the status, checked by reading it.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Progress line and popups slice
+
+**Scope**
+
+- The refresh's Now entry shows its stage's progress as its second line (`detail` in `src/state/lastingStates.ts`), in the wording the mockup review settles.
+- `RefreshProgress` carries the counts the line needs from the status.
+- An "X of Y" helper beside `countText` in `src/text/` groups both numbers.
+- The player's indicator stays "Library refresh: {stage} ({percent}%)".
+- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, counted as unread or not as the mockup review settles.
+- A refresh the user starts that changes nothing pops up "No changes".
+- `notify` takes a request to add an entry without a popup (`src/notifications/notifications.ts`).
+- `CONTEXT.md` describes the progress line and which refreshes pop up.
+
+**Traps**
+
+- The Now entry renders a lasting state's `detail` under its text (`EntryRow` in `src/ui/Notifications.tsx`), and the refresh's state sets it to null (`src/state/lastingStates.ts`).
+- The indicator relays its text to `last.log` once per state and title (`createPlayerIndicator` in `src/state/lastingStates.ts`), so a changing second line adds no log lines while it stays out of that key.
+- The player's indicator shows the title and percent and never `detail` (`src/ui/Player.tsx`).
+- `notify` pops up unless the popup settings, the open list, fullscreen, or the popup cap stop it, and an entry that doesn't pop up while the list is closed counts as unread (`src/notifications/notifications.ts`).
+- The status's `trigger` is "manual" for a refresh started through `POST /api/refresh/start` or the tray, and "auto" for a scheduled one (`RefreshPipelineService.cs`).
+- The Settings tab's Library refresh popup kind turns every refresh popup off (`src/ui/SettingsTab.tsx`).
+- `countText` groups with `toLocaleString` and adds "s" for any count but 1 (`src/text/countText.ts`).
+
+**Acceptance**
+
+- The Now entry shows each stage's second line, and none before the first stage, in lasting state and notifications screen tests.
+- The indicator's text and its relays are unchanged, in player and foundation screen tests.
+- An automatic refresh that changes nothing lands in the list without a popup, and one the user starts pops up "No changes", in server connection tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check of a refresh's second line in the bell's list.
+
+#### Release checks
+
+- Manual: In Firefox on the desktop, a refresh started from the tray shows its stage's progress in the bell's list, and when it finishes pops up "No changes" or what it changed.
+
+#### Not included
+
+- `last.log` lines for each refresh stage and run from the server, which is Server Instrumentation.
+- The admin view's Library refresh card, which is Admin Refresh, Backup, and Duplicate Review.
+- Reporting a case-only rename on Linux as a rename, which is Ordinal Path Identity on Linux.
+- Counting files missing on disk.
+- Naming the files that failed.
+- Scanning a replaced file's duration and loudness again.
+
+### M12n2 - WebUI Context Menus
 
 - **Status**: ⏳ Planned
 - **Goal**: A right-click, or a long press on a touch screen, opens an app-styled menu of actions on the player, the now-playing name, tags, categories, presets, sources, notifications, and file paths across the WebUI, in place of the browser's own menu.
@@ -916,7 +1127,7 @@ Last milestone completed: M12l
 - Firefox's Shift+right-click, which always opens Firefox's own menu.
 - Opening a menu from the keyboard.
 
-### M12n2 - WebUI Loop Range
+### M12n3 - WebUI Loop Range
 
 - **Status**: ⏳ Planned
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
@@ -955,7 +1166,7 @@ Last milestone completed: M12l
 
 - Markers on a photo, whose scrub bar is its timer.
 
-### M12n3 - Library Profiles
+### M12n4 - Library Profiles
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
@@ -1163,7 +1374,7 @@ Last milestone completed: M12l
 - Switching profiles on a phone on its side, where the header hides.
 - Profiles in the admin section, which covers the whole library.
 
-### M12n4 - Profile Tag and Preset Visibility
+### M12n5 - Profile Tag and Preset Visibility
 
 - **Status**: ⏳ Planned
 - **Goal**: Each profile shows only the tags, categories, and presets chosen for it, and in a profile a filter or preset leaves out its conditions on the tags the profile hides.
@@ -1643,7 +1854,7 @@ Last milestone completed: M12l
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so each works from any device.
-- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares, and WebUI Context Menus, whose menu and long press a file card's menu uses.
+- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares, and WebUI Context Menus, whose menu and long press a file card's menu uses, and Library Refresh Progress and Summary, whose progress line and summary the Library refresh card shows.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1666,7 +1877,9 @@ Last milestone completed: M12l
 **Scope**
 
 - Refresh Now with the refresh status.
-- While a refresh runs, the Refresh card shows its stage and progress, and its result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
+- While a refresh runs, the Library refresh card shows its stage, its percent, and the progress line the bell's Now entry shows, as Library Refresh Progress and Summary words them.
+- Otherwise the card shows its last refresh's time and summary, or the text Library Refresh Progress and Summary's mockup settles for no refresh since the server started.
+- A refresh's result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
 - The refresh settings: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
 - Clear playback stats for the whole library, which the desktop offered from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
 - Clear All Playback Stats… sends `allItems: true`, since the route refuses a request that names neither `allItems` nor any item id.
@@ -1676,12 +1889,13 @@ Last milestone completed: M12l
 
 - Desktop Client Removal leaves `POST /api/refresh/start` and `/api/refresh/settings` with no caller. The routes exist, so this needs no contract change (measured before promotion).
 - The tray can also start a refresh (measured).
+- The server keeps the refresh status only in memory (`RefreshPipelineService.cs`), so after a restart it has no last refresh until one runs.
 - The interval and parallelism ranges are the ones the server already clamps to.
 - Before WebUI Multi-Select and Bulk Actions, which clears a selection's playback stats by ids, the WebUI never called `POST /api/playback/clear-stats` (measured).
 
 **Acceptance**
 
-- Refresh Now starts a refresh, its card shows the refresh's stage and progress, and its result pops up, in admin section UI tests.
+- Refresh Now starts a refresh, its card shows the refresh's stage, percent, and progress line while it runs and its last refresh's summary afterwards, and its result pops up, in admin section UI tests.
 - Refresh settings load and save, and saving one field leaves the others as they were on the server, in admin section UI tests.
 - Each refresh field accepts the range the server enforces, in admin section UI tests.
 - A refresh value outside its range is flagged with the field validation pattern as it is typed, and Save can't proceed until it is corrected, in admin section UI tests of each refresh field.
