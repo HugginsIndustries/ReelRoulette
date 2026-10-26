@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a Developer section in Settings for testing on devices, a library refresh's progress in the bell's list and a plain summary of what it changed, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12n6, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a Developer section in Settings for testing on devices, a notice to reload onto a newer build, the bell's messages kept across reloads, 24-hour times and ISO dates, a library refresh's progress in the bell's list and a plain summary of what it changed, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12n6, M12n7, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -365,7 +365,287 @@ Last milestone completed: M12m
 - The server's auth mode in Diagnostics, which the WebUI isn't sent.
 - Clearing the client id, the session id, or pairing in a reset.
 
-### M12n2 - Library Refresh Progress and Summary
+### M12n2 - WebUI Update Notice
+
+- **Status**: ⏳ Planned
+- **Goal**: When the server serves a newer build of ReelRoulette, the player's indicator and the bell's list say so until a tap reloads the page, the bell's messages survive the reload, and every time and date the app shows reads in 24-hour time and ISO dates.
+- **Depends on**: WebUI Notifications, whose indicator and bell's list this milestone adds to, and WebUI Developer Settings, whose page reload the notice's tap uses and whose reset this milestone keeps the bell's messages through.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The notice is a lasting state, "ReelRoulette updated · Tap to reload", worded as the mockup review settles, on the player's indicator and in the bell's Now section.
+- It never fades with the controls, as Reconnecting… doesn't.
+- It comes after Reconnecting… and before Server not compatible and the states after it.
+- It is off while Reconnecting… shows, since a reload while the server can't be reached lands on the browser's error page, which an installed iOS app can't leave.
+- While the server also fails the compatibility check, the bell's Now section lists both, and the indicator shows the notice.
+- A tap on the indicator or on the notice's Now row reloads the page, after asking "Discard changes?" while the Filter or Tags tab holds unsaved changes.
+- Every time the app shows uses 24-hour time, and every date shown as a value uses "YYYY-MM-DD", or "MM-DD" where the year isn't shown, through shared formatters.
+- Dates worded into a summary on purpose, such as the Filters line's "Added Jan 3 – Mar 31, 2026", keep their wording.
+- The browser's own date pickers follow the device.
+- Relative times, such as the Stats tab's "3 hours ago" and the admin view's "Last refresh 2 hours ago", aren't date values and stay.
+- The bell's times read "HH:MM" for a message from today and "MM-DD HH:MM" for one from another day, in place of "Just now", "{n} min ago", and a 12-hour time of day.
+- Show seconds, a Notifications setting that is off by default, makes the bell's times "HH:MM:SS" and "MM-DD HH:MM:SS".
+- The bell's Recent list is kept per device, up to its 50 messages, with each one's read state.
+- Clear empties the kept list.
+- The bell's Now section isn't kept.
+- Reset this device's settings keeps the bell's messages, since they aren't settings.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The update notice on the indicator and in the bell's Now section with its tap and the discard question, the notice in the admin view after Apply & Restart, the bell's new times and Show seconds, the bell's messages kept across reloads, and every time and date in the mockup in 24-hour time and ISO dates, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Dev server | ⏳ Planned | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
+| Build check | ⏳ Planned | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
+| Reload notice | ⏳ Planned | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
+| Times and dates | ⏳ Planned | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
+| Kept messages | ⏳ Planned | The bell's Recent list kept per device across reloads, up to its 50 messages with their read state, with Clear emptying it and the reset keeping it. |
+
+#### Mockup slice
+
+**Scope**
+
+- The update notice is a lasting state in the shared notifications (`NOTIFY_LASTING_ORDER` in `build/common.js`), after Reconnecting… and before Server not compatible, with its entry in `LASTING` (`build/layout.src.html`).
+- Its icon comes from the mockup's icon subset, such as `refresh`, `update`, or `restart_alt`.
+- The indicator takes a tap only while it shows the notice, and the tap doesn't reach the player's own tap handling.
+- The notice's Now row takes a tap too.
+- A tap asks "Discard changes?" in the mockup's confirmation (`confirmDialog` in `build/common.js`), with a red Discard, while the Filter or Tags tab holds unsaved changes, then reloads the page.
+- The Mockup tab's Lasting states fieldset gains a ReelRoulette updated checkbox, apart from the Server choices, so the notice can show beside Server not compatible.
+- The admin view's bell lists the notice in its Now section after Apply & Restart (`build/admin.src.html`).
+- The bell's times read "HH:MM" for today and "MM-DD HH:MM" for another day, and "HH:MM:SS" and "MM-DD HH:MM:SS" with Show seconds, through one helper in `build/common.js` in place of `notifyAgo`.
+- Show seconds sits in the Settings tab's Notifications section, outside the popup settings' fields (`#set-popup-fields`), off by default.
+- A Mockup-tab button adds a message from an earlier day, so the "MM-DD" form shows.
+- The bell's Recent list is kept across reloads with its read state, in the mockup's own storage (`store` in `build/common.js`), and Clear empties it.
+- The mockup's Reset this device's settings keeps the bell's messages.
+- The admin page's times and dates go through the same helper:
+  - the backups' labels, such as "06:00", "10-25 18:00", and "10-23 06:00 (daily)", in place of "Today 06:00", "Yesterday 18:00", and "3 days ago (daily)";
+  - the backup made before an import or a restore, such as "14:32 (before import)";
+  - a connected client's time, as "MM-DD HH:MM" when it connected on another day;
+  - the Log Viewer's rows, with "MM-DD" before the time for a line from another day.
+- The notes that describe the lasting states, the bell's list, and the Mockup tab say what changed (`build/index.src.html`, the Lasting states fieldset's note in `build/layout.src.html`, and the list's comment in `build/common.js`).
+- The review settles:
+  - the notice's wording, including whether it says "Tap" on the desktop;
+  - its icon, and whether it is orange;
+  - its second line in the Now section;
+  - whether the mockup's tap reloads the page or stands in for the reload;
+  - Show seconds' wording and place;
+  - the admin page's labels.
+- Before the app is built, the user approves the design in Firefox on the desktop, on the iPad, and on an Android phone.
+
+**Traps**
+
+- The indicator ignores the pointer (`pointer-events: none` in `#player-indicator`'s rules in `build/layout.src.html`), as the app's does.
+- `renderIndicator` and `setLasting` in `build/common.js` show the first active state, hide it while pairing shows, and set `follows-controls` and `is-warning`.
+- A Now row is a plain list item with no listener (`entryRow` in `build/common.js`).
+- The Mockup tab's Server choices (`mock-situation`) include Reconnecting, Running without a library, and Server not compatible, which `applySituation` maps to lasting states, and the Lasting states checkboxes (`#mock-lasting`) mirror them (`build/layout.src.html`).
+- The admin page starts the notifications with no indicator, so its bell's Now section is its only place for a lasting state, and its Apply & Restart only shows "Applying the update and restarting…" (`build/admin.src.html`).
+- The admin page's list of messages is the main page's (`initNotifications` in `build/admin.src.html`), so one kept list shows in both.
+- `notifyAgo` in `build/common.js` mirrors the app's `messageTime`, and every sample message is made at `Date.now()`, so no message from another day shows today.
+- The open list renders its times again every 30 seconds (`build/common.js`).
+- The mockup keeps its settings and the Mockup tab's options under one `rr-mockup.` prefix (`store` in `build/common.js`), with the popup settings under `rr-mockup.notify`.
+- The mockup's Reset this device's settings comes with WebUI Developer Settings, and clears the mockup's settings except its Developer ones.
+- The admin page builds the safety backup's time by hand (`addSafetyBackup` in `build/admin.src.html`), its backups are fixed labels (`BACKUPS` and `DAILY_BACKUPS`), and Restore's confirmation puts the label, lowercased, into its sentence.
+- The Log Viewer's rows show a line's time of day alone (`entry.ts.slice(11)` in `build/admin.src.html`), while its time window reaches Last 24 hours.
+- The Stats tab's exact times already read "YYYY-MM-DD HH:MM:SS", the Filters line words its dates on purpose (`dateStyle: "medium"`), and the admin page's Events, its export name, and the recovery page's log lines already match.
+- The Filter and Tags tabs mark unsaved changes and have Discard changes buttons (`#filter-discard` and `#tags-discard` in `build/layout.src.html`).
+- `refresh`, `update`, and `restart_alt` are in the mockup's icon subset, and `system_update` isn't (`ICONS` in `build/build_font.py`) (measured).
+- `build_font.py` isn't among the commands `AGENTS.md` lets an agent run without approval.
+- `check.mjs` runs the pages in happy-dom with no layout, so whether the notice's text fits a phone's indicator can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the notice, its tap, the bell's times, Show seconds, the kept messages, and the admin page's times as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+#### Dev server slice
+
+**Scope**
+
+- `tools/scripts/run-server.ps1` builds the WebUI as it does now, then copies `dist` into `artifacts/run-server/webui/`, emptied first, and points `ServerApp__WebUiStaticRootPath` at the copy.
+- Another build, such as an agent's `npm run verify`, then changes nothing the running server serves until `run-server.ps1` runs again.
+- The script's "WebUI static root" line prints the copy's path.
+- `docs/dev-setup.md` and `CONTEXT.md` say `run-server.ps1` serves a copy, and `docs/dev-setup.md`'s troubleshooting note on WebUI changes stays as it is.
+
+**Traps**
+
+- The server reads the WebUI's files from its static root on every request (`PhysicalFileProvider` in `MapWebUiStaticServing`, `src/core/ReelRoulette.ServerApp/Program.cs`), so a build into that folder reaches a running server at once (inferred).
+- On 2026-10-25, the user's `run-server.ps1` server started at 20:00:08, and `dist/index.html` was rewritten at 20:24:26 while it ran (measured).
+- `npm run verify` ends with `npm run build`, which builds into `dist` (`package.json`).
+- Vite empties `dist` before it writes a build, so for the build's length the folder has no `index.html` (inferred).
+- `artifacts/` is gitignored as a whole (`.gitignore`), and holds `publish`, `scratch`, and `velopack-smoke`.
+- An in-app restart starts the replacement server with this process's environment and a few server settings of its own (`TryLaunchReplacementProcess` in `src/core/ReelRoulette.ServerApp/Program.cs`), so it keeps serving the same copy (inferred).
+- `run-server.ps1` runs on the user's real settings and must not be isolated (`AGENTS.md`), and the copy changes only where the WebUI's files come from.
+- `verify-web-deploy.ps1` builds and serves `dist` on its own, isolated, without `run-server.ps1`.
+- The script stops when `dist` is missing after the build.
+
+**Acceptance**
+
+- With `run-server.ps1` running, an `npm run build` after a WebUI change leaves the page that Firefox on the desktop loads on the earlier build until `run-server.ps1` runs again, in one quick spot check.
+
+#### Build check slice
+
+**Scope**
+
+- After every version check that gets an answer, including one that fails the compatibility check, the page fetches `/index.html` with `cache: "no-store"` and compares the `/assets/` addresses of its module script and stylesheets with its own, which it reads from its document when it starts (`checkVersionOnce` in `src/state/serverConnection.ts`, and a module of its own beside `src/state/serverCompatibility.ts`).
+- A different set sets a store signal that the server serves a newer build, which lasts until the page reloads.
+- A fetch that fails, an answer other than 200, an answer with no `/assets/` script, or a page with no `/assets/` script of its own, as in tests, leaves the signal as it was.
+- One `last.log` line, when the page first finds a newer build, names its own script file and the server's.
+- When a restarted server comes back failing the compatibility check, Reconnecting… ends without "Reconnected." (`blockForCompatibility` and `updateReconnecting` in `src/state/serverConnection.ts`).
+- The server, the API contract, and `docs/api.md` don't change.
+- `CONTEXT.md` describes the check.
+
+**Traps**
+
+- Nothing identifies a WebUI build today: `/api/version`'s `assetsVersion` is a fixed release string (`GetVersion` in `ServerStateService.cs`), the event stream's `streamOpened` carries only the revision, and `APP_VERSION` comes from `.version`, the same on every dev build.
+- Vite names the entry script and the stylesheet by their content, as builds of a copy of the WebUI showed (measured):
+  - two builds of the same source were byte for byte the same, with the same names as the live `dist`;
+  - an edit to a stylesheet changed both names, and an edit to a script changed the script's name;
+  - an edit that the minifier folded away changed neither;
+  - an edit only to `index.html`'s inline theme script, or to a file under `public/`, changed neither.
+- The build is one script file, with no dynamic `import(` in `src`.
+- The server sends `index.html`, `sw.js`, and the fallback for other paths with `Cache-Control: no-store`, and `/assets/` with a year's `immutable` cache (`MapWebUiStaticServing` in `Program.cs`).
+- The service worker passes only navigations to the network and caches nothing (`public/sw.js`), so the page's fetch of `/index.html` goes straight to the server.
+- `serverVersion` and `serverCapabilities` are written before the compatibility check (`checkVersionOnce`), and once it fails, `checkVersion` and `connectEvents` return at once, so no later check runs (measured).
+- `visibilitychange` to visible, `focus`, `pageshow`, and `online` reopen the event stream, even an open one, and each open checks the version (`addReconnectListeners` and the stream's `onOpen` in `serverConnection.ts`) (measured).
+- On the desktop, `visibilitychange` and `focus` usually fire together on a return to the page, and `checkVersion` then runs at most one more check after the one running (inferred).
+- A server update always restarts the server (`ApplyDownloadedUpdate` in `src/core/ReelRoulette.ServerApp/Hosting/UpdateService.cs`), and a restart always goes through Reconnecting… and checks the version again when the stream opens.
+- With the Dev server slice, a new build reaches the user's dev server only with a restart, as in a release.
+- `blockForCompatibility` calls `updateReconnecting`, which turns Reconnecting… off and pops up "Reconnected." as the page turns to Server not compatible (measured), and the test of a restart that comes back incompatible checks no popups (`serverConnection.test.ts`).
+- The server connection tests run against a fake fetch, a fake event source, and a fake window (`setup` in `src/test/serverConnection.test.ts`).
+
+**Acceptance**
+
+- A page whose script or stylesheet names differ from a fresh `index.html`'s finds the newer build after the check on start, on a reconnect, on a return to the page, and after a check that fails the compatibility check, in server connection tests.
+- The same names, a failed fetch, an answer other than 200, and an answer with no `/assets/` script leave the signal as it was, in server connection tests.
+- The `last.log` line is written once, in server connection tests.
+- A restart that comes back incompatible ends Reconnecting… with no "Reconnected." popup, in server connection tests.
+- `npm run verify` passes.
+
+#### Reload notice slice
+
+**Scope**
+
+- The notice is a lasting state (`src/state/lastingStates.ts`), after Reconnecting… in the order, active while the server serves a newer build and Reconnecting… doesn't show, with the wording, icon, and second line the mockup review settles.
+- On the player, the indicator takes taps while it shows the notice, and a tap reloads the page without also showing or hiding the controls, starting a random pick, or seeking (`PlayerIndicator` in `src/ui/Player.tsx`, `.player-indicator` in `src/styles.css`).
+- In the bell's Now section, the notice's row takes a tap that reloads the page (`EntryRow` in `src/ui/Notifications.tsx`).
+- While the Filter or Tags tab holds unsaved changes, a tap first asks "Discard changes?" through `dialogs.confirm`, with a red Discard, and Cancel leaves the page as it was.
+- The reload goes through the page reload that WebUI Developer Settings passes in for its reset, so tests replace it.
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the notice, its place in the order, and its tap.
+
+**Traps**
+
+- The lasting states' order is `LASTING_STATE_ORDER`, and the indicator shows the first active one, so it never alternates, and shows nothing while pairing shows (`createPlayerIndicator`).
+- The bell's Now section lists every active lasting state, during pairing too (`NotificationList` in `src/ui/Notifications.tsx`).
+- The indicator ignores the pointer (`pointer-events: none` on `.player-indicator` in `src/styles.css`).
+- The indicator sits inside `#media-container`, outside `#overlay-controls` (`src/ui/Player.tsx`).
+- The indicator fades with the controls only for a state that follows them, as a library refresh does.
+- A tap on the player goes through `onAreaClick` in `src/ui/Player.tsx`: a swipe's click is swallowed, a tap on a seekable video waits 300 ms for a double tap, and the tap then starts a random pick while nothing plays, or shows or hides the controls.
+- The player's touch listeners skip only touches that start in `#overlay-controls`, which stops click and touch events from reaching the player.
+- A Now row is a plain list item, and the list's only buttons are Clear, Close, and Notification settings.
+- Server not compatible lasts until the page loads again, since the event stream stops while it shows.
+- The Filter and Tags tabs' unsaved changes are `services.unsaved` (`src/state/appServices.ts`), and the Tags tab already asks "Discard changes?" with a red Discard (`DISCARD_ITEM_CHANGES` in `src/tags/tagEditor.ts`).
+- No `beforeunload` or `pagehide` handler exists.
+- A reload keeps every `rr_device.` setting, the client id in `localStorage`, and the session id in `sessionStorage`, which lasts through a reload in the same tab.
+- A reload loses the item playing, its position, Previous and Next, the library's search, selection, and scroll, fullscreen, and unsaved Filter and Tags changes (inferred).
+- With `index.html` sent `no-store` and the service worker caching nothing, `location.reload()` loads the server's build and stays in the installed app's window on iOS and Android (inferred).
+- A reload while the server can't be reached shows the browser's error page, and an installed iOS app has no address bar to leave it (inferred).
+- `relayLog` sends with a plain `fetch` and no `keepalive` (`src/state/appApi.ts`), so a line sent as the page reloads can be lost (inferred).
+- Dialogs open with `showModal`, above the player, so the indicator can't be tapped while one is open (inferred).
+- The lasting state tests check each state alone, the order through `LASTING_STATE_ORDER`, the flags, and the relayed lines (`src/test/lastingStates.test.ts`), the player screen tests check the indicator, and the notifications screen tests check the Now rows.
+
+**Acceptance**
+
+- The notice shows on the indicator and in the bell's Now section while the server serves a newer build, before Server not compatible and the states after it, and not while Reconnecting… shows, in lasting state tests.
+- With the server also incompatible, the Now section lists both and the indicator shows the notice, in lasting state tests.
+- A tap on the indicator reloads the page and neither shows or hides the controls nor starts a random pick, in player screen tests.
+- A tap on the notice's Now row reloads the page, in notifications screen tests.
+- With unsaved Filter or Tags changes, a tap asks "Discard changes?" first, Discard reloads, and Cancel doesn't, in player and notifications screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check in Firefox on the desktop: after `run-server.ps1` runs again with a WebUI change, the open page shows the notice, and a click reloads it.
+
+#### Times and dates slice
+
+**Scope**
+
+- Shared formatters in `src/time/timeText.ts`, beside `localDayText` and `exactTimeText`, give a time of day as "HH:MM" or "HH:MM:SS", and a message's time as that for today and with "MM-DD" before it for another day.
+- The bell's list shows each message's time through them (`messageTime` in `src/notifications/notifications.ts`), in place of "Just now", "{n} min ago", and the 12-hour time of day.
+- The open list's 30-second refresh of its times goes (`LIST_TIME_REFRESH_MS`), since a message's time changes only when a day ends, which the list follows the next time it renders.
+- Show seconds, off by default, sits in the Settings tab's Notifications section outside the popup settings (`NotificationSettings` in `src/ui/SettingsTab.tsx`), is kept per device as `notifications.showSeconds`, and makes the bell's times "HH:MM:SS" and "MM-DD HH:MM:SS".
+- The Stats tab's exact times go through the shared formatters and read as before.
+- The Filters line's dates keep their wording, and the custom range's date pickers follow the device.
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the bell's times, Show seconds, and the formatters.
+
+**Traps**
+
+- The WebUI shows two times or dates as values, the bell's message times and the Stats tab's exact times, and its popups, Diagnostics, Library, Auto Tag, Randomization tab, and refresh summary show none (measured).
+- `messageTime` gives "Just now" under a minute, "{n} min ago" under an hour, and then `toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })`, which reads "3:04 PM" on an en-US device and gives no date for a message from another day (measured).
+- `exactTimeText` builds "YYYY-MM-DD HH:MM:SS" by hand, and the Stats tab shows it with Show exact times on and `timeAgo` otherwise (`src/stats/statsModel.ts`).
+- The Filters line words a custom range with `Intl.DateTimeFormat`'s `dateStyle: "medium"` (`src/filter/filterSummaryModel.ts`).
+- The server sends no date or time as text that the WebUI shows, and never formats a value that the WebUI also formats, so no shared fixture is needed (measured).
+- The popup settings are kept together as `notifications.popups` (`readPopupSettings` in `src/notifications/notifications.ts`), and their `seconds` field is how long a popup shows.
+- The Settings tab's popup settings sit in a fieldset that Show popups disables (`NotificationSettings`).
+- `appearance.tileNames` is a setting kept as one boolean under its own key (`src/settings/settings.ts`).
+- `messageTime` is pinned by the notifications tests and the notifications screen tests, and the exact times by the time text, Stats model, and Stats screen tests.
+
+**Acceptance**
+
+- The formatters give "HH:MM", "HH:MM:SS", "MM-DD HH:MM", and "MM-DD HH:MM:SS", with today ending at local midnight, in time text tests.
+- The bell's list shows today's and another day's messages in their forms, with Show seconds off and on, in notifications tests and notifications screen tests.
+- Show seconds is off by default and kept on the device, in Settings screen tests.
+- The Stats tab's exact times read as before, in Stats tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Kept messages slice
+
+**Scope**
+
+- The bell's Recent list is kept per device as `notifications.recent` in the device store, up to its 50 messages, each with its kind, icon, text, second line, warning, time, and read state (`src/notifications/notifications.ts`).
+- It is written when a message or a notice joins the list, when the list opens, and when Clear empties it, and it is read when the page starts, with each entry's fields checked as the popup settings' are.
+- Kept messages get new ids when the page starts, and the list's highlight of unread messages while it is open isn't kept.
+- The bell's badge counts the kept messages marked unread, in place of its own counter.
+- Reset this device's settings keeps `notifications.recent`, as it keeps the Developer settings.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and the module's comment on its 50 messages say the list is kept across reloads.
+
+**Traps**
+
+- An entry holds an id, its kind, icon, text, second line, warning, time in milliseconds, whether it is unread, and whether it is highlighted (`NotificationEntry`).
+- The id comes from a counter that starts at 0 on each page, and keys each row and each popup.
+- The highlight is set only while the list is open, from the unread messages.
+- A popup's key, a message's log text, and a notice's action button never sit on an entry, and `noticeWithAction` passes only its message to the list (`src/dialogs/dialogs.ts`).
+- A second line can name files and folders, such as a failed refresh's error, so a kept list holds them in the device's browser storage, while log text keeps them only out of `last.log`.
+- The list keeps the newest 50 first, and no entry changes in place except its unread and highlight.
+- The badge's counter rises with each unread message and isn't worked out from the entries, so it can count messages that have left the list.
+- 50 messages of about 210 bytes come to about 10.5 KB (measured).
+- The device store keeps one JSON value per key under `rr_device.` (`src/state/deviceStore.ts`), and the popup settings are read with a check of each field (`readPopupSettings`).
+- WebUI Developer Settings' reset clears every `rr_device.` setting except the `developer.` ones, through the clear it gives the device store.
+- No code listens for another page's storage changes, so two pages on one device each write the whole list and the last one wins, as with every device setting.
+- The player screen test of which keys a session writes expects an exact list and plays a flow that sends a message, so it fails until it allows `notifications.recent` (`src/test/screens/player.test.ts`) (inferred).
+- The library, Settings, and Randomization screen tests also expect exact key lists, and may need the same (inferred).
+- The screen harness clears `localStorage` and `sessionStorage` before each page (`resetPage` in `src/test/screens/pageHarness.ts`), so a test of the kept list mounts the page again without it.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and the comment on `NOTIFICATIONS_KEPT` say the list lasts for the page's life.
+
+**Acceptance**
+
+- Messages with their read state survive the page mounting again, up to 50, and Clear empties the kept list, in notifications tests and notifications screen tests.
+- The badge after a reload counts the kept unread messages, in notifications screen tests.
+- Reset this device's settings keeps the bell's messages, in Settings screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: After an in-app update between two dev releases that both have the update notice, a page left open in Firefox on the desktop, in the iPad's installed app, and in the Android phone's installed app shows the notice, and a tap reloads it onto the new version with the bell's messages still listed.
+
+#### Not included
+
+- Reloading the page on its own, since that would cut off playback.
+- Noticing a change only to `index.html`'s inline script or to a file under `public/`, which leaves the script and stylesheet names as they were.
+- Keeping the item playing, its position, and Previous and Next through the reload.
+- Merging the bell's messages kept by two pages open on one device.
+- The Operator page's locale times, which is Recovery Page and Operator Retirement.
+
+### M12n3 - Library Refresh Progress and Summary
 
 - **Status**: ⏳ Planned
 - **Goal**: While a library refresh runs, the bell's list shows how far its stage has got, and a finished refresh says in plain words what it changed, from counts the server sends as numbers.
@@ -576,7 +856,7 @@ Last milestone completed: M12m
 - Naming the files that failed.
 - Scanning a replaced file's duration and loudness again.
 
-### M12n3 - WebUI Context Menus
+### M12n4 - WebUI Context Menus
 
 - **Status**: ⏳ Planned
 - **Goal**: A right-click, or a long press on a touch screen, opens an app-styled menu of actions on the player, the now-playing name, tags, categories, presets, sources, notifications, and file paths across the WebUI, in place of the browser's own menu.
@@ -835,7 +1115,7 @@ Last milestone completed: M12m
 - Firefox's Shift+right-click, which always opens Firefox's own menu.
 - Opening a menu from the keyboard.
 
-### M12n4 - WebUI Loop Range
+### M12n5 - WebUI Loop Range
 
 - **Status**: ⏳ Planned
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
@@ -874,7 +1154,7 @@ Last milestone completed: M12m
 
 - Markers on a photo, whose scrub bar is its timer.
 
-### M12n5 - Library Profiles
+### M12n6 - Library Profiles
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
@@ -1082,7 +1362,7 @@ Last milestone completed: M12m
 - Switching profiles on a phone on its side, where the header hides.
 - Profiles in the admin section, which covers the whole library.
 
-### M12n6 - Profile Tag and Preset Visibility
+### M12n7 - Profile Tag and Preset Visibility
 
 - **Status**: ⏳ Planned
 - **Goal**: Each profile shows only the tags, categories, and presets chosen for it, and in a profile a filter or preset leaves out its conditions on the tags the profile hides.
@@ -1859,7 +2139,7 @@ Last milestone completed: M12m
 - Settings and backups are not part of the transfer. Presets, profiles, and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
 - Import also works while the server runs without a library, and can import one of the server's own backups, which is how the admin section restores a backup.
 - Before it replaces the library, an import or a restore takes a catalog backup of the current one, even with server backups off and whatever the backup gap, so a mistaken import or restore can be undone from the restore list.
-- That backup is listed first in the restore list, labeled by when it was made and what it came before, such as "Today 14:32 (before import)" or "Today 14:32 (before restore)".
+- That backup is listed first in the restore list, labeled by when it was made and what it came before, such as "14:32 (before import)" or "14:32 (before restore)".
 
 #### Slices
 
@@ -1954,7 +2234,7 @@ Last milestone completed: M12m
 **Scope**
 
 - A new route lists the server's backups, a contract change that only adds.
-- The Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "Today 06:00", "Yesterday 18:00", or "3 days ago (daily)", with a Restore… button.
+- The Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "06:00", "10-25 18:00", or "10-23 06:00 (daily)", with a Restore… button.
 - A backup kept only by daily retention is labeled "(daily)".
 - Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and a Your actions popup then says "Restored the backup from {when}.".
 - A backup row's context menu holds Restore…, which asks first, as the row's button does.

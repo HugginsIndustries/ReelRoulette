@@ -20,12 +20,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan developer settings, layout measurements, and fuller diagnostics as WebUI Developer Settings
+Docs: Plan a reload notice for a newer build, kept bell messages, and 24-hour times as WebUI Update Notice
 
-- MILESTONES.md adds WebUI Developer Settings as M12n1: a Developer section at the bottom of the Settings tab, kept per device, with Don't record plays on this device, Show layout measurements, and Reset this device's settings.
-- While plays aren't recorded, the WebUI skips record-playback for random picks and sends recordPlayback false for history steps and library plays, with no server change, a "Counts disabled" pill under the bell that stays when the controls hide, and a last.log line on each change and on a page load with it on.
-- The layout figures, in the mockup notes' magenta, dashed look, show the panel's and player's widths, the viewport's size, the grid's zoom, and a corner box of layout facts, live and letting taps through; the panel's figure replaces the mockup's handle readout.
-- A reset keeps the Developer settings, the client id, and the session id, then reloads. Diagnostics gains the event stream's state, the last event number, resyncs since the page loaded, the server address, and the WebUI's API version.
-- Its slices: a mockup approved in Firefox on the desktop, the iPad, and an Android phone; the Developer section, which also moves Scan full library into the device store and merges coreApi.ts's storage helper; layout measurements, which also removes the panel's unused size container; then Diagnostics.
-- Library Refresh Progress and Summary, WebUI Context Menus, WebUI Loop Range, Library Profiles, and Profile Tag and Preset Visibility move to M12n2 through M12n6, and the v0.15.0 outline lists the new IDs and the Developer section.
-- Resume Position and Session Continuity depends on the new milestone and keeps Don't record plays working once every play is recorded through record-playback.
+- MILESTONES.md adds WebUI Update Notice as M12n2: when the server serves a newer build, the player's indicator and the bell's Now section say "ReelRoulette updated · Tap to reload", after Reconnecting… and before Server not compatible, and a tap reloads the page, asking "Discard changes?" first while the Filter or Tags tab holds unsaved changes.
+- The page compares its content-hashed script and stylesheet names with a fresh index.html after every version check that gets an answer, with no server or contract change, and a restarted server that comes back incompatible no longer pops up "Reconnected.".
+- run-server.ps1 serves a copy of the WebUI it builds at startup from artifacts/run-server/webui, so another build, such as an agent's npm run verify, no longer changes what the running dev server serves.
+- The bell's Recent list is kept per device across reloads, up to its 50 messages with their read state, and its times read "HH:MM" for today and "MM-DD HH:MM" otherwise, with a Show seconds setting.
+- Every time the WebUI and the mockup show uses 24-hour time and every date value ISO format, the admin designs' backup labels, connected clients, and Log Viewer rows included; AGENTS.md gains the rule as a guardrail, and Admin Library Catalog Transfer's backup label examples follow it.
+- Library Refresh Progress and Summary, WebUI Context Menus, WebUI Loop Range, Library Profiles, and Profile Tag and Preset Visibility move to M12n3 through M12n7, and the v0.15.0 outline lists the new IDs and the notice.
