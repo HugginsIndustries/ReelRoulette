@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a library refresh's progress in the bell's list and a plain summary of what it changed, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a Developer section in Settings for testing on devices, a library refresh's progress in the bell's list and a plain summary of what it changed, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12n6, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -139,7 +139,233 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12m
 
-### M12n1 - Library Refresh Progress and Summary
+### M12n1 - WebUI Developer Settings
+
+- **Status**: ⏳ Planned
+- **Goal**: A Developer section at the bottom of the Settings tab lets a device play without counting plays, show the layout's measurements live, and reset its settings, and Diagnostics shows the event stream and the server address.
+- **Depends on**: WebUI Settings Panel, whose Settings tab and Diagnostics section this milestone extends, and WebUI Responsive Layout and Panels, whose panel host the figures read, and WebUI Grid Row Reuse and Zoom, whose zoom the grid's figures follow.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The Developer section is the Settings tab's last section, below Diagnostics, and its settings are kept per device like the others.
+- It holds Don't record plays on this device, Show layout measurements, and Reset this device's settings, worded as the mockup review settles.
+- The Counts disabled pill and the layout figures share the look of the mockup's notes, magenta and dashed (`.mock-note` in `build/common.css`), as the app's developer style.
+- In the mockup, the pill and the figures use a class that Hide mockup notes leaves showing, since they ship.
+- A reset keeps the Developer section's own settings, so testing after a reset still counts no plays.
+- A reset keeps the client id and the session id, which are identity rather than settings, and which Diagnostics shows for matching `last.log` lines.
+- The figures update live and let taps pass through to what is under them.
+- The panel's figure shows its width and the range the handle allows, in place of the mockup's readout while the handle is dragged.
+- Diagnostics gains the event stream's state, the last event number, the resyncs since the page loaded, the server address, and the API version on the ReelRoulette row.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Developer section | ⏳ Planned | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
+| Layout measurements | ⏳ Planned | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, and the panel's unused size container gone. |
+| Diagnostics | ⏳ Planned | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
+
+#### Mockup slice
+
+**Scope**
+
+- The Settings tab's Developer section, after Diagnostics and above "Settings apply at once and are kept on this device.", with its two switches and its Reset button.
+- Reset this device's settings asks first in the mockup's confirmation (`confirmDialog` in `build/common.js`), with a red confirm button, then clears the mockup's settings except its Developer ones and reloads.
+- The Counts disabled pill, with the `play_disabled` icon, sits where the mockup's playback note (`#play-chip`) sits: 64 px from the top under the bell on a wide player, and 108 px on a narrow one, below the indicator.
+- The pill stays while the player's controls hide, and shows in fullscreen.
+- The mockup's playback note moves below the pill while the pill shows.
+- `play_disabled` joins the mockup's icon subset (`ICONS` in `build/build_font.py`), which `build_font.py` rebuilds.
+- The layout figures show live from the mockup's own layout:
+  - the panel's width and the handle's range at the top of the panel, in place of the handle's readout (`#handle-readout`);
+  - the player's width at the top of the player;
+  - the viewport's width along its top edge and its height along its left edge;
+  - the Library grid's target row height and gap at the grid while a zoom lasts;
+  - a corner box with the device pixel ratio, the layout mode, the safe-area insets, the Library controls' width against its 520 px breakpoint, mouse or touch, installed app or browser tab, and the visible area when the on-screen keyboard or a pinch shrinks it.
+- Diagnostics shows the new rows with sample values, and the event stream's row follows the Mockup tab's Server choices.
+- The review settles:
+  - the section's and its settings' wording;
+  - the reset's confirmation;
+  - where the player's figure goes beside the indicator;
+  - which corner the box takes;
+  - how long the grid's figures stay after a zoom ends;
+  - the Diagnostics rows' labels.
+- Before the app is built, the user approves the design in Firefox on the desktop, on the iPad, and on an Android phone.
+
+**Traps**
+
+- `#play-chip` is a mockup-only note (`mock-chip mock-note`) that reads out the mockup's playback state, such as "Playing" or "Photo looping" (`chipText` in `build/layout.src.html`), and the app has nothing like it.
+- Hide mockup notes hides every `.mock-note` not marked `mock-keep` (`build/common.css`).
+- The mockup's notes are `#e040fb` on `rgba(40, 0, 48, 0.92)` in the dark theme and `#a000b8` on `rgba(255, 240, 255, 0.96)` in the light one (`--mock` and `--mock-bg` in `build/common.css`).
+- The mockup keeps its settings and the Mockup tab's own options, such as `hideMock`, `pairing`, and `mockShort`, under one `rr-mockup.` prefix (`store` in `build/common.js`), so its reset has to name what it clears.
+- The handle's readout shows the width and its range only while the handle is dragged, and hides 900 ms after (`setWidth` in `build/layout.src.html`).
+- The Mockup tab's Panel layout readout already shows the window's size, the pointer, and the panel's state and widths (`renderReadout` in `build/layout.src.html`).
+- The mockup's grid zooms its rows with Ctrl+scroll and a pinch, between 120 and 300 px, with a 2, 3, or 4 px gap (`ROW_HEIGHT` and `tileGap` in `build/layout.src.html`).
+- `play_disabled` is in the app's icon font and missing from the mockup's subset (measured).
+- `build_font.py` isn't among the commands `AGENTS.md` lets an agent run without approval.
+- `check.mjs` runs the pages in happy-dom with no layout, so where the figures and the pill sit can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the Developer section, the reset, the pill, the figures, and the Diagnostics rows as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+#### Developer section slice
+
+**Scope**
+
+- The Developer section in the Settings tab (`src/ui/SettingsTab.tsx`), after Diagnostics, as the mockup shows it.
+- Don't record plays on this device is kept as `developer.dontRecordPlays`, off by default, in the app store (`src/state/appStore.ts`), which the player and the library both get.
+- While it is on, a random pick posts no `POST /api/record-playback` (`notifyPlaybackStarted` in `src/playback/player.ts`).
+- While it is on, a history step sends `recordPlayback: false` (`requestPlay` in `src/playback/player.ts`).
+- While it is on, a library tile's play sends `recordPlayback: false` (`play` in `src/library/library.ts`).
+- The three share one check of the setting, and the server needs no change.
+- While it is on, the player shows "Counts disabled" with the `play_disabled` icon in the media container (`src/ui/Player.tsx`): 64 px from the top under the bell on a wide player, 108 px on a narrow one, with the short-screen offsets the corner buttons and the indicator use.
+- The pill stays while the player's controls hide, and shows in fullscreen and pseudo-fullscreen.
+- Popups set to Top left cover the pill while they show.
+- The developer style joins `src/styles.css` as tokens with the mockup notes' colors for the light and dark themes, which the pill and the figures use.
+- A `last.log` line is written each time Don't record plays changes, and once when a page loads with it on.
+- Reset this device's settings asks first with `dialogs.confirm` and a red confirm button, then clears every `rr_device.` setting except the `developer.` ones and reloads the page.
+- `DeviceStore` gains the clear (`src/state/deviceStore.ts`), and the reload is passed in so tests can replace it.
+- Scan full library moves from `rr_autoTagScanFullLibrary` into the device store as `tags.scanFullLibrary`, with no carry-over (`src/tags/tagEditor.ts`, `src/state/appServices.ts`).
+- `tryGetStorage` in `src/api/coreApi.ts` goes, and the client and session ids reach their storage through `DeviceStorage` and one helper beside it in `src/state/deviceStore.ts`.
+- `CONTEXT.md` describes the Developer section, Don't record plays, and the reset.
+
+**Traps**
+
+- A recorded play adds 1 to the item's play count, sets its last played time, and publishes `playbackRecorded`, and does nothing else (`RecordPlayback` in `LibraryCatalogSession.cs`).
+- `POST /api/play/{itemId}` with `recordPlayback: false` answers as it otherwise would, records nothing, and publishes nothing (`PlayItem` in `ServerHostComposition.cs`).
+- `POST /api/random` has no `recordPlayback` field and records no play, and a random pick's play is recorded through `POST /api/record-playback` as its attempt starts (`beginAttempt` in `src/playback/player.ts`).
+- A history step records its play through `POST /api/play/{itemId}` with `recordPlayback: true` (`playFresh` in `src/playback/player.ts`).
+- Recovery and the recheck after a `404` already send `recordPlayback: false`, and a loop's or a photo timer's repeat records nothing.
+- `requestPlayItem` (`src/api/coreApi.ts`) is a plain API function given its config and identity, so its callers read the setting.
+- While plays aren't recorded, a random pick still moves this device's Shuffle cycle and writes the server's "Random pick" log line, since the random route has no flag.
+- `createSettings` runs after `createPlayer` and `createLibrary` (`src/state/appServices.ts`), so a setting in `src/settings/settings.ts` can't reach them.
+- `notifyPlaybackStarted` already skips while `store.heldBack` is set.
+- The bell is 44 px, 12 px from the top, and fades with the player's controls (`.overlay-corner-btn` in `src/styles.css`).
+- The indicator sits at the top center 14 px down on a wide player, and 64 px down across nearly the whole width of a player narrower than 600 px, at z-index 25 (`.player-indicator` in `src/styles.css`).
+- On a short screen, the corner buttons sit at `max(12px, var(--safe-area-top))`, and a narrow player's indicator 52 px below that (`body.short-screen` rules in `src/styles.css`).
+- Popups at the top sit 64 px down, or 104 px on a narrow player, at z-index 1200 (`.toasts` in `src/styles.css`).
+- The WebUI's log lines name their area, such as `library=random-line-catalog-failed`, and go through `api.relayLog` (`src/state/appApi.ts`).
+- Each module reads its settings once, when the app starts, and only ambient tuning and loudness normalization reset their own, so the page reloads to start from the defaults.
+- `index.html`'s boot script reads `rr_device.appearance.theme` before the first paint.
+- `DeviceStorage` is only `getItem` and `setItem` (`src/state/deviceStore.ts`), and no app code removes a key or reloads the page.
+- Settings are written when they change, never on unload, so nothing writes between the clear and the reload (inferred).
+- The pairing cookie, `rr_paired`, is HttpOnly, so page code can't clear it.
+- A new client id would only start a new Shuffle cycle and add a row to the admin section's Connected clients (inferred).
+- Scan full library is kept as a raw "true" or "false" through the `localStorage` that `src/state/appServices.ts` passes to the tag editor, outside the device store.
+- Tag editor tests and Tags screen tests check the `rr_autoTagScanFullLibrary` key, and several screen tests check exactly which keys the page keeps.
+- The screen harness clears `localStorage` and `sessionStorage` before each page (`src/test/screens/pageHarness.ts`).
+
+**Acceptance**
+
+- With Don't record plays on, a random pick posts no `POST /api/record-playback`, and a history step and a library play send `recordPlayback: false`, while with it off all three record as before, in player and library screen tests.
+- The pill shows while Don't record plays is on, through the controls hiding and in fullscreen, in Player screen tests.
+- Each change of Don't record plays, and a page load with it on, writes its `last.log` line, in Settings screen tests.
+- Reset asks first, keeps the client id, the session id, and the Developer settings, clears every other setting, and reloads, while Cancel changes nothing, in Settings screen tests.
+- Scan full library is kept as `tags.scanFullLibrary`, in tag editor and Tags screen tests.
+- The client and session ids are kept as before, in foundation screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check of the pill in Firefox on the desktop.
+
+#### Layout measurements slice
+
+**Scope**
+
+- Show layout measurements is kept as `developer.layoutMeasurements`, off by default, in the Developer section.
+- While it is on, one overlay inside `#fullscreen-stage` (`src/ui/Stage.tsx`) shows the figures in the developer style, live, with taps passing through:
+  - the panel's width and the range the handle allows, at the top of the panel;
+  - the player's width, at the top of the player where the mockup review places it;
+  - the viewport's width along its top edge and its height along its left edge;
+  - the Library grid's target row height and gap at the grid while a zoom lasts;
+  - the corner box the mockup shows.
+- The panel host exposes the player column's width and the panel's widest width (`playerWidth` and `maxWidth` in `src/panel/panelHost.ts`).
+- The grid controller gives the zoom's live target row height and its gap through the library (`src/library/libraryGridController.ts`, `src/library/library.ts`).
+- The overlay observes what nothing measures yet, and only while it is on: the panel's box, the viewport, `visualViewport`, `#library-controls`, the pointer and installed-app media queries, and the safe areas through a hidden probe element.
+- `.panel`'s `container: panel / inline-size` goes, since no query uses it (`src/styles.css`).
+- `CONTEXT.md` describes the figures.
+
+**Traps**
+
+- The panel host's public layout values are `mode`, `shortScreen`, `width`, and `playerNarrow`, and it keeps the stage's width, the pointer, and the handle's width private (`src/panel/panelHost.ts`).
+- The panel host already observes the player column, but keeps only whether it is narrower than 600 px (`measurePlayer`).
+- In overlay mode the panel is fixed over the whole screen, so `panel.width` isn't its width there.
+- The grid's target row height is the controller's own variable, and its gap goes only to `--library-grid-gap` (`src/library/libraryGridController.ts`).
+- During a zoom only a CSS scale on the rows changes, and the new row height is worked out when the zoom settles (`settleZoom` in `src/library/libraryGridController.ts`).
+- The gap is 2, 3, or 4 px by the row height, snapped to device pixels (`tileGap` in `src/library/libraryGridLayout.ts`).
+- A zoom starts from Ctrl+wheel, which a trackpad pinch sends, a two-finger pinch, or Safari's `gesturestart`, and lasts until 200 ms after the wheel stops and its ease ends, or until a finger lifts (`createGridZoom` in `src/library/libraryGridZoom.ts`).
+- The 520 px breakpoint is a CSS container query on `.library-controls` alone (`src/styles.css`).
+- The Library controls measure 0 while the Library tab is hidden or they are collapsed (inferred).
+- The safe areas exist only as CSS `env()` values in the `--safe-area-*` variables (`src/styles.css`), which JS can't read directly.
+- happy-dom doesn't resolve `env()`, so tests stub the safe-area probe (inferred).
+- No WebUI code uses `visualViewport`, `orientationchange`, or a JS check for an installed app, and only the panel host's private query reads the pointer (measured).
+- The page allows pinch zoom, since its viewport tag sets no maximum scale (`index.html`).
+- A fixed element follows the layout viewport, so the corner box needs `visualViewport`'s offsets to stay on screen during a pinch (inferred).
+- Only `#fullscreen-stage` goes fullscreen, and pseudo-fullscreen fixes it at z-index 9999, so an overlay outside it doesn't show in fullscreen.
+- Nothing on `.player-col` may create a stacking context, or the popups go under the overlay panel (`src/styles.css`).
+- Dialogs open with `showModal`, so they show above the figures.
+- The panel's `overflow: hidden` would clip a figure placed inside it.
+- On a wide player the indicator sits at the top center, where a figure at the player's top would meet it.
+- Figures kept out of the page flow can't change what the observers measure (inferred).
+- Field tooltips (`.vfield-tip`) are fixed and placed in viewport coordinates, and some sit inside the panel, so they show whether removing the panel's container moves anything (inferred).
+- The last `@container panel` rule went when Auto Tag moved to open over the whole page, and no rule has used the panel's container since (measured).
+- happy-dom has no layout, so tests check the figures' wiring and their values from stubbed sizes, and their places are judged on the devices.
+
+**Acceptance**
+
+- With Show layout measurements on, each figure shows its value and follows a change of what it measures, and with it off no figure shows and nothing is observed, in layout measurement screen tests with stubbed sizes.
+- The grid's figures show the zoom's target row height and gap while a zoom lasts, in library grid tests.
+- The panel's figure reads its width beside the player and as the overlay, in panel screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check in Firefox on the desktop that the figures sit at their elements and the panel and a field's tooltip in it look as before.
+
+#### Diagnostics slice
+
+**Scope**
+
+- Diagnostics (`src/ui/SettingsTab.tsx`) shows, worded as the mockup review settles:
+  - the event stream's state: connecting, open, or reconnecting;
+  - the last event number;
+  - the resyncs since the page loaded;
+  - the server address;
+  - the WebUI's API version beside its version on the ReelRoulette row, as the Server row shows the server's.
+- The server connection exposes the event stream's state, the last event number, and the resync count as signals (`src/state/serverConnection.ts`).
+- The event stream gives the connection each event's revision (`src/events/sseClient.ts`).
+- `WEBUI_API_VERSION` is exported (`src/state/serverCompatibility.ts`).
+- `CONTEXT.md` describes the Diagnostics rows.
+
+**Traps**
+
+- Diagnostics shows Client, Session, Client type, Device name, Server with its version and API version, and ReelRoulette with its version, and the mockup shows the same rows.
+- The stream's state lives in the connection's private `streamOpen` and `streamFailed`, and the `ServerConnection` interface doesn't expose the event stream.
+- The event stream keeps its last revision privately, behind `lastRevision()`, which is null until the first event.
+- A resync takes its own revision, which can be lower after a server restart (`nextEventRevision`, locked to `src/test/fixtures/event-revision.json`).
+- The connection already emits `resyncRequired` to its listeners.
+- The server address is the runtime config's `apiBaseUrl` (`src/config/runtimeConfig.ts`), and the config also holds `pairToken`, which Diagnostics never shows.
+
+**Acceptance**
+
+- Diagnostics shows the event stream connecting, open, and reconnecting, in Settings screen tests.
+- The last event number follows each event and a resync, and the resync count rises with each resync, in Settings screen tests.
+- The server address and the ReelRoulette row's API version show, and the pair token doesn't, in Settings screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: In Firefox on the desktop, with Don't record plays on, a random pick and a library play leave the file's play count in the Stats tab unchanged, and Counts disabled shows on the player and in fullscreen.
+- Manual: On the iPad, with Show layout measurements on, the figures show at their elements and follow a rotation.
+- Manual: On the iPad and the Android phone, the panel beside the player, the overlay panel, and a field's tooltip in the Settings tab look and sit as before.
+
+#### Not included
+
+- Leaving this device's Shuffle cycle and the server's "Random pick" log line untouched while plays aren't recorded, since the random route has no `recordPlayback` flag.
+- Recording a play only once its media starts, which is Resume Position and Session Continuity.
+- Copy menus on the Diagnostics IDs, which is WebUI Context Menus.
+- The server's auth mode in Diagnostics, which the WebUI isn't sent.
+- Clearing the client id, the session id, or pairing in a reset.
+
+### M12n2 - Library Refresh Progress and Summary
 
 - **Status**: ⏳ Planned
 - **Goal**: While a library refresh runs, the bell's list shows how far its stage has got, and a finished refresh says in plain words what it changed, from counts the server sends as numbers.
@@ -350,7 +576,7 @@ Last milestone completed: M12m
 - Naming the files that failed.
 - Scanning a replaced file's duration and loudness again.
 
-### M12n2 - WebUI Context Menus
+### M12n3 - WebUI Context Menus
 
 - **Status**: ⏳ Planned
 - **Goal**: A right-click, or a long press on a touch screen, opens an app-styled menu of actions on the player, the now-playing name, tags, categories, presets, sources, notifications, and file paths across the WebUI, in place of the browser's own menu.
@@ -609,7 +835,7 @@ Last milestone completed: M12m
 - Firefox's Shift+right-click, which always opens Firefox's own menu.
 - Opening a menu from the keyboard.
 
-### M12n3 - WebUI Loop Range
+### M12n4 - WebUI Loop Range
 
 - **Status**: ⏳ Planned
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
@@ -648,7 +874,7 @@ Last milestone completed: M12m
 
 - Markers on a photo, whose scrub bar is its timer.
 
-### M12n4 - Library Profiles
+### M12n5 - Library Profiles
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
@@ -856,7 +1082,7 @@ Last milestone completed: M12m
 - Switching profiles on a phone on its side, where the header hides.
 - Profiles in the admin section, which covers the whole library.
 
-### M12n5 - Profile Tag and Preset Visibility
+### M12n6 - Profile Tag and Preset Visibility
 
 - **Status**: ⏳ Planned
 - **Goal**: Each profile shows only the tags, categories, and presets chosen for it, and in a profile a filter or preset leaves out its conditions on the tags the profile hides.
@@ -1993,6 +2219,7 @@ Last milestone completed: M12m
 
 - **Status**: ⏳ Planned
 - **Goal**: The server remembers playback position for the WebUI on every device and counts only plays that start.
+- **Depends on**: WebUI Developer Settings, whose Don't record plays on this device every recorded play still follows.
 
 #### Scope
 
@@ -2002,13 +2229,15 @@ Last milestone completed: M12m
 - Loop iterations do not count as plays and do not create resume points.
 - A play counts only once its media starts: the WebUI records it through `POST /api/record-playback` once the video first fires `playing` or the photo loads, so a file that fails to load isn't counted.
 - No playback start request records a play, so their `recordPlayback` option goes.
+- Don't record plays on this device keeps working: while it is on, the WebUI posts no `POST /api/record-playback`.
 - Resume positions are kept per server, shared by every device, until accounts exist.
 
 #### Traps
 
 - `POST /api/play/{itemId}` records a play before the browser loads anything, for a library play and a history step.
 - A random pick records its play through `POST /api/record-playback` as its attempt starts (`beginAttempt` in `src/playback/player.ts`).
-- Only the recovery of a video that had played and the recheck after a `404` send `recordPlayback: false`.
+- Apart from Don't record plays on this device, only the recovery of a video that had played and the recheck after a `404` send `recordPlayback: false`.
+- Don't record plays on this device skips `POST /api/record-playback` for a random pick and sends `recordPlayback: false` for a library play and a history step, so with every play recorded through `POST /api/record-playback`, its one check moves there.
 - A file Safari rejected at load still counted a play: one file's only recorded play was its failed attempt (measured).
 
 #### Acceptance
@@ -2019,6 +2248,7 @@ Last milestone completed: M12m
 - Resume settings are stored and enforced by the server, and documented, checked by reading the docs.
 - A video or photo that fails before it plays or shows records no play, and one that plays or shows records one, in WebUI tests of play recording for a library play, a history step, and a random pick.
 - No playback start request records a play, in server tests of the start routes.
+- With Don't record plays on this device on, a library play, a history step, and a random pick record no play, in WebUI tests of play recording.
 - Loop iterations record no play and create no resume point, in server tests for the loop rule.
 
 #### Not included
