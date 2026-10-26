@@ -541,6 +541,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/item-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count the named library items and their states
+         * @description How many of the named items are in the library, and how many of those are favorites, are blacklisted, and have
+         *     playback stats to clear, which is a play count or a last played time, as `POST /api/playback/clear-stats`
+         *     counts them. The library menus ask it for a selection that reaches items the client hasn't loaded, to offer
+         *     only the actions that would change something. Ids match exactly and each counts once; an id no item has isn't
+         *     counted, and no ids count none. It is a read and publishes no event. Each request writes one `last.log` line
+         *     with how many ids it named, the counts, and the elapsed time.
+         */
+        post: operations["postLibraryItemSummary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library/delete-files": {
         parameters: {
             query?: never;
@@ -1643,6 +1668,32 @@ export interface components {
         LibraryIdsQueryResponse: {
             /** @description The catalog id of every item the query matches. */
             ids: string[];
+        };
+        LibraryItemSummaryRequest: {
+            /** @description Catalog item ids. Ids match exactly, each counts once, and an id no item has isn't counted. */
+            itemIds: string[];
+        };
+        LibraryItemSummaryResponse: {
+            /**
+             * Format: int32
+             * @description How many of the named items are in the library.
+             */
+            count: number;
+            /**
+             * Format: int32
+             * @description How many of them are favorites.
+             */
+            favoriteCount: number;
+            /**
+             * Format: int32
+             * @description How many of them are blacklisted.
+             */
+            blacklistedCount: number;
+            /**
+             * Format: int32
+             * @description How many of them have playback stats to clear, a play count or a last played time.
+             */
+            playedCount: number;
         };
         LibraryQueryRequest: {
             /**
@@ -3866,6 +3917,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postLibraryItemSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryItemSummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description The counts among the named items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryItemSummaryResponse"];
                 };
             };
             /** @description Unauthorized when auth is required and request is not paired */

@@ -4,6 +4,7 @@ import { blurDropdownsAfterPick, listenForShortcuts } from "../keyboard/shortcut
 import { useApp } from "./appContext";
 import { AutoTag } from "./AutoTag";
 import { DialogHost } from "./Dialog";
+import { ContextMenuHost } from "./Menu";
 import { NotificationList, Popups } from "./Notifications";
 import { Panel } from "./Panel";
 import { Player } from "./Player";
@@ -12,7 +13,8 @@ import { blockWheelPageZoom } from "./wheel";
 
 /**
  * The part of the page that goes fullscreen: the player with its popups beside it, the side panel with its tabs, Auto
- * Tag, the list behind the player's bell, and the in-app dialogs, which stay inside it so they show in fullscreen too.
+ * Tag, the list behind the player's bell, the context menu, and the in-app dialogs, which stay inside it so they show
+ * in fullscreen too.
  * The panel's side, where it goes, its width, whether the overlay panel covers the player, and pseudo-fullscreen are set
  * on the stage as they change, and whether the player is narrow on the player column, without rendering them again, so
  * dragging the panel's handle doesn't render the player.
@@ -90,6 +92,9 @@ export function Stage() {
       </ScreenBoundary>
       <ScreenBoundary screen="notifications" relay={api.relayLog}>
         <NotificationList />
+      </ScreenBoundary>
+      <ScreenBoundary screen="menu" relay={api.relayLog}>
+        <ContextMenuHost />
       </ScreenBoundary>
       <ScreenBoundary screen="autotag" relay={api.relayLog}>
         <AutoTag />

@@ -13,6 +13,9 @@ public sealed class LibraryCatalogSession
     private const double DefaultBaselineLoudnessLufs = -18.0;
     private const int ListCountCacheCapacity = 64;
 
+    /// <summary>The condition an item has playback stats to clear under.</summary>
+    private const string HasPlaybackStatsSql = "(play_count != 0 OR last_played_utc IS NOT NULL)";
+
     private readonly string _databasePath;
     private readonly AsyncLocal<WriteScope?> _writeScope = new();
     private readonly object _listCountLock = new();
@@ -336,6 +339,50 @@ public sealed class LibraryCatalogSession
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         return LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM items;");
+    }
+
+    /// <summary>
+    /// How many of the named items are in the library, and how many of them are favorites, are blacklisted, and have
+    /// playback stats to clear, from one read. Ids match exactly, and each counts once; no ids counts none.
+    /// </summary>
+    public CatalogItemSummary SummarizeItems(IReadOnlyCollection<string>? itemIds)
+    {
+        var requested = DistinctIds(itemIds);
+        if (requested.Count == 0)
+        {
+            return default;
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction(deferred: true);
+
+        // Ids are distinct, so each chunk counts its own items and the chunks' counts add up.
+        var summary = default(CatalogItemSummary);
+        ForEachIdChunk(
+            connection,
+            transaction,
+            requested,
+            $$"""
+            SELECT COUNT(*),
+              COALESCE(SUM(is_favorite != 0), 0),
+              COALESCE(SUM(is_blacklisted != 0), 0),
+              COALESCE(SUM({{HasPlaybackStatsSql}}), 0)
+            FROM items
+            WHERE id IN ({0});
+            """,
+            command =>
+            {
+                using var reader = command.ExecuteReader();
+                reader.Read();
+                summary = new CatalogItemSummary(
+                    summary.Count + reader.GetInt32(0),
+                    summary.FavoriteCount + reader.GetInt32(1),
+                    summary.BlacklistedCount + reader.GetInt32(2),
+                    summary.PlayedCount + reader.GetInt32(3));
+            });
+
+        transaction.Commit();
+        return summary;
     }
 
     /// <summary>
@@ -1325,7 +1372,7 @@ public sealed class LibraryCatalogSession
                 connection,
                 transaction,
                 requested,
-                "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE id IN ({0}) AND (play_count != 0 OR last_played_utc IS NOT NULL);",
+                $"UPDATE items SET play_count = 0, last_played_utc = NULL WHERE id IN ({{0}}) AND {HasPlaybackStatsSql};",
                 command => cleared += command.ExecuteNonQuery());
             return cleared > 0;
         });
@@ -1343,7 +1390,7 @@ public sealed class LibraryCatalogSession
             cleared = LibraryCatalogStore.Execute(
                 connection,
                 transaction,
-                "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE play_count != 0 OR last_played_utc IS NOT NULL;");
+                $"UPDATE items SET play_count = 0, last_played_utc = NULL WHERE {HasPlaybackStatsSql};");
             return cleared > 0;
         });
         return new CatalogPlaybackStatsClear(count, cleared);
@@ -2999,6 +3046,12 @@ public sealed class CatalogItemState
 /// many of them had stats to clear.
 /// </summary>
 public readonly record struct CatalogPlaybackStatsClear(int Count, int Changed);
+
+/// <summary>
+/// How many of the named items are in the library, and how many of them are favorites, are blacklisted, and have
+/// playback stats to clear.
+/// </summary>
+public readonly record struct CatalogItemSummary(int Count, int FavoriteCount, int BlacklistedCount, int PlayedCount);
 
 /// <summary>The flag a bulk change sets or clears.</summary>
 public enum CatalogItemFlag

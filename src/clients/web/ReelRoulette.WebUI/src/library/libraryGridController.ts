@@ -52,6 +52,8 @@ export interface LibraryGridController {
   setBrowseContent(input: { visibleItems: readonly LibraryProjectionItem[]; resetScroll?: boolean }): void;
   /** Marks the playing item's tile, or none, on the tiles shown and on those shown later. */
   setPlayingItemId(itemId: string | null): void;
+  /** Marks the tile a menu acts on alone, or none, on the tiles shown and on those shown later. */
+  setMenuItemId(itemId: string | null): void;
   /** Marks the selected items' tiles, as `isSelected` says, on the tiles shown and on those shown later. */
   setSelection(isSelected: (itemId: string) => boolean): void;
   measureCoverage(): LibraryGridCoverage | null;
@@ -131,6 +133,7 @@ export function createLibraryGridController(
 
   let items: readonly LibraryProjectionItem[] = [];
   let playingItemId: string | null = null;
+  let menuItemId: string | null = null;
   let isSelected: (itemId: string) => boolean = () => false;
   let targetRowHeight = options?.rowHeight ?? DEFAULT_TARGET_ROW_HEIGHT;
   let virtualizerState: LibraryGridVirtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
@@ -186,6 +189,7 @@ export function createLibraryGridController(
     zoomEl.appendChild(rowsEl);
     gridRows = createLibraryGridRows(rowsEl, apiBaseUrl);
     gridRows.setPlayingItemId(playingItemId);
+    gridRows.setMenuItemId(menuItemId);
     gridRows.setSelection(isSelected);
 
     bottomSpacerEl = document.createElement("div");
@@ -588,6 +592,12 @@ export function createLibraryGridController(
     gridRows?.setPlayingItemId(itemId);
   }
 
+  // Moves the ring between the tiles shown, changing nothing else.
+  function setMenuItemId(itemId: string | null): void {
+    menuItemId = itemId;
+    gridRows?.setMenuItemId(itemId);
+  }
+
   // Changes only the marks of the tiles shown.
   function setSelection(next: (itemId: string) => boolean): void {
     isSelected = next;
@@ -644,6 +654,7 @@ export function createLibraryGridController(
   return {
     setBrowseContent,
     setPlayingItemId,
+    setMenuItemId,
     setSelection,
     measureCoverage,
     flushDeferredLayout,

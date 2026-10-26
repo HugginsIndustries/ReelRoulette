@@ -30,7 +30,8 @@ export interface LibrarySelection {
   remove(ids: readonly string[]): void;
   /** Ends selection, taking out every item and closing the menu. */
   clear(): void;
-  toggleMenu(): void;
+  /** Opens the Selection actions menu, while selection is on. */
+  openMenu(): void;
   closeMenu(): void;
 }
 
@@ -119,8 +120,8 @@ export function createLibrarySelection(): LibrarySelection {
       changed();
     },
 
-    toggleMenu() {
-      menuOpen.value = active.peek() && !menuOpen.peek();
+    openMenu() {
+      menuOpen.value = active.peek();
     },
 
     closeMenu() {

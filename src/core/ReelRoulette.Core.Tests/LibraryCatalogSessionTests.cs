@@ -613,6 +613,42 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
+    public void SummarizeItems_PastOneChunkOfIds_CountsTheNamedItemsInEachState_EachOnce()
+    {
+        using var dir = new TempDirectory();
+        var lastPlayed = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+        // 501 ids, so the 501st, a favorite, blacklisted, and played, is in a chunk of its own. Every 7th has a play
+        // count alone and every 11th a last played time alone.
+        var items = Enumerable.Range(0, 501)
+            .Select(index => new SeedItem($"item-{index:D3}", $"/media/item-{index:D3}.mp4")
+            {
+                IsFavorite = index % 2 == 0,
+                IsBlacklisted = index % 5 == 0,
+                PlayCount = index % 7 == 0 || index == 500 ? 3 : 0,
+                LastPlayedUtc = index % 11 == 0 ? lastPlayed : null
+            })
+            .ToList();
+        items.Add(new SeedItem("not-named", "/media/not-named.mp4") { IsFavorite = true, IsBlacklisted = true, PlayCount = 1 });
+        CatalogSeed.Write(dir.Path, items: items);
+        var session = CatalogOpen.Open(dir.Path).Session!;
+
+        // A repeated id counts once, and an id in other casing or one no item has isn't counted.
+        var named = Enumerable.Range(0, 501).Select(index => $"item-{index:D3}");
+        Assert.Equal(
+            new CatalogItemSummary(501, 251, 101, 112),
+            session.SummarizeItems([.. named, "item-000", "ITEM-001", "missing"]));
+
+        Assert.Equal(new CatalogItemSummary(1, 0, 0, 1), session.SummarizeItems(["item-007"]));
+        Assert.Equal(new CatalogItemSummary(1, 0, 0, 1), session.SummarizeItems(["item-011"]));
+        Assert.Equal(new CatalogItemSummary(1, 1, 1, 1), session.SummarizeItems(["item-500"]));
+        Assert.Equal(new CatalogItemSummary(1, 0, 0, 0), session.SummarizeItems(["item-001"]));
+        Assert.Equal(default, session.SummarizeItems(["ITEM-001", "missing"]));
+        Assert.Equal(default, session.SummarizeItems([]));
+        Assert.Equal(default, session.SummarizeItems(null));
+    }
+
+    [Fact]
     public void SetRating_StoresChangesAndClearsIt_AndReportsOnlyARealChange()
     {
         using var dir = new TempDirectory();

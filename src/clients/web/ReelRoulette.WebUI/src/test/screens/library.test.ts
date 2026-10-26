@@ -11,8 +11,13 @@ import {
   COMPATIBLE_VERSION,
   FakeServer,
   closeNotices,
+  contextMenuPlace,
+  contextMenuShown,
   currentStyle,
   json,
+  menuIcons,
+  menuItemIn,
+  menuParts as partsOf,
   mountPage,
   normalizedMarkup,
   openNotices,
@@ -22,11 +27,13 @@ import {
   presetSelect,
   randomAnswer,
   resetPage,
+  rightClick,
   selectedPresetLabel,
   setViewport,
   settle,
   status,
   starsShown,
+  stubContextMenuSize,
   stubLayoutSize,
   stubStarLayout,
   stylesheetText,
@@ -152,6 +159,17 @@ function serveLibrary(server: FakeServer, items: LibraryRow[]): FakeLibrary {
     const ids = library.items.map((item) => String(item.id));
     const asked = call.body?.itemIds ? new Set<string>(call.body.itemIds) : null;
     return json({ ids: asked ? ids.filter((id) => asked.has(id)) : ids });
+  });
+  // As the server does: how many of the named items are in the library, and how many of them are in each state.
+  server.on("POST", "/api/library/item-summary", (call) => {
+    const asked = new Set<string>(call.body?.itemIds ?? []);
+    const named = library.items.filter((item) => asked.has(String(item.id)));
+    return json({
+      count: named.length,
+      favoriteCount: named.filter((item) => item.isFavorite).length,
+      blacklistedCount: named.filter((item) => item.isBlacklisted).length,
+      playedCount: named.filter((item) => item.playCount > 0 || (item as Record<string, unknown>).lastPlayedUtc != null).length
+    });
   });
   return library;
 }
@@ -2224,12 +2242,25 @@ function grouped(count: number): string {
 }
 
 /**
+ * `count` items, of which the last three, past the tiles loaded, are a favorite, a blacklisted one, and a played one,
+ * so every action of the library's menus applies to all of them.
+ */
+function itemsInEveryState(count: number): LibraryRow[] {
+  const items = libraryItems(count);
+  items[count - 3] = { ...items[count - 3]!, isFavorite: true };
+  items[count - 2] = { ...items[count - 2]!, isBlacklisted: true };
+  items[count - 1] = { ...items[count - 1]!, playCount: 2 };
+  return items;
+}
+
+/**
  * Mounts a library of `MATCHING` items, shows it, and selects every one with Select all, most of them not loaded. The
- * server answers each bulk route with a count that differs from the selection's, `ANSWERED`.
+ * items are in every state, past the loaded tiles, unless `items` says otherwise. The server answers each bulk route
+ * with a count that differs from the selection's, `ANSWERED`.
  */
 async function selectAllItems(
   setup: (server: FakeServer) => void = () => {},
-  items: LibraryRow[] = libraryItems(MATCHING)
+  items: LibraryRow[] = itemsInEveryState(MATCHING)
 ): Promise<LibraryPage & { ids: string[] }> {
   const ids = items.map((item) => item.id);
   const mounted = await mountLibrary(items, (server) => {
@@ -2251,7 +2282,7 @@ const ANSWERED = 1200;
 
 /** The Selection actions menu's items and rules in order: each item's label, or "—" for a rule. */
 function menuParts(): string[] {
-  return Array.from(selectionMenu().children).map((part) => (part.tagName === "HR" ? "—" : part.textContent ?? ""));
+  return partsOf(selectionMenu());
 }
 
 function menuItems(): HTMLButtonElement[] {
@@ -2259,11 +2290,7 @@ function menuItems(): HTMLButtonElement[] {
 }
 
 function menuItem(label: string): HTMLButtonElement {
-  const found = menuItems().find((button) => button.textContent === label);
-  if (!found) {
-    throw new Error(`The menu has no ${label}.`);
-  }
-  return found;
+  return menuItemIn(selectionMenu(), label);
 }
 
 /** Opens Selection actions and picks `label`. */
@@ -2340,11 +2367,14 @@ async function typeToken(text: string): Promise<void> {
 }
 
 describe("bulk actions", () => {
-  it("Selection actions lists its actions in three groups with a rule between them, Delete files… in red, in the menu's look", async () => {
+  it("Selection actions lists its actions in three groups with a rule between them, each with its icon, Delete files… in red, in the menu's look", async () => {
     useStylesheet();
-    await mountLibrary(libraryItems(3));
+    // A favorite, a blacklisted item, and a played one, so every action applies to them.
+    await mountLibrary(itemsInEveryState(3));
     await openLibrary();
     await click(check("item-1"));
+    await click(tile("item-2")!);
+    await click(tile("item-3")!);
     await click(barButton("Selection actions"));
 
     expect(menuParts()).toEqual([
@@ -2363,6 +2393,17 @@ describe("bulk actions", () => {
     expect(currentStyle(menuItem("Add to favorites")).color).not.toBe(error);
     expect([currentStyle(menuItem("Rate…")).minHeight, currentStyle(menuItem("Rate…")).textAlign]).toEqual(["40px", "left"]);
     expect(menuItems().every((button) => !button.disabled)).toBe(true);
+    expect(menuIcons(selectionMenu())).toEqual([
+      "heart_plus Add to favorites",
+      "heart_minus Remove from favorites",
+      "thumb_down Add to blacklist",
+      "thumb_up Remove from blacklist",
+      "star Rate…",
+      "delete_history Clear playback stats…",
+      "delete_forever Delete files…"
+    ]);
+    const icon = menuItem("Rate…").querySelector(".material-symbol-icon")!;
+    expect([currentStyle(menuItem("Rate…")).display, currentStyle(menuItem("Rate…")).gap, currentStyle(icon).fontSize]).toEqual(["flex", "12px", "20px"]);
   });
 
   it("picking an action closes the menu before the action asks anything", async () => {
@@ -2666,7 +2707,7 @@ describe("delete files", () => {
 
     // The control session lasts, so the next delete asks the server, which allows it, and shows no prompt.
     await click(check("item-5"));
-    await pickAction("Delete files…");
+    await pickAction("Delete file…");
     expect(server.requests("GET", "/control/access")).toHaveLength(2);
     expect(tokenPrompt()).toBeNull();
     expect(findDialog("Permanently delete 1 file from disk and remove it from the library? This can't be undone.")).not.toBeNull();
@@ -2680,7 +2721,7 @@ describe("delete files", () => {
     });
     await openLibrary();
     await click(check("item-2"));
-    await pickAction("Delete files…");
+    await pickAction("Delete file…");
 
     expect(tokenPrompt()).toBeNull();
     const confirm = dialogWith("Permanently delete 1 file from disk and remove it from the library? This can't be undone.");
@@ -2707,7 +2748,7 @@ describe("delete files", () => {
     });
     await openLibrary();
     await click(check("item-1"));
-    await pickAction("Delete files…");
+    await pickAction("Delete file…");
     await click(buttonIn(dialogWith("Permanently delete 1 file from disk and remove it from the library? This can't be undone."), "Delete 1 File"));
     expect(selecting()).toBe(false);
 
@@ -2989,5 +3030,165 @@ describe("kept sources", () => {
     );
     await waitFor(() => expect(openNotices()).toEqual([MOVIES_NOTICE]));
     expect(server.requests("GET", "/api/sources")).toHaveLength(2);
+  });
+});
+
+describe("a tile's menu", () => {
+  const MENU_WIDTH = 240;
+  const MENU_HEIGHT = 300;
+
+  function ringed(itemId: string): boolean {
+    return tile(itemId)!.classList.contains("is-menu-target");
+  }
+
+  it("opens at a mouse's right-click in place of the browser's menu, in the fullscreen stage, with the tile ringed and the items that apply to it", async () => {
+    useStylesheet();
+    stubContextMenuSize(MENU_WIDTH, MENU_HEIGHT);
+    // A favorite, a blacklisted item, and a played one.
+    const { server } = await mountLibrary(itemsInEveryState(3));
+    await openLibrary();
+
+    expect(rightClick(tile("item-1")!, 120, 140)).toBe(false);
+    await flush();
+    const menu = contextMenuShown()!;
+    expect(document.getElementById("fullscreen-stage")!.contains(menu)).toBe(true);
+    expect(panel().contains(menu)).toBe(false);
+    const host = document.getElementById("context-menu")!;
+    expect([currentStyle(host).position, currentStyle(host).zIndex]).toEqual(["fixed", "1500"]);
+    expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 120, top: 140 });
+    expect(menuIcons(menu)).toEqual([
+      "heart_minus Remove from favorites",
+      "thumb_down Add to blacklist",
+      "star Rate…",
+      "delete_history Clear playback stats…",
+      "delete_forever Delete file…"
+    ]);
+    expect([menuItemIn(menu, "Clear playback stats…").disabled, menuItemIn(menu, "Clear playback stats…").title]).toEqual([true, "No playback stats to clear"]);
+    expect(ringed("item-1")).toBe(true);
+    expect(stylesheetText()).toMatch(/\.library-grid-tile\.is-menu-target::after \{[^}]*border: 2px solid var\(--huggins-orange\);/);
+    // Its items come from the loaded tile, so it asks the server nothing.
+    expect(server.requests("POST", "/api/library/item-summary")).toEqual([]);
+    // A right-click on the menu opens nothing more.
+    expect(fireEvent.contextMenu(menu)).toBe(false);
+
+    // Near the window's bottom-right corner, it opens on the pointer's other sides.
+    rightClick(tile("item-3")!, 1000, 700);
+    await flush();
+    expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 760, top: 400 });
+    expect([ringed("item-1"), ringed("item-3")]).toEqual([false, true]);
+    expect(menuItemIn(contextMenuShown()!, "Clear playback stats…").disabled).toBe(false);
+  });
+
+  it("acts on that tile alone, and a pick closes it before the action's dialog opens", async () => {
+    const { server, page } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("POST", "/api/bulk/item-state", () => json({ count: 1 }));
+    });
+    await openLibrary();
+
+    rightClick(tile("item-2")!);
+    await flush();
+    await click(menuItemIn(contextMenuShown()!, "Add to favorites"));
+    expect([contextMenuShown(), ringed("item-2")]).toEqual([null, false]);
+    expect(server.requests("POST", "/api/bulk/item-state").map((call) => call.body)).toEqual([
+      { itemIds: ["item-2"], flag: "favorite", value: true, clientId: page.clientId() }
+    ]);
+    await waitFor(() => expect(popupsShown()).toEqual(["Added 1 item to favorites."]));
+
+    rightClick(tile("item-3")!);
+    await flush();
+    await click(menuItemIn(contextMenuShown()!, "Rate…"));
+    expect(contextMenuShown()).toBeNull();
+    expect(findDialog("Rate 1 item")).not.toBeNull();
+  });
+
+  it("on a selected tile acts on the selection, and on a tile outside it acts on that tile alone, keeping the selection even as it deletes the file", async () => {
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("GET", "/control/access", () => status(204));
+      fake.on("POST", "/api/library/delete-files", () => json({ deletedCount: 1, failedItemIds: [] }));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-2")!);
+
+    rightClick(tile("item-2")!);
+    await flush();
+    expect(partsOf(contextMenuShown()!).at(-1)).toBe("Delete files…");
+    expect(ringed("item-2")).toBe(false);
+    // Escape closes the menu and leaves the selection.
+    await pressEscape();
+    expect([contextMenuShown(), selecting()]).toEqual([null, true]);
+
+    rightClick(tile("item-3")!);
+    await flush();
+    expect(partsOf(contextMenuShown()!).at(-1)).toBe("Delete file…");
+    expect(ringed("item-3")).toBe(true);
+    await click(menuItemIn(contextMenuShown()!, "Delete file…"));
+    await click(buttonIn(dialogWith("Permanently delete 1 file from disk and remove it from the library? This can't be undone."), "Delete 1 File"));
+    expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: ["item-3"] }]);
+    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1", "item-2"]]);
+  });
+
+  it("shows the Selection actions menu's items for the same items, and each of the two closes the other", async () => {
+    await mountLibrary(itemsInEveryState(3));
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-2")!);
+    await click(tile("item-3")!);
+    await click(barButton("Selection actions"));
+    const selectionItems = menuIcons(selectionMenu());
+
+    rightClick(tile("item-2")!);
+    await flush();
+    expect(selectionMenu().hidden).toBe(true);
+    expect(menuIcons(contextMenuShown()!)).toEqual(selectionItems);
+
+    await click(barButton("Selection actions"));
+    expect([contextMenuShown(), selectionMenu().hidden]).toEqual([null, false]);
+  });
+
+  it("closes on a press outside it, the Library tab hiding, and its tile leaving the results", async () => {
+    const { page, library } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+
+    rightClick(tile("item-1")!);
+    await flush();
+    fireEvent.pointerDown(tile("item-3")!);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+
+    rightClick(tile("item-1")!);
+    await flush();
+    await click(panelTab("Filter"));
+    expect(contextMenuShown()).toBeNull();
+    await click(panelTab("Library"));
+
+    rightClick(tile("item-1")!);
+    await flush();
+    library.items = library.items.filter((item) => item.id !== "item-1");
+    page.stream().emit("itemsRemoved", 2, { itemIds: ["item-1"] });
+    await waitFor(() => expect(contextMenuShown()).toBeNull());
+  });
+
+  it("opens for no long press, which selects its tile instead", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+
+    fireEvent.pointerDown(tile("item-1")!, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+    await vi.advanceTimersByTimeAsync(500);
+    // Chrome on Android sends `contextmenu` for a long press.
+    expect(fireEvent.contextMenu(tile("item-1")!)).toBe(false);
+    await flush();
+    expect([contextMenuShown(), selectedTiles()]).toEqual([null, ["item-1"]]);
+  });
+
+  it("on a selection past the loaded tiles asks the server once what it is, and shows only the items that apply", async () => {
+    const { server, ids } = await selectAllItems(undefined, libraryItems(MATCHING));
+
+    rightClick(tile("item-2")!);
+    await flush();
+    expect(server.requests("POST", "/api/library/item-summary").map((call) => call.body)).toEqual([{ itemIds: ids }]);
+    expect(partsOf(contextMenuShown()!)).toEqual(["Add to favorites", "Add to blacklist", "—", "Rate…", "Clear playback stats…", "—", "Delete files…"]);
+    expect(menuItemIn(contextMenuShown()!, "Clear playback stats…").title).toBe("No playback stats to clear");
   });
 });

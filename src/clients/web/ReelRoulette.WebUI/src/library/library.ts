@@ -18,7 +18,9 @@ import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { RefreshKeptSource } from "../types/serverContracts";
-import { createBulkActions, type BulkActions } from "./bulkActions";
+import type { ContextMenu, MenuGroups } from "../ui/menuModel";
+import type { WindowPoint } from "../ui/placement";
+import { createBulkActions, summarizeLoaded, type BulkActions, type BulkSummary, type BulkTarget } from "./bulkActions";
 import { KEPT_SOURCES_LOG_TEXT, keptSourcesMessage, type KeptSourceFolder } from "./keptSources";
 import {
   LIBRARY_SORT_MODES,
@@ -37,7 +39,7 @@ import {
 import { DEFAULT_TARGET_ROW_HEIGHT, isTargetRowHeight } from "./libraryGridLayout";
 import { libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
 import { playRefusalFailure } from "./libraryPlayModel";
-import { parseLibraryIds, parseLibraryQueryPage } from "./libraryProjectionModel";
+import { parseItemSummary, parseLibraryIds, parseLibraryQueryPage } from "./libraryProjectionModel";
 import {
   LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
   createLibraryQuerySession,
@@ -97,7 +99,8 @@ export type CreateLibraryGrid = (host: HTMLElement, options: Required<LibraryGri
  * row height a zoom over the grid set. A refresh that keeps a source's items because its folder listed no media files
  * shows a notice naming the folder, once per folder for the page's life. Selection lasts while the tab is hidden, a
  * change to the search or the filter the grid shows ends it, and selected items that leave the results, which reloads
- * the window, leave it.
+ * the window, leave it. The Selection actions menu and a tile's menu each show only the actions that apply to what
+ * they act on, and one shows at a time.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
@@ -121,8 +124,10 @@ export interface Library {
   readonly selection: LibrarySelection;
   /** As many items are selected as the search and the filter match, so Select all has nothing to add. */
   readonly allSelected: ReadonlySignal<boolean>;
-  /** The Selection actions menu's actions on the selected items. */
+  /** The library menus' actions, on the selected items or one tile's item. */
   readonly bulk: BulkActions;
+  /** The Selection actions menu's items, as they were when it last opened. */
+  readonly selectionMenuGroups: ReadonlySignal<MenuGroups>;
 
   /** The tab's view rendered, so the tab can open. */
   attach(): void;
@@ -170,6 +175,17 @@ export interface Library {
    * does nothing, an answer that comes after selection ended is dropped, and a failure shows in the notice.
    */
   selectAll(): Promise<void>;
+  /**
+   * Selection actions: opens its menu, once the server has said what the selected items are when some aren't loaded,
+   * or closes it, dropping a read under way.
+   */
+  toggleSelectionMenu(): Promise<void>;
+  /**
+   * A right-click on a tile with a mouse: opens a menu at `point` that acts on the selection when the tile is selected,
+   * and otherwise on that tile alone, which shows a ring while the menu is open, so a right-click never changes a
+   * selection. It closes when its tile leaves the grid, the tab hides, or a selection it acts on ends.
+   */
+  openTileMenu(itemId: string, point: WindowPoint): Promise<void>;
 }
 
 export interface LibraryOptions {
@@ -193,6 +209,8 @@ export interface LibraryOptions {
   device: DeviceStore;
   /** The tag catalog the tabs share, whose categories the Random line names under By category. */
   tagCatalog: Pick<TagCatalog, "catalog" | "ensureLoaded">;
+  /** The app's context menu, which a tile's menu opens in. */
+  contextMenu: ContextMenu;
   /** Defaults to the grid controller. */
   createGrid?: CreateLibraryGrid;
   /** Defaults to `requestAnimationFrame`. */
@@ -200,7 +218,7 @@ export interface LibraryOptions {
 }
 
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player, panel, device, dialogs, notifications, controlAccess, tagCatalog } = options;
+  const { store, api, connection, player, panel, device, dialogs, notifications, controlAccess, tagCatalog, contextMenu } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const createGrid: CreateLibraryGrid =
     options.createGrid ?? ((host, gridOptions) => createLibraryGridController(host, apiBaseUrl, gridOptions));
@@ -229,6 +247,14 @@ export function createLibrary(options: LibraryOptions): Library {
   let selectAllRequest: AbortController | null = null;
   /** The check of the selected items under way, which a later check or a selection ending aborts. */
   let selectionCheck: AbortController | null = null;
+  const selectionMenuGroups = signal<MenuGroups>([]);
+  /** The tile whose menu is open, and what the menu acts on, or null. */
+  let tileMenu: { itemId: string; target: BulkTarget } | null = null;
+  /**
+   * The read of what a menu about to open acts on, and which menu it is for, which a newer open, a close, or a change to
+   * the selection drops.
+   */
+  let menuRead: { menu: "selection" | "tile"; request: AbortController } | null = null;
 
   let attached = false;
   let open = false;
@@ -251,6 +277,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const session = createLibraryQuerySession((request, signal) => postQuery(request, signal));
   session.setListener((event) => {
     renderWindow(event.scroll);
+    closeTileMenuIfGone();
     // Every change that can take an item out of the results reloads the window, so a reload checks the selection.
     if (event.reloaded) {
       void checkSelection();
@@ -472,11 +499,15 @@ export function createLibrary(options: LibraryOptions): Library {
     }
   }
 
-  // The Selection actions menu closes with the tab, so it never stays open where nobody can see it.
+  // The menus close with the tab, so none stays open where nobody can see it.
   function close(): void {
     open = false;
     session.setOverlayVisible(false);
+    dropMenuRead();
     selection.closeMenu();
+    if (tileMenu) {
+      contextMenu.close();
+    }
   }
 
   /** The media type of the loaded tile with `itemId`, which a refusal's message names. */
@@ -611,8 +642,103 @@ export function createLibrary(options: LibraryOptions): Library {
     }
   }
 
+  function dropMenuRead(): void {
+    menuRead?.request.abort();
+    menuRead = null;
+  }
+
+  /**
+   * What the items of `ids` are, for a menu about to open: from the loaded tiles when every one is loaded, and otherwise
+   * from the server. Null when the read failed, which only logs, so the menu shows every add and remove item, and
+   * "unauthorized" for a 401, whose pairing prompt is the only signal, so no menu opens.
+   */
+  async function readMenuSummary(ids: string[], abort: AbortSignal): Promise<BulkSummary | null | "unauthorized"> {
+    const loaded = summarizeLoaded(ids, session.snapshot().items);
+    if (loaded) {
+      return loaded;
+    }
+    try {
+      return parseItemSummary(await api.postJson("/api/library/item-summary", { itemIds: ids }, { signal: abort }));
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return "unauthorized";
+      }
+      if (!abort.aborted) {
+        void api.relayLog("warn", failureLine("library=item-summary-failed", error));
+      }
+      return null;
+    }
+  }
+
+  /**
+   * The items of `menu` about to open on `target`, once what it acts on is known, so they never appear or vanish under
+   * the pointer; null when a newer open, a close, a change to the selection, or a 401 dropped the menu.
+   */
+  async function menuGroupsFor(menu: "selection" | "tile", target: BulkTarget): Promise<MenuGroups | null> {
+    dropMenuRead();
+    const read = { menu, request: new AbortController() };
+    menuRead = read;
+    try {
+      const summary = await readMenuSummary(bulk.targetIds(target), read.request.signal);
+      return read.request.signal.aborted || summary === "unauthorized" ? null : bulk.menuGroups(target, summary);
+    } finally {
+      if (menuRead === read) {
+        menuRead = null;
+      }
+    }
+  }
+
+  // A press while its own read is under way closes it, as a press on the open menu does; a tile's menu still reading
+  // gives way to it.
+  async function toggleSelectionMenu(): Promise<void> {
+    if (selection.menuOpen.peek() || menuRead?.menu === "selection") {
+      dropMenuRead();
+      selection.closeMenu();
+      return;
+    }
+    const groups = await menuGroupsFor("selection", { kind: "selection" });
+    if (groups) {
+      selectionMenuGroups.value = groups;
+      selection.openMenu();
+    }
+  }
+
+  /** The tile that shows the ring: the one whose menu acts on it alone. */
+  function ringedItemId(): string | null {
+    return tileMenu?.target.kind === "item" ? tileMenu.itemId : null;
+  }
+
+  async function openTileMenu(itemId: string, point: WindowPoint): Promise<void> {
+    const target: BulkTarget = selection.active.peek() && selection.has(itemId) ? { kind: "selection" } : { kind: "item", itemId };
+    const groups = await menuGroupsFor("tile", target);
+    if (!groups) {
+      return;
+    }
+    const shown = { itemId, target };
+    contextMenu.open({
+      point,
+      groups,
+      onClose() {
+        if (tileMenu === shown) {
+          tileMenu = null;
+          grid?.setMenuItemId(null);
+        }
+      }
+    });
+    tileMenu = shown;
+    grid?.setMenuItemId(ringedItemId());
+  }
+
+  /** A tile's menu closes when its tile leaves the grid: its item leaves the loaded window, or a message replaces it. */
+  function closeTileMenuIfGone(): void {
+    const shown = tileMenu;
+    if (shown && (body.peek().kind !== "grid" || !session.snapshot().items.some((item) => item.id === shown.itemId))) {
+      contextMenu.close();
+    }
+  }
+
   // Select all's answer would start selection over, and a check's would take items out of a new one, so a selection
-  // ending drops them.
+  // ending drops them, and a menu about to open on it or open on it closes.
   selection.active.subscribe((active) => {
     if (active) {
       return;
@@ -622,6 +748,25 @@ export function createLibrary(options: LibraryOptions): Library {
     }
     selectAllRequest = null;
     selectionCheck = null;
+    dropMenuRead();
+    if (tileMenu?.target.kind === "selection") {
+      contextMenu.close();
+    }
+  });
+  // A menu about to open shows what the selection was when it opened, so a change to the selection drops it.
+  selection.version.subscribe(() => dropMenuRead());
+  // One menu shows at a time: a context menu opening closes the Selection actions menu, and that menu opening closes the
+  // context menu.
+  contextMenu.isOpen.subscribe((isOpen) => {
+    if (isOpen) {
+      dropMenuRead();
+      selection.closeMenu();
+    }
+  });
+  selection.menuOpen.subscribe((isOpen) => {
+    if (isOpen) {
+      contextMenu.close();
+    }
   });
   // The tiles shown change their marks in place.
   effect(() => {
@@ -687,6 +832,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const rerenderShown = () => {
     if (open) {
       renderWindow("keep");
+      closeTileMenuIfGone();
     }
   };
   store.compatibilityBlocked.subscribe(rerenderShown);
@@ -710,6 +856,7 @@ export function createLibrary(options: LibraryOptions): Library {
     selection,
     allSelected,
     bulk,
+    selectionMenuGroups,
 
     attach() {
       attached = true;
@@ -735,6 +882,7 @@ export function createLibrary(options: LibraryOptions): Library {
       grid = created;
       created.setPlayingItemId(store.current.peek()?.itemId ?? null);
       created.setSelection(selection.has);
+      created.setMenuItemId(ringedItemId());
       const resetScroll = pendingScrollTop;
       pendingScrollTop = false;
       const snap = session.snapshot();
@@ -832,6 +980,8 @@ export function createLibrary(options: LibraryOptions): Library {
 
     clickTile,
     longPressTile: (itemId) => selection.toggle(itemId),
-    selectAll
+    selectAll,
+    toggleSelectionMenu,
+    openTileMenu
   };
 }

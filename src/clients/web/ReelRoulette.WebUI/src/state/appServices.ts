@@ -24,6 +24,7 @@ import { createStatsTab, type StatsTab } from "../stats/statsTab";
 import { createTagCatalog } from "../tags/tagCatalog";
 import { createTagEditor, type TagEditor } from "../tags/tagEditor";
 import type { RuntimeConfig } from "../types/runtimeConfig";
+import { createContextMenu, type ContextMenu } from "../ui/menuModel";
 import { createAppApi, type AppApi } from "./appApi";
 import { createAppStore, type AppStore } from "./appStore";
 import { createDeviceStore } from "./deviceStore";
@@ -76,6 +77,8 @@ export interface AppServices {
   indicator: ReadonlySignal<LastingState | null>;
   /** The one-off messages' popups and the list behind the player's bell. */
   notifications: Notifications;
+  /** The context menu that shows at a point, one at a time, such as a library tile's. */
+  contextMenu: ContextMenu;
   /** The Settings tab's settings that nothing else keeps. */
   settings: Settings;
 }
@@ -155,8 +158,22 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by, and whose categories
   // By category lists and the Library tab's Random line names.
   const tagCatalog = createTagCatalog({ api, connection });
+  const contextMenu = createContextMenu();
   // After the player, so the player handles an item-state event before the library does.
-  const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, controlAccess, panel, device, tagCatalog });
+  const library = createLibrary({
+    config,
+    store,
+    api,
+    connection,
+    player,
+    dialogs,
+    notifications,
+    controlAccess,
+    panel,
+    device,
+    tagCatalog,
+    contextMenu
+  });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications, tagCatalog });
   const tagEditor = createTagEditor({
     store,
@@ -274,6 +291,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     })),
     indicator: createPlayerIndicator(store),
     notifications,
+    contextMenu,
     settings
   };
 }

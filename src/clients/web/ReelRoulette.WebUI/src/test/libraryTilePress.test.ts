@@ -6,6 +6,8 @@ import { LONG_PRESS_MOVE_PX, LONG_PRESS_MS, listenForTilePress, type TilePress }
 let host: HTMLElement;
 let press: TilePress;
 let pressed: string[];
+/** Each menu a right-click opened: its tile's item id and the point. */
+let menus: string[];
 
 function tile(itemId: string): HTMLElement {
   return host.querySelector<HTMLElement>(`[data-item-id="${itemId}"] img`)!;
@@ -44,9 +46,11 @@ beforeEach(() => {
     <p class="gap"></p>`;
   document.body.append(host);
   pressed = [];
+  menus = [];
   press = listenForTilePress(host, {
     tileItemId: (target) => (target instanceof Element ? target.closest("[data-item-id]")?.getAttribute("data-item-id") ?? null : null),
-    onLongPress: (itemId) => pressed.push(itemId)
+    onLongPress: (itemId) => pressed.push(itemId),
+    onMenu: (itemId, point) => menus.push(`${itemId} at ${point.x},${point.y}`)
   });
 });
 
@@ -79,24 +83,30 @@ describe("tile long press", () => {
     expect(press.takeClick()).toBe(false);
   });
 
-  it("counts a pen, but not a mouse, whose right-click keeps the browser's menu", () => {
+  it("counts a pen, but not a mouse, whose right-click opens the tile's menu at the pointer in place of the browser's", () => {
     down(tile("item-1"), { pointerType: "mouse" });
     vi.advanceTimersByTime(LONG_PRESS_MS);
     expect(pressed).toEqual([]);
     down(tile("item-1"), { pointerType: "mouse", button: 2 });
-    expect(browserMenuOpens(tile("item-1"))).toBe(true);
+    expect(fireEvent.contextMenu(tile("item-1"), { clientX: 40, clientY: 50 })).toBe(false);
+    expect(menus).toEqual(["item-1 at 40,50"]);
+    // Off a tile, the browser's menu stays.
+    down(host.querySelector(".gap")!, { pointerType: "mouse", button: 2 });
+    expect(browserMenuOpens(host.querySelector(".gap")!)).toBe(true);
+    expect(menus).toHaveLength(1);
 
     down(tile("item-2"), { pointerType: "pen" });
     vi.advanceTimersByTime(LONG_PRESS_MS);
     expect(pressed).toEqual(["item-2"]);
   });
 
-  it("keeps the browser's menu off a tile pressed with a finger, before and after the press counts", () => {
+  it("keeps the browser's menu off a tile pressed with a finger, before and after the press counts, and opens none of its own", () => {
     down(tile("item-1"));
     expect(browserMenuOpens(tile("item-1"))).toBe(false);
     vi.advanceTimersByTime(LONG_PRESS_MS);
     expect(browserMenuOpens(tile("item-1"))).toBe(false);
     expect(browserMenuOpens(host.querySelector(".gap")!)).toBe(true);
+    expect(menus).toEqual([]);
   });
 
   it("is cancelled by moving as far as a scroll or drag, but not by a finger's tremor", () => {

@@ -11,6 +11,7 @@ import { createDeviceStore, type DeviceStorage } from "../state/deviceStore";
 import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 import { createTagCatalog } from "../tags/tagCatalog";
+import { createContextMenu } from "../ui/menuModel";
 import { REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 const PLAYED: PlayingItem = {
@@ -56,6 +57,8 @@ function fakeGrid(options: Required<LibraryGridOptions>, page: FakePage) {
     contents: [] as Array<{ ids: string[]; resetScroll: boolean | undefined }>,
     /** Each playing item id the library marked, the first when the grid was created. */
     playing: [] as Array<string | null>,
+    /** Each item id the library ringed as the one a menu acts on alone, the first when the grid was created. */
+    ringed: [] as Array<string | null>,
     /** Whether an item's tile shows as selected, as the library last marked the tiles. */
     isSelected: (_itemId: string) => false,
     /** Whether the tab's page was shown or hidden each time the deferred layout was flushed. */
@@ -67,6 +70,9 @@ function fakeGrid(options: Required<LibraryGridOptions>, page: FakePage) {
     },
     setPlayingItemId(itemId: string | null) {
       grid.playing.push(itemId);
+    },
+    setMenuItemId(itemId: string | null) {
+      grid.ringed.push(itemId);
     },
     setSelection(isSelected: (itemId: string) => boolean) {
       grid.isSelected = isSelected;
@@ -170,6 +176,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
   };
   const grids: Array<ReturnType<typeof fakeGrid>> = [];
   const frames: Array<() => void> = [];
+  const contextMenu = createContextMenu();
   /** Each notice's message, and the text it relays when that differs. */
   const notices: string[] = [];
   const noticeLogs: string[] = [];
@@ -194,6 +201,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     panel,
     device: createDeviceStore(options.storage ?? null),
     tagCatalog: createTagCatalog({ api, connection }),
+    contextMenu,
     createGrid(_host, gridOptions) {
       const grid = fakeGrid(gridOptions, page);
       grids.push(grid);
@@ -204,6 +212,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
   service.attach();
   return {
     library: service,
+    contextMenu,
     fakeLibrary: library,
     store,
     page,
@@ -1335,9 +1344,243 @@ describe("selection", () => {
   it("hiding the tab closes the Selection actions menu and keeps the selection", async () => {
     const t = await shown();
     t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
-    t.library.selection.toggleMenu();
+    await t.library.toggleSelectionMenu();
+    expect(t.library.selection.menuOpen.peek()).toBe(true);
 
     t.hideTab();
     expect([t.library.selection.menuOpen.peek(), t.library.selection.ids()]).toEqual([false, ["item-1"]]);
+  });
+});
+
+describe("menus", () => {
+  const POINT = { x: 40, y: 50 };
+
+  /** A library whose first page has loaded and whose tab shows, with its grid. */
+  async function shown(items: Array<Record<string, unknown>> = libraryItems(3)) {
+    const t = setup();
+    t.fakeLibrary.items = items;
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    const grid = t.mountGrid();
+    t.replies.set("/api/bulk/item-state", () => json({ count: 1 }));
+    return { ...t, grid };
+  }
+
+  type Shown = Awaited<ReturnType<typeof shown>>;
+
+  /** The items of the open context menu, each with a disabled one's reason, or null while none shows. */
+  function tileMenuItems(t: Shown): string[] | null {
+    const view = t.contextMenu.view.peek();
+    return view ? view.groups.flat().map((item) => (item.disabledReason ? `${item.label} (${item.disabledReason})` : item.label)) : null;
+  }
+
+  function selectionMenuItems(t: Shown): string[] {
+    return t.library.selectionMenuGroups.peek().flat().map((item) => (item.disabledReason ? `${item.label} (${item.disabledReason})` : item.label));
+  }
+
+  /** Picks `label` in the open context menu, as a click does: the menu closes, then the action runs. */
+  async function pick(t: Shown, label: string): Promise<void> {
+    const item = t.contextMenu.view.peek()!.groups.flat().find((candidate) => candidate.label === label)!;
+    t.contextMenu.close();
+    item.onPick();
+    await settle();
+  }
+
+  const flagBody = (itemIds: string[], flag: string, value: boolean) => ({ itemIds, flag, value, clientId: "client-1" });
+
+  it("with nothing selected acts on the tile alone, rings it, and reads what applies from its loaded tile", async () => {
+    const t = await shown([...libraryItems(2), { ...libraryItems(3)[2]!, isFavorite: true, playCount: 4 }]);
+
+    await t.library.openTileMenu("item-3", POINT);
+    expect(t.contextMenu.view.peek()!.point).toEqual(POINT);
+    expect(tileMenuItems(t)).toEqual(["Remove from favorites", "Add to blacklist", "Rate…", "Clear playback stats…", "Delete file…"]);
+    expect(t.grid.ringed.at(-1)).toBe("item-3");
+    expect(t.requests("/api/library/item-summary")).toEqual([]);
+
+    await pick(t, "Remove from favorites");
+    expect(t.requests("/api/bulk/item-state").map((request) => request.body)).toEqual([flagBody(["item-3"], "favorite", false)]);
+    expect(t.grid.ringed.at(-1)).toBeNull();
+
+    // A tile never played has no stats to clear.
+    await t.library.openTileMenu("item-1", POINT);
+    expect(tileMenuItems(t)).toEqual(["Add to favorites", "Add to blacklist", "Rate…", "Clear playback stats… (No playback stats to clear)", "Delete file…"]);
+  });
+
+  it("on a selected tile acts on the selection, without a ring, and on a tile outside it acts on that tile alone, leaving the selection", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    void t.library.clickTile("item-2", PLAIN);
+
+    await t.library.openTileMenu("item-2", POINT);
+    expect(tileMenuItems(t)!.at(-1)).toBe("Delete files…");
+    expect(t.grid.ringed.at(-1)).toBeNull();
+    await pick(t, "Add to blacklist");
+
+    await t.library.openTileMenu("item-3", POINT);
+    expect(tileMenuItems(t)!.at(-1)).toBe("Delete file…");
+    expect(t.grid.ringed.at(-1)).toBe("item-3");
+    await pick(t, "Add to blacklist");
+
+    expect(t.requests("/api/bulk/item-state").map((request) => request.body)).toEqual([
+      flagBody(["item-1", "item-2"], "blacklist", true),
+      flagBody(["item-3"], "blacklist", true)
+    ]);
+    expect(t.library.selection.ids()).toEqual(["item-1", "item-2"]);
+  });
+
+  it("shows one menu at a time: a tile's menu closes the Selection actions menu, and that menu closes a tile's", async () => {
+    const t = await shown();
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    await t.library.toggleSelectionMenu();
+    expect(t.library.selection.menuOpen.peek()).toBe(true);
+
+    await t.library.openTileMenu("item-2", POINT);
+    expect([t.library.selection.menuOpen.peek(), t.contextMenu.isOpen.peek(), t.grid.ringed.at(-1)]).toEqual([false, true, "item-2"]);
+
+    await t.library.toggleSelectionMenu();
+    expect([t.library.selection.menuOpen.peek(), t.contextMenu.isOpen.peek(), t.grid.ringed.at(-1)]).toEqual([true, false, null]);
+  });
+
+  it("a tile's menu closes when its tile leaves the loaded window or a message replaces the grid, but not when another leaves", async () => {
+    const t = await shown();
+    await t.library.openTileMenu("item-2", POINT);
+    t.fakeLibrary.items = libraryItems(2);
+    t.emit("itemsRemoved", { itemIds: ["item-3"] });
+    await settle();
+    expect(t.contextMenu.isOpen.peek()).toBe(true);
+
+    t.fakeLibrary.items = libraryItems(1);
+    t.emit("itemsRemoved", { itemIds: ["item-2"] });
+    await settle();
+    expect([t.contextMenu.isOpen.peek(), t.grid.ringed.at(-1)]).toEqual([false, null]);
+
+    await t.library.openTileMenu("item-1", POINT);
+    t.store.compatibilityMessage.value = "Server API version 0 is not supported.";
+    t.store.compatibilityBlocked.value = true;
+    expect(t.library.body.peek().kind).toBe("message");
+    expect(t.contextMenu.isOpen.peek()).toBe(false);
+  });
+
+  it("a tile's menu closes when the tab hides and when a selection it acts on ends, while one on a tile alone stays", async () => {
+    const t = await shown();
+    await t.library.openTileMenu("item-1", POINT);
+    t.hideTab();
+    expect(t.contextMenu.isOpen.peek()).toBe(false);
+    t.showTab();
+
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    await t.library.openTileMenu("item-1", POINT);
+    t.library.selection.clear();
+    expect(t.contextMenu.isOpen.peek()).toBe(false);
+
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    await t.library.openTileMenu("item-2", POINT);
+    t.library.selection.clear();
+    expect(t.contextMenu.isOpen.peek()).toBe(true);
+  });
+
+  /** A library of 250 items, 200 of them loaded, all selected with Select all. */
+  async function selectedPastLoaded() {
+    const t = await shown(libraryItems(250));
+    t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
+    await t.library.selectAll();
+    await settle();
+    expect(t.library.selection.count.peek()).toBe(250);
+    return t;
+  }
+
+  /** Holds the summary read's replies until `answer` is called with a summary, or with a status to fail. */
+  function holdSummary(t: Shown) {
+    const waiting: Array<(response: Response) => void> = [];
+    t.replies.set("/api/library/item-summary", () => new Promise<Response>((resolve) => waiting.push(resolve)));
+    return {
+      answer(body: unknown, status = 200) {
+        for (const resolve of waiting.splice(0)) {
+          resolve(json(body, status));
+        }
+      }
+    };
+  }
+
+  const ALL_FAVORITES = { count: 250, favoriteCount: 250, blacklistedCount: 0, playedCount: 0 };
+
+  it("asks the server once what a selection past the loaded tiles is, and opens only with its answer", async () => {
+    const t = await selectedPastLoaded();
+    const summary = holdSummary(t);
+
+    const opening = t.library.toggleSelectionMenu();
+    await settle();
+    expect(t.library.selection.menuOpen.peek()).toBe(false);
+    expect(t.requests("/api/library/item-summary").map((request) => request.body)).toEqual([{ itemIds: t.library.selection.ids() }]);
+
+    summary.answer(ALL_FAVORITES);
+    await opening;
+    expect(t.library.selection.menuOpen.peek()).toBe(true);
+    expect(selectionMenuItems(t)).toEqual([
+      "Remove from favorites",
+      "Add to blacklist",
+      "Rate…",
+      "Clear playback stats… (No playback stats to clear)",
+      "Delete files…"
+    ]);
+    expect(t.requests("/api/library/item-summary")).toHaveLength(1);
+  });
+
+  it("drops a read under way when Selection actions is pressed again, the selection changes, or the tab hides", async () => {
+    const t = await selectedPastLoaded();
+    const summary = holdSummary(t);
+    const drops = [
+      () => void t.library.toggleSelectionMenu(),
+      () => void t.library.clickTile("item-2", PLAIN),
+      () => t.hideTab()
+    ];
+    for (const drop of drops) {
+      t.showTab();
+      const opening = t.library.toggleSelectionMenu();
+      await settle();
+      drop();
+      summary.answer(ALL_FAVORITES);
+      await opening;
+      expect(t.library.selection.menuOpen.peek()).toBe(false);
+    }
+  });
+
+  it("opens Selection actions pressed while a tile's menu is still reading, dropping the tile's read", async () => {
+    const t = await selectedPastLoaded();
+    const summary = holdSummary(t);
+
+    const tileOpening = t.library.openTileMenu("item-1", POINT);
+    await settle();
+    const opening = t.library.toggleSelectionMenu();
+    await settle();
+    summary.answer(ALL_FAVORITES);
+    await Promise.all([tileOpening, opening]);
+    expect([t.library.selection.menuOpen.peek(), t.contextMenu.isOpen.peek()]).toEqual([true, false]);
+    expect(t.requests("/api/library/item-summary")).toHaveLength(2);
+  });
+
+  it("opens with every add and remove item when the read fails, and logs it, and opens none when it answers 401", async () => {
+    const t = await selectedPastLoaded();
+    t.replies.set("/api/library/item-summary", () => json({ error: "The library is busy." }, 503));
+
+    await t.library.toggleSelectionMenu();
+    expect(t.library.selection.menuOpen.peek()).toBe(true);
+    expect(selectionMenuItems(t)).toEqual([
+      "Add to favorites",
+      "Remove from favorites",
+      "Add to blacklist",
+      "Remove from blacklist",
+      "Rate…",
+      "Clear playback stats…",
+      "Delete files…"
+    ]);
+    expect(t.relayed).toContain("library=item-summary-failed status=503");
+    expect(t.notices).toEqual([]);
+
+    await t.library.toggleSelectionMenu();
+    t.replies.set("/api/library/item-summary", () => json({ error: "Unauthorized" }, 401));
+    await t.library.toggleSelectionMenu();
+    expect([t.library.selection.menuOpen.peek(), t.store.pairingRequired.peek()]).toEqual([false, true]);
   });
 });

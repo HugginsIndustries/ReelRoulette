@@ -1,20 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { cleanup, fireEvent, render, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
-import { Menu, type MenuItem } from "../../ui/Menu";
+import { Menu } from "../../ui/Menu";
+import type { MenuItem } from "../../ui/menuModel";
+import { menuIcons, menuItemIn as item, menuParts as parts } from "./pageHarness";
 
 afterEach(() => {
   cleanup();
 });
-
-/** The menu's items and rules in order: each item's label, or "—" for a rule. */
-function parts(menu: HTMLElement): string[] {
-  return Array.from(menu.children).map((part) => (part.tagName === "HR" ? "—" : part.textContent ?? ""));
-}
-
-function item(menu: HTMLElement, label: string): HTMLButtonElement {
-  return Array.from(menu.querySelectorAll("button")).find((button) => button.textContent === label)!;
-}
 
 describe("the menu", () => {
   it("lists its items in groups with a rule between them, leaving out an empty group", () => {
@@ -23,7 +16,14 @@ describe("the menu", () => {
       <Menu
         id="test-menu"
         class="test-place"
-        groups={[[{ label: "One", onPick: pick }, { label: "Two", onPick: pick }], [], [{ label: "Three", onPick: pick }]]}
+        groups={[
+          [
+            { label: "One", icon: "star", onPick: pick },
+            { label: "Two", icon: "tag", onPick: pick }
+          ],
+          [],
+          [{ label: "Three", icon: "delete_forever", onPick: pick }]
+        ]}
         onClose={() => {}}
       />
     );
@@ -33,10 +33,18 @@ describe("the menu", () => {
     expect(menu.querySelectorAll("hr.menu-rule")).toHaveLength(1);
   });
 
+  it("draws each item's icon at its left, which leaves the item's name its label", () => {
+    const { container } = render(<Menu groups={[[{ label: "Rate…", icon: "star", onPick: () => {} }]]} onClose={() => {}} />);
+    const menu = container.querySelector<HTMLElement>(".menu")!;
+    expect(menuIcons(menu)).toEqual(["star Rate…"]);
+    expect(item(menu, "Rate…").firstElementChild?.className).toBe("material-symbol-icon");
+    expect(within(menu).getByRole("button", { name: "Rate…" })).toBe(item(menu, "Rate…"));
+  });
+
   it("marks a destructive item red, and disables an item with its reason as its tooltip", () => {
     const groups: MenuItem[][] = [
-      [{ label: "Rename", onPick: () => {}, disabledReason: "Pick one item to rename" }],
-      [{ label: "Delete", onPick: () => {}, danger: true }]
+      [{ label: "Rename", icon: "edit", onPick: () => {}, disabledReason: "Pick one item to rename" }],
+      [{ label: "Delete", icon: "delete_forever", onPick: () => {}, danger: true }]
     ];
     const { container } = render(<Menu groups={groups} onClose={() => {}} />);
     const menu = container.querySelector<HTMLElement>(".menu")!;
@@ -49,8 +57,8 @@ describe("the menu", () => {
     const happened: string[] = [];
     const groups: MenuItem[][] = [
       [
-        { label: "Rate…", onPick: () => happened.push("rate") },
-        { label: "Rename", onPick: () => happened.push("rename"), disabledReason: "Pick one item to rename" }
+        { label: "Rate…", icon: "star", onPick: () => happened.push("rate") },
+        { label: "Rename", icon: "edit", onPick: () => happened.push("rename"), disabledReason: "Pick one item to rename" }
       ]
     ];
     const { container } = render(<Menu groups={groups} onClose={() => happened.push("close")} />);

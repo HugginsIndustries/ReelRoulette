@@ -3,6 +3,7 @@ import { messageTime, type NotificationEntry, type Popup } from "../notification
 import { activeLastingStates, lastingStateText } from "../state/lastingStates";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
+import { keepInside } from "./placement";
 
 /** How far a swipe on a touch screen has to go, to either side, to close a popup. */
 const SWIPE_CLOSE_PX = 64;
@@ -189,7 +190,7 @@ export function NotificationList() {
     if (!anchor || !element) return;
     const width = element.offsetWidth || Math.min(380, window.innerWidth - 16);
     const left = anchor.left < window.innerWidth / 2 ? anchor.left : anchor.right - width;
-    element.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+    element.style.left = `${keepInside(left, width, window.innerWidth)}px`;
     element.style.top = `${Math.round(anchor.bottom + 6)}px`;
     element.style.maxHeight = `${Math.max(220, Math.round(window.innerHeight - anchor.bottom - 18))}px`;
   }

@@ -155,6 +155,19 @@ export function parseLibraryIds(raw: unknown): LibraryIdsQueryResponse["ids"] {
   return Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [];
 }
 
+type LibraryItemSummaryResponse = components["schemas"]["LibraryItemSummaryResponse"];
+
+/** `POST /api/library/item-summary`'s answer: how many of the named items are in the library, and in each state. */
+export function parseItemSummary(raw: unknown): LibraryItemSummaryResponse {
+  const body = raw && typeof raw === "object" ? (raw as Partial<Record<keyof LibraryItemSummaryResponse, unknown>>) : {};
+  return {
+    count: readCount(body.count),
+    favoriteCount: readCount(body.favoriteCount),
+    blacklistedCount: readCount(body.blacklistedCount),
+    playedCount: readCount(body.playedCount)
+  };
+}
+
 function readCount(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     return Math.trunc(value);

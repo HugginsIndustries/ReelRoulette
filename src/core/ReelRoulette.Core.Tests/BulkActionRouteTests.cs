@@ -689,6 +689,40 @@ public sealed class BulkActionRouteTests : IDisposable
             "LibraryIdsQueryRequest");
     }
 
+    [Fact]
+    public void ItemSummary_CountsTheNamedItemsInEachState_AndAnswersZerosForNoIds_MatchingItsSchemas()
+    {
+        CatalogSeed.Write(
+            _dataDir,
+            sources: [new SeedSource("s1", "/media")],
+            items:
+            [
+                new SeedItem("favorite", "/media/favorite.mp4") { SourceId = "s1", IsFavorite = true },
+                new SeedItem("blacklisted", "/media/blacklisted.mp4") { SourceId = "s1", IsBlacklisted = true },
+                new SeedItem("played", "/media/played.mp4") { SourceId = "s1", PlayCount = 2 },
+                new SeedItem("plain", "/media/plain.mp4") { SourceId = "s1" },
+                new SeedItem("not-named", "/media/not-named.mp4") { SourceId = "s1", IsFavorite = true }
+            ]);
+        var operations = CreateOperations();
+        var request = new LibraryItemSummaryRequest { ItemIds = ["favorite", "blacklisted", "played", "plain", "PLAIN", "missing"] };
+
+        var response = Assert.IsType<LibraryItemSummaryResponse>(Value(ServerHostComposition.SummarizeItems(request, operations)));
+
+        Assert.Equal((4, 1, 1, 1), (response.Count, response.FavoriteCount, response.BlacklistedCount, response.PlayedCount));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(request), "LibraryItemSummaryRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "LibraryItemSummaryResponse");
+
+        var empty = Assert.IsType<LibraryItemSummaryResponse>(
+            Value(ServerHostComposition.SummarizeItems(new LibraryItemSummaryRequest { ItemIds = [] }, operations)));
+        Assert.Equal((0, 0, 0, 0), (empty.Count, empty.FavoriteCount, empty.BlacklistedCount, empty.PlayedCount));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(empty), "LibraryItemSummaryResponse");
+
+        var logLines = LogLines().Where(line => line.Contains("Library item summary", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, logLines.Count);
+        Assert.Contains("requested=6 count=4 favorites=1 blacklisted=1 played=1 elapsedMs=", logLines[0]);
+        Assert.Contains("requested=0 count=0 favorites=0 blacklisted=0 played=0 elapsedMs=", logLines[1]);
+    }
+
     /// <summary>Seeds <paramref name="count"/> items, with files on disk when asked, and returns their ids.</summary>
     private List<string> SeedItems(int count, bool withFiles = false)
     {

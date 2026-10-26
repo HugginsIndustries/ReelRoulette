@@ -904,3 +904,19 @@ public sealed class LibraryIdsQueryResponse
     /// <summary>The catalog id of every item the query matches.</summary>
     public List<string> Ids { get; set; } = [];
 }
+
+public sealed class LibraryItemSummaryRequest
+{
+    public List<string>? ItemIds { get; set; }
+}
+
+/// <summary>How many of the named items are in the library, and how many of those are in each state.</summary>
+public sealed class LibraryItemSummaryResponse
+{
+    public int Count { get; set; }
+    public int FavoriteCount { get; set; }
+    public int BlacklistedCount { get; set; }
+
+    /// <summary>How many have playback stats to clear: a play count or a last played time.</summary>
+    public int PlayedCount { get; set; }
+}

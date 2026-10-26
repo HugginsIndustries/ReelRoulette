@@ -1031,7 +1031,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <kbd>
                       "Esc"
                   <dd>
-                    "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"
+                    "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"
                 <p class="setting-hint">
                   "Shortcuts do nothing while you type in a text field."
             <section class="settings-section">

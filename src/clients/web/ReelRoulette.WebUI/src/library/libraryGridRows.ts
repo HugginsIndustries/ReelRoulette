@@ -12,6 +12,8 @@ export interface LibraryGridRows {
   show(rows: readonly LibraryGridRowLayout[], first: number, end: number, items: readonly LibraryProjectionItem[]): void;
   /** Marks the playing item's tile, or none, on the tiles shown and on those created later. */
   setPlayingItemId(itemId: string | null): void;
+  /** Marks the tile a menu acts on alone, or none, on the tiles shown and on those created later. */
+  setMenuItemId(itemId: string | null): void;
   /** Marks the selected items' tiles, as `isSelected` says, on the tiles shown and on those shown later. */
   setSelection(isSelected: (itemId: string) => boolean): void;
   /** The tiles shown, in layout order. */
@@ -60,6 +62,7 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
   let shownTiles = new Map<string, GridTile[]>();
   let shownList: ShownTile[] = [];
   let playingItemId: string | null = null;
+  let menuItemId: string | null = null;
   let isSelected: (itemId: string) => boolean = () => false;
 
   function tileView(item: LibraryProjectionItem, tileWidth: number, tileHeight: number): GridTileView {
@@ -113,6 +116,9 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
           tile.setSelected(isSelected(item.id));
         } else {
           tile = createGridTile(item.id, view, item.id === playingItemId, isSelected(item.id));
+          if (item.id === menuItemId) {
+            tile.setMenuTarget(true);
+          }
         }
         const sameItem = nextTiles.get(item.id);
         if (sameItem) {
@@ -134,12 +140,13 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     shownList = nextList;
   }
 
-  function markPlaying(itemId: string | null, playing: boolean): void {
+  /** Changes the tiles shown of `itemId`, if any. */
+  function eachTile(itemId: string | null, change: (tile: GridTile) => void): void {
     if (itemId === null) {
       return;
     }
     for (const tile of shownTiles.get(itemId) ?? []) {
-      tile.setPlaying(playing);
+      change(tile);
     }
   }
 
@@ -148,9 +155,19 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     if (itemId === playingItemId) {
       return;
     }
-    markPlaying(playingItemId, false);
+    eachTile(playingItemId, (tile) => tile.setPlaying(false));
     playingItemId = itemId;
-    markPlaying(itemId, true);
+    eachTile(itemId, (tile) => tile.setPlaying(true));
+  }
+
+  // Changes only the tiles that gain or lose the mark.
+  function setMenuItemId(itemId: string | null): void {
+    if (itemId === menuItemId) {
+      return;
+    }
+    eachTile(menuItemId, (tile) => tile.setMenuTarget(false));
+    menuItemId = itemId;
+    eachTile(itemId, (tile) => tile.setMenuTarget(true));
   }
 
   // Changes only the tiles whose mark differs.
@@ -171,5 +188,5 @@ export function createLibraryGridRows(container: HTMLElement, apiBaseUrl: string
     shownList = [];
   }
 
-  return { show, setPlayingItemId, setSelection, shownTiles: () => shownList, clear };
+  return { show, setPlayingItemId, setMenuItemId, setSelection, shownTiles: () => shownList, clear };
 }

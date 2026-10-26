@@ -712,6 +712,78 @@ export function stubScroller(element: HTMLElement, top: number, height: number, 
   stubProperty(restores, element, "getBoundingClientRect", { value: () => new DOMRect(0, top, 300, height) });
 }
 
+/** A menu item's label: its text without its icon's name, which the icon font draws as the icon. */
+export function menuItemLabel(item: Element): string {
+  return Array.from(item.childNodes)
+    .filter((node) => !(node instanceof Element && node.classList.contains("material-symbol-icon")))
+    .map((node) => node.textContent ?? "")
+    .join("");
+}
+
+/** A menu's items and rules in order: each item's label, or "—" for a rule. */
+export function menuParts(menu: Element): string[] {
+  return Array.from(menu.children).map((part) => (part.tagName === "HR" ? "—" : menuItemLabel(part)));
+}
+
+/** A menu's items in order, each as its icon's name and its label, such as "heart_plus Add to favorites". */
+export function menuIcons(menu: Element): string[] {
+  return Array.from(menu.querySelectorAll("button")).map(
+    (item) => `${item.querySelector(".material-symbol-icon")?.textContent ?? ""} ${menuItemLabel(item)}`
+  );
+}
+
+export function menuItemIn(menu: Element, label: string): HTMLButtonElement {
+  const found = Array.from(menu.querySelectorAll("button")).find((item) => menuItemLabel(item) === label);
+  if (!found) {
+    throw new Error(`The menu has no ${label}.`);
+  }
+  return found;
+}
+
+/** The context menu showing, or null. */
+export function contextMenuShown(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("#context-menu .menu");
+}
+
+/**
+ * A mouse's right-click on `element` at `x`, `y`, as a browser sends it: the right button's press, which closes an
+ * open popover, then `contextmenu`. Answers whether the browser's own menu would open, which nothing stopped.
+ */
+export function rightClick(element: Element, x = 100, y = 100): boolean {
+  fireEvent.pointerDown(element, { pointerType: "mouse", pointerId: 1, isPrimary: true, button: 2, clientX: x, clientY: y });
+  return fireEvent.contextMenu(element, { button: 2, clientX: x, clientY: y });
+}
+
+/** Gives the context menu a layout size, which happy-dom does not compute, so its placement can be checked. */
+export function stubContextMenuSize(width: number, height: number): void {
+  for (const [name, value] of [["offsetWidth", width], ["offsetHeight", height]] as const) {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)!;
+    stubProperty(restores, HTMLElement.prototype, name, {
+      get(this: HTMLElement) {
+        return this.classList.contains("context-menu") ? value : original.get!.call(this);
+      }
+    });
+  }
+}
+
+/**
+ * Where the context menu was placed, `{ left, top }`, with its stubbed size, after checking that it sits wholly
+ * inside the window with at least 8 px to spare.
+ */
+export function contextMenuPlace(width: number, height: number): { left: number; top: number } {
+  const host = document.getElementById("context-menu");
+  if (!host) {
+    throw new Error("No context menu shows.");
+  }
+  const place = { left: parseFloat(host.style.left), top: parseFloat(host.style.top) };
+  const inside =
+    place.left >= 8 && place.top >= 8 && place.left + width <= window.innerWidth - 8 && place.top + height <= window.innerHeight - 8;
+  if (!inside) {
+    throw new Error(`The context menu at ${place.left},${place.top} isn't inside the ${window.innerWidth}x${window.innerHeight} window.`);
+  }
+  return place;
+}
+
 /** happy-dom's window size, which each test starts from. */
 export const DEFAULT_VIEWPORT = { width: 1024, height: 768 };
 

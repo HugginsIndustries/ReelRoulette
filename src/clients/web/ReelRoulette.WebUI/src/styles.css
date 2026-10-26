@@ -401,7 +401,8 @@ html.theme-light .app-dialog {
   color: var(--error);
 }
 
-/* The app's menu: actions in groups with a rule between them, one look for every menu. Its container places it. */
+/* The app's menu: actions in groups with a rule between them, each with its icon at its left in the item's color, one
+   look for every menu. Its container places it. */
 .menu {
   min-width: 230px;
   padding: 6px;
@@ -417,6 +418,9 @@ html.theme-light .app-dialog {
   display: none;
 }
 .menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   min-height: 40px;
   padding: 0 12px;
   border: 0;
@@ -426,6 +430,9 @@ html.theme-light .app-dialog {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+.menu button .material-symbol-icon {
+  font-size: 20px;
 }
 @media (hover: hover) {
   .menu button:hover:not(:disabled) {
@@ -443,6 +450,18 @@ html.theme-light .app-dialog {
   border: 0;
   border-top: 1px solid var(--surface-border);
   margin: 4px 0;
+}
+/* A context menu opens at a point, placed by script inside the window, over the panel and the popups. It sits in the
+   fullscreen stage, so it shows in fullscreen and the panel doesn't clip it. */
+.context-menu {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1500;
+}
+.context-menu .menu {
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
 }
 
 /* Icon-only buttons in the panel's tabs and Auto Tag. */
@@ -1622,6 +1641,16 @@ body.sorting * {
   opacity: 1;
   color: var(--huggins-orange);
   background: radial-gradient(circle closest-side, var(--tile-check-disc) 0 76%, transparent 80%);
+}
+/* The tile a menu acts on alone, rather than on the selection: an orange ring inside its edge while the menu is open.
+   The selected tiles' own marks show what a menu on the selection reaches. */
+.library-grid-tile.is-menu-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--huggins-orange);
+  border-radius: 4px;
+  pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .library-grid-tile-media {

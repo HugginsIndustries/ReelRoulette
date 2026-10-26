@@ -7,6 +7,7 @@ import {
   type FieldReveal,
   type SettingFieldOptions
 } from "../validation/fieldValidation";
+import { keepInside, WINDOW_MARGIN } from "./placement";
 import { prefersReducedMotion } from "./reducedMotion";
 
 // The field validation pattern: a field that holds a value that is not valid shows a red icon, whose tooltip says what
@@ -78,7 +79,6 @@ export interface FieldValidation<T extends HTMLElement> {
   mark: JSX.Element | null;
 }
 
-const TIP_MARGIN = 8;
 const TIP_GAP = 10;
 
 /** Whether the icon shows: it has a size, and the closest scrolling container around it hasn't scrolled it out of view. */
@@ -111,9 +111,9 @@ function placeTip(icon: HTMLElement | null, tip: HTMLElement | null): void {
   }
   tip.dataset.place = "above";
   const tipBox = tip.getBoundingClientRect();
-  const above = iconBox.top - tipBox.height - TIP_GAP >= TIP_MARGIN;
+  const above = iconBox.top - tipBox.height - TIP_GAP >= WINDOW_MARGIN;
   const top = above ? iconBox.top - tipBox.height - TIP_GAP : iconBox.bottom + TIP_GAP;
-  const left = Math.max(TIP_MARGIN, Math.min(iconBox.right + 6 - tipBox.width, window.innerWidth - tipBox.width - TIP_MARGIN));
+  const left = keepInside(iconBox.right + 6 - tipBox.width, tipBox.width, window.innerWidth);
   tip.dataset.place = above ? "above" : "below";
   tip.style.top = `${Math.round(top)}px`;
   tip.style.left = `${Math.round(left)}px`;

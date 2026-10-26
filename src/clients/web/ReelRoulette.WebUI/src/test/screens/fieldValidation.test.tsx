@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/preact";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HeldButton, ValidatedField } from "../../ui/FieldValidation";
 import { createFieldReveal, type FieldReveal } from "../../validation/fieldValidation";
@@ -121,5 +121,46 @@ describe("a held action's move to its field", () => {
     unmount();
     reveal.reveal("min");
     expect(shown).toEqual(["second"]);
+  });
+});
+
+describe("a field's tooltip", () => {
+  const TIP_WIDTH = 200;
+  const TIP_HEIGHT = 40;
+
+  /** Lays out the field's icon at `left` to `left + 20` and `top` to `top + 20`, and its tooltip at its own size. */
+  function stubBoxes(icon: { left: number; top: number }) {
+    const original = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      if (this.classList.contains("vfield-icon")) {
+        return new DOMRect(icon.left, icon.top, 20, 20);
+      }
+      if (this.classList.contains("vfield-tip")) {
+        return new DOMRect(0, 0, TIP_WIDTH, TIP_HEIGHT);
+      }
+      return original.call(this);
+    });
+  }
+
+  it("sits above its icon, its right edge just past the icon's, and stays 8 px inside the window near either edge", () => {
+    const icon = { left: 480, top: 300 };
+    stubBoxes(icon);
+    render(
+      <ValidatedField problem={{ message: "Use seconds." }} flagged={true}>
+        {(control) => <input {...control} id="min" type="text" />}
+      </ValidatedField>
+    );
+    fireEvent.focus(byId("min"));
+    const tip = document.querySelector<HTMLElement>(".vfield-tip")!;
+    // The icon's right edge, 500, and 6 px past it, less the tooltip's width; above it, 10 px clear.
+    expect([tip.dataset.place, tip.style.left, tip.style.top]).toEqual(["above", "306px", "250px"]);
+
+    icon.left = 10;
+    window.dispatchEvent(new Event("resize"));
+    expect(tip.style.left).toBe("8px");
+
+    icon.left = window.innerWidth - 24;
+    window.dispatchEvent(new Event("resize"));
+    expect(tip.style.left).toBe(`${window.innerWidth - TIP_WIDTH - 8}px`);
   });
 });

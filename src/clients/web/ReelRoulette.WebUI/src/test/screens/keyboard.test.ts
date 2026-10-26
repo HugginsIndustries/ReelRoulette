@@ -602,7 +602,7 @@ describe("keyboard shortcuts", () => {
       ["P", "Show or hide the panel"],
       ["Shift+F", "Fullscreen"],
       ["H", "These shortcuts"],
-      ["Esc", "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
+      ["Esc", "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
     ]);
     expect(within(shortcutsSection()).getByText("Shortcuts do nothing while you type in a text field.")).toBeTruthy();
   });

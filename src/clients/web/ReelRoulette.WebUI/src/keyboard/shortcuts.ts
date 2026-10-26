@@ -66,8 +66,9 @@ export interface ShortcutLine {
 
 /**
  * The shortcuts, as the Settings tab's reference lists them, and every key bound, so the two can't differ. Esc is the
- * bell's list's, the rating's popover's, the Selection actions menu's, and the stage's own (`src/ui/Notifications.tsx`,
- * `src/ui/Player.tsx`, `src/ui/LibraryOverlay.tsx`, `src/ui/Stage.tsx`), and an open dialog's before them.
+ * bell's list's, the rating's popover's, the Selection actions menu's, the context menu's, and the stage's own
+ * (`src/ui/Notifications.tsx`, `src/ui/Player.tsx`, `src/ui/LibraryOverlay.tsx`, `src/ui/Menu.tsx`, `src/ui/Stage.tsx`),
+ * and an open dialog's before them.
  */
 export const SHORTCUT_LINES: readonly ShortcutLine[] = [
   {
@@ -148,7 +149,7 @@ export const SHORTCUT_LINES: readonly ShortcutLine[] = [
   { keys: ["Shift+F"], text: "Fullscreen", bindings: [{ key: "f", shift: true, action: "fullscreen" }] },
   // Not ?, which Firefox takes for its quick find.
   { keys: ["H"], text: "These shortcuts", bindings: [{ key: "h", action: "shortcuts" }] },
-  { keys: ["Esc"], text: "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen", bindings: [] }
+  { keys: ["Esc"], text: "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen", bindings: [] }
 ];
 
 /** The actions a key held down repeats; every other key acts once per press. */

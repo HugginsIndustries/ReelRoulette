@@ -235,6 +235,33 @@ public sealed class LibraryOperationsService
         return new LibraryIdsQueryResponse { Ids = ids };
     }
 
+    /// <summary>
+    /// How many of the named items are in the library, and how many of them are favorites, are blacklisted, and have
+    /// playback stats to clear, for the library menus. It writes one <c>last.log</c> line with the counts and the
+    /// elapsed time.
+    /// </summary>
+    public LibraryItemSummaryResponse SummarizeItems(LibraryItemSummaryRequest? request)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var itemIds = request?.ItemIds ?? [];
+        CatalogItemSummary summary;
+        lock (_lock)
+        {
+            summary = _catalog.Session.SummarizeItems(itemIds);
+        }
+
+        _serverLog.Append(
+            "info",
+            $"Library item summary requested={itemIds.Distinct(StringComparer.Ordinal).Count()} count={summary.Count} favorites={summary.FavoriteCount} blacklisted={summary.BlacklistedCount} played={summary.PlayedCount} elapsedMs={stopwatch.ElapsedMilliseconds}.");
+        return new LibraryItemSummaryResponse
+        {
+            Count = summary.Count,
+            FavoriteCount = summary.FavoriteCount,
+            BlacklistedCount = summary.BlacklistedCount,
+            PlayedCount = summary.PlayedCount
+        };
+    }
+
     public LibraryStatsResponse GetLibraryStats()
     {
         lock (_lock)

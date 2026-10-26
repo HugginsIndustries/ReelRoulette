@@ -1,3 +1,5 @@
+import type { WindowPoint } from "../ui/placement";
+
 /** How long a finger or a pen rests on a tile before the press counts as a long press. */
 export const LONG_PRESS_MS = 500;
 /** How far the press may move, in pixels, before it is a scroll or a drag rather than a long press. */
@@ -8,6 +10,8 @@ export interface TilePressOptions {
   tileItemId(target: EventTarget | null): string | null;
   /** A long press on the tile of `itemId` was held long enough. */
   onLongPress(itemId: string): void;
+  /** A mouse's right-click on the tile of `itemId`, at `point`, which opens its menu. */
+  onMenu(itemId: string, point: WindowPoint): void;
 }
 
 export interface TilePress {
@@ -31,7 +35,8 @@ interface Press {
  * A long press on a tile in `host`, from a finger or a pen; a mouse has the check icon. It counts once it has rested
  * for `LONG_PRESS_MS` without moving `LONG_PRESS_MOVE_PX`, and a second finger, as for a pinch, a scroll the browser
  * takes over, or lifting the finger first, ends it before then. Only the first finger down starts one, so a pinch never
- * does. The browser's own menu, its callout or image menu, doesn't open on a tile pressed with a finger or a pen.
+ * does. The browser's own menu, its callout or image menu, never opens on a tile: a mouse's right-click opens the
+ * tile's menu, and a finger's or a pen's press opens none.
  */
 export function listenForTilePress(host: HTMLElement, options: TilePressOptions): TilePress {
   let press: Press | null = null;
@@ -90,9 +95,14 @@ export function listenForTilePress(host: HTMLElement, options: TilePressOptions)
     }
   }
 
-  function onContextMenu(event: Event): void {
-    if (touchPress && options.tileItemId(event.target)) {
-      event.preventDefault();
+  function onContextMenu(event: MouseEvent): void {
+    const itemId = options.tileItemId(event.target);
+    if (!itemId) {
+      return;
+    }
+    event.preventDefault();
+    if (!touchPress) {
+      options.onMenu(itemId, { x: event.clientX, y: event.clientY });
     }
   }
 

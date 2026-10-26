@@ -301,6 +301,8 @@ public static class ServerHostComposition
 
         app.MapPost("/api/library/query-ids", QueryLibraryIds);
 
+        app.MapPost("/api/library/item-summary", SummarizeItems);
+
         app.MapPost("/api/library/delete-files", DeleteFiles);
 
         app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>
@@ -951,6 +953,15 @@ public static class ServerHostComposition
         return response == null
             ? Results.BadRequest(new { error = error ?? "Invalid library query" })
             : Results.Ok(response);
+    }
+
+    /// <summary>
+    /// How many of the named items are in the library, and how many of them are favorites, are blacklisted, and have
+    /// playback stats to clear.
+    /// </summary>
+    internal static IResult SummarizeItems(LibraryItemSummaryRequest? request, LibraryOperationsService operations)
+    {
+        return Results.Ok(operations.SummarizeItems(request));
     }
 
     private static bool NamesAnyItem(IReadOnlyList<string>? itemIds) =>

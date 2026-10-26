@@ -962,6 +962,39 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
+  /api/library/item-summary:
+    post:
+      summary: Count the named library items and their states
+      description: |
+        How many of the named items are in the library, and how many of those are favorites, are blacklisted, and have
+        playback stats to clear, which is a play count or a last played time, as `POST /api/playback/clear-stats`
+        counts them. The library menus ask it for a selection that reaches items the client hasn't loaded, to offer
+        only the actions that would change something. Ids match exactly and each counts once; an id no item has isn't
+        counted, and no ids count none. It is a read and publishes no event. Each request writes one `last.log` line
+        with how many ids it named, the counts, and the elapsed time.
+      operationId: postLibraryItemSummary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryItemSummaryRequest"
+      responses:
+        "200":
+          description: The counts among the named items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryItemSummaryResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/library/delete-files:
     post:
       summary: Delete library items' files from disk and remove the items
@@ -3142,6 +3175,42 @@ components:
           description: The catalog id of every item the query matches.
           items:
             type: string
+
+    LibraryItemSummaryRequest:
+      type: object
+      required:
+        - itemIds
+      properties:
+        itemIds:
+          type: array
+          description: Catalog item ids. Ids match exactly, each counts once, and an id no item has isn't counted.
+          items:
+            type: string
+
+    LibraryItemSummaryResponse:
+      type: object
+      required:
+        - count
+        - favoriteCount
+        - blacklistedCount
+        - playedCount
+      properties:
+        count:
+          type: integer
+          format: int32
+          description: How many of the named items are in the library.
+        favoriteCount:
+          type: integer
+          format: int32
+          description: How many of them are favorites.
+        blacklistedCount:
+          type: integer
+          format: int32
+          description: How many of them are blacklisted.
+        playedCount:
+          type: integer
+          format: int32
+          description: How many of them have playback stats to clear, a play count or a last played time.
 
     LibraryQueryRequest:
       type: object

@@ -74,7 +74,7 @@ describe("library selection", () => {
   it("clearing ends selection, closes the menu, and forgets where a range starts", () => {
     const selection = createLibrarySelection();
     selection.toggle("b");
-    selection.toggleMenu();
+    selection.openMenu();
     expect(selection.menuOpen.value).toBe(true);
 
     selection.clear();
@@ -85,15 +85,15 @@ describe("library selection", () => {
 
   it("opens the menu only while selecting, and taking out the last tile closes it", () => {
     const selection = createLibrarySelection();
-    selection.toggleMenu();
+    selection.openMenu();
     expect(selection.menuOpen.value).toBe(false);
 
     selection.toggle("a");
-    selection.toggleMenu();
+    selection.openMenu();
     expect(selection.menuOpen.value).toBe(true);
-    selection.toggleMenu();
+    selection.closeMenu();
     expect(selection.menuOpen.value).toBe(false);
-    selection.toggleMenu();
+    selection.openMenu();
     selection.toggle("a");
     expect(selection.menuOpen.value).toBe(false);
   });

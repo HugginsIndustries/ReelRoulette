@@ -13,6 +13,8 @@ export function buildThumbnailUrl(apiBaseUrl: string, itemId: string, version: s
 const PLAYING_TILE_CLASS = "is-playing";
 /** The class that marks a selected item's tile. */
 const SELECTED_TILE_CLASS = "is-selected";
+/** The class that marks the tile a menu acts on alone, which the stylesheet rings. */
+const MENU_TILE_CLASS = "is-menu-target";
 /** The class of a tile's check icon, which selects it. */
 export const TILE_CHECK_CLASS = "library-grid-tile-check";
 
@@ -34,6 +36,8 @@ export interface GridTile {
   update(view: GridTileView): void;
   setPlaying(playing: boolean): void;
   setSelected(selected: boolean): void;
+  /** Marks the tile as the one its menu acts on alone. */
+  setMenuTarget(target: boolean): void;
 }
 
 function block(className: string): HTMLDivElement {
@@ -156,8 +160,12 @@ export function createGridTile(itemId: string, view: GridTileView, playing: bool
     check.title = isSelected ? "Deselect" : "Select";
   }
 
+  function setMenuTarget(target: boolean): void {
+    element.classList.toggle(MENU_TILE_CLASS, target);
+  }
+
   update(view);
   setPlaying(playing);
   setSelected(selected);
-  return { element, update, setPlaying, setSelected };
+  return { element, update, setPlaying, setSelected, setMenuTarget };
 }

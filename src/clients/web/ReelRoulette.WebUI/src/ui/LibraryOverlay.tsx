@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { FILTER_SUMMARY_LABEL, FILTER_SUMMARY_SEPARATOR } from "../filter/filterSummaryModel";
-import { BULK_FLAG_ACTIONS, CHOOSE_RATING_REASON, type RateDialogView } from "../library/bulkActions";
+import { CHOOSE_RATING_REASON, type RateDialogView } from "../library/bulkActions";
 import { ALL_SELECTED_REASON } from "../library/library";
 import { formatSelectionCount, getSortLabel, LIBRARY_SORT_MODES } from "../library/libraryBrowseModel";
 import { TILE_CHECK_CLASS } from "../library/libraryGridTile";
@@ -13,7 +13,7 @@ import { useApp } from "./appContext";
 import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { useLightDismiss } from "./LightDismiss";
-import { Menu, type MenuItem } from "./Menu";
+import { Menu } from "./Menu";
 import { RatingStars } from "./RatingStars";
 
 /** The item id of the tile an event landed on, if any. */
@@ -104,11 +104,12 @@ export function LibraryOverlay() {
 
 /**
  * While selecting: Select all, Clear selection, how many are selected, and, at the far end, Selection actions, whose
- * menu opens above the bar and closes on a press outside it, Escape, or a pick.
+ * menu opens above the bar, with the actions that apply to the selected items, and closes on a press outside it,
+ * Escape, or a pick.
  */
 function SelectionBar() {
   const { library } = useApp();
-  const { selection, bulk } = library;
+  const { selection } = library;
   const actions = useRef<HTMLDivElement>(null);
   useLightDismiss({
     open: selection.menuOpen,
@@ -120,14 +121,6 @@ function SelectionBar() {
     return null;
   }
   const allSelected = library.allSelected.value;
-  const groups: MenuItem[][] = [
-    BULK_FLAG_ACTIONS.map((action) => ({ label: action.label, onPick: () => void bulk.setFlag(action) })),
-    [
-      { label: "Rate…", onPick: bulk.openRate },
-      { label: "Clear playback stats…", onPick: () => void bulk.clearPlaybackStats() }
-    ],
-    [{ label: "Delete files…", danger: true, onPick: () => void bulk.deleteFiles() }]
-  ];
   return (
     <div id="library-selection-bar" class="library-selection-bar">
       <button
@@ -159,11 +152,17 @@ function SelectionBar() {
           type="button"
           aria-label="Selection actions"
           title="Selection actions"
-          onClick={selection.toggleMenu}
+          onClick={() => void library.toggleSelectionMenu()}
         >
           <Icon name="more_vert" />
         </button>
-        <Menu id="library-selection-menu" class="library-selection-menu" hidden={!selection.menuOpen.value} groups={groups} onClose={selection.closeMenu} />
+        <Menu
+          id="library-selection-menu"
+          class="library-selection-menu"
+          hidden={!selection.menuOpen.value}
+          groups={library.selectionMenuGroups.value}
+          onClose={selection.closeMenu}
+        />
       </div>
     </div>
   );
@@ -303,8 +302,9 @@ function PresetSelect() {
 
 /**
  * The body while tiles show. The grid controller renders into it, so it has no children here, and it stays the
- * same element while the tiles change, so the scroll position stays. A click on a tile plays it or selects it, and a
- * long press with a finger or a pen selects it, without the click it ends with doing either again.
+ * same element while the tiles change, so the scroll position stays. A click on a tile plays it or selects it, a
+ * long press with a finger or a pen selects it, without the click it ends with doing either again, and a mouse's
+ * right-click opens its menu.
  */
 function LibraryGrid() {
   const { library } = useApp();
@@ -313,7 +313,11 @@ function LibraryGrid() {
 
   useLayoutEffect(() => {
     const destroyGrid = library.attachGrid(host.current!);
-    const tilePress = listenForTilePress(host.current!, { tileItemId, onLongPress: (itemId) => library.longPressTile(itemId) });
+    const tilePress = listenForTilePress(host.current!, {
+      tileItemId,
+      onLongPress: (itemId) => library.longPressTile(itemId),
+      onMenu: (itemId, point) => void library.openTileMenu(itemId, point)
+    });
     press.current = tilePress;
     return () => {
       tilePress.dispose();
