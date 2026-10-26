@@ -557,11 +557,8 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .bulk-bar .btn { min-height: 40px; padding: 4px 10px; }
 /* A count wider than its room is cut off with "…" rather than wrapping. */
 #bulk-count { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The app's menu: actions in groups with a rule between them, one look for every menu. Its container places it. */
 .menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
   min-width: 230px;
   padding: 6px;
   background: var(--surface-raised);
@@ -571,7 +568,11 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
   display: flex;
   flex-direction: column;
 }
+/* Each item has its icon at its left, in the item's color. */
 .menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   min-height: 40px;
   padding: 0 12px;
   border: 0;
@@ -582,9 +583,20 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
   text-align: left;
   cursor: pointer;
 }
-@media (hover: hover) { .menu button:hover { background: rgba(127, 127, 127, 0.16); } }
+.menu button .material-symbol-icon { font-size: 20px; }
+@media (hover: hover) { .menu button:hover:not(:disabled) { background: rgba(127, 127, 127, 0.16); } }
+/* An item that applies but can't act now is disabled, with its reason as its tooltip. */
+.menu button:disabled { opacity: 0.45; cursor: not-allowed; }
 .menu .menu-danger { color: var(--error); }
 .menu-rule { border: 0; border-top: 1px solid var(--surface-border); margin: 4px 0; }
+/* The Selection actions menu opens above its button. */
+.bulk-menu { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 40; }
+/* A tile's menu opens at the pointer, placed by script inside the window, over the panel and the popups. It sits in the
+   stage, so it shows in fullscreen and the panel doesn't clip it. */
+.context-menu { position: fixed; z-index: 1500; max-height: calc(100dvh - 16px); overflow-y: auto; }
+/* The tile a menu acts on alone, rather than on the selection: an orange ring inside its edge while the menu is open.
+   The selection's own marks show what a menu on the selection reaches. */
+.lib-tile.is-menu-target::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--huggins-orange); border-radius: 4px; pointer-events: none; }
 /* Rate…: the Stats tab's stars, centered, with the rating they choose under them. */
 .rate-dialog .rating { margin: 6px auto 0; }
 .rate-dialog-words { margin: 0; text-align: center; color: var(--muted-fg); }
@@ -1001,18 +1013,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <button class="icon-btn" type="button" id="bulk-clear" aria-label="Clear selection" title="Clear selection"><span class="material-symbol-icon">deselect</span></button>
           <span id="bulk-count" class="grow">0 / 0 selected</span>
           <button class="icon-btn" type="button" id="bulk-actions" aria-label="Selection actions" title="Selection actions"><span class="material-symbol-icon">more_vert</span></button>
-          <div id="bulk-menu" class="menu" hidden>
-            <button type="button" data-bulk="fav-add">Add to favorites</button>
-            <button type="button" data-bulk="fav-remove">Remove from favorites</button>
-            <button type="button" data-bulk="bl-add">Add to blacklist</button>
-            <button type="button" data-bulk="bl-remove">Remove from blacklist</button>
-            <hr class="menu-rule">
-            <button type="button" data-bulk="rate">Rate…</button>
-            <button type="button" data-bulk="tags">Edit tags…</button>
-            <button type="button" data-bulk="clear">Clear playback stats…</button>
-            <hr class="menu-rule">
-            <button type="button" data-bulk="delete" class="menu-danger">Delete files…</button>
-          </div>
+          <div id="bulk-menu" class="menu bulk-menu" hidden></div>
         </div>
       </section>
 
@@ -1516,6 +1517,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <button type="button" class="mock-back" id="startup-error-back">Back to the mockup</button>
       </main>
     </div>
+
+    <div id="tile-menu" class="menu context-menu" hidden></div>
 
     <button id="mock-toggle" class="mock-toggle" type="button">Mockup</button>
     <div id="mock-sheet" class="mock-sheet mock-note mock-keep" hidden>
@@ -2514,8 +2517,11 @@ function applyLayout() {
 
 function showTab(tab) {
   if (tab !== "settings") leaveSettingFields();
-  // The Selection actions menu closes with the Library tab, and the selection stays.
-  if (tab !== "library") closeBulkMenu();
+  // The Selection actions menu and a tile's menu close with the Library tab, and the selection stays.
+  if (tab !== "library") {
+    closeBulkMenu();
+    closeTileMenu();
+  }
   state.tab = tab;
   store.set("tab", tab);
   document.querySelectorAll(".panel-tab").forEach((button) => {
@@ -2544,6 +2550,7 @@ function openPanel(tab) {
 function closePanel() {
   leaveSettingFields();
   closeBulkMenu();
+  closeTileMenu();
   const focused = document.activeElement;
   const hadFocus = $("panel").contains(focused);
   state.open = false;
@@ -3411,6 +3418,7 @@ function placeGridScrollbar(grid) {
 }
 function layoutGrid(force) {
   dropUnmatchedSelection();
+  closeTileMenuIfGone();
   const grid = $("lib-grid");
   if (grid.offsetParent === null) {
     if (force) gridStale = true;
@@ -3447,7 +3455,8 @@ function layoutGrid(force) {
       const item = items[tile.index];
       const tileEl = document.createElement("div");
       tileEl.className = "lib-tile" + (item.id === playback.item?.id ? " is-current" : "") +
-        (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "");
+        (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "") +
+        (item.id === ringedTileId() ? " is-menu-target" : "");
       tileEl.dataset.id = String(item.id);
       // With a mouse, hovering a tile shows its name, whether or not names show on tiles.
       tileEl.title = item.name;
@@ -4581,6 +4590,20 @@ async function editSelectionTags() {
   renderTags();
   openPanel("tags");
 }
+// Edit tags… in a tile's menu acting on that tile alone opens the Tags tab on its item, as the tab shows an item that
+// isn't playing, after asking to discard unsaved changes to other items' tags.
+async function editItemTags(item) {
+  const others = tagSelection || tagTarget !== item;
+  if (hasItemEdits() && others) {
+    if (!(await confirmDialog({ message: "Discard changes?", confirmLabel: "Discard", danger: true }))) return;
+    TAGS.forEach((category) => category.chips.forEach((chip) => (chip.pending = null)));
+  }
+  tagSelection = null;
+  tagSelectionLive = false;
+  tagTarget = item;
+  renderTags();
+  openPanel("tags");
+}
 
 function renderTags() {
   const host = $("tags-body");
@@ -5477,6 +5500,8 @@ function reloadGrid() {
 let selecting = false;
 let lastSelected = null;
 let swallowClick = false;
+// The tile whose menu is open, and whether the menu acts on the selection or on that tile alone, or null.
+let tileMenu = null;
 const selected = new Set();
 // The matching count the bar last showed.
 let bulkMatching = -1;
@@ -5513,6 +5538,7 @@ function setSelecting(on) {
   if (!on) {
     selected.clear();
     lastSelected = null;
+    if (tileMenu?.onSelection) closeTileMenu();
   }
   closeBulkMenu();
   renderBulk();
@@ -5584,37 +5610,149 @@ $("lib-grid").addEventListener("pointerdown", (event) => {
   $("lib-grid").addEventListener("pointerup", cancel, { once: true });
   $("lib-grid").addEventListener("pointercancel", cancel, { once: true });
 });
+// A right-click on a tile shows only the app's menu, never the browser's own. With a mouse it opens the tile's menu at
+// the pointer; a finger's or a pen's long press selects instead, so it opens none.
 $("lib-grid").addEventListener("contextmenu", (event) => {
-  if (event.target.closest(".lib-tile") && touchPress) event.preventDefault();
+  const tile = event.target.closest(".lib-tile");
+  if (!tile) return;
+  event.preventDefault();
+  if (!touchPress && !tile.classList.contains("is-placeholder")) openTileMenu(Number(tile.dataset.id), event.clientX, event.clientY);
 });
+
+// ---- Menus ----
+const selectedItems = () => [...selected].map((id) => ITEMS[id]);
+
+// The Selection actions menu's items, which a tile's menu shows too, in their groups, each with its icon, for the items
+// they act on. An add or remove shows only while it applies: Add to favorites while some of the items aren't
+// favorites, Remove from favorites while some are, and the same for the blacklist. An item that applies but can't act
+// is disabled, with its reason as its tooltip, as Clear playback stats is when none of them has stats to clear. Delete
+// names one file for one item.
+function fillMenu(menu, items) {
+  const some = (test) => items.some(test);
+  const groups = [
+    [
+      some((item) => !item.favorite) && ["fav-add", "heart_plus", "Add to favorites"],
+      some((item) => item.favorite) && ["fav-remove", "heart_minus", "Remove from favorites"],
+      some((item) => !item.blacklisted) && ["bl-add", "thumb_down", "Add to blacklist"],
+      some((item) => item.blacklisted) && ["bl-remove", "thumb_up", "Remove from blacklist"]
+    ],
+    [["rate", "star", "Rate…"], ["tags", "tag", "Edit tags…"], ["clear", "delete_history", "Clear playback stats…"]],
+    [["delete", "delete_forever", items.length === 1 ? "Delete file…" : "Delete files…"]]
+  ];
+  const reasons = { clear: some((item) => item.plays || item.lastPlayedAt) ? null : "No playback stats to clear" };
+  menu.textContent = "";
+  groups.forEach((group, index) => {
+    if (index) {
+      const rule = document.createElement("hr");
+      rule.className = "menu-rule";
+      menu.append(rule);
+    }
+    for (const [kind, icon, label] of group.filter(Boolean)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.bulk = kind;
+      button.append(iconSpan(icon), label);
+      if (kind === "delete") button.className = "menu-danger";
+      const reason = reasons[kind] || null;
+      button.disabled = !!reason;
+      if (reason) button.title = reason;
+      menu.append(button);
+    }
+  });
+}
 
 function closeBulkMenu() {
   $("bulk-menu").hidden = true;
 }
+// One menu shows at a time: opening the Selection actions menu closes a tile's menu.
 $("bulk-actions").addEventListener("click", (event) => {
   event.stopPropagation();
-  $("bulk-menu").hidden = !$("bulk-menu").hidden;
+  const opening = $("bulk-menu").hidden;
+  if (opening) {
+    closeTileMenu();
+    fillMenu($("bulk-menu"), selectedItems());
+  }
+  $("bulk-menu").hidden = !opening;
 });
 document.addEventListener("click", (event) => {
   if (!$("bulk-menu").hidden && !event.target.closest("#bulk-menu")) closeBulkMenu();
 });
 $("bulk-menu").addEventListener("click", (event) => {
   const item = event.target.closest("[data-bulk]");
-  if (item) runBulk(item.dataset.bulk);
+  if (item) runBulk(item.dataset.bulk, selectedItems(), true);
 });
+
+// A tile's menu, at the pointer. It acts on the selection when the tile is selected, and otherwise on that tile alone,
+// leaving any selection as it is, so a right-click never changes a selection. It closes any other menu, the Selection
+// actions menu included.
+function openTileMenu(id, x, y) {
+  const onSelection = selecting && selected.has(id);
+  closeBulkMenu();
+  tileMenu = { id, onSelection };
+  const menu = $("tile-menu");
+  fillMenu(menu, onSelection ? selectedItems() : [ITEMS[id]]);
+  menu.hidden = false;
+  placeAtPoint(menu, x, y);
+  markMenuTile();
+}
+function closeTileMenu() {
+  if (!tileMenu) return;
+  tileMenu = null;
+  $("tile-menu").hidden = true;
+  markMenuTile();
+}
+// It closes when its tile leaves the results, or the grid shows a message in place of the tiles.
+function closeTileMenuIfGone() {
+  if (tileMenu && (libraryMessage() || !visibleItems().items.some((item) => item.id === tileMenu.id))) closeTileMenu();
+}
+// Below and to the right of the pointer, or on its other side where the menu would cross the window's edge, and kept
+// 8 px inside the window.
+function placeAtPoint(menu, x, y) {
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  const left = x + width + 8 > window.innerWidth ? x - width : x;
+  const top = y + height + 8 > window.innerHeight ? y - height : y;
+  menu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
+}
+const ringedTileId = () => (tileMenu && !tileMenu.onSelection ? tileMenu.id : null);
+function markMenuTile() {
+  const id = ringedTileId();
+  $("lib-grid").querySelectorAll(".lib-tile").forEach((tile) => tile.classList.toggle("is-menu-target", Number(tile.dataset.id) === id));
+}
+$("tile-menu").addEventListener("click", (event) => {
+  const item = event.target.closest("[data-bulk]");
+  if (!item || !tileMenu) return;
+  const { id, onSelection } = tileMenu;
+  runBulk(item.dataset.bulk, onSelection ? selectedItems() : [ITEMS[id]], onSelection);
+});
+// A right-click on the menu itself opens nothing more.
+$("tile-menu").addEventListener("contextmenu", (event) => event.preventDefault());
+// A press outside closes it and still does what it does, and Escape closes it before anything else it would close, as
+// the notifications list does.
+document.addEventListener("pointerdown", (event) => {
+  if (tileMenu && !$("tile-menu").contains(event.target)) closeTileMenu();
+}, true);
+document.addEventListener("keydown", (event) => {
+  if (!tileMenu || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeTileMenu();
+}, true);
 
 const countOf = (n) => (n === 1 ? "1 item" : `${n.toLocaleString()} items`);
 const filesOf = (n) => (n === 1 ? "1 file" : `${n.toLocaleString()} files`);
-async function runBulk(kind) {
+// A menu's action on its items: the selection's, or one tile's alone. The menu closes before the action's dialog opens.
+async function runBulk(kind, items, fromSelection) {
   closeBulkMenu();
-  const items = [...selected].map((id) => ITEMS[id]);
+  closeTileMenu();
   const noun = countOf(items.length);
   const status = (text) => acknowledge(text, "bulk");
   if (kind === "fav-add") { items.forEach((item) => Object.assign(item, { favorite: true, blacklisted: false })); status(`Added ${noun} to favorites.`); }
   if (kind === "fav-remove") { items.forEach((item) => (item.favorite = false)); status(`Removed ${noun} from favorites.`); }
   if (kind === "bl-add") { items.forEach((item) => Object.assign(item, { blacklisted: true, favorite: false })); status(`Blacklisted ${noun}.`); }
   if (kind === "bl-remove") { items.forEach((item) => (item.blacklisted = false)); status(`Removed ${noun} from the blacklist.`); }
-  if (kind === "tags") return editSelectionTags();
+  if (kind === "tags") return fromSelection ? editSelectionTags() : editItemTags(items[0]);
   if (kind === "rate") {
     const answer = await rateDialog(noun);
     if (!answer) return;
@@ -5632,7 +5770,7 @@ async function runBulk(kind) {
     });
     status(`Cleared playback stats for ${noun}.`);
   }
-  if (kind === "delete") await deleteFiles(items);
+  if (kind === "delete") await deleteFiles(items, fromSelection);
   renderPlayback();
   layoutGrid(true);
 }
@@ -5713,8 +5851,9 @@ function askControlToken() {
 
 // Delete files…: it removes the items from the library and deletes their files from disk, always, since an item removed
 // with its file left on disk would come back at the next refresh. It asks for the control token first from another
-// machine, then to confirm, and ends selection.
-async function deleteFiles(items) {
+// machine, then to confirm, and ends selection when it acted on the selection; a tile's menu acting on that tile alone
+// leaves the selection as it is.
+async function deleteFiles(items, fromSelection) {
   if (!(await askControlToken())) return;
   const files = filesOf(items.length);
   const yes = await confirmDialog({
@@ -5727,9 +5866,11 @@ async function deleteFiles(items) {
   const failed = state.deleteFails ? items.slice(-2) : [];
   const deleted = items.filter((item) => !failed.includes(item));
   deleted.forEach((item) => (item.removed = true));
-  selected.clear();
-  selecting = false;
-  lastSelected = null;
+  if (fromSelection) {
+    selected.clear();
+    selecting = false;
+    lastSelected = null;
+  }
   renderBulk();
   renderSelection();
   if (deleted.length) acknowledge(`Deleted ${filesOf(deleted.length)}.`, "bulk");
@@ -6601,7 +6742,7 @@ const SHORTCUTS = [
   ["P", "Show or hide the panel"],
   ["Shift+F", "Fullscreen"],
   ["H", "These shortcuts"],
-  ["Esc", "Close the top dialog, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
+  ["Esc", "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
 ];
 function showShortcuts() {
   openPanel("settings");

@@ -170,7 +170,7 @@ Last milestone completed: M12l
 | Library look | ✅ Complete | The Library tab as the mockup shows it: the selected tile's look, rounded tiles, no border or background, gaps set by the zoom's row height and snapped to device pixels, the zoom from 120 px, the thin scrollbar in the tab's right margin, the count line's "shown", the preset dropdown's "Preset:", and the Filters and Random lines' chevrons. |
 | Bulk actions | ✅ Complete | The Selection actions menu's favorite, blacklist, rate, clear playback stats, and delete actions, the control-token prompt the delete action asks through, clear-stats' resync payload and count, a resync in place of an event too large to send, the player's read of the playing item after a resync, and favorite and blacklist answers applied to the item they were for. |
 | Selection follows results | ✅ Complete | Selected items that leave the results leave the selection, loaded or not, through a check of the selected ids after each reload of the window, and an item that leaves the results reloads the window, so the counts follow. |
-| Context menu | ⏳ Planned | A right-click on a library tile opens an app-styled context menu with the Selection actions menu's options, built as a shared context menu component. |
+| Context menu | ⏳ Planned | A right-click on a library tile opens an app-styled context menu with the Selection actions menu's options, built as a shared context menu component, and both menus' items gain icons and show only the add and remove items that apply, through a read of the items that aren't loaded. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
 
 #### Contract slice
@@ -533,19 +533,29 @@ Last milestone completed: M12l
 
 **Scope**
 
+- The user approved the mockup's tile menu and both menus' items, icons, and wording in their review on their devices, and the slice builds them as the mockup shows them.
 - A right-click on a library tile with a mouse opens an app-styled context menu with the Selection actions menu's options.
-- Its actions apply to the selection when the tile is in it, and to that tile alone when nothing is selected.
+- Its actions apply to the selection when the tile is in it, and otherwise to that tile alone, whether or not something is selected. A right-click on a tile outside the selection leaves the selection as it is, so a right-click never changes a selection.
+- While the menu acts on a tile alone, the tile shows a 2 px orange ring inside its edge, set and cleared without rendering the tiles again, as the playing mark is. While it acts on the selection, the selected tiles' marks show what it reaches.
 - It is for mouse pointers; touch screens keep the long press and the Selection actions menu.
+- Both menus' items have an icon at their left, in the item's color: Add to favorites `heart_plus`, Remove from favorites `heart_minus`, Add to blacklist `thumb_down`, Remove from blacklist `thumb_up`, Rate… `star`, Edit tags… `tag`, Clear playback stats… `delete_history`, and Delete files… `delete_forever`.
+- Both menus show only the add and remove items that apply to what they act on: Add to favorites while some of the items aren't favorites, Remove from favorites while some are, and the same for the blacklist. Clear playback stats… is disabled with the tooltip "No playback stats to clear" while none of them has stats to clear.
+- For one item, Delete files… reads "Delete file…", in both menus, and its confirmation keeps the Bulk actions slice's one-file wording.
+- When every item a menu acts on is a loaded tile, a single tile always included, the WebUI reads their favorite, blacklist, and playback stats from the tiles. Otherwise, as after a Select all that reaches items not loaded, it asks the server when the menu opens, and the menu shows once the answer arrives, so its items never appear or vanish under the pointer.
+- `POST /api/library/item-summary` takes `itemIds` and answers, for the named items in the library, `count`, `favoriteCount`, `blacklistedCount`, and `playedCount`, the items with playback stats to clear, counted in Core in chunks of ids, as clear-stats and the tag-count read count them. OpenAPI and generated WebUI types.
+- A failed read opens the menu with both the add and the remove items and writes a `last.log` line, since each action still works and the server decides what it changes.
+- The bulk actions take what they act on, the selection, read when an item is picked, or one item, in place of always reading the selection, and Delete files… ends the selection only when it acted on it. Both menus' items come from one list in `src/library/bulkActions.ts`.
 - Esc and a press outside close it, as they close the Selection actions menu.
 - It is built as a shared context menu component in `src/ui/`, showing the Selection actions menu's item list.
 - It opens at a point with a list of items, and isn't tied to tiles or to the right-click that opened it, so WebUI Context Menus can open it from other surfaces and from a long press.
 - It is placed by script and kept inside the window near its edges, as the bell's list is, and renders inside the fullscreen stage, so it shows in fullscreen and iOS pseudo-fullscreen and the panel doesn't clip it.
+- It opens below and to the right of the pointer, and on the pointer's other side where it would cross the window's edge, kept 8 px inside the window. One helper in `src/ui/` keeps a box inside the window, for it, the bell's list, and the field validation tooltip, in place of their own copies.
 - One menu is open at a time: opening one closes any other, the Selection actions menu included.
 - It closes when its tile leaves the grid, when the Library tab hides, and before an action's dialog opens.
 - A right-click on a tile shows only this menu, never the browser's own.
 - Esc's row in the shortcut list reads "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen".
 - Test helpers open a menu at a point, list its items, pick one, and check that it stays inside the window.
-- Its look, and what a right-click on a tile outside the selection does during a selection, are settled in its mockup review, which comes first.
+- Edit tags… joins both menus in the Tag edits slice.
 
 **Traps**
 
@@ -557,10 +567,22 @@ Last milestone completed: M12l
 - The panel hides its overflow and is a size container (`.panel` in `src/styles.css`), so a menu rendered inside it could be clipped or stacked under other parts (inferred).
 - The Esc row's text is in `src/keyboard/shortcuts.ts`, and the shortcut reference test checks it.
 - happy-dom lays nothing out, so tests stub the sizes a menu's placement reads, as `stubLayoutSize` and `setViewport` in `src/test/screens/pageHarness.ts` do.
+- A right-button press already closes an open popover, since `useLightDismiss` hears every button's `pointerdown`, but tests' `click()` and the keyboard's Menu key send no press, so the two menus have to close each other in code, and one Esc closes every open popover at once (measured in happy-dom).
+- No portal or shared placement code exists: the bell's list and the dialogs are children of the stage that read app state, and the Rate dialog renders inside the panel and reaches the top layer through `showModal()` (measured).
+- The bulk actions read `selection.ids()` in `setFlag`, `openRate`, `clearPlaybackStats`, and `deleteFiles`, and `deleteFiles` always ends selection (`src/library/bulkActions.ts`).
+- The grid drops and builds tile elements as they scroll (`libraryGridRows.ts`), so the loaded window, not a tile's element, says whether its tile left the grid, and a failed reset empties the window without the `reloaded` flag (`libraryQuerySession.ts`).
+- A loaded tile's item carries `isFavorite`, `isBlacklisted`, `playCount`, and `lastPlayedUtcMs` (`libraryProjectionModel.ts`).
+- Clear-stats counts an item as having stats when `play_count != 0 OR last_played_utc IS NOT NULL` (`ClearPlaybackStats` in `LibraryCatalogSession.cs`).
+- Sending every id of the 49,450-item catalog costs about 2 MB at about 40 bytes an id, and looking them up 500 at a time by the primary key took 171 ms, as the Selection follows results slice measured; the selection check after each reload already sends those ids (measured).
+- The WebUI's icon font, which the mockup's is cut from, has all eight menu icons (measured).
+- The mockup's tile menu is `#tile-menu.menu.context-menu`, and `fillMenu` builds both menus' items (`build/layout.src.html`).
 
 **Acceptance**
 
-- A right-click on a tile in the selection opens the context menu, whose actions apply to the selection, and on a tile with no selection, to that tile alone, in WebUI tests of the context menu.
+- A right-click on a tile in the selection opens the context menu, whose actions apply to the selection, and on a tile with no selection, or outside the selection, to that tile alone, which shows the ring, with the selection left as it was, in WebUI tests of the context menu.
+- Both menus' items show their icons, an add or remove item shows only while it applies to what the menu acts on, loaded or not, and Clear playback stats… is disabled with its reason while none of the items has stats, in WebUI tests of the context menu.
+- A menu over items that aren't all loaded asks `POST /api/library/item-summary` once as it opens and shows once it answers, a menu over loaded tiles asks nothing, and a failed read shows both the add and the remove items and logs, in WebUI tests of the context menu.
+- `POST /api/library/item-summary` counts the named items in the library, the favorites, the blacklisted, and the played among them, across chunks of ids, and leaves out ids no item has, in server tests, and is in OpenAPI.
 - A long press on a touch screen doesn't open it, in WebUI tests of the context menu.
 - The menu opens at the pointer and stays inside the window when opened near an edge, in WebUI tests of the context menu with stubbed sizes.
 - The menu renders inside the fullscreen stage, and opening it closes the Selection actions menu, and opening that menu closes it, in WebUI tests of the context menu.
@@ -568,7 +590,7 @@ Last milestone completed: M12l
 - The context menu and the Selection actions menu show the same items, in WebUI tests of the context menu.
 - Esc's row reads "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen", in the shortcut reference test.
 - The mockup matches what the slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Tag edits slice
 
@@ -579,7 +601,8 @@ Last milestone completed: M12l
 - While the tab edits several items, a collapsed category's count is how many of its tags the selected items have, and a chip shows green for a tag all of them have and orange for a tag only some have, and Add or Remove applies to all of them. The counts come from the tag-editor model's `countsOnly` read.
 - Save applies the changes to every selected item and says "Updated tags on {n} items.".
 - An `itemTagsChanged` that would name more than 1,000 items publishes `resyncRequired` in its place, as the Decisions say, through the Bulk actions slice's code for the bulk events.
-- Edit tags… joins the Selection actions menu.
+- Edit tags… joins the Selection actions menu and a tile's menu, with the `tag` icon, between Rate… and Clear playback stats….
+- Edit tags… in a tile's menu acting on that tile alone opens the Tags tab on its item, with the line WebUI Tags and Filter Tabs shows for an item that isn't playing, "Editing tags for {name}", as the mockup shows.
 - The tab edits the selection while selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or discarded.
 - Choosing Edit tags while the tab holds unsaved changes to another item's tags asks "Discard changes?" first.
 
@@ -591,6 +614,7 @@ Last milestone completed: M12l
 
 - Edit tags opens the Tags tab with "Editing tags for {n} items", with no dialog. Its chips show green for a tag every selected item has and orange for one only some have, and Save applies the changes to every selected item, in WebUI tests for each bulk action.
 - Tag add and remove apply to all selected items, in WebUI tests for each bulk action.
+- Edit tags… in a tile's menu acting on that tile alone opens the Tags tab on its item, with "Editing tags for {name}", in WebUI tests for each bulk action.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -630,7 +654,7 @@ Last milestone completed: M12l
 - Copy items stand in for the browser's Copy on selected text, which goes with its menu: Copy name and Copy path for files, Copy text for notifications, and Copy for the Settings tab's diagnostics IDs.
 - Show in File Manager sits wherever Copy path does, shown while the version check lists `api.showInFileManager`, as the Stats tab's button is.
 - Menus hold actions on their item, not playback controls.
-- An item that can't act at the moment is disabled with its reason as its tooltip.
+- A menu shows only the items that apply to what it acts on, such as Add to favorites only while something it acts on isn't a favorite, and an item that applies but can't act at the moment is disabled with its reason as its tooltip.
 - A menu item works as the control it repeats does, with the same confirmations, the same wait for Save or Apply, and the same popups.
 
 #### Slices
@@ -650,11 +674,12 @@ Last milestone completed: M12l
 
 - The mockup shows every menu of this milestone in the shared menu's look:
   - the player's picture, the header's now-playing name, and the Stats tab's file path;
-  - the library tiles' Copy path and Show in File Manager;
+  - the library tiles' Copy path and Show in File Manager, shown while a tile's menu acts on one item;
   - the Tags tab's tags and categories, and the Stats tab's tags;
   - the Filter tab's preset rows and sources;
   - the bell's list entries and the popups;
   - Auto Tag's file rows and the Settings tab's diagnostics IDs.
+- The Stats tab's Copy Path or Show in File Manager button beside the file path goes, since the path's menu holds both, and the path takes its room.
 - It shows a long press opening them on a touch screen, and a right-click where no menu exists opening nothing.
 - The review settles each menu's wording and order, and:
   - what the player's menu does with nothing playing;
@@ -721,8 +746,9 @@ Last milestone completed: M12l
 - The player's controls stay shown while its menu is open, as they do for the bell's list and the rating's stars.
 - The header's now-playing name has a menu with Show stats, Copy name, Copy path, and Show in File Manager.
 - The Stats tab's file path has a menu with Copy name, Copy path, and Show in File Manager.
-- A library tile's menu gains Copy path and Show in File Manager, disabled with their reason while several items are selected.
+- A library tile's menu gains Copy path and Show in File Manager while it acts on one item. They don't apply to several, so a menu on several selected items doesn't show them.
 - Copy path works on every device, the server machine included, where the Stats tab shows only Show in File Manager today.
+- The Stats tab's Copy Path or Show in File Manager button beside the file path goes, since the path's menu holds both, and the path takes its room.
 - The now-playing name shortens with "…", as the rest of the app does, in place of "...".
 
 **Traps**
@@ -746,7 +772,8 @@ Last milestone completed: M12l
 - Each of the player menu's items acts on the playing item as the control it repeats does, Clear playback stats and Delete file ask first, and Delete file asks for the control token from another machine, in Player screen tests.
 - The click a long press ends with neither shows nor hides the controls nor starts a double-tap seek, and a swipe or a two-finger drag opens no menu, in gesture tests.
 - The controls stay shown while the player's menu is open, in player controls tests.
-- The now-playing name's, the Stats path's, and a tile's menus copy the name or path and show the file in the file manager while the server lists it, and a tile's are disabled with their reason while several items are selected, in Header, Stats, and library screen tests.
+- The now-playing name's, the Stats path's, and a tile's menus copy the name or path and show the file in the file manager while the server lists it, and a tile's show them only while it acts on one item, in Header, Stats, and library screen tests.
+- The Stats tab's file path shows with no Copy Path or Show in File Manager button beside it, in Stats screen tests.
 - The now-playing name shortens with "…", in now-playing tests.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.

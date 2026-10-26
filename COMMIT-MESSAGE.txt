@@ -20,11 +20,10 @@ Instructions:
 
 Commit Message:
 
-M12m: Selected items that leave the results leave the selection
+M12m: Settle the library tiles' right-click menu in the mockup
 
-- WebUI: After each reload of the library window while selecting, the selected ids go with the window's search and filter to POST /api/library/query-ids, and the ones it doesn't answer leave the selection, loaded or not, so items an action here, another device, a refresh, or a removal sent as resyncRequired takes out of the results leave it, and the bar's count and Select all follow. Ids selected meanwhile stay, a selection ending drops the answer, and a failed check only logs.
-- WebUI: A change that takes an item outside the loaded tiles out of the results now reloads the window, as one that brings it in did, so the count line follows: a favorite or blacklist change, a rating under Only unrated or a minimum, a filtered tag, or a first play under Only never played, which the event's play count shows. The favorite and blacklist rule compares whether the item matched before and after, for loaded and unloaded items alike.
-- Server: POST /api/library/query-ids takes an optional itemIds and answers only those of them that match, from one full match, which measured a flat 22-26 ms where looking the ids up in chunks took up to 300 ms for every item.
-- Mockup: Its selection drops items that leave its results and ends when none are left, and its Edit tags save lays the grid out again.
-- Cleanup: One failureLine builds the tabs' and the selection check's failure log lines, and the page tests' fake library answers the ids query from its own items.
-- Docs: OpenAPI, the generated types, CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and the changelog describe the check and the rule, and MILESTONES.md records the slice's evidence, its release check, and source changes reaching the selection through Admin Source Management's reload.
+- Mockup: A mouse right-click on a library tile opens the Selection actions menu's items at the pointer, flipped to stay inside the window. It acts on the selection when the tile is selected, and otherwise on that tile alone, which shows an orange ring, leaving any selection as it is. A finger's or pen's long press still selects.
+- Mockup: Both menus' items have icons, the add and remove items show only while they apply to what the menu acts on, Clear playback stats is disabled with its reason when there are none to clear, and Delete reads "Delete file…" for one item. The menus close each other, and a tile's menu closes on Esc, a press outside, a pick, the Library tab hiding, and its tile leaving the results.
+- Mockup: Its icon font gains thumb_up, delete_history, and delete_forever, and the Esc row names a menu.
+- Docs: MILESTONES.md records the approved menu in the Context menu slice, with a read of the favorite, blacklist, and playback stats of selected items that aren't loaded, Edit tags joining the tile menu in the Tag edits slice, and, in WebUI Context Menus, a tile's Copy path and Show in File Manager shown only for one item and the Stats tab's path button replaced by the path's menu.
+- Docs: AGENTS.md's block rule is for nonsense combinations and sequences, and normal app behavior, such as a menu showing only the items that apply, wins where it is clearer; WebUI Context Menus' decision on disabled items follows it.
