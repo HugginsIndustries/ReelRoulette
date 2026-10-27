@@ -20,7 +20,8 @@ Instructions:
 
 Commit Message:
 
-Test: Skip three file-permission tests when they run as root on Linux or macOS
+Chore: Update happy-dom to 21.0.4 to clear a high-severity npm audit finding
 
-- Root ignores file permissions, so in a container that runs as root the tests that rely on a permission failing (a read-only catalog file, a backup that can't be opened, a file that can't be deleted) failed there.
-- A shared FilePermissions.AreIgnored check makes them return early as root on Linux or macOS, the way the backup test already returns early on Windows; for a normal user, and on Windows even as administrator, they run unchanged.
+- happy-dom 17.0.0 through 21.0.3 can run injected code when it compiles a crafted module script (GHSA-834v-8h66-3h79). No 20.x release fixes it, so the WebUI's dev dependency moves from ^20.14.5 to ^21.0.4.
+- happy-dom runs only in the WebUI's screen tests and the mockup smoke check, never in the built WebUI, and neither passes module scripts to it, so the flaw wasn't reachable here; the update clears npm audit's warning.
+- 21.0's breaking change, CSS file and iframe loading off by default, affects neither: tests, build, and the mockup check pass unchanged.
