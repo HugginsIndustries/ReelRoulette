@@ -1277,7 +1277,7 @@ public sealed class LibraryOperationsServiceTests
                 path => !path.EndsWith("-wal", StringComparison.Ordinal) &&
                         !path.EndsWith("-shm", StringComparison.Ordinal) &&
                         !path.EndsWith("-journal", StringComparison.Ordinal));
-            if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            if ((!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) || FilePermissions.AreIgnored)
             {
                 return;
             }

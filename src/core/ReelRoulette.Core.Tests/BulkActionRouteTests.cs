@@ -355,6 +355,11 @@ public sealed class BulkActionRouteTests : IDisposable
     [Fact]
     public void DeleteFiles_DeletesTheFilesAndRemovesTheirItemsAndTags_AndKeepsTheItemsItCouldNotDelete()
     {
+        if (FilePermissions.AreIgnored)
+        {
+            return;
+        }
+
         var first = MediaFile("first.mp4");
         var second = MediaFile("second.mp4");
         var lockedDir = Path.Combine(_mediaDir, "locked");

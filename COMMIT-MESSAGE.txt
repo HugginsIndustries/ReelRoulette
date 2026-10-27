@@ -20,11 +20,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan a reload notice for a newer build, kept bell messages, and 24-hour times as WebUI Update Notice
+Test: Skip three file-permission tests when they run as root on Linux or macOS
 
-- MILESTONES.md adds WebUI Update Notice as M12n2: when the server serves a newer build, the player's indicator and the bell's Now section say "ReelRoulette updated · Tap to reload", after Reconnecting… and before Server not compatible, and a tap reloads the page, asking "Discard changes?" first while the Filter or Tags tab holds unsaved changes.
-- The page compares its content-hashed script and stylesheet names with a fresh index.html after every version check that gets an answer, with no server or contract change, and a restarted server that comes back incompatible no longer pops up "Reconnected.".
-- run-server.ps1 serves a copy of the WebUI it builds at startup from artifacts/run-server/webui, so another build, such as an agent's npm run verify, no longer changes what the running dev server serves.
-- The bell's Recent list is kept per device across reloads, up to its 50 messages with their read state, and its times read "HH:MM" for today and "MM-DD HH:MM" otherwise, with a Show seconds setting.
-- Every time the WebUI and the mockup show uses 24-hour time and every date value ISO format, the admin designs' backup labels, connected clients, and Log Viewer rows included; AGENTS.md gains the rule as a guardrail, and Admin Library Catalog Transfer's backup label examples follow it.
-- Library Refresh Progress and Summary, WebUI Context Menus, WebUI Loop Range, Library Profiles, and Profile Tag and Preset Visibility move to M12n3 through M12n7, and the v0.15.0 outline lists the new IDs and the notice.
+- Root ignores file permissions, so in a container that runs as root the tests that rely on a permission failing (a read-only catalog file, a backup that can't be opened, a file that can't be deleted) failed there.
+- A shared FilePermissions.AreIgnored check makes them return early as root on Linux or macOS, the way the backup test already returns early on Windows; for a normal user, and on Windows even as administrator, they run unchanged.

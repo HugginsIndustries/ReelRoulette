@@ -138,6 +138,11 @@ public sealed class LibraryCatalogStoreTests
     [Fact]
     public void SyncFile_ReadOnlyFile_Throws()
     {
+        if (FilePermissions.AreIgnored)
+        {
+            return;
+        }
+
         using var dir = new TempDirectory();
         var path = Path.Combine(dir.Path, "library.db");
         File.WriteAllText(path, "x");
