@@ -548,11 +548,13 @@ export function createLibrary(options: LibraryOptions): Library {
     trace("info", "library-play-start");
 
     try {
+      // The play counts unless Don't record plays is on.
       const result = await requestPlayItem(
         { apiBaseUrl },
         itemId,
         { clientId: store.identity.clientId, sessionId: store.identity.sessionId },
-        api.request
+        api.request,
+        { recordPlayback: !store.dontRecordPlays.peek() }
       );
 
       if (!result.ok) {
@@ -574,7 +576,8 @@ export function createLibrary(options: LibraryOptions): Library {
       store.pushHistory(data);
       void panel.closeIfOverlay();
       trace("info", "library-play-success");
-      // The server recorded the play, and a file that can't play shows its message rather than being skipped.
+      // The server recorded the play, unless Don't record plays is on, and a file that can't play shows its message
+      // rather than being skipped.
       player.playCurrent({ origin: "library" });
     } catch (error) {
       if (error instanceof UnauthorizedError) {

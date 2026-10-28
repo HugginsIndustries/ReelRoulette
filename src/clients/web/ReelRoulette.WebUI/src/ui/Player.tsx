@@ -235,6 +235,7 @@ export function Player() {
       <img id="photo" alt="Photo" style="display:none" ref={photo} onLoad={player.photoLoaded} onError={player.photoFailed} />
       <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
       <PlayerIndicator />
+      <CountsDisabled />
       <VolumeIndicator />
       <SeekIndicator />
       <div id="overlay-controls" class="overlay-controls" ref={overlay} onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
@@ -277,6 +278,20 @@ export function Player() {
       </div>
     </div>
   );
+}
+
+/**
+ * Counts disabled, while the Settings tab's Don't record plays is on, so plays here aren't taken for counted ones. It
+ * sits under the bell and fades with the controls, as the bell does, in fullscreen too.
+ */
+function CountsDisabled() {
+  const { store } = useApp();
+  return store.dontRecordPlays.value ? (
+    <div id="counts-disabled" class="counts-pill dev-note">
+      <span class="material-symbol-icon">play_disabled</span>
+      Counts disabled
+    </div>
+  ) : null;
 }
 
 /**

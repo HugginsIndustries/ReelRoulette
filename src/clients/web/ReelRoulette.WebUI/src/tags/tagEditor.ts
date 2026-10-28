@@ -19,7 +19,7 @@ import {
 } from "../library/tagSave";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
-import type { DeviceStorage, DeviceStore } from "../state/deviceStore";
+import { isBoolean, type DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import { countText } from "../text/countText";
@@ -75,7 +75,7 @@ import {
 } from "./tagEditorModel";
 
 const EXPANDED_CATEGORIES_KEY = "tags.expandedCategories";
-const SCAN_FULL_LIBRARY_KEY = "rr_autoTagScanFullLibrary";
+const SCAN_FULL_LIBRARY_KEY = "tags.scanFullLibrary";
 const SAVE_SUCCEEDED = "Tag editor changes applied";
 /** The question Edit tags… asks before it drops adds and removes held for other items. */
 const DISCARD_ITEM_CHANGES = "Discard changes?";
@@ -296,10 +296,8 @@ export interface TagEditorOptions {
   library: Pick<Library, "session" | "selection">;
   /** The Filter tab, whose unsaved changes take a tag renamed or deleted. */
   filter: Pick<FilterDialog, "reviseTags">;
-  /** This device's memory, for the categories expanded. */
+  /** This device's memory, for the categories expanded and Scan full library. */
   device: DeviceStore;
-  /** Browser `localStorage`, for Scan full library. */
-  localStorage: DeviceStorage;
   /** The in-app dialogs, for the confirmations and the notices of what failed. */
   dialogs: Pick<Dialogs, "confirm" | "notice">;
   /** The one-off messages: a save that landed says so. */
@@ -341,7 +339,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     editing: false,
     categoryEdit: null,
     newCategory: null,
-    autoTag: emptyAutoTag(readScanFull(), false)
+    autoTag: emptyAutoTag(options.device.read(SCAN_FULL_LIBRARY_KEY, false, isBoolean), false)
   };
 
   const saves = createTagSaveSession();
@@ -443,22 +441,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
     options.device.write(EXPANDED_CATEGORIES_KEY, Array.from(expanded));
     return expanded;
-  }
-
-  function readScanFull(): boolean {
-    try {
-      return options.localStorage.getItem(SCAN_FULL_LIBRARY_KEY) === "true";
-    } catch {
-      return false;
-    }
-  }
-
-  function saveScanFull(value: boolean): void {
-    try {
-      options.localStorage.setItem(SCAN_FULL_LIBRARY_KEY, value ? "true" : "false");
-    } catch {
-      // Best effort: the box starts unchecked next time.
-    }
   }
 
   /** Takes `change`; before the editor first opens, it only notes it. */
@@ -1223,7 +1205,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     setScanFullLibrary(checked) {
-      saveScanFull(checked);
+      options.device.write(SCAN_FULL_LIBRARY_KEY, checked);
       update({ autoTag: { ...state.autoTag, scanFull: checked } });
     },
 

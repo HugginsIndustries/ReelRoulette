@@ -394,11 +394,11 @@ export function createPlayer(options: PlayerOptions): Player {
   }
 
   /**
-   * Records the play on start, so random picks and filters use fresh play counts. Nothing is
-   * recorded while the server fails the compatibility check or runs without a library.
+   * Records the play on start, so random picks and filters use fresh play counts. Nothing is recorded while the server
+   * fails the compatibility check or runs without a library, or while Don't record plays is on.
    */
   function notifyPlaybackStarted(item: PlayingItem): void {
-    if (!item?.itemId || store.heldBack.peek()) return;
+    if (!item?.itemId || store.heldBack.peek() || store.dontRecordPlays.peek()) return;
     void api
       .post("/api/record-playback", {
         itemId: item.itemId,
@@ -851,8 +851,9 @@ export function createPlayer(options: PlayerOptions): Player {
 
   /**
    * Steps through the history, forward or back, and plays the entry with a fresh media URL from the server, which
-   * counts its one play. Returns false at either end of the history. While the server fails the compatibility check or
-   * runs without a library, it plays nothing, so the entry plays with the URL it has and nothing is recorded.
+   * counts its one play unless Don't record plays is on. Returns false at either end of the history. While the server
+   * fails the compatibility check or runs without a library, it plays nothing, so the entry plays with the URL it has
+   * and nothing is recorded.
    */
   function stepHistory(step: -1 | 1): boolean {
     if (!store.stepHistory(step)) return false;
@@ -947,11 +948,12 @@ export function createPlayer(options: PlayerOptions): Player {
 
   /**
    * A history step's play: its fresh media URL replaces the entry's, and its media loads with it. Its favorite,
-   * blacklist, and rating become the entry's, so a change made while the entry wasn't playing shows.
+   * blacklist, and rating become the entry's, so a change made while the entry wasn't playing shows. It counts a play
+   * unless Don't record plays is on.
    */
   async function playFresh(item: PlayingItem, attemptId: number): Promise<void> {
     const attempt: ArmedAttempt = { mediaType: item.mediaType, id: item.id, attemptId };
-    const answer = await requestPlay(item, true);
+    const answer = await requestPlay(item, !store.dontRecordPlays.peek());
     if (!isStale(attempt)) {
       stepWaiting = false;
     }

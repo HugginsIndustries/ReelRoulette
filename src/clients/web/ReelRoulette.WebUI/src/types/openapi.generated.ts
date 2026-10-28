@@ -1949,7 +1949,7 @@ export interface components {
             clientId?: string | null;
             sessionId?: string | null;
             /**
-             * @description Defaults to true; the WebUI sends false only to get a fresh media URL for an item already playing.
+             * @description Defaults to true; the WebUI sends false to get a fresh media URL for an item already playing, and while the device's Don't record plays is on.
              * @default true
              */
             recordPlayback: boolean;

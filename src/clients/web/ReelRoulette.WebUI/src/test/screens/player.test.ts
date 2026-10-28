@@ -3060,6 +3060,174 @@ describe("other screens", () => {
   });
 });
 
+describe("Don't record plays on this device", () => {
+  /** Keeps Don't record plays on this device as on or off before the page loads. */
+  function keepDontRecordPlays(on: boolean): void {
+    localStorage.setItem("rr_device.developer.dontRecordPlays", JSON.stringify(on));
+  }
+
+  function countsDisabled(): HTMLElement | null {
+    return document.getElementById("counts-disabled");
+  }
+
+  for (const on of [false, true]) {
+    it(`${on ? "records nothing" : "records each play"} for a random pick and a history step while it is ${on ? "on" : "off"}`, async () => {
+      keepDontRecordPlays(on);
+      const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+      await mount(server);
+
+      await click(emptyState());
+      await click(button("Next"));
+      expect(randomPicks(server)).toBe(2);
+      expect(playRecords(server)).toBe(on ? 0 : 2);
+
+      // A history step asks the play route for a fresh media URL, which counts its play unless told not to.
+      await click(button("Previous"));
+      expect(video().src).toBe(VIDEO_URL);
+      expect(server.requests("POST", "/api/play/item-video").map((call) => call.body.recordPlayback)).toEqual([on ? false : undefined]);
+      expect(playsCounted(server)).toBe(on ? 0 : 3);
+    });
+
+    it(`${on ? "asks the play route not to count" : "counts"} a library tile's play while it is ${on ? "on" : "off"}`, async () => {
+      keepDontRecordPlays(on);
+      setViewport({ width: 600, height: 800 });
+      stubLayoutSize();
+      const server = serverPicking(SECOND_VIDEO);
+      server.on("POST", "/api/library/query", () =>
+        json({
+          items: [
+            {
+              id: "item-video",
+              fullPath: VIDEO_ITEM.id,
+              fileName: "holiday clip.mp4",
+              mediaType: 1,
+              durationSeconds: 65,
+              tags: [],
+              hasThumbnail: false,
+              width: 1920,
+              height: 1080
+            }
+          ],
+          totalCount: 1,
+          searchBaselineCount: 1
+        })
+      );
+      server.on("POST", "/api/play/item-video", () => json(VIDEO_ITEM));
+      const page = mountPage({ server });
+      await pageReady(server);
+      await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
+
+      await openPanel("Library");
+      const tile = await waitFor(() => {
+        const found = document.querySelector('.library-grid-tile[data-item-id="item-video"]');
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      await click(tile);
+
+      expect(server.requests("POST", "/api/play/item-video").map((call) => call.body)).toEqual([
+        { clientId: page.clientId(), sessionId: page.sessionId(), ...(on ? { recordPlayback: false } : {}) }
+      ]);
+      expect(video().src).toBe(VIDEO_URL);
+      expect(playsCounted(server)).toBe(on ? 0 : 1);
+    });
+  }
+
+  it("stops counting from the next play once it is turned on in the Settings tab while the page is open", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    await mountAndPlay(server);
+    expect(playsCounted(server)).toBe(1);
+
+    await click(button("Open panel"));
+    await click(within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: "Settings" }));
+    await click(within(panel()).getByRole("checkbox", { name: "Don't record plays on this device", hidden: true }));
+    await closePanel();
+
+    // A random pick then records nothing, and a history step asks the play route not to count its play.
+    await click(button("Next"));
+    expect(randomPicks(server)).toBe(2);
+    expect(playRecords(server)).toBe(1);
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+    expect(server.requests("POST", "/api/play/item-video").map((call) => call.body.recordPlayback)).toEqual([false]);
+    expect(playsCounted(server)).toBe(1);
+  });
+
+  it("shows Counts disabled with its icon while it is on, hiding and showing with the controls, in fullscreen too", async () => {
+    hideControlsOnClick();
+    useStylesheet();
+    keepDontRecordPlays(true);
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mountAndPlay(server);
+    expect(mediaArea().contains(countsDisabled())).toBe(true);
+    expect(countsDisabled()!.textContent).toBe("play_disabledCounts disabled");
+    expect(countsDisabled()!.querySelector(".material-symbol-icon")!.textContent).toBe("play_disabled");
+    expect(page.server.logLines()).toContain("developer=dont-record-plays-on-at-load");
+    // happy-dom reports no opacity where no rule sets one, which is fully shown.
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(countsDisabled()!).opacity).not.toBe("0");
+
+    await click(video());
+    expect(controlsShown()).toBe(false);
+    expect(currentStyle(countsDisabled()!).opacity).toBe("0");
+    await click(video());
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(countsDisabled()!).opacity).not.toBe("0");
+
+    // Pseudo-fullscreen, where the browser has no Fullscreen API, and the browser's own fullscreen both show the stage.
+    await click(button("Fullscreen"));
+    expect(isPseudoFullscreen()).toBe(true);
+    expect(stage().contains(countsDisabled())).toBe(true);
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(countsDisabled()!).opacity).not.toBe("0");
+    await click(video());
+    expect(controlsShown()).toBe(false);
+    expect(currentStyle(countsDisabled()!).opacity).toBe("0");
+    await click(video());
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(countsDisabled()!).opacity).not.toBe("0");
+  });
+
+  it("shows nothing while it is off, and follows the setting as it changes", async () => {
+    const { store } = await mountWithServices();
+    expect(countsDisabled()).toBeNull();
+
+    store.setDontRecordPlays(true);
+    await flush();
+    expect(countsDisabled()).not.toBeNull();
+
+    store.setDontRecordPlays(false);
+    await flush();
+    expect(countsDisabled()).toBeNull();
+  });
+
+  it("sits under the bell, below the indicator on a narrow player, in the developer style, and under the popups", async () => {
+    useStylesheet();
+    keepDontRecordPlays(true);
+    await mountWithServices();
+
+    const pill = currentStyle(countsDisabled()!);
+    expect([pill.position, pill.top, pill.left, pill.pointerEvents]).toEqual(["absolute", "64px", "12px", "none"]);
+    const root = currentStyle(document.documentElement);
+    expect(pill.borderStyle).toBe("dashed");
+    expect(pill.backgroundColor).toBe(root.getPropertyValue("--dev-bg").trim());
+    expect(currentStyle(countsDisabled()!.querySelector(".material-symbol-icon")!).color).toBe(root.getPropertyValue("--dev").trim());
+    // The player clips to its rounded corners, which makes it its own stacking context, so the pill's z-index counts only
+    // inside it, and the popups beside it, at 1200, cover it.
+    expect(currentStyle(mediaArea()).clipPath).toBe("inset(0 round 8px)");
+    const popups = document.getElementById("toasts")!;
+    expect(mediaArea().contains(popups)).toBe(false);
+    expect(popups.parentElement).toBe(mediaArea().parentElement);
+    expect(currentStyle(popups).zIndex).toBe("1200");
+
+    stubLayoutSize(599);
+    setViewport({ width: 1000, height: 768 });
+    await flush();
+    expect(stage().querySelector("main.player-col")!.classList.contains("is-narrow")).toBe(true);
+    expect(currentStyle(countsDisabled()!).top).toBe("108px");
+  });
+});
+
 describe("page structure", () => {
   it("keeps the same video and photo elements while switching media and opening and closing each panel tab", async () => {
     const server = serverPicking(VIDEO_ITEM, PHOTO_ITEM, SECOND_VIDEO);

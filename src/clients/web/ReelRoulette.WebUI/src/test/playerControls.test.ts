@@ -3,11 +3,12 @@ import { signal } from "@preact/signals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPlayerControls, HIDE_AFTER_KEY, HIDE_CONTROLS_KEY, KEEP_WHILE_PAUSED_KEY } from "../playback/playerControls";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 
 /** Controls whose device store starts with `saved`, as the page's `localStorage` would hold it, while playing. */
 function setup(saved: Record<string, unknown> = {}) {
   const kept = new Map(Object.entries(saved).map(([key, value]) => [`rr_device.${key}`, JSON.stringify(value)]));
-  const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
+  const device = createDeviceStore(memoryStorage(kept));
   const paused = signal(false);
   const openFromControls = signal(false);
   const controls = createPlayerControls({ device, paused, openFromControls });

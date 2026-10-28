@@ -1,6 +1,9 @@
 /** Where each setting is kept in the browser's storage: this prefix, then the setting's key. */
 const KEY_PREFIX = "rr_device.";
 
+/** How every Developer setting's key starts, so Reset this device's settings keeps them. */
+export const DEVELOPER_KEY_PREFIX = "developer.";
+
 /**
  * What the WebUI remembers on this device across a page refresh.
  * Each setting is one entry, kept as JSON. Browser storage is kept per address, so the WebUI opened at another address
@@ -11,6 +14,11 @@ export interface DeviceStore {
   read<T>(key: string, fallback: T, accept: (value: unknown) => value is T): T;
   /** Keeps the setting. Best effort: a browser that refuses to store it leaves the page working. */
   write(key: string, value: unknown): void;
+  /**
+   * Removes every setting whose key `keep` turns down, such as every one but the Developer settings for Reset this
+   * device's settings. Best effort, as `write` is. Nothing kept outside the store, such as the client id, is touched.
+   */
+  clear(keep: (key: string) => boolean): void;
 }
 
 /** Takes a setting kept as true or false, for `read`. */
@@ -23,7 +31,21 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export type DeviceStorage = Pick<Storage, "getItem" | "setItem">;
+/** The parts of the browser's storage the WebUI uses. */
+export type DeviceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
+
+/**
+ * The browser's `localStorage` or `sessionStorage`, or null where the page can't reach it, as when the browser blocks
+ * storage for the address, or where there is none, as in a test that runs without a page.
+ */
+export function browserStorage(name: "localStorage" | "sessionStorage"): DeviceStorage | null {
+  try {
+    const candidate = (globalThis as Record<string, unknown>)[name] as Partial<DeviceStorage> | null | undefined;
+    return candidate && typeof candidate.getItem === "function" && typeof candidate.setItem === "function" ? (candidate as DeviceStorage) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function createDeviceStore(storage: DeviceStorage | null): DeviceStore {
   return {
@@ -45,6 +67,29 @@ export function createDeviceStore(storage: DeviceStorage | null): DeviceStore {
         storage?.setItem(KEY_PREFIX + key, JSON.stringify(value));
       } catch {
         // Storage can be full, or refused in a private window; the setting then lasts until the page closes.
+      }
+    },
+
+    clear(keep) {
+      if (!storage) {
+        return;
+      }
+      try {
+        // Every key first, since removing one moves the keys after it.
+        const keys: string[] = [];
+        for (let index = 0; index < storage.length; index++) {
+          const key = storage.key(index);
+          if (key !== null) {
+            keys.push(key);
+          }
+        }
+        for (const key of keys) {
+          if (key.startsWith(KEY_PREFIX) && !keep(key.slice(KEY_PREFIX.length))) {
+            storage.removeItem(key);
+          }
+        }
+      } catch {
+        // As `write`: a browser that refuses leaves what it keeps.
       }
     }
   };

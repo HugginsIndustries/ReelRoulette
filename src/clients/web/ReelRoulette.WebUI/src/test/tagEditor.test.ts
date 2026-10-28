@@ -7,6 +7,7 @@ import { statusLogLine } from "../logging/relayLogLines";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { createTagEditor } from "../tags/tagEditor";
 import type { TagEditorModel } from "../tags/tagEditorModel";
@@ -58,17 +59,8 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function memoryStorage() {
-  const values = new Map<string, string>();
-  return {
-    values,
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => void values.set(key, value)
-  };
-}
-
-/** `scanFullLibrary` is what this browser stored for Scan full library before the page loaded. */
-function setup(options: { scanFullLibrary?: string } = {}) {
+/** `scanFullLibrary` is what this device kept for Scan full library before the page loaded. */
+function setup(options: { scanFullLibrary?: boolean } = {}) {
   const steps: string[] = [];
   const server = {
     model: structuredClone(CATALOG),
@@ -194,9 +186,8 @@ function setup(options: { scanFullLibrary?: string } = {}) {
 
   /** The editor's memory on this device. */
   const remembered = memoryStorage();
-  const localStorage = memoryStorage();
   if (options.scanFullLibrary !== undefined) {
-    localStorage.setItem("rr_autoTagScanFullLibrary", options.scanFullLibrary);
+    remembered.setItem("rr_device.tags.scanFullLibrary", JSON.stringify(options.scanFullLibrary));
   }
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
   const selection = createLibrarySelection();
@@ -214,7 +205,6 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     library: { session, selection } as never,
     filter: { reviseTags: vi.fn() },
     device: createDeviceStore(remembered),
-    localStorage,
     dialogs: { confirm, notice },
     notifications,
     newId: () => "new-category"
@@ -237,7 +227,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   };
   /** The item ids each tag model request asked for. */
   const modelRequests = () => server.posts.filter((post) => post.path === "/api/tag-editor/model").map((post) => post.body.itemIds);
-  return { editor, view, titles, store, server, notified, notices, noticeLogs, statuses, steps, listeners, tiles, storedFilter, session, selection, remembered, localStorage, confirm, models, modelRequests };
+  return { editor, view, titles, store, server, notified, notices, noticeLogs, statuses, steps, listeners, tiles, storedFilter, session, selection, remembered, confirm, models, modelRequests };
 }
 
 /** Lets fetch replies finish. */
@@ -1445,15 +1435,15 @@ describe("Auto Tag", () => {
     expect(context.notified).toEqual([]);
   });
 
-  it("scans with Scan full library, stores the box, and applies the selected files with its own Apply, not Save", async () => {
+  it("scans with Scan full library, keeps the box on this device, and applies the selected files with its own Apply, not Save", async () => {
     const context = setup();
-    const { editor, server, localStorage, notified } = context;
+    const { editor, server, remembered, notified } = context;
     context.server.scan = SCAN;
     await openOn(context);
     editor.openAutoTag();
     expect(editor.autoTagOpen.value).toBe(true);
     editor.setScanFullLibrary(true);
-    expect(localStorage.values.get("rr_autoTagScanFullLibrary")).toBe("true");
+    expect(remembered.values.get("rr_device.tags.scanFullLibrary")).toBe("true");
     await editor.scan();
     expect(server.posts.at(-1)).toEqual({ path: "/api/autotag/scan", body: { scanFullLibrary: true } });
     expect(context.view().autoTag.status).toBe("Scan complete: 1 matching tags, 1 matches, 0/1 selected changes.");
@@ -1477,8 +1467,8 @@ describe("Auto Tag", () => {
     expect(notified).toEqual([APPLIED]);
   });
 
-  it("starts with Scan full library as this browser last stored it, and scans with it", async () => {
-    const context = setup({ scanFullLibrary: "true" });
+  it("starts with Scan full library as this device last kept it, and scans with it", async () => {
+    const context = setup({ scanFullLibrary: true });
     context.server.scan = SCAN;
     await openOn(context);
     expect(context.view().autoTag.scanFull).toBe(true);

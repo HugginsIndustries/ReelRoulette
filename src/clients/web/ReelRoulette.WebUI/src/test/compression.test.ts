@@ -10,11 +10,12 @@ import {
   webAudioMakeupDb
 } from "../playback/compression";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 
 /** A device whose store starts with `saved`, and what it keeps. */
 function device(saved: Record<string, string> = {}) {
   const kept = new Map(Object.entries(saved));
-  return { kept, store: createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) }) };
+  return { kept, store: createDeviceStore(memoryStorage(kept)) };
 }
 
 describe("Web Audio's makeup gain", () => {

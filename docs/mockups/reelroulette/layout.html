@@ -1394,8 +1394,8 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 
 /* The Developer section's settings show over the app in the developer style. */
 .dev-note { border: 1px dashed var(--dev); background: var(--dev-bg); color: var(--page-fg); }
-/* Counts disabled, while Don't record plays is on: under the bell, below the indicator on a narrow player, and kept
-   while the controls hide and in fullscreen. */
+/* Counts disabled, while Don't record plays is on: under the bell, below the indicator on a narrow player, fading with
+   the controls as the bell does, in fullscreen too. */
 .counts-pill {
   position: absolute;
   top: 64px;
@@ -1410,7 +1410,9 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
   line-height: 1.3;
   white-space: nowrap;
   pointer-events: none;
+  transition: opacity 0.2s;
 }
+.media-container:not(.controls-visible) .counts-pill { opacity: 0; }
 .counts-pill .material-symbol-icon { font-size: 18px; color: var(--dev); }
 .player-col.is-narrow .counts-pill { top: 108px; }
 body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .counts-pill { top: calc(max(12px, env(safe-area-inset-top)) + 52px); }

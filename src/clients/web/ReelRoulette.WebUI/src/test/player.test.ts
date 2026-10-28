@@ -10,6 +10,7 @@ import { DEFAULT_RANDOM_OPTIONS } from "../random/randomOptions";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 import { NO_LIBRARY_PLAY_NOTICE } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 import { randomAnswer } from "./randomAnswer";
@@ -201,7 +202,7 @@ function setup(
   const relayed: string[] = [];
   // Photos show for 15 seconds, the time these tests' photo timers assume.
   const kept = new Map(Object.entries({ "rr_device.playback.advanceAfter": "15", ...saved }));
-  const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
+  const device = createDeviceStore(memoryStorage(kept));
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     device,

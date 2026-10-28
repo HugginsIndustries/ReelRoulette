@@ -206,18 +206,29 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Audio, Player controls, Appearance, Notifications, Panel, Keyboard shortcuts, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
+  it("shows Playback, Audio, Player controls, Appearance, Notifications, Panel, Keyboard shortcuts, Diagnostics, and Developer, in that order, then says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Player controls", "Appearance", "Notifications", "Panel", "Keyboard shortcuts", "Diagnostics"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "Playback",
+      "Audio",
+      "Player controls",
+      "Appearance",
+      "Notifications",
+      "Panel",
+      "Keyboard shortcuts",
+      "Diagnostics",
+      "Developer"
+    ]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
-    // Loudness normalization settings' and Ambient mode settings' Reset to defaults and Custom's Reset to Medium are the
-    // tab's only buttons.
+    // Loudness normalization settings' and Ambient mode settings' Reset to defaults, Custom's Reset to Medium, and Reset
+    // this device's settings are the tab's only buttons.
     expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => [button.id, button.textContent])).toEqual([
       ["settings-loudness-reset", "Reset to defaults"],
       ["settings-compression-reset", "Reset to Medium"],
-      ["settings-ambient-reset", "Reset to defaults"]
+      ["settings-ambient-reset", "Reset to defaults"],
+      ["settings-reset-device", "Reset this device's settings"]
     ]);
   });
 
@@ -1355,6 +1366,119 @@ describe("Diagnostics", () => {
     await openSettings();
     expect(diagnostics().Server).toBe("Unknown");
     expect(diagnostics().ReelRoulette).toBe(RELEASE_VERSION);
+  });
+});
+
+describe("the Developer section", () => {
+  const DONT_RECORD_PLAYS = "Don't record plays on this device";
+
+  function resetButton(): HTMLButtonElement {
+    return within(settingsPage()).getByRole("button", { name: "Reset this device's settings", hidden: true }) as HTMLButtonElement;
+  }
+
+  /** The confirmation open now, or null. */
+  function confirmation(): HTMLDialogElement | null {
+    return document.querySelector<HTMLDialogElement>('dialog.app-dialog[role="alertdialog"]');
+  }
+
+  function confirmationButton(label: "Cancel" | "Reset"): HTMLButtonElement {
+    return within(confirmation()!).getByRole("button", { name: label }) as HTMLButtonElement;
+  }
+
+  /** The lines the page relayed about the Developer settings. */
+  function developerLines(page: MountedPage): string[] {
+    return page.server.logLines().filter((line) => line.startsWith("developer="));
+  }
+
+  it("comes after Diagnostics, with Don't record plays off by default and Reset this device's settings, each with its hint", async () => {
+    await mount();
+    await openSettings();
+    const box = checkbox(DONT_RECORD_PLAYS);
+    const section = box.closest("section")!;
+    expect(section.querySelector("h3")!.textContent).toBe("Developer");
+    expect(section.previousElementSibling!.querySelector("h3")!.textContent).toBe("Diagnostics");
+    expect(box.checked).toBe(false);
+    expect(hintOf(box)).toBe("Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on.");
+    expect(section.contains(resetButton())).toBe(true);
+    expect(resetButton().nextElementSibling!.textContent).toBe("Puts every other setting on this device back to its default and reloads. The Developer settings stay.");
+  });
+
+  it("writes a last.log line each time Don't record plays changes, keeps it on this device, and writes one when a page loads with it on", async () => {
+    const page = await mount();
+    await openSettings();
+    expect(developerLines(page)).toEqual([]);
+
+    await click(checkbox(DONT_RECORD_PLAYS));
+    expect(localStorage.getItem("rr_device.developer.dontRecordPlays")).toBe("true");
+    await click(checkbox(DONT_RECORD_PLAYS));
+    expect(localStorage.getItem("rr_device.developer.dontRecordPlays")).toBe("false");
+    await click(checkbox(DONT_RECORD_PLAYS));
+    await waitFor(() =>
+      expect(developerLines(page)).toEqual([
+        "developer=dont-record-plays-changed on=true",
+        "developer=dont-record-plays-changed on=false",
+        "developer=dont-record-plays-changed on=true"
+      ])
+    );
+    page.unmount();
+
+    const again = await mount();
+    expect(developerLines(again)).toEqual(["developer=dont-record-plays-on-at-load"]);
+    await openSettings();
+    expect(checkbox(DONT_RECORD_PLAYS).checked).toBe(true);
+  });
+
+  it("writes no line when a page loads with it off", async () => {
+    localStorage.setItem("rr_device.developer.dontRecordPlays", "false");
+    const page = await mount();
+    expect(developerLines(page)).toEqual([]);
+  });
+
+  it("Reset asks first, and Cancel changes nothing", async () => {
+    const page = await mount();
+    await openSettings();
+    await click(themeRadio("Light"));
+    const keptBefore = { ...localStorage };
+
+    await click(resetButton());
+    expect(confirmation()!.querySelector(".dialog-message")!.textContent).toBe(
+      "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads."
+    );
+    expect(confirmationButton("Reset").classList.contains("btn-danger")).toBe(true);
+    await click(confirmationButton("Cancel"));
+
+    expect(confirmation()).toBeNull();
+    expect({ ...localStorage }).toEqual(keptBefore);
+    expect(page.reloadPage).not.toHaveBeenCalled();
+  });
+
+  it("Reset clears every setting on this device but the Developer ones, keeps the client and session ids, and reloads", async () => {
+    const page = await mount();
+    const clientId = page.clientId();
+    const sessionId = page.sessionId();
+    await openSettings();
+    await click(themeRadio("Light"));
+    await click(tileNamesBox());
+    await click(radio("Left"));
+    await click(checkbox(DONT_RECORD_PLAYS));
+    expect(Object.keys(localStorage).filter((key) => key.startsWith("rr_device.")).length).toBeGreaterThan(4);
+
+    await click(resetButton());
+    await click(confirmationButton("Reset"));
+
+    expect(Object.keys(localStorage).sort()).toEqual(["rr_clientId", "rr_device.developer.dontRecordPlays"]);
+    expect([page.clientId(), page.sessionId()]).toEqual([clientId, sessionId]);
+    expect(page.reloadPage).toHaveBeenCalledTimes(1);
+    page.unmount();
+
+    // The page that loads next starts from the defaults, but plays still don't count.
+    await mount();
+    expect(pageTheme()).toEqual(DARK);
+    await openSettings();
+    expect(themeRadio("System").checked).toBe(true);
+    expect(tileNamesBox().checked).toBe(false);
+    expect(radio("Right").checked).toBe(true);
+    expect(checkbox(DONT_RECORD_PLAYS).checked).toBe(true);
   });
 });
 

@@ -165,7 +165,7 @@ Last milestone completed: M12m
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
-| Developer section | ⏳ Planned | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
+| Developer section | ✅ Complete | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
 | Layout measurements | ⏳ Planned | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, the panel's unused size container gone, and a wheel notch zooming the grid 10%. |
 | Diagnostics | ⏳ Planned | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
 
@@ -237,7 +237,7 @@ Last milestone completed: M12m
 - While it is on, a library tile's play sends `recordPlayback: false` (`play` in `src/library/library.ts`).
 - The three share one check of the setting, and the server needs no change.
 - While it is on, the player shows "Counts disabled" with the `play_disabled` icon in the media container (`src/ui/Player.tsx`): 64 px from the top under the bell on a wide player, 108 px on a narrow one, with the short-screen offsets the corner buttons and the indicator use.
-- The pill stays while the player's controls hide, and shows in fullscreen and pseudo-fullscreen.
+- The pill shows and hides with the player's controls, as the bell does, in fullscreen and pseudo-fullscreen too.
 - Popups set to Top left cover the pill while they show.
 - The developer style joins `src/styles.css` as tokens with the mockup notes' colors for the light and dark themes, which the pill and the figures use.
 - A `last.log` line is written each time Don't record plays changes, and once when a page loads with it on.
@@ -276,13 +276,32 @@ Last milestone completed: M12m
 **Acceptance**
 
 - With Don't record plays on, a random pick posts no `POST /api/record-playback`, and a history step and a library play send `recordPlayback: false`, while with it off all three record as before, in player and library screen tests.
-- The pill shows while Don't record plays is on, through the controls hiding and in fullscreen, in Player screen tests.
+- The pill shows while Don't record plays is on, and hides and shows with the controls, in fullscreen too, in Player screen tests.
 - Each change of Don't record plays, and a page load with it on, writes its `last.log` line, in Settings screen tests.
 - Reset asks first, keeps the client id, the session id, and the Developer settings, clears every other setting, and reloads, while Cancel changes nothing, in Settings screen tests.
 - Scan full library is kept as `tags.scanFullLibrary`, in tag editor and Tags screen tests.
 - The client and session ids are kept as before, in foundation screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check of the pill in Firefox on the desktop.
+
+**Evidence**
+
+- The Developer section shows Don't record plays on this device and Reset this device's settings, worded as the mockup shows them; Show layout measurements joins it with the Layout measurements slice.
+- The store keeps Don't record plays as `developer.dontRecordPlays`, and the random pick's record, the history step's play, and the library play read its one signal at each play (`src/state/appStore.ts`, `src/playback/player.ts`, `src/library/library.ts`).
+- The key is built from `DEVELOPER_KEY_PREFIX` in `src/state/deviceStore.ts`, the one prefix the reset keeps, so later Developer settings use it too.
+- `last.log` gets `developer=dont-record-plays-changed on=true` or `on=false` on each change, and `developer=dont-record-plays-on-at-load` when a page loads with it on.
+- Counts disabled sits in the media container at z-index 30, and the container's `clip-path` makes it its own stacking context, so popups beside it at z-index 1200 cover the pill, which a Player screen test checks from the stylesheet.
+- The reset is `resetDevice` in `src/settings/settings.ts`, through the device store's `clear(keep)`, and it reloads with the browser's own reload unless `renderApp` and `createAppServices` are given another, as the screen tests give a mock.
+- `browserStorage` in `src/state/deviceStore.ts` replaces `tryGetStorage`, and `DeviceStorage` gains `removeItem`, `key`, and `length` for the clear, so the tests' eight copies of an in-memory storage and their inline ones became one helper, `src/test/memoryStorage.ts`.
+- The library tile's play with the setting on and off is covered in the Player screen tests, beside the existing library play test, in place of a library screen test.
+- The foundation screen tests' starting markup snapshot takes the Developer section.
+- The foundation screen tests that keep the client and session ids pass unchanged, and the Settings screen test of the reset checks that it keeps both.
+- A Player screen test turns Don't record plays on in the Settings tab after a counted play, then checks that a random pick records nothing and a history step sends `recordPlayback: false`.
+- Breaking the random pick's skip, the history step's flag, the library play's flag, the reset's keep check, and the clear's keep check each failed its tests, and so did reading the setting once as the player starts, which failed only the test that turns it on after the page loads, and dropping the pill's fade with the controls failed the Player screen test of the pill; each file was restored from a copy (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 95 test files and 2392 tests, 16 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- In Firefox on the desktop the pill showed under the bell and in fullscreen, and the user asked that it show and hide with the controls, which it now does, with the mockup following.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the section, and `docs/api.md`, the play route's contract in `shared/api/openapi.yaml`, and the server's comments say the WebUI also sends `recordPlayback: false` while Don't record plays is on.
 
 #### Layout measurements slice
 
@@ -376,7 +395,7 @@ Last milestone completed: M12m
 
 #### Release checks
 
-- Manual: In Firefox on the desktop, with Don't record plays on, a random pick and a library play leave the file's play count in the Stats tab unchanged, and Counts disabled shows on the player and in fullscreen.
+- Manual: In Firefox on the desktop, with Don't record plays on, a random pick and a library play leave the file's play count in the Stats tab unchanged, and Counts disabled shows and hides with the controls, on the player and in fullscreen.
 - Manual: On the iPad, with Show layout measurements on, the figures show at their elements and follow a rotation.
 - Manual: On the iPad and the Android phone, the panel beside the player, the overlay panel, and a field's tooltip in the Settings tab look and sit as before.
 

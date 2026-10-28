@@ -1062,6 +1062,21 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "ReelRoulette"
                 <dd>
                   "…"
+            <section class="settings-section">
+              <h3 id="settings-developer-heading">
+                "Developer"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input id="settings-dont-record-plays" type="checkbox">
+                    "Don't record plays on this device"
+                <p class="setting-hint">
+                  "Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on."
+              <div class="setting">
+                <button class="btn" id="settings-reset-device" type="button">
+                  "Reset this device's settings"
+                <p class="setting-hint">
+                  "Puts every other setting on this device back to its default and reloads. The Developer settings stay."
             <p class="setting-hint">
               "Settings apply at once and are kept on this device."
     <section class="notify-list" hidden="" id="notify-list">

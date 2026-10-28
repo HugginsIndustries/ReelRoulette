@@ -499,7 +499,8 @@ public static class ServerHostComposition
             return Results.Json(new { error, code = errorCode }, statusCode: statusCode);
         }
 
-        // A fresh media URL for an item already playing counts no second play.
+        // A fresh media URL for an item already playing counts no second play, and nothing counts while the device's
+        // Don't record plays is on.
         if (!body.RecordPlayback)
         {
             return Results.Ok(playResponse);

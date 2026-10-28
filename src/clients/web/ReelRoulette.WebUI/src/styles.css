@@ -41,6 +41,10 @@
   --tile-selected-bg: #333333;
   --tile-check-disc: #000000;
   --icon: #ffffff;
+  /* The developer style, for what the Settings tab's Developer section shows over the app, such as Counts disabled:
+     magenta, on a dashed border. */
+  --dev: #e040fb;
+  --dev-bg: rgba(40, 0, 48, 0.92);
   /* The screen's safe-area insets: the notch, the status bar, and the home indicator, which the page keeps its
      controls clear of. They read 0 where there are none. Rules take max() of one inside calc(), which is the same
      value, since happy-dom drops a declaration with a bare max() and its tests could not read it. */
@@ -78,6 +82,8 @@ html.theme-light {
   --tile-selected-bg: #e0e3e8;
   --tile-check-disc: #ffffff;
   --icon: #333333;
+  --dev: #a000b8;
+  --dev-bg: rgba(255, 240, 255, 0.96);
 }
 
 /* Checkboxes, radio buttons, sliders, and progress bars use the app's orange accent instead of the browser's blue. */
@@ -917,6 +923,30 @@ html.theme-light .ambient canvas {
 /* A player narrower than 600 px, which the page measures and marks on the player column. After the panel's side, which
    is as specific, so the narrow player's width wins. */
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
+/* What the Developer section shows over the app, in the developer style. */
+.dev-note { border: 1px dashed var(--dev); background: var(--dev-bg); color: var(--page-fg); }
+/* Counts disabled, while Don't record plays is on: under the bell, below the indicator on a narrow player. It fades
+   with the controls, as the bell does, and sits in the stage, so it shows in fullscreen. The player is its own stacking
+   context, so popups, which sit beside it at z-index 1200, cover it. */
+.counts-pill {
+  position: absolute;
+  top: 64px;
+  left: 12px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.media-container:not(.controls-visible) .counts-pill { opacity: 0; }
+.counts-pill .material-symbol-icon { font-size: 18px; color: var(--dev); }
+.player-col.is-narrow .counts-pill { top: 108px; }
 @keyframes player-indicator-spin {
   to { transform: rotate(360deg); }
 }
@@ -2131,6 +2161,13 @@ body.short-screen .fullscreen-stage:not(.fullscreen-pseudo):not(:fullscreen) .pl
 /* Below the corner buttons, which keep clear of the status bar. */
 body.short-screen .fullscreen-stage:not(.fullscreen-pseudo):not(:fullscreen) .player-col.is-narrow .player-indicator {
   top: calc(max(12px, var(--safe-area-top)) + 52px);
+}
+/* Counts disabled stays under the bell, which keeps clear of the status bar, and below the indicator on a narrow player. */
+body.short-screen .fullscreen-stage:not(.fullscreen-pseudo):not(:fullscreen) .counts-pill {
+  top: calc(max(12px, var(--safe-area-top)) + 52px);
+}
+body.short-screen .fullscreen-stage:not(.fullscreen-pseudo):not(:fullscreen) .player-col.is-narrow .counts-pill {
+  top: calc(max(12px, var(--safe-area-top)) + 96px);
 }
 /* Popups at the bottom rise above the controls, which keep clear of the home indicator. */
 body.short-screen .fullscreen-stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullscreen) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] {

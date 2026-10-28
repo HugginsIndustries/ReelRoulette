@@ -1,17 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_AMBIENT_TUNING } from "../playback/ambient";
-import { advanceAfterProblem, boostLimitProblem, createSettings, manualTargetProblem, numberProblem, wholeNumberProblem } from "../settings/settings";
+import {
+  advanceAfterProblem,
+  boostLimitProblem,
+  createSettings,
+  manualTargetProblem,
+  numberProblem,
+  RESET_DEVICE_QUESTION,
+  wholeNumberProblem
+} from "../settings/settings";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage, type MemoryStorage } from "./memoryStorage";
 
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    values,
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    }
-  };
+/** Settings kept in `storage`, whose reset's question gets `confirmed` and whose reloads `reloadPage` counts. */
+function settingsKeptIn(storage: MemoryStorage, confirmed = false, reloadPage?: () => void) {
+  return createSettings({ device: createDeviceStore(storage), dialogs: { confirm: async () => confirmed }, reloadPage });
 }
 
 describe("wholeNumberProblem", () => {
@@ -64,13 +67,13 @@ describe("loudness normalization's fields", () => {
 
 describe("createSettings", () => {
   it("starts Auto-Pause at Responsive, or as this device keeps it, and keeps each change", () => {
-    expect(createSettings({ device: createDeviceStore(memoryStorage()) }).autoPauseMode.value).toBe("responsive");
-    expect(createSettings({ device: createDeviceStore(memoryStorage({ "rr_device.panel.autoPause": '"sometimes"' })) }).autoPauseMode.value).toBe(
+    expect(settingsKeptIn(memoryStorage()).autoPauseMode.value).toBe("responsive");
+    expect(settingsKeptIn(memoryStorage({ "rr_device.panel.autoPause": '"sometimes"' })).autoPauseMode.value).toBe(
       "responsive"
     );
 
     const storage = memoryStorage({ "rr_device.panel.autoPause": '"never"' });
-    const settings = createSettings({ device: createDeviceStore(storage) });
+    const settings = settingsKeptIn(storage);
     expect(settings.autoPauseMode.value).toBe("never");
     settings.setAutoPauseMode("always");
     expect(settings.autoPauseMode.value).toBe("always");
@@ -80,15 +83,13 @@ describe("createSettings", () => {
 
 describe("createSettings' Appearance", () => {
   it("starts the theme at System and file names on tiles off, or as this device keeps them, and keeps each change", () => {
-    const fresh = createSettings({ device: createDeviceStore(memoryStorage()) });
+    const fresh = settingsKeptIn(memoryStorage());
     expect([fresh.theme.value, fresh.tileNames.value]).toEqual(["system", false]);
-    const unreadable = createSettings({
-      device: createDeviceStore(memoryStorage({ "rr_device.appearance.theme": '"sepia"', "rr_device.appearance.tileNames": '"yes"' }))
-    });
+    const unreadable = settingsKeptIn(memoryStorage({ "rr_device.appearance.theme": '"sepia"', "rr_device.appearance.tileNames": '"yes"' }));
     expect([unreadable.theme.value, unreadable.tileNames.value]).toEqual(["system", false]);
 
     const storage = memoryStorage({ "rr_device.appearance.theme": '"light"', "rr_device.appearance.tileNames": "true" });
-    const settings = createSettings({ device: createDeviceStore(storage) });
+    const settings = settingsKeptIn(storage);
     expect([settings.theme.value, settings.tileNames.value]).toEqual(["light", true]);
     settings.setTheme("dark");
     settings.setTileNames(false);
@@ -99,11 +100,11 @@ describe("createSettings' Appearance", () => {
 
 describe("createSettings' ambient mode", () => {
   it("starts on, or as this device keeps it, and keeps each change", () => {
-    expect(createSettings({ device: createDeviceStore(memoryStorage()) }).ambient.value).toBe(true);
-    expect(createSettings({ device: createDeviceStore(memoryStorage({ "rr_device.appearance.ambient": '"off"' })) }).ambient.value).toBe(true);
+    expect(settingsKeptIn(memoryStorage()).ambient.value).toBe(true);
+    expect(settingsKeptIn(memoryStorage({ "rr_device.appearance.ambient": '"off"' })).ambient.value).toBe(true);
 
     const storage = memoryStorage({ "rr_device.appearance.ambient": "false" });
-    const settings = createSettings({ device: createDeviceStore(storage) });
+    const settings = settingsKeptIn(storage);
     expect(settings.ambient.value).toBe(false);
     settings.setAmbient(true);
     expect(settings.ambient.value).toBe(true);
@@ -112,7 +113,7 @@ describe("createSettings' ambient mode", () => {
 
   it("changes the settings given, keeping the others, and Reset to defaults puts every one back", () => {
     const storage = memoryStorage({ "rr_device.appearance.ambientSettings": JSON.stringify({ ...DEFAULT_AMBIENT_TUNING, blur: 40 }) });
-    const settings = createSettings({ device: createDeviceStore(storage) });
+    const settings = settingsKeptIn(storage);
     expect(settings.ambientTuning.value).toEqual({ ...DEFAULT_AMBIENT_TUNING, blur: 40 });
 
     settings.setAmbientTuning({ rate: 2.5 });
@@ -123,5 +124,37 @@ describe("createSettings' ambient mode", () => {
     settings.resetAmbientTuning();
     expect(settings.ambientTuning.value).toEqual(DEFAULT_AMBIENT_TUNING);
     expect(JSON.parse(storage.values.get("rr_device.appearance.ambientSettings")!)).toEqual(DEFAULT_AMBIENT_TUNING);
+  });
+});
+
+describe("createSettings' reset", () => {
+  const kept = () => ({
+    "rr_device.appearance.theme": '"light"',
+    "rr_device.panel.autoPause": '"never"',
+    "rr_device.developer.dontRecordPlays": "true",
+    rr_clientId: "client-kept"
+  });
+
+  it("asks first, then clears every setting but the Developer ones and reloads the page", async () => {
+    const storage = memoryStorage(kept());
+    const reloadPage = vi.fn();
+    const confirm = vi.fn(async () => true);
+    const settings = createSettings({ device: createDeviceStore(storage), dialogs: { confirm }, reloadPage });
+
+    await settings.resetDevice();
+
+    expect(confirm).toHaveBeenCalledWith({ message: RESET_DEVICE_QUESTION, confirmLabel: "Reset", danger: true });
+    expect([...storage.values.keys()].sort()).toEqual(["rr_clientId", "rr_device.developer.dontRecordPlays"]);
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("changes nothing when the question is cancelled", async () => {
+    const storage = memoryStorage(kept());
+    const reloadPage = vi.fn();
+
+    await settingsKeptIn(storage, false, reloadPage).resetDevice();
+
+    expect(Object.fromEntries(storage.values)).toEqual(kept());
+    expect(reloadPage).not.toHaveBeenCalled();
   });
 });

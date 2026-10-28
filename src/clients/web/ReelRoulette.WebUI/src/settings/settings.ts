@@ -1,10 +1,11 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import type { Dialogs } from "../dialogs/dialogs";
 import { AMBIENT_KEY, AMBIENT_TUNING_KEY, DEFAULT_AMBIENT_TUNING, readAmbientTuning, type AmbientTuning } from "../playback/ambient";
 import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "../playback/autoPause";
 import { BOOST_LIMIT_RANGE, MANUAL_TARGET_RANGE } from "../playback/loudnessNormalization";
 import { HIDE_AFTER_RANGE } from "../playback/playerControls";
 import { MAX_ADVANCE_AFTER_SECONDS, MIN_ADVANCE_AFTER_SECONDS } from "../state/appStore";
-import { isBoolean, type DeviceStore } from "../state/deviceStore";
+import { DEVELOPER_KEY_PREFIX, isBoolean, type DeviceStore } from "../state/deviceStore";
 import type { FieldProblem } from "../validation/fieldValidation";
 import { DEFAULT_THEME_CHOICE, isThemeChoice, THEME_KEY, type ThemeChoice } from "./theme";
 
@@ -16,6 +17,10 @@ export const TILE_NAMES_KEY = "appearance.tileNames";
 
 /** The per-device store's key for the seek step. */
 export const SEEK_STEP_KEY = "player.seekStep";
+
+/** What Reset this device's settings asks first. */
+export const RESET_DEVICE_QUESTION =
+  "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads.";
 
 /** The seek step's choices, in seconds: the desktop's. */
 export const SEEK_STEPS = [1, 5, 10] as const;
@@ -74,10 +79,11 @@ export function boostLimitProblem(text: string): FieldProblem | null {
 
 /**
  * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
- * settings, whether tiles show their file names, and the seek step. Each applies as it changes and is kept on this device. The panel
- * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, the player's
- * controls Hide player controls and its settings, the audio stage Enhanced audio, loudness normalization its own
- * settings, and the notifications service the popup settings.
+ * settings, whether tiles show their file names, and the seek step. Each applies as it changes and is kept on this
+ * device. The panel keeps its side, the store Advance after, the autoplay settings, and Don't record plays, the player
+ * its buttons' state, the player's controls Hide player controls and its settings, the audio stage Enhanced audio,
+ * loudness normalization its own settings, and the notifications service the popup settings. Reset this device's
+ * settings puts them all back but the Developer ones.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
@@ -112,10 +118,24 @@ export interface Settings {
    */
   readonly shortcutsRequest: ReadonlySignal<number>;
   revealShortcuts(): void;
+  /**
+   * Reset this device's settings: asks first, then clears every setting on this device except the Developer ones and
+   * reloads the page, since each part reads its settings once, as the page starts. Cancel changes nothing.
+   */
+  resetDevice(): Promise<void>;
 }
 
-export function createSettings(options: { device: DeviceStore }): Settings {
-  const { device } = options;
+export interface SettingsOptions {
+  device: DeviceStore;
+  /** The in-app dialogs, for the reset's question. */
+  dialogs: Pick<Dialogs, "confirm">;
+  /** Reloads the page, which ends a reset: the browser's own reload unless a test replaces it. */
+  reloadPage?: () => void;
+}
+
+export function createSettings(options: SettingsOptions): Settings {
+  const { device, dialogs } = options;
+  const reloadPage = options.reloadPage ?? (() => window.location.reload());
   const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
   const theme = signal(device.read(THEME_KEY, DEFAULT_THEME_CHOICE, isThemeChoice));
   const ambient = signal(device.read(AMBIENT_KEY, true, isBoolean));
@@ -167,6 +187,13 @@ export function createSettings(options: { device: DeviceStore }): Settings {
     shortcutsRequest,
     revealShortcuts() {
       shortcutsRequest.value += 1;
+    },
+    async resetDevice() {
+      if (!(await dialogs.confirm({ message: RESET_DEVICE_QUESTION, confirmLabel: "Reset", danger: true }))) {
+        return;
+      }
+      device.clear((key) => key.startsWith(DEVELOPER_KEY_PREFIX));
+      reloadPage();
     }
   };
 }

@@ -14,6 +14,7 @@ import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { createFakePresets, type FakePresets } from "./fakePresetServer";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
@@ -88,11 +89,12 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
       notified.push(request);
     }
   };
+  const deviceStorage = memoryStorage();
   /** The keys the device store wrote, in order. */
-  const deviceWrites: string[] = [];
+  const deviceWrites = deviceStorage.writtenKeys;
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
-    device: createDeviceStore({ getItem: () => null, setItem: (key) => void deviceWrites.push(key) }),
+    device: createDeviceStore(deviceStorage),
     relay: () => {}
   });
   store.presets.value = presets.slice();
@@ -166,10 +168,7 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
   };
   /** The dialog's own memory on this device, by key. */
   const remembered = new Map<string, string>();
-  const device = createDeviceStore({
-    getItem: (key: string) => remembered.get(key) ?? null,
-    setItem: (key: string, value: string) => void remembered.set(key, value)
-  });
+  const device = createDeviceStore(memoryStorage(remembered));
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
   /** The messages shown in the in-app notice, in order, and the line each sent to the log. */
   const notices: string[] = [];

@@ -27,7 +27,7 @@ import type { RuntimeConfig } from "../types/runtimeConfig";
 import { createContextMenu, type ContextMenu } from "../ui/menuModel";
 import { createAppApi, type AppApi } from "./appApi";
 import { createAppStore, type AppStore } from "./appStore";
-import { createDeviceStore } from "./deviceStore";
+import { browserStorage, createDeviceStore } from "./deviceStore";
 import { createPlayerIndicator, type LastingState } from "./lastingStates";
 import { createServerConnection, type ServerConnection } from "./serverConnection";
 
@@ -83,8 +83,13 @@ export interface AppServices {
   settings: Settings;
 }
 
-export function createAppServices(config: RuntimeConfig): AppServices {
-  const device = createDeviceStore(localStorage);
+export interface AppServicesOptions {
+  /** Reloads the page, as Reset this device's settings does once it has cleared them: the browser's own unless set. */
+  reloadPage?: () => void;
+}
+
+export function createAppServices(config: RuntimeConfig, options: AppServicesOptions = {}): AppServices {
+  const device = createDeviceStore(browserStorage("localStorage"));
   const api = createAppApi(config.apiBaseUrl, {
     onUnauthorized(route) {
       store.pairingRequired.value = true;
@@ -184,7 +189,6 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     library,
     filter: filterDialog,
     device,
-    localStorage,
     dialogs,
     notifications,
     tagCatalog
@@ -202,7 +206,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     device
   });
   const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
-  const settings = createSettings({ device });
+  const settings = createSettings({ device, dialogs, reloadPage: options.reloadPage });
   const ambient = createAmbient({
     enabled: settings.ambient,
     tuning: settings.ambientTuning,
