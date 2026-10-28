@@ -92,7 +92,8 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         Assert.Single(state.GetReplayAfter(0).Events, envelope => envelope.EventType == "playbackRecorded");
     }
 
-    // The WebUI sends it only to get a fresh media URL for an item already playing, which counts no second play.
+    // The WebUI sends it to get a fresh media URL for an item already playing, which counts no second play, and while the
+    // device's Don't record plays is on.
     [Fact]
     public void PlayItem_WithRecordPlaybackFalse_AnswersTheSameWithoutCountingAPlayOrPublishing()
     {

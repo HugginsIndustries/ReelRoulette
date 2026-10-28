@@ -202,8 +202,8 @@ public sealed class PlayItemRequest
     public string? SessionId { get; set; }
 
     /// <summary>
-    /// Whether the play counts, recording it and publishing <c>playbackRecorded</c>. False only gets a fresh media URL
-    /// for an item already playing.
+    /// Whether the play counts, recording it and publishing <c>playbackRecorded</c>. False gets a fresh media URL for an
+    /// item already playing, or plays an item without counting while the device's Don't record plays is on.
     /// </summary>
     public bool RecordPlayback { get; set; } = true;
 }

@@ -24,7 +24,7 @@ async function bootstrap(): Promise<void> {
 
   try {
     const config = await loadRuntimeConfig();
-    renderApp(root, config, { reloadPage: () => window.location.reload() });
+    renderApp(root, config);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown startup failure";
     renderStartupError(root, message);

@@ -53,7 +53,7 @@ async function mountWithServices(server = new FakeServer()): Promise<AppServices
   const root = document.createElement("div");
   root.id = "app";
   document.body.appendChild(root);
-  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL }, { reloadPage: () => {} });
+  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
   services.connection.start = () => {};
   renderInto(h(App, { services }), root);
   unmountServices = () => renderInto(null, root);

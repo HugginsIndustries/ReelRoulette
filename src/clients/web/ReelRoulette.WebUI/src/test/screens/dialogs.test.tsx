@@ -386,7 +386,7 @@ describe("the dialog in the page", () => {
     const root = document.createElement("div");
     root.id = "app";
     document.body.appendChild(root);
-    const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL }, { reloadPage: () => {} });
+    const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
     renderInto(<App services={services} />, root);
     unmount = () => renderInto(null, root);
     return { services, server };

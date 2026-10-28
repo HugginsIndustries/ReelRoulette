@@ -84,11 +84,11 @@ export interface AppServices {
 }
 
 export interface AppServicesOptions {
-  /** Reloads the page, as Reset this device's settings does once it has cleared them. Tests replace it. */
-  reloadPage: () => void;
+  /** Reloads the page, as Reset this device's settings does once it has cleared them: the browser's own unless set. */
+  reloadPage?: () => void;
 }
 
-export function createAppServices(config: RuntimeConfig, options: AppServicesOptions): AppServices {
+export function createAppServices(config: RuntimeConfig, options: AppServicesOptions = {}): AppServices {
   const device = createDeviceStore(browserStorage("localStorage"));
   const api = createAppApi(config.apiBaseUrl, {
     onUnauthorized(route) {

@@ -83,8 +83,8 @@ export function getDeviceName(): string {
 
 export interface PlayItemOptions {
   /**
-   * False gets a fresh media URL for an item already playing, which counts no play and publishes no
-   * `playbackRecorded`. Defaults to true, sending the default body.
+   * False counts no play and publishes no `playbackRecorded`: for a fresh media URL for an item already playing, or
+   * for any play while Don't record plays is on. Defaults to true, sending the default body.
    */
   recordPlayback?: boolean;
   /** Cancels the request. */

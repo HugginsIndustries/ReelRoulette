@@ -287,18 +287,21 @@ Last milestone completed: M12m
 **Evidence**
 
 - The Developer section shows Don't record plays on this device and Reset this device's settings, worded as the mockup shows them; Show layout measurements joins it with the Layout measurements slice.
-- The store keeps Don't record plays as `developer.dontRecordPlays`, and the random pick's record, the history step's play, and the library play read its one signal (`src/state/appStore.ts`, `src/playback/player.ts`, `src/library/library.ts`).
+- The store keeps Don't record plays as `developer.dontRecordPlays`, and the random pick's record, the history step's play, and the library play read its one signal at each play (`src/state/appStore.ts`, `src/playback/player.ts`, `src/library/library.ts`).
+- The key is built from `DEVELOPER_KEY_PREFIX` in `src/state/deviceStore.ts`, the one prefix the reset keeps, so later Developer settings use it too.
 - `last.log` gets `developer=dont-record-plays-changed on=true` or `on=false` on each change, and `developer=dont-record-plays-on-at-load` when a page loads with it on.
 - Counts disabled sits in the media container at z-index 30, and the container's `clip-path` makes it its own stacking context, so popups beside it at z-index 1200 cover the pill, which a Player screen test checks from the stylesheet.
-- The reset is `resetDevice` in `src/settings/settings.ts`, through the device store's `clear(keep)`, and the page reload reaches it through `renderApp` and `createAppServices`, which `main.ts` gives `window.location.reload`.
-- `browserStorage` in `src/state/deviceStore.ts` replaces `tryGetStorage`, and `DeviceStorage` gains `removeItem`, `key`, and `length` for the clear, so the tests' seven copies of an in-memory storage and their inline ones became one helper, `src/test/memoryStorage.ts`.
+- The reset is `resetDevice` in `src/settings/settings.ts`, through the device store's `clear(keep)`, and it reloads with the browser's own reload unless `renderApp` and `createAppServices` are given another, as the screen tests give a mock.
+- `browserStorage` in `src/state/deviceStore.ts` replaces `tryGetStorage`, and `DeviceStorage` gains `removeItem`, `key`, and `length` for the clear, so the tests' eight copies of an in-memory storage and their inline ones became one helper, `src/test/memoryStorage.ts`.
 - The library tile's play with the setting on and off is covered in the Player screen tests, beside the existing library play test, in place of a library screen test.
 - The foundation screen tests' starting markup snapshot takes the Developer section.
-- Breaking the random pick's skip, the history step's flag, the library play's flag, the reset's keep check, and the clear's keep check each failed its tests, and each file was restored from a copy (measured).
+- The foundation screen tests that keep the client and session ids pass unchanged, and the Settings screen test of the reset checks that it keeps both.
+- A Player screen test turns Don't record plays on in the Settings tab after a counted play, then checks that a random pick records nothing and a history step sends `recordPlayback: false`.
+- Breaking the random pick's skip, the history step's flag, the library play's flag, the reset's keep check, and the clear's keep check each failed its tests, and so did reading the setting once as the player starts, which failed only the test that turns it on after the page loads; each file was restored from a copy (measured).
 - The mockup needed no change, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, with 95 test files and 2391 tests, 15 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- `npm run verify` passes, with 95 test files and 2392 tests, 16 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
 - The spot check of the pill in Firefox on the desktop is the user's.
-- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the section.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the section, and `docs/api.md`, the play route's contract in `shared/api/openapi.yaml`, and the server's comments say the WebUI also sends `recordPlayback: false` while Don't record plays is on.
 
 #### Layout measurements slice
 

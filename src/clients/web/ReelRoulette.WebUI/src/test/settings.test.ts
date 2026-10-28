@@ -13,7 +13,7 @@ import { createDeviceStore } from "../state/deviceStore";
 import { memoryStorage, type MemoryStorage } from "./memoryStorage";
 
 /** Settings kept in `storage`, whose reset's question gets `confirmed` and whose reloads `reloadPage` counts. */
-function settingsKeptIn(storage: MemoryStorage, confirmed = false, reloadPage: () => void = () => {}) {
+function settingsKeptIn(storage: MemoryStorage, confirmed = false, reloadPage?: () => void) {
   return createSettings({ device: createDeviceStore(storage), dialogs: { confirm: async () => confirmed }, reloadPage });
 }
 

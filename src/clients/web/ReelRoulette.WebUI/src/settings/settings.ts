@@ -5,7 +5,7 @@ import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "..
 import { BOOST_LIMIT_RANGE, MANUAL_TARGET_RANGE } from "../playback/loudnessNormalization";
 import { HIDE_AFTER_RANGE } from "../playback/playerControls";
 import { MAX_ADVANCE_AFTER_SECONDS, MIN_ADVANCE_AFTER_SECONDS } from "../state/appStore";
-import { isBoolean, type DeviceStore } from "../state/deviceStore";
+import { DEVELOPER_KEY_PREFIX, isBoolean, type DeviceStore } from "../state/deviceStore";
 import type { FieldProblem } from "../validation/fieldValidation";
 import { DEFAULT_THEME_CHOICE, isThemeChoice, THEME_KEY, type ThemeChoice } from "./theme";
 
@@ -17,9 +17,6 @@ export const TILE_NAMES_KEY = "appearance.tileNames";
 
 /** The per-device store's key for the seek step. */
 export const SEEK_STEP_KEY = "player.seekStep";
-
-/** How the Developer settings' keys in the per-device store start, which Reset this device's settings keeps. */
-const DEVELOPER_KEY_PREFIX = "developer.";
 
 /** What Reset this device's settings asks first. */
 export const RESET_DEVICE_QUESTION =
@@ -132,12 +129,13 @@ export interface SettingsOptions {
   device: DeviceStore;
   /** The in-app dialogs, for the reset's question. */
   dialogs: Pick<Dialogs, "confirm">;
-  /** Reloads the page, which ends a reset. */
-  reloadPage: () => void;
+  /** Reloads the page, which ends a reset: the browser's own reload unless a test replaces it. */
+  reloadPage?: () => void;
 }
 
 export function createSettings(options: SettingsOptions): Settings {
-  const { device, dialogs, reloadPage } = options;
+  const { device, dialogs } = options;
+  const reloadPage = options.reloadPage ?? (() => window.location.reload());
   const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
   const theme = signal(device.read(THEME_KEY, DEFAULT_THEME_CHOICE, isThemeChoice));
   const ambient = signal(device.read(AMBIENT_KEY, true, isBoolean));

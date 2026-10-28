@@ -355,7 +355,7 @@ async function mountWithServices(server = new FakeServer()): Promise<AppServices
   const root = document.createElement("div");
   root.id = "app";
   document.body.appendChild(root);
-  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL }, { reloadPage: () => {} });
+  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
   services.connection.start = () => {};
   renderInto(h(App, { services }), root);
   unmountServices = () => renderInto(null, root);
@@ -3132,6 +3132,26 @@ describe("Don't record plays on this device", () => {
       expect(playsCounted(server)).toBe(on ? 0 : 1);
     });
   }
+
+  it("stops counting from the next play once it is turned on in the Settings tab while the page is open", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    await mountAndPlay(server);
+    expect(playsCounted(server)).toBe(1);
+
+    await click(button("Open panel"));
+    await click(within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: "Settings" }));
+    await click(within(panel()).getByRole("checkbox", { name: "Don't record plays on this device", hidden: true }));
+    await closePanel();
+
+    // A random pick then records nothing, and a history step asks the play route not to count its play.
+    await click(button("Next"));
+    expect(randomPicks(server)).toBe(2);
+    expect(playRecords(server)).toBe(1);
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+    expect(server.requests("POST", "/api/play/item-video").map((call) => call.body.recordPlayback)).toEqual([false]);
+    expect(playsCounted(server)).toBe(1);
+  });
 
   it("shows Counts disabled with its icon while it is on, through the controls hiding and in fullscreen", async () => {
     useFakeClock();

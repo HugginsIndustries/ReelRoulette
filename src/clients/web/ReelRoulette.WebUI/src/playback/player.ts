@@ -851,8 +851,9 @@ export function createPlayer(options: PlayerOptions): Player {
 
   /**
    * Steps through the history, forward or back, and plays the entry with a fresh media URL from the server, which
-   * counts its one play. Returns false at either end of the history. While the server fails the compatibility check or
-   * runs without a library, it plays nothing, so the entry plays with the URL it has and nothing is recorded.
+   * counts its one play unless Don't record plays is on. Returns false at either end of the history. While the server
+   * fails the compatibility check or runs without a library, it plays nothing, so the entry plays with the URL it has
+   * and nothing is recorded.
    */
   function stepHistory(step: -1 | 1): boolean {
     if (!store.stepHistory(step)) return false;

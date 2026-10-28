@@ -22,7 +22,7 @@ import { statusLogLine } from "../logging/relayLogLines";
 import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds";
 import { isRandomBehavior, readRandomOptions, type RandomBehavior, type RandomOptions } from "../random/randomOptions";
 import type { components } from "../types/openapi.generated";
-import { isBoolean, isRecord, type DeviceStore } from "./deviceStore";
+import { DEVELOPER_KEY_PREFIX, isBoolean, isRecord, type DeviceStore } from "./deviceStore";
 
 /** The Settings tab's Advance after, the timer both autoplay modes use, in the per-device store. */
 const ADVANCE_AFTER_KEY = "playback.advanceAfter";
@@ -33,7 +33,7 @@ const AUTOPLAY_KEY = "player.autoplay";
 const RANDOM_OPTIONS_KEY = "randomization.options";
 const RANDOM_BEHAVIOR_KEY = "randomization.behavior";
 /** The Settings tab's Don't record plays on this device, one of the Developer settings, which a reset keeps. */
-const DONT_RECORD_PLAYS_KEY = "developer.dontRecordPlays";
+const DONT_RECORD_PLAYS_KEY = `${DEVELOPER_KEY_PREFIX}dontRecordPlays`;
 const DEFAULT_ADVANCE_AFTER_SECONDS = 10;
 export const MIN_ADVANCE_AFTER_SECONDS = 1;
 export const MAX_ADVANCE_AFTER_SECONDS = 3600;

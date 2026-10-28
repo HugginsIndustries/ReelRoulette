@@ -4,7 +4,7 @@ import type { RuntimeConfig } from "./types/runtimeConfig";
 import { App, StartupError } from "./ui/App";
 
 /** Mounts the WebUI into `container`. Returns a function that unmounts it. */
-export function renderApp(container: HTMLElement, config: RuntimeConfig, options: AppServicesOptions): () => void {
+export function renderApp(container: HTMLElement, config: RuntimeConfig, options: AppServicesOptions = {}): () => void {
   render(<App services={createAppServices(config, options)} />, container);
   return () => render(null, container);
 }

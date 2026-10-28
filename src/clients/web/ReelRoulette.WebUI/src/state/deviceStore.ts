@@ -1,6 +1,9 @@
 /** Where each setting is kept in the browser's storage: this prefix, then the setting's key. */
 const KEY_PREFIX = "rr_device.";
 
+/** How every Developer setting's key starts, so Reset this device's settings keeps them. */
+export const DEVELOPER_KEY_PREFIX = "developer.";
+
 /**
  * What the WebUI remembers on this device across a page refresh.
  * Each setting is one entry, kept as JSON. Browser storage is kept per address, so the WebUI opened at another address
