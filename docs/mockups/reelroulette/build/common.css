@@ -38,6 +38,10 @@
   /* Mockup-only annotations. */
   --mock: #e040fb;
   --mock-bg: rgba(40, 0, 48, 0.92);
+  /* The developer style, for what the Settings tab's Developer section shows over the app: the mockup notes' look,
+     which ships, so Hide mockup notes leaves it showing. */
+  --dev: #e040fb;
+  --dev-bg: rgba(40, 0, 48, 0.92);
   color-scheme: dark;
 }
 html.theme-light {
@@ -63,6 +67,8 @@ html.theme-light {
   --tip-fg: #ffffff;
   --mock: #a000b8;
   --mock-bg: rgba(255, 240, 255, 0.96);
+  --dev: #a000b8;
+  --dev-bg: rgba(255, 240, 255, 0.96);
   color-scheme: light;
 }
 

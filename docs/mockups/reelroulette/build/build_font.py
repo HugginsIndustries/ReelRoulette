@@ -31,7 +31,7 @@ ICONS = ["browse", "filter_alt", "tag", "favorite", "thumb_down", "skip_previous
          "volume_down", "lan", "shuffle", "radio_button_unchecked", "description", "swap_vert", "restart_alt", "unfold_less", "unfold_more", "tune", "chevron_left", "chevron_right", "expand_less", "play_circle",
          "notifications", "progress_activity", "devices", "cloud_done", "sync_problem", "autorenew", "fast_forward",
          "undo", "filter_alt_off", "select_all", "deselect", "casino", "star", "calendar_clock", "more_vert", "thumb_up",
-         "delete_history", "delete_forever"]
+         "delete_history", "delete_forever", "play_disabled"]
 # Shown filled on library tiles: the favorite and blacklist badges, the playing icon, and the selection icon; and the
 # rating's full stars and the filled half of its half stars.
 FILLED = ["favorite", "thumb_down", "play_circle", "check_circle", "star"]

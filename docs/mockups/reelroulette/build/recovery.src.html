@@ -53,7 +53,7 @@ h2 { margin: 0 0 8px; font-size: 1.1rem; }
     <section>
       <h2>Server</h2>
       <dl class="facts">
-        <dt>Version</dt><dd>0.15.0</dd>
+        <dt>Version</dt><dd>0.15.0-dev.1</dd>
         <dt>Running for</dt><dd>3 days, 4 hours</dd>
         <dt>Library</dt><dd>49,055 items in 3 sources</dd>
       </dl>
@@ -64,7 +64,7 @@ h2 { margin: 0 0 8px; font-size: 1.1rem; }
     </section>
     <section>
       <h2>Updates</h2>
-      <p class="hint" id="update-state">Up to date: 0.15.0.</p>
+      <p class="hint" id="update-state">Up to date: 0.15.0-dev.1.</p>
       <div class="row">
         <button class="btn" type="button" id="update-check">Check for Updates</button>
         <button class="btn" type="button" id="update-download" hidden>Download Update</button>
@@ -91,9 +91,9 @@ function applyGate() {
   $("recovery").hidden = gated;
   placeAllTips();
 }
-$("mock-remote").checked = store.get("recoveryRemote", false);
+$("mock-remote").checked = store.get("mock.recoveryRemote", false);
 $("mock-remote").addEventListener("change", () => {
-  store.set("recoveryRemote", $("mock-remote").checked);
+  store.set("mock.recoveryRemote", $("mock-remote").checked);
   unlocked = false;
   applyGate();
 });

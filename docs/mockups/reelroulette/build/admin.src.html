@@ -194,7 +194,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
           <h3><span class="material-symbol-icon">dns</span>Server</h3>
           <p class="notice-box" id="no-library" hidden><span class="material-symbol-icon">warning</span><span>Running without a library: the catalog was saved by a newer version of ReelRoulette and was left unchanged. Restore a backup or import a library, or update the server.</span></p>
           <dl class="facts">
-            <dt>Version</dt><dd id="running-version">0.15.0</dd>
+            <dt>Version</dt><dd id="running-version">0.15.0-dev.1</dd>
             <dt>Running for</dt><dd>3 days, 4 hours</dd>
             <dt>Library</dt><dd id="library-state">49,055 items in 3 sources</dd>
           </dl>
@@ -204,7 +204,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
             <button class="btn" type="button" id="stop"><span class="material-symbol-icon">power_settings_new</span>Stop</button>
           </div>
           <h4>Updates</h4>
-          <p class="hint" id="update-state" style="margin:0 0 8px">Up to date: 0.15.0.</p>
+          <p class="hint" id="update-state" style="margin:0 0 8px">Up to date: 0.15.0-dev.1.</p>
           <div class="row">
             <button class="btn" type="button" id="update-check"><span class="material-symbol-icon">update</span>Check for Updates</button>
             <button class="btn" type="button" id="update-download" hidden><span class="material-symbol-icon">download</span>Download Update</button>
@@ -425,10 +425,10 @@ const $ = (id) => document.getElementById(id);
 const notes = initNotifications({ button: $("notify-btn"), host: $("toasts") });
 const status = (text) => notes.notify({ kind: "actions", text });
 const state = {
-  remote: store.get("adminRemote", false),
-  noLibrary: store.get("adminNoLibrary", false),
-  devRun: store.get("adminDevRun", false),
-  mockShort: store.get("adminShort", false),
+  remote: store.get("mock.adminRemote", false),
+  noLibrary: store.get("mock.adminNoLibrary", false),
+  devRun: store.get("mock.adminDevRun", false),
+  mockShort: store.get("mock.adminShort", false),
   dupDefault: store.get("dupDefault", "keep-all")
 };
 
@@ -440,7 +440,7 @@ function applyGate() {
   $("no-library").hidden = !state.noLibrary;
   $("library-state").textContent = state.noLibrary ? "None (newer catalog version)" : "49,055 items in 3 sources";
   // Today's wording for a server that wasn't installed by Velopack, such as one run from the repository.
-  $("running-version").textContent = state.devRun ? "0.15.0 (dev run — not a Velopack install)" : "0.15.0";
+  $("running-version").textContent = state.devRun ? "0.15.0-dev.1 (dev run — not a Velopack install)" : "0.15.0-dev.1";
   const coarse = window.matchMedia("(pointer: coarse)").matches;
   document.body.classList.toggle("short-screen", state.mockShort || (coarse && window.innerHeight < 500));
   $("refresh-now").disabled = state.noLibrary;
@@ -448,7 +448,7 @@ function applyGate() {
   $("dup-scan").disabled = state.noLibrary;
   placeAllTips();
 }
-[["mock-remote", "remote", "adminRemote"], ["mock-no-library", "noLibrary", "adminNoLibrary"], ["mock-dev-run", "devRun", "adminDevRun"], ["mock-short", "mockShort", "adminShort"]].forEach(([id, key, storeKey]) => {
+[["mock-remote", "remote", "mock.adminRemote"], ["mock-no-library", "noLibrary", "mock.adminNoLibrary"], ["mock-dev-run", "devRun", "mock.adminDevRun"], ["mock-short", "mockShort", "mock.adminShort"]].forEach(([id, key, storeKey]) => {
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;

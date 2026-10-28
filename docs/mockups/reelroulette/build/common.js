@@ -51,6 +51,8 @@ function fadeShown(el, shown) {
   fades.set(el, setTimeout(() => el.classList.remove("fade-rendered"), FADE_MS));
 }
 
+// The mockup's settings, kept per browser under one prefix, as the app keeps its device settings. The Mockup tab's own
+// options start "mock." and the Developer section's settings "developer.", which a reset of the settings keeps.
 const store = {
   get(key, fallback) {
     try {
@@ -70,6 +72,17 @@ const store = {
   remove(key) {
     try {
       localStorage.removeItem("rr-mockup." + key);
+    } catch {
+      // As above.
+    }
+  },
+  // Clears every setting except the Mockup tab's options and the Developer settings, as the app's reset clears every
+  // device setting except the Developer ones.
+  clearSettings() {
+    try {
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith("rr-mockup.") && !/^rr-mockup\.(mock|developer)\./.test(key))
+        .forEach((key) => localStorage.removeItem(key));
     } catch {
       // As above.
     }
@@ -662,11 +675,11 @@ function noticeDialog({ title, message }) {
 /** "Hide mockup notes": one option, kept on this device, for every page that offers it. */
 function initHideMock() {
   const box = document.getElementById("mock-hide-notes");
-  const apply = () => document.documentElement.classList.toggle("hide-mock", store.get("hideMock", false));
+  const apply = () => document.documentElement.classList.toggle("hide-mock", store.get("mock.hideNotes", false));
   if (box) {
-    box.checked = store.get("hideMock", false);
+    box.checked = store.get("mock.hideNotes", false);
     box.addEventListener("change", () => {
-      store.set("hideMock", box.checked);
+      store.set("mock.hideNotes", box.checked);
       apply();
     });
   }

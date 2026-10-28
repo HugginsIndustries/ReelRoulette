@@ -47,6 +47,10 @@
   /* Mockup-only annotations. */
   --mock: #e040fb;
   --mock-bg: rgba(40, 0, 48, 0.92);
+  /* The developer style, for what the Settings tab's Developer section shows over the app: the mockup notes' look,
+     which ships, so Hide mockup notes leaves it showing. */
+  --dev: #e040fb;
+  --dev-bg: rgba(40, 0, 48, 0.92);
   color-scheme: dark;
 }
 html.theme-light {
@@ -72,12 +76,14 @@ html.theme-light {
   --tip-fg: #ffffff;
   --mock: #a000b8;
   --mock-bg: rgba(255, 240, 255, 0.96);
+  --dev: #a000b8;
+  --dev-bg: rgba(255, 240, 255, 0.96);
   color-scheme: light;
 }
 
 @font-face {
   font-family: "Material Symbols Outlined";
-  src: url("data:font/woff2;base64,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") format("woff2");
+  src: url("data:font/woff2;base64,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") format("woff2");
   font-weight: 100 700;
   font-style: normal;
   font-display: block;
@@ -85,7 +91,7 @@ html.theme-light {
 /* The few icons shown filled; the WebUI sets the variable font's FILL axis to 1 instead. */
 @font-face {
   font-family: "Material Symbols Filled";
-  src: url("data:font/woff2;base64,d09GMgABAAAAAAR4AA4AAAAACGQAAAQhAALrRAAAAAAAAAAAAAAAAAAAAAAAAAAAHCoGYD9TVEFUUABUEQgKhgCFSwE2AiQDDgsOAAQgBYR6ByAMBxspBwiuA2xjCnU3TshgUTiGXWeVUGoGeOT68iJ87QuiHCP3kjwQKGRQAFBkRwCSXCtUp8a1/ze3v7dVqKIXcWmuB2mIW0he6ZQgJZAaPPxzr973f9YAWhMkJ5TtS3hhQCKeAI2ClainXoH6wLr3HdJ3sho0WQ1Sm0MDEOf0URevLS2xEZSz96Vb32Q1/VehvV+/pvZi+Uf4bMLKxGl6AdykwNuyu3MFYAc8voqFI022KqergHRV1BmUBxRw0lbFa/Bcqx0BtkKEUVt3VRPMU352HDYD+N8pNpj0Y3KDrCCLkmhRFlzO3pLSXW0pn48gZpBW/z8xQ3QCBKC/0wcgWCQhrBngToEk6v+P37sASo/5RUIg197MspCoW3VsVig0w5kQKmwBEBpSVG8BUEADd5oAd0YewJ41xfzOGCFjb2pj+o/6v5aiT9GraFk0heBECMN1pRZLAPbAFQLkDgAYNBuHNXLunIpO+70lPranSR7cqvUobmmKHe0Hf1lFjAYUe96nMOLtKJj/3ZnkZ815MeJjjwNSSOOsGmsHuqc11haccvWm8Psi4xvzChbh4+fIR3OY7Xzr+TFw+PPlez6KI58s4XaL7ZezdvCixsLmltaWlqam5rbOlsHO9v6m9oEGRLU2N7+uZcWBHgpff8xDa2nOT2Brk1W6+bOaMzpKFBFZP7cJC9J1Kzpf0E4QWsTO3Ar9Wfj+Pa/nefu3Cx95/am8c62ZvLMCDbZ8Vu8424Z7sNrZ886t37u3SXW4TQTPcLSNeMYX/lQn5Y927t0NVAOwtbZwpKbOalCwg6YtmaDiNacN79/XoEu6OxpmJwobzwd5ypNSRYeLxaaw9psAV1mchI5Ex2cmOhsTFFA6jgR7el3JgrcDKwuUaedjE7MTDBatyHakYLGibtXW1m4bDdhURn5KK/gX2cE6ZkuXeqiDAl9t3oD5CIzCSIwGAQokaJPBacN4zwkEZypiFXba9W+VOyGWKiV4Vk1v/2xnFWCpQYHl/nd+Hl6R630ATPN7AYy+jk2Aa/5hCYBVBFB/27M9JzvtFPZFoj8C/HlZvgDwl846k/wnv6hTwJICIPipU5SQnEbt8uClJB15REQyMpsTRRZRFShGlnePObiMlGRsgD6gkUjQR4qjk6Q1eZJR4E8WfGPqsZQT+wgB6zhKgm2cJYV3PEljHy/JBuv4+ldssY9vYnX1zA3UVdWMIAniJEgRrFRXV1VLGVIlyEEpWLB8LS1IA89DVcqGqQxMZGaJUrW8UaerLk8+1GiuraCrJVJrPLLUAndceqlStQeAkwGtl3TxqZGpVASne9gWX4rlsY3CrvfRtkPC6UVKQ3F3dQqH3cgD6m51Lat4SF4JIC09oL544IV1C2VY+Q2wfROjJKxruU3sIL1EE8NfEv8+1CIAAA==") format("woff2");
+  src: url("data:font/woff2;base64,d09GMgABAAAAAARYAA4AAAAACGQAAAQBAALrRAAAAAAAAAAAAAAAAAAAAAAAAAAAHCoGYD9TVEFUUABUEQgKhgCFSwE2AiQDDgsOAAQgBYR6ByAMBxspBwiOxDhG8YAHmmjB8//fnL/PnSErRBpqkjIV1wTxODV0oEjFxP6eqDZAQPZ/v35N7cXyj/DZhJWJ0/QCuEmBt2V35wrADnh8FQtHmmxVTlcB6aqoMygPKOCkrYrX4LlWOwLYqK8h1bd/oo8yxVmjS6lCB/j/nGKDrl1Xl4kiKMommigLrhhviSclxcP1Dzp+MUU3/t8Oen0yAQHQrmvXAUMTgmBFBypQQFvq/4/fuwCe9F59RZBhw0dNFIUaZxaMFg0NnRiCoMQGgKCBRKvLAChAAyrQEKACnZ6AAysK/YOOX1T6wt5U/MWU/w/q/2IfVv6+8uPKayrPRXAiCMMupRYLAA6gHASQ2QCAjmadwxqWCg6HlvZXqVrVdppU0em0msGAL3aEF761Sma8U/ZFbxTTX3cEFr3rTHprW/ia6W/s44AU0jgrMyd74LTGnMApV2/qdq3I+EZfYBE+9Rx5v2FXW/eDDx8DJ9688Xs+GUc+aNTN3uPQo7N2/EVm0B8IBgI+nz+UGcjJDGf5wtkNiAr6/a8LTHLqucl7T1YnaFv4VpixqXLmpmdZjhkzJCRZv9MXFKTrVjJfEBbRROz6gS7//J2UfPSI1/O8/fGq4LqeI0b0XBcM9Vwr0GDLa/WOtaFgD1Zbe94xU48cmZrqjGvkPoOjNYMzvvC9LG8vM3Pu7ATTHWxZsHhJQctwLcNw0LSlJrSo7k/Mmz9v6OD+AyPpo4f1ydga2yHO2yF2cbhhh4bhy+523jjJWNIrfdSwzIwEBZSOJUaHXlc79+WBlcWUaVv7ZIwexsgexT1KerjHD0qdbGs1qtXoydGDU56VJvb+b0nVZ7ac2Sqpmoc6qOahYq97wgiMwkiMBgEKJGiTcfVxPrXExKwZlBZvr73h7xb9+7fQba07TG5w7e2CMSYwwa0DE+veWLSIV+T6REBvfi/APLpsLNWM3WYBYDICqK/7np1Z97vBrq6/WpV2HeDTR2vOA3xuoSv1/2/aCe0MYEEBIPBTpyhRuEbtcp2XknTkPt2Tkd24UMgiKh6dkeXdY052oiF6NDAENBJaG0KKMqwkDR/bSac3v1AU1WrvsdC91AgBqywlwSZrSVGl7aThkPMUjVVu/xUbDnlMH4YxnAmMpBCTAkZjaK2l1tozeBjGMEyKycOQSCJ9aM5g6EUxxRjSeR6lSh6jUhnJWJmZS3NJZDG601VIFvlQBhMoIZthFIukMGZkqRhc6tJLlcweAE5G0tpLJ61SowsPKTjdQ5fFl2J5bNPMrvfRtjOEA4uURol7GKWFw27kAfX+FFJsFR4ki1yAtAwH6nMOvLCQieQRJO8NcO9NjFySGWa5hNih8RJNGH5e/p9zXF8CAAA=") format("woff2");
   font-weight: 100 700;
   font-style: normal;
   font-display: block;
@@ -894,17 +900,6 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   .panel-handle { flex-basis: 20px; }
   .handle-grip { width: 6px; height: 56px; }
 }
-.handle-readout {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 8px;
-  white-space: nowrap;
-  z-index: 50;
-  pointer-events: none;
-}
-
 /* The panel. */
 .panel {
   flex: 0 0 var(--panel-w, 420px);
@@ -1396,6 +1391,65 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .player-indicator .material-symbol-icon.spins { animation-duration: 3s; } }
+
+/* The Developer section's settings show over the app in the developer style. */
+.dev-note { border: 1px dashed var(--dev); background: var(--dev-bg); color: var(--page-fg); }
+/* Counts disabled, while Don't record plays is on: under the bell, below the indicator on a narrow player, and kept
+   while the controls hide and in fullscreen. */
+.counts-pill {
+  position: absolute;
+  top: 64px;
+  left: 12px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.counts-pill .material-symbol-icon { font-size: 18px; color: var(--dev); }
+.player-col.is-narrow .counts-pill { top: 108px; }
+body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .counts-pill { top: calc(max(12px, env(safe-area-inset-top)) + 52px); }
+body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .player-col.is-narrow .counts-pill { top: calc(max(12px, env(safe-area-inset-top)) + 96px); }
+/* Show layout measurements: figures at what they measure, over everything but menus and dialogs, and never in the way
+   of a tap. */
+.dev-figures { position: fixed; inset: 0; z-index: 1400; pointer-events: none; overflow: hidden; }
+.dev-figure {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.dev-figure.is-centered { transform: translateX(-50%); }
+/* The viewport's height reads up along the left ruler. */
+.dev-figure.is-upward { writing-mode: vertical-rl; padding: 6px 1px; transform: translateY(-50%) rotate(180deg); }
+.dev-ruler { position: absolute; border: 0 dashed var(--dev); }
+.dev-ruler.is-across { height: 0; border-top-width: 1px; }
+.dev-ruler.is-down { width: 0; border-left-width: 1px; }
+.dev-ruler::before, .dev-ruler::after { content: ""; position: absolute; background: var(--dev); }
+.dev-ruler.is-across::before, .dev-ruler.is-across::after { top: -5px; width: 1px; height: 9px; }
+.dev-ruler.is-across::before { left: 0; }
+.dev-ruler.is-across::after { right: 0; }
+.dev-ruler.is-down::before, .dev-ruler.is-down::after { left: -5px; width: 9px; height: 1px; }
+.dev-ruler.is-down::before { top: 0; }
+.dev-ruler.is-down::after { bottom: 0; }
+.dev-box { position: absolute; transform-origin: bottom left; padding: 6px 8px; border-radius: 8px; font-size: 0.75rem; line-height: 1.45; white-space: pre; font-variant-numeric: tabular-nums; }
+/* Its padding holds the safe areas, which only CSS can read. */
+.dev-safe-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
 /* The volume indicator and the seek indicator share their look: white text with a shadow so it reads on a bright
    picture, with no background. They sit outside the controls, so they show while those are hidden. They fade in
    quickly and out more slowly; with reduced motion they show and hide at once. */
@@ -1481,6 +1535,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
 .mock-hint { position: absolute; top: 64px; right: 12px; z-index: 30; padding: 6px 10px; max-width: min(230px, calc(50% - 18px)); pointer-events: none; }
 /* Below the indicator, which a narrow player shows under the corner buttons. */
 .player-col.is-narrow .mock-chip, .player-col.is-narrow .mock-hint { top: 108px; }
+/* Below Counts disabled while it shows. */
+.media-container.counts-off .mock-chip { top: 100px; }
+.player-col.is-narrow .media-container.counts-off .mock-chip { top: 144px; }
 .mock-toggle {
   position: fixed;
   left: env(safe-area-inset-left);
@@ -1558,6 +1615,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div id="volume-indicator" class="volume-indicator"><span class="material-symbol-icon">volume_up</span><span id="volume-indicator-text"></span></div>
         <div id="seek-indicator-back" class="seek-indicator is-back"><span class="material-symbol-icon">chevron_left</span><span class="seek-indicator-text"></span></div>
         <div id="seek-indicator-forward" class="seek-indicator is-forward"><span class="seek-indicator-text"></span><span class="material-symbol-icon">chevron_right</span></div>
+        <div id="counts-pill" class="counts-pill dev-note" hidden><span class="material-symbol-icon">play_disabled</span>Counts disabled</div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
@@ -1589,7 +1647,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
 
     <div id="handle" class="panel-handle" hidden>
       <span class="handle-grip"></span>
-      <span id="handle-readout" class="handle-readout mock-note" hidden></span>
     </div>
 
     <aside id="panel" class="panel" aria-label="Panel" hidden>
@@ -2104,14 +2161,46 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <dt>Session</dt><dd>7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
-              <dt>Server</dt><dd>0.15.0 (API 2)</dd>
-              <dt>ReelRoulette</dt><dd>0.15.0</dd>
+              <dt>Server</dt><dd>0.15.0-dev.1 (API 2)</dd>
+              <dt>Server address</dt><dd>https://192.168.1.20:45123</dd>
+              <dt>ReelRoulette</dt><dd>0.15.0-dev.1 (API 2)</dd>
+              <dt>Event stream</dt><dd id="diag-stream"></dd>
+              <dt>Last event</dt><dd id="diag-last-event"></dd>
+              <dt>Resyncs</dt><dd id="diag-resyncs"></dd>
             </dl>
+          </div>
+          <div class="settings-section" id="set-developer-section">
+            <h3>Developer</h3>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-dont-record"> Don't record plays on this device</label></div>
+              <p class="setting-hint">Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on.</p>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-layout-figures"> Show layout measurements</label></div>
+              <p class="setting-hint">Shows the layout's sizes and details over the page, as they change.</p>
+            </div>
+            <div class="setting">
+              <button class="btn" type="button" id="set-reset-device">Reset this device's settings</button>
+              <p class="setting-hint">Puts every other setting on this device back to its default and reloads. The Developer settings stay.</p>
+              <p class="mock-note mock-inline">The mockup's reset also keeps the Mockup tab's options.</p>
+            </div>
           </div>
           <p class="setting-hint">Settings apply at once and are kept on this device.</p>
         </div>
       </section>
     </aside>
+
+    <div id="dev-figures" class="dev-figures" hidden>
+      <div id="dev-safe-probe" class="dev-safe-probe"></div>
+      <div id="dev-vw-ruler" class="dev-ruler is-across"></div>
+      <div id="dev-vw" class="dev-figure dev-note is-centered"></div>
+      <div id="dev-vh-ruler" class="dev-ruler is-down"></div>
+      <div id="dev-vh" class="dev-figure dev-note is-upward"></div>
+      <div id="dev-panel" class="dev-figure dev-note is-centered"></div>
+      <div id="dev-player" class="dev-figure dev-note is-centered"></div>
+      <div id="dev-grid" class="dev-figure dev-note is-centered" hidden></div>
+      <div id="dev-box" class="dev-box dev-note"></div>
+    </div>
 
     <div id="autotag" class="autotag-overlay" role="dialog" aria-labelledby="autotag-title" hidden>
       <div class="autotag-head">
@@ -2251,7 +2340,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
 
 // The mockups carry only the icons they use, looked up by codepoint instead of by ligature, so markup can keep
 // the WebUI's `<span class="material-symbol-icon">name</span>` form.
-const ICON_CODEPOINTS = {"add": 57669, "admin_panel_settings": 61245, "arrow_back": 58820, "article": 61250, "auto_awesome": 58975, "autoplay": 63157, "autorenew": 57384, "bar_chart": 57963, "browse": 60179, "bug_report": 59496, "calendar_clock": 62784, "casino": 60224, "check_circle": 59500, "checklist": 59057, "chevron_left": 58376, "chevron_right": 58377, "close": 57676, "cloud_done": 58047, "content_copy": 57677, "content_paste": 57679, "delete": 59506, "delete_forever": 59691, "delete_history": 62744, "description": 59507, "deselect": 60342, "desktop_windows": 58124, "devices": 57777, "dns": 59509, "dock_to_right": 63460, "download": 57713, "drag_indicator": 59717, "edit_note": 59205, "error": 57344, "expand_less": 58830, "expand_more": 58831, "fast_forward": 57375, "favorite": 59517, "filter_alt": 61263, "filter_alt_off": 60210, "folder": 58055, "folder_open": 58056, "fullscreen": 58832, "fullscreen_exit": 58833, "group": 59375, "heart_minus": 63619, "heart_plus": 63620, "history": 57998, "info": 59534, "key": 59196, "keyboard": 58130, "lan": 60207, "left_panel_close": 63255, "left_panel_open": 63254, "more_vert": 58836, "notifications": 59380, "open_in_new": 59541, "pause": 57396, "photo": 58384, "play_arrow": 57399, "play_circle": 57400, "power_settings_new": 59564, "progress_activity": 59856, "radio_button_unchecked": 59446, "refresh": 58837, "remove": 57691, "repeat_one": 57409, "restart_alt": 61523, "right_panel_close": 63237, "right_panel_open": 63236, "save": 57697, "select_all": 57698, "settings": 59576, "shuffle": 57411, "skip_next": 57412, "skip_previous": 57413, "star": 59448, "storage": 57819, "swap_vert": 57539, "sync": 58919, "sync_problem": 58921, "tag": 59887, "thumb_down": 59414, "thumb_up": 59415, "tune": 58409, "undo": 57702, "unfold_less": 58838, "unfold_more": 58839, "update": 59683, "upload": 58054, "visibility": 58391, "visibility_off": 59637, "volume_down": 57421, "volume_off": 57423, "volume_up": 57424, "warning": 57346};
+const ICON_CODEPOINTS = {"add": 57669, "admin_panel_settings": 61245, "arrow_back": 58820, "article": 61250, "auto_awesome": 58975, "autoplay": 63157, "autorenew": 57384, "bar_chart": 57963, "browse": 60179, "bug_report": 59496, "calendar_clock": 62784, "casino": 60224, "check_circle": 59500, "checklist": 59057, "chevron_left": 58376, "chevron_right": 58377, "close": 57676, "cloud_done": 58047, "content_copy": 57677, "content_paste": 57679, "delete": 59506, "delete_forever": 59691, "delete_history": 62744, "description": 59507, "deselect": 60342, "desktop_windows": 58124, "devices": 57777, "dns": 59509, "dock_to_right": 63460, "download": 57713, "drag_indicator": 59717, "edit_note": 59205, "error": 57344, "expand_less": 58830, "expand_more": 58831, "fast_forward": 57375, "favorite": 59517, "filter_alt": 61263, "filter_alt_off": 60210, "folder": 58055, "folder_open": 58056, "fullscreen": 58832, "fullscreen_exit": 58833, "group": 59375, "heart_minus": 63619, "heart_plus": 63620, "history": 57998, "info": 59534, "key": 59196, "keyboard": 58130, "lan": 60207, "left_panel_close": 63255, "left_panel_open": 63254, "more_vert": 58836, "notifications": 59380, "open_in_new": 59541, "pause": 57396, "photo": 58384, "play_arrow": 57399, "play_circle": 57400, "play_disabled": 61290, "power_settings_new": 59564, "progress_activity": 59856, "radio_button_unchecked": 59446, "refresh": 58837, "remove": 57691, "repeat_one": 57409, "restart_alt": 61523, "right_panel_close": 63237, "right_panel_open": 63236, "save": 57697, "select_all": 57698, "settings": 59576, "shuffle": 57411, "skip_next": 57412, "skip_previous": 57413, "star": 59448, "storage": 57819, "swap_vert": 57539, "sync": 58919, "sync_problem": 58921, "tag": 59887, "thumb_down": 59414, "thumb_up": 59415, "tune": 58409, "undo": 57702, "unfold_less": 58838, "unfold_more": 58839, "update": 59683, "upload": 58054, "visibility": 58391, "visibility_off": 59637, "volume_down": 57421, "volume_off": 57423, "volume_up": 57424, "warning": 57346};
 
 function setIcon(el, name) {
   el.dataset.icon = name;
@@ -2299,6 +2388,8 @@ function fadeShown(el, shown) {
   fades.set(el, setTimeout(() => el.classList.remove("fade-rendered"), FADE_MS));
 }
 
+// The mockup's settings, kept per browser under one prefix, as the app keeps its device settings. The Mockup tab's own
+// options start "mock." and the Developer section's settings "developer.", which a reset of the settings keeps.
 const store = {
   get(key, fallback) {
     try {
@@ -2318,6 +2409,17 @@ const store = {
   remove(key) {
     try {
       localStorage.removeItem("rr-mockup." + key);
+    } catch {
+      // As above.
+    }
+  },
+  // Clears every setting except the Mockup tab's options and the Developer settings, as the app's reset clears every
+  // device setting except the Developer ones.
+  clearSettings() {
+    try {
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith("rr-mockup.") && !/^rr-mockup\.(mock|developer)\./.test(key))
+        .forEach((key) => localStorage.removeItem(key));
     } catch {
       // As above.
     }
@@ -2910,11 +3012,11 @@ function noticeDialog({ title, message }) {
 /** "Hide mockup notes": one option, kept on this device, for every page that offers it. */
 function initHideMock() {
   const box = document.getElementById("mock-hide-notes");
-  const apply = () => document.documentElement.classList.toggle("hide-mock", store.get("hideMock", false));
+  const apply = () => document.documentElement.classList.toggle("hide-mock", store.get("mock.hideNotes", false));
   if (box) {
-    box.checked = store.get("hideMock", false);
+    box.checked = store.get("mock.hideNotes", false);
     box.addEventListener("change", () => {
-      store.set("hideMock", box.checked);
+      store.set("mock.hideNotes", box.checked);
       apply();
     });
   }
@@ -3335,7 +3437,8 @@ let rowHeight = ((kept) => (Number.isInteger(kept) && kept >= ROW_HEIGHT.min && 
 // Tiles sit this far apart, across a row and between rows, in CSS pixels. The row height the rows aim for sets it, not
 // each row's own height, so every gap on screen is the same: 2 px from 120 to 179 px, 3 px from 180 to 239 px, and 4 px
 // from 240 to 300 px.
-const tileGap = () => (rowHeight < 180 ? 2 : rowHeight < 240 ? 3 : 4);
+const gapFor = (height) => (height < 180 ? 2 : height < 240 ? 3 : 4);
+const tileGap = () => gapFor(rowHeight);
 // How far a selected tile's thumbnail is inset on every side, in CSS pixels, at every zoom.
 const SELECT_INSET = 8;
 // The screen's pixels per CSS pixel, which the grid's sizes snap to.
@@ -3347,6 +3450,10 @@ const tileGapPx = () => Math.max(1, Math.round(tileGap() * devicePixels())) / de
 const tileSize = () => ({ target: rowHeight, min: rowHeight * 0.625, max: rowHeight * 1.5 });
 // The zoom gesture under way over the grid, if any.
 let gridZoom = null;
+// The row height a zoom at `scale` settles to.
+const zoomedRowHeight = (scale) => Math.round(Math.min(ROW_HEIGHT.max, Math.max(ROW_HEIGHT.min, rowHeight * scale)));
+// Show layout measurements' pending frame, how long the grid's figures stay after a zoom, and what it observes.
+const figures = { frame: 0, gridUntil: 0, gridTimer: 0, observer: null };
 
 const $ = (id) => document.getElementById(id);
 const stage = $("stage");
@@ -3372,12 +3479,12 @@ const state = {
   volumeStep: store.get("volumeStep", 5),
   // The volume sound plays at when not muted, which Mute remembers: 1 to 100, since 0 is muted.
   volume: ((kept) => (Number.isInteger(kept) && kept >= 1 && kept <= 100 ? kept : 100))(store.get("volume", 100)),
-  serverMachine: store.get("serverMachine", false),
-  deleteFails: store.get("deleteFails", false),
-  pairing: store.get("pairing", false),
-  iosVolume: store.get("iosVolume", false),
-  sound: store.get("sound", true),
-  mockShort: store.get("mockShort", false),
+  serverMachine: store.get("mock.serverMachine", false),
+  deleteFails: store.get("mock.deleteFails", false),
+  pairing: store.get("mock.pairing", false),
+  iosVolume: store.get("mock.iosVolume", false),
+  sound: store.get("mock.sound", true),
+  mockShort: store.get("mock.mockShort", false),
   statsExactTimes: store.get("statsExactTimes", false),
   libCollapsed: store.get("libCollapsed", false),
   tileNames: store.get("tileNames", false),
@@ -3385,8 +3492,8 @@ const state = {
   enhancedAudio: store.get("enhancedAudio", true),
   normalization: store.get("normalization", true),
   compression: store.get("compression", false),
-  audioFails: store.get("audioFails", false),
-  mediaStalled: store.get("mediaStalled", false),
+  audioFails: store.get("mock.audioFails", false),
+  mediaStalled: store.get("mock.mediaStalled", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
@@ -3394,6 +3501,16 @@ const state = {
   randomBehavior: store.get("randomBehavior", "jump"),
   // Whether the Randomization tab's Shuffle cycle card is open.
   cycleOpen: store.get("cycleOpen", true),
+  // The Developer section's settings, which a reset of this device's settings keeps.
+  dontRecordPlays: store.get("developer.dontRecordPlays", false),
+  layoutFigures: store.get("developer.layoutMeasurements", false),
+  // Mockup options for the review of the layout measurements: where the player's width shows, the box's corner, and
+  // how long the grid's figures stay after a zoom ends.
+  // The event stream as Diagnostics shows it: connecting until the first load ends, then following the server's
+  // situation, with the last event's number and the resyncs since the page loaded.
+  streamConnecting: true,
+  lastEvent: 18342,
+  resyncs: 0,
   // Mockup option: the server's situation.
   situation: null,
   // How the Library tab's load goes: it loads, fails, or times out.
@@ -3936,8 +4053,10 @@ function start(item) {
     noticeDialog({ message: failureMessage(item, playback.failed) });
     return;
   }
-  item.plays += 1;
-  item.lastPlayedAt = Date.now();
+  if (!state.dontRecordPlays) {
+    item.plays += 1;
+    item.lastPlayedAt = Date.now();
+  }
   // While Auto-Pause holds playback, the item starts paused, for Auto-Pause to play as it lets go, and nothing waits for
   // its media.
   if (playback.autoHold) {
@@ -4217,6 +4336,7 @@ function applyLayout() {
   notes.renderIndicator();
   syncAutoPause();
   renderReadout();
+  scheduleFigures();
   placeAllTips();
 }
 
@@ -4280,15 +4400,6 @@ let dragging = false;
 function setWidth(width) {
   state.width = Math.round(Math.min(Math.max(width, PANEL_MIN), maxWidth()));
   applyLayout();
-  const readout = $("handle-readout");
-  readout.hidden = false;
-  readout.textContent = `${state.width} px (${PANEL_MIN}–${maxWidth()})`;
-}
-function hideReadoutSoon() {
-  clearTimeout(hideReadoutSoon.timer);
-  hideReadoutSoon.timer = setTimeout(() => {
-    if (!dragging) $("handle-readout").hidden = true;
-  }, 900);
 }
 handle.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
@@ -4308,7 +4419,6 @@ function endDrag() {
   dragging = false;
   handle.classList.remove("is-dragging");
   store.set("width", state.width);
-  hideReadoutSoon();
 }
 handle.addEventListener("pointerup", endDrag);
 handle.addEventListener("pointercancel", endDrag);
@@ -5217,7 +5327,7 @@ new ResizeObserver(() => layoutGrid()).observe($("lib-grid"));
 // pinch's center moving pans them. When it settles, as the fingers lift or the wheel pauses, the rows reflow once to the
 // new height, the tile under the pointer keeps its vertical place, and each tile moves from where it showed to its new
 // place. With reduced motion the tiles take their places at once.
-const ZOOM_NOTCH = 1.15;
+const ZOOM_NOTCH = 1.1;
 const ZOOM_PER_PIXEL = 0.01;
 const ZOOM_EASE = 0.35;
 const ZOOM_SETTLE_MS = 200;
@@ -5240,6 +5350,7 @@ function beginZoom() {
 }
 function showZoom(zoom) {
   zoom.layer.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`;
+  scheduleFigures();
 }
 // Scales the rows to `scale` around a point on the screen, which stays where it is.
 function scaleZoomAround(zoom, scale, clientX, clientY) {
@@ -5349,8 +5460,9 @@ function settleZoom() {
   const anchor = tileAt(before, zoom.focusX, zoom.focusY);
   zoom.layer.style.transform = "";
   zoom.layer.style.willChange = "";
-  rowHeight = Math.round(Math.min(ROW_HEIGHT.max, Math.max(ROW_HEIGHT.min, rowHeight * zoom.scale)));
+  rowHeight = zoomedRowHeight(zoom.scale);
   store.set("rowHeight", rowHeight);
+  lingerGridFigure();
   layoutGrid(true);
   // The point under the pointer stays the same height down its tile, so the tile keeps its vertical place.
   const anchorTile = anchor && grid.querySelector(`.lib-tile[data-id="${anchor.id}"]`);
@@ -6776,7 +6888,13 @@ function applySituation(situation) {
   document.body.classList.toggle("held-back", heldBack());
   document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => (radio.checked = radio.value === situation));
   SERVER_STATES.forEach((id) => notes.setLasting(id, situation === id ? LASTING[id] : null));
-  if (was === "reconnecting" && situation !== "reconnecting") notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+  if (was === "reconnecting" && situation !== "reconnecting") {
+    notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+    // The server restarted, so it asks for a resync, whose event number starts again.
+    state.resyncs += 1;
+    state.lastEvent = 1;
+  }
+  renderDiagnostics();
   renderMockLasting();
   renderLibPresets();
   renderSortControls();
@@ -8609,7 +8727,7 @@ $("pair").addEventListener("submit", (event) => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Pairing failed: Couldn't reach the server." });
   if (pairField.input.value.trim().toLowerCase() === "wrong") return void noticeDialog({ message: "Pairing failed: The pairing token is wrong." });
   state.pairing = false;
-  store.set("pairing", false);
+  store.set("mock.pairing", false);
   $("mock-pairing").checked = false;
   pairField.reset("");
   applyMockOptions();
@@ -8620,6 +8738,7 @@ $("pair").addEventListener("submit", (event) => {
 // ---- Mockup options ----
 function applyMockOptions() {
   $("pair").hidden = !state.pairing;
+  renderDiagnostics();
   // On a phone on its side, the header shows while the server asks for pairing, so its prompt can be reached.
   document.body.classList.toggle("pairing", state.pairing);
   // What loads from the server shows nothing while it asks for pairing, and loads once paired.
@@ -8642,7 +8761,7 @@ $("mock-server-machine").addEventListener("change", () => (controlSession = fals
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;
-    store.set(key, state[key]);
+    store.set(`mock.${key}`, state[key]);
     applyMockOptions();
     applyLayout();
   });
@@ -8664,6 +8783,160 @@ $("lib-collapse").addEventListener("click", () => {
   applyCollapse();
 });
 
+// ---- Developer settings ----
+// Don't record plays on this device: a play leaves its play count and last played as they were, and the player says so.
+function renderCountsPill() {
+  $("counts-pill").hidden = !state.dontRecordPlays;
+  media.classList.toggle("counts-off", state.dontRecordPlays);
+}
+$("set-dont-record").checked = state.dontRecordPlays;
+$("set-dont-record").addEventListener("change", () => {
+  state.dontRecordPlays = $("set-dont-record").checked;
+  store.set("developer.dontRecordPlays", state.dontRecordPlays);
+  renderCountsPill();
+});
+$("set-layout-figures").checked = state.layoutFigures;
+$("set-layout-figures").addEventListener("change", () => {
+  state.layoutFigures = $("set-layout-figures").checked;
+  store.set("developer.layoutMeasurements", state.layoutFigures);
+  showFigures(state.layoutFigures);
+});
+// The reset clears every setting but the Developer ones, then reloads, since each part reads its settings as the page
+// starts.
+$("set-reset-device").addEventListener("click", async () => {
+  const reset = await confirmDialog({
+    message: "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads.",
+    confirmLabel: "Reset",
+    danger: true
+  });
+  if (!reset) return;
+  store.clearSettings();
+  location.reload();
+});
+
+// The event stream as Diagnostics shows it. The server refuses the stream while it runs without a library or asks for
+// pairing, so the WebUI keeps trying it, and the WebUI stops it once the server fails the compatibility check.
+function streamState() {
+  if (state.situation === "incompatible") return "Stopped";
+  if (state.streamConnecting) return "Connecting";
+  if (state.situation === "reconnecting" || state.situation === "nolibrary" || state.pairing) return "Reconnecting";
+  return "Open";
+}
+function renderDiagnostics() {
+  $("diag-stream").textContent = streamState();
+  $("diag-last-event").textContent = String(state.lastEvent);
+  $("diag-resyncs").textContent = String(state.resyncs);
+}
+
+// Show layout measurements: figures over the page at what they measure, following it live, and observed only while
+// the setting is on.
+const installedApp = window.matchMedia("(display-mode: standalone)");
+function showFigures(on) {
+  $("dev-figures").hidden = !on;
+  const viewport = window.visualViewport;
+  const listen = on ? "addEventListener" : "removeEventListener";
+  viewport?.[listen]("resize", scheduleFigures);
+  viewport?.[listen]("scroll", scheduleFigures);
+  installedApp[listen]("change", scheduleFigures);
+  if (on) {
+    figures.observer ??= new ResizeObserver(() => scheduleFigures());
+    [panel, media.parentElement, $("lib-controls"), $("lib-grid")].forEach((el) => figures.observer.observe(el));
+    scheduleFigures();
+  } else {
+    figures.observer?.disconnect();
+  }
+}
+function scheduleFigures() {
+  if (!state.layoutFigures || figures.frame) return;
+  figures.frame = requestAnimationFrame(() => {
+    figures.frame = 0;
+    renderFigures();
+  });
+}
+// After a zoom settles, the grid's figures stay 3 seconds.
+const GRID_FIGURE_STAY_MS = 3000;
+function lingerGridFigure() {
+  figures.gridUntil = Date.now() + GRID_FIGURE_STAY_MS;
+  clearTimeout(figures.gridTimer);
+  figures.gridTimer = setTimeout(scheduleFigures, GRID_FIGURE_STAY_MS);
+  scheduleFigures();
+}
+function placeFigure(el, box, text) {
+  el.hidden = false;
+  Object.entries(box).forEach(([edge, value]) => (el.style[edge] = `${Math.round(value)}px`));
+  if (text !== undefined) el.textContent = text;
+}
+function renderFigures() {
+  if (!state.layoutFigures) return;
+  const probe = getComputedStyle($("dev-safe-probe"));
+  const inset = Object.fromEntries(["top", "right", "bottom", "left"].map((edge) => {
+    const name = `padding${edge[0].toUpperCase()}${edge.slice(1)}`;
+    return [edge, Math.round(parseFloat(probe[name]) || 0)];
+  }));
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // The viewport, along its top and left edges, inside the safe areas. The height reads up along the left ruler, in
+  // from the edge so the Mockup tab doesn't cover it.
+  placeFigure($("dev-vw-ruler"), { left: inset.left, top: inset.top + 3, width: w - inset.left - inset.right });
+  placeFigure($("dev-vw"), { left: (inset.left + w - inset.right) / 2, top: inset.top + 7 }, `${w} px`);
+  placeFigure($("dev-vh-ruler"), { left: inset.left + 3, top: inset.top, height: h - inset.top - inset.bottom });
+  placeFigure($("dev-vh"), { left: inset.left + 24, top: (inset.top + h - inset.bottom) / 2 }, `${h} px`);
+
+  // The panel's width just below its tab row, with the range the handle allows beside the player.
+  const panelBox = panel.getBoundingClientRect();
+  if (panel.hidden || !panelBox.width) $("dev-panel").hidden = true;
+  else {
+    const width = Math.round(panelBox.width);
+    const tabsBottom = panel.querySelector(".panel-tabs").getBoundingClientRect().bottom;
+    placeFigure($("dev-panel"), { left: panelBox.left + panelBox.width / 2, top: tabsBottom + 2 },
+      state.mode === "overlay" ? `${width} px` : `${width} px (${PANEL_MIN}–${maxWidth()})`);
+  }
+
+  // The player's width, centered below the indicator, unless the overlay panel covers the player.
+  const col = media.parentElement;
+  const playerBox = col.getBoundingClientRect();
+  const playerFigure = $("dev-player");
+  if (!playerBox.width || (state.mode === "overlay" && state.open)) playerFigure.hidden = true;
+  else {
+    // The corner buttons' top, which a short screen moves below the status bar outside fullscreen.
+    const top = playerBox.top + (document.body.classList.contains("short-screen") && !isFullscreen() ? Math.max(12, inset.top) : 12);
+    placeFigure(playerFigure, { left: playerBox.left + playerBox.width / 2, top: top + (col.classList.contains("is-narrow") ? 88 : 40) },
+      `${Math.round(playerBox.width)} px`);
+  }
+
+  // The grid's target row height and gap while a zoom lasts, and for a moment after.
+  const gridBox = $("lib-grid").getBoundingClientRect();
+  if (!gridBox.width || !(gridZoom || Date.now() < figures.gridUntil)) $("dev-grid").hidden = true;
+  else {
+    const height = gridZoom ? zoomedRowHeight(gridZoom.scale) : rowHeight;
+    placeFigure($("dev-grid"), { left: gridBox.left + gridBox.width / 2, top: gridBox.top + 8 }, `Rows ${height} px · gap ${gapFor(height)} px`);
+  }
+
+  // The box, at the bottom left of what shows on screen, which a pinch or the on-screen keyboard shrinks.
+  const viewport = window.visualViewport;
+  const ratio = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const controls = $("lib-controls").clientWidth;
+  const lines = [
+    `Pixel ratio: ${ratio}`,
+    `Layout: ${state.mode === "overlay" ? "overlay" : `beside the player, ${state.side}`}${document.body.classList.contains("short-screen") ? " · short screen" : ""}`,
+    `Safe area: ${inset.top} top · ${inset.right} right · ${inset.bottom} bottom · ${inset.left} left`,
+    `Library controls: ${controls ? `${controls} px, ${controls >= 520 ? "520 or wider" : "under 520"}` : "not showing"}`,
+    `Pointer: ${coarse.matches ? "touch" : "mouse"}`,
+    `Running as: ${installedApp.matches || navigator.standalone === true ? "installed app" : "browser tab"}`
+  ];
+  if (viewport && (viewport.width < w - 1 || viewport.height < h - 1)) {
+    lines.push(`Visible area: ${Math.round(viewport.width)} × ${Math.round(viewport.height)}${viewport.scale > 1.01 ? `, zoomed ${Math.round(viewport.scale * 100) / 100}×` : ""}`);
+  }
+  const box = $("dev-box");
+  box.textContent = lines.join("\n");
+  // It keeps its size on screen through a pinch, and stays clear of the safe areas.
+  const scale = viewport ? 1 / viewport.scale : 1;
+  const view = { left: viewport?.offsetLeft ?? 0, top: viewport?.offsetTop ?? 0, height: viewport?.height ?? h };
+  box.style.transform = `scale(${scale})`;
+  box.style.left = `${Math.round(view.left + (8 + inset.left) * scale)}px`;
+  box.style.bottom = `${Math.round(h - view.top - view.height + (8 + inset.bottom) * scale)}px`;
+}
+
 // ---- Start ----
 // The library and presets load after a moment, as they do from the server.
 initSettings();
@@ -8683,11 +8956,15 @@ renderPlayback();
 renderApply();
 applySituation("connected");
 renderLibPresets();
+renderCountsPill();
+showFigures(state.layoutFigures);
 applyLayout();
 applyControlsMode();
 setTimeout(() => {
   libLoading = false;
   presetsLoading = false;
+  state.streamConnecting = false;
+  renderDiagnostics();
   renderLibPresets();
   layoutGrid(true);
 }, instant ? 0 : 400);

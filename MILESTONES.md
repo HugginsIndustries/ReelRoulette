@@ -141,7 +141,7 @@ Last milestone completed: M12m
 
 ### M12n1 - WebUI Developer Settings
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: A Developer section at the bottom of the Settings tab lets a device play without counting plays, show the layout's measurements live, and reset its settings, and Diagnostics shows the event stream and the server address.
 - **Depends on**: WebUI Settings Panel, whose Settings tab and Diagnostics section this milestone extends, and WebUI Responsive Layout and Panels, whose panel host the figures read, and WebUI Grid Row Reuse and Zoom, whose zoom the grid's figures follow.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -149,22 +149,24 @@ Last milestone completed: M12m
 #### Decisions
 
 - The Developer section is the Settings tab's last section, below Diagnostics, and its settings are kept per device like the others.
-- It holds Don't record plays on this device, Show layout measurements, and Reset this device's settings, worded as the mockup review settles.
+- It holds Don't record plays on this device, Show layout measurements, and Reset this device's settings, worded as the mockup shows them.
 - The Counts disabled pill and the layout figures share the look of the mockup's notes, magenta and dashed (`.mock-note` in `build/common.css`), as the app's developer style.
 - In the mockup, the pill and the figures use a class that Hide mockup notes leaves showing, since they ship.
 - A reset keeps the Developer section's own settings, so testing after a reset still counts no plays.
 - A reset keeps the client id and the session id, which are identity rather than settings, and which Diagnostics shows for matching `last.log` lines.
 - The figures update live and let taps pass through to what is under them.
 - The panel's figure shows its width and the range the handle allows, in place of the mockup's readout while the handle is dragged.
+- The panel's figure sits just below the panel's tab row, the player's width centered below the indicator, the viewport's height reads up along the left ruler, the corner box sits at the bottom left of what shows on screen, and the grid's figures stay 3 seconds after a zoom settles.
+- A mouse wheel notch zooms the Library grid 10%, where it zoomed 15%, and a trackpad's and a touch screen's pinches zoom as before.
 - Diagnostics gains the event stream's state, the last event number, the resyncs since the page loaded, the server address, and the API version on the ReelRoulette row.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Mockup | ✅ Complete | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Developer section | ⏳ Planned | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
-| Layout measurements | ⏳ Planned | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, and the panel's unused size container gone. |
+| Layout measurements | ⏳ Planned | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, the panel's unused size container gone, and a wheel notch zooming the grid 10%. |
 | Diagnostics | ⏳ Planned | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
 
 #### Mockup slice
@@ -178,19 +180,14 @@ Last milestone completed: M12m
 - The mockup's playback note moves below the pill while the pill shows.
 - `play_disabled` joins the mockup's icon subset (`ICONS` in `build/build_font.py`), which `build_font.py` rebuilds.
 - The layout figures show live from the mockup's own layout:
-  - the panel's width and the handle's range at the top of the panel, in place of the handle's readout (`#handle-readout`);
-  - the player's width at the top of the player;
-  - the viewport's width along its top edge and its height along its left edge;
-  - the Library grid's target row height and gap at the grid while a zoom lasts;
-  - a corner box with the device pixel ratio, the layout mode, the safe-area insets, the Library controls' width against its 520 px breakpoint, mouse or touch, installed app or browser tab, and the visible area when the on-screen keyboard or a pinch shrinks it.
+  - the panel's width and the handle's range just below the panel's tab row, in place of the handle's readout (`#handle-readout`);
+  - the player's width, centered below the indicator;
+  - the viewport's width along its top edge, and its height reading up along its left edge, turned 90° counterclockwise and in from the Mockup tab;
+  - the Library grid's target row height and gap at the grid while a zoom lasts and for 3 seconds after it settles;
+  - a box at the bottom left of what shows on screen, with the device pixel ratio, the layout mode, the safe-area insets, the Library controls' width against its 520 px breakpoint, mouse or touch, installed app or browser tab, and the visible area when the on-screen keyboard or a pinch shrinks it.
+- A mouse wheel notch zooms the mockup's Library grid 10%, where it zoomed 15% (`ZOOM_NOTCH` in `build/layout.src.html`), and the mockup's index lists it.
 - Diagnostics shows the new rows with sample values, and the event stream's row follows the Mockup tab's Server choices.
-- The review settles:
-  - the section's and its settings' wording;
-  - the reset's confirmation;
-  - where the player's figure goes beside the indicator;
-  - which corner the box takes;
-  - how long the grid's figures stay after a zoom ends;
-  - the Diagnostics rows' labels.
+- The review settles the wording, the reset's confirmation, the figures' places, how long the grid's figures stay after a zoom, and the Diagnostics rows' labels.
 - Before the app is built, the user approves the design in Firefox on the desktop, on the iPad, and on an Android phone.
 
 **Traps**
@@ -205,10 +202,28 @@ Last milestone completed: M12m
 - `play_disabled` is in the app's icon font and missing from the mockup's subset (measured).
 - `build_font.py` isn't among the commands `AGENTS.md` lets an agent run without approval.
 - `check.mjs` runs the pages in happy-dom with no layout, so where the figures and the pill sit can only be judged on the devices.
+- The Mockup tab is fixed at the middle of the left edge, about 20 px wide, above the figures (`.mock-toggle` in `build/layout.src.html`).
 
 **Acceptance**
 
 - The mockup shows the Developer section, the reset, the pill, the figures, and the Diagnostics rows as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- The user approved the mockup after two review rounds on their devices, with Don't record plays, the pill, Reset, the section's wording, and the Diagnostics rows' labels as first built.
+- The review placed the player's width centered below the indicator and the box at the bottom left, and kept the grid's figures 3 seconds after a zoom settles.
+- The review turned the viewport's height to read up along the left ruler, 24 px in so the Mockup tab doesn't cover it, and moved the panel's figure just below the tab row, off the tab icons.
+- The review made a mouse wheel notch zoom the grid 10%, where it zoomed 15%, and changed Show layout measurements' hint to "Shows the layout's sizes and details over the page, as they change."
+- The handle's drag readout is gone, and the panel's figure shows the handle's range in its place.
+- The Mockup tab's own options are kept under `mock.` keys and the Developer settings under `developer.` keys, so the mockup's reset keeps both (`clearSettings` on `store` in `build/common.js`).
+- The Diagnostics slice adds the stopped state, since the WebUI stops the event stream once the server fails the compatibility check.
+- The Server and ReelRoulette rows show a dev build's full version, "0.15.0-dev.1 (API 2)", as the app does from the server's `assetsVersion` and the WebUI's `.version`.
+- The admin page's Version row shows the full version too, "0.15.0-dev.1", or "0.15.0-dev.1 (dev run — not a Velopack install)" on a dev run, as the app does from the ServerApp's `<Version>` on a dev run and Velopack's installed version on an install.
+- The admin page's update line and the recovery page's Version row and update line read "0.15.0-dev.1" too, since the server's update line names the same running version as its Version row (`_runningVersion` in `UpdateService.cs`).
+- `build_font.py` added `play_disabled` to the mockup's icon subset, run with the user's approval.
+- In one-off happy-dom runs with the measurements on and element sizes stubbed, each figure took the place its code sets, one wheel notch took the row height from 160 to 176 px, and no script errors occurred (measured).
+- The README describes the Developer section and the developer style, and the index lists the 10% notch and the figures' timing and place (`build/index.src.html`).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, `node docs/mockups/reelroulette/build/check.mjs` passes, and `pwsh ./tools/scripts/check-milestones.ps1` passes.
 
 #### Developer section slice
 
@@ -216,6 +231,7 @@ Last milestone completed: M12m
 
 - The Developer section in the Settings tab (`src/ui/SettingsTab.tsx`), after Diagnostics, as the mockup shows it.
 - Don't record plays on this device is kept as `developer.dontRecordPlays`, off by default, in the app store (`src/state/appStore.ts`), which the player and the library both get.
+- Its hint reads "Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on."
 - While it is on, a random pick posts no `POST /api/record-playback` (`notifyPlaybackStarted` in `src/playback/player.ts`).
 - While it is on, a history step sends `recordPlayback: false` (`requestPlay` in `src/playback/player.ts`).
 - While it is on, a library tile's play sends `recordPlayback: false` (`play` in `src/library/library.ts`).
@@ -225,7 +241,7 @@ Last milestone completed: M12m
 - Popups set to Top left cover the pill while they show.
 - The developer style joins `src/styles.css` as tokens with the mockup notes' colors for the light and dark themes, which the pill and the figures use.
 - A `last.log` line is written each time Don't record plays changes, and once when a page loads with it on.
-- Reset this device's settings asks first with `dialogs.confirm` and a red confirm button, then clears every `rr_device.` setting except the `developer.` ones and reloads the page.
+- Reset this device's settings, with the hint "Puts every other setting on this device back to its default and reloads. The Developer settings stay.", asks "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads." with `dialogs.confirm` and a red Reset, then clears every `rr_device.` setting except the `developer.` ones and reloads the page.
 - `DeviceStore` gains the clear (`src/state/deviceStore.ts`), and the reload is passed in so tests can replace it.
 - Scan full library moves from `rr_autoTagScanFullLibrary` into the device store as `tags.scanFullLibrary`, with no carry-over (`src/tags/tagEditor.ts`, `src/state/appServices.ts`).
 - `tryGetStorage` in `src/api/coreApi.ts` goes, and the client and session ids reach their storage through `DeviceStorage` and one helper beside it in `src/state/deviceStore.ts`.
@@ -273,17 +289,19 @@ Last milestone completed: M12m
 **Scope**
 
 - Show layout measurements is kept as `developer.layoutMeasurements`, off by default, in the Developer section.
+- Its hint reads "Shows the layout's sizes and details over the page, as they change."
 - While it is on, one overlay inside `#fullscreen-stage` (`src/ui/Stage.tsx`) shows the figures in the developer style, live, with taps passing through:
-  - the panel's width and the range the handle allows, at the top of the panel;
-  - the player's width, at the top of the player where the mockup review places it;
-  - the viewport's width along its top edge and its height along its left edge;
-  - the Library grid's target row height and gap at the grid while a zoom lasts;
-  - the corner box the mockup shows.
+  - the panel's width and the range the handle allows, centered 2 px below the panel's tab row (`.panel-tabs` in `src/ui/Panel.tsx`);
+  - the player's width, centered below the indicator, 52 px from the player's top on a wide player and 100 px on a narrow one, with the short-screen offset the corner buttons take;
+  - the viewport's width along its top edge, and its height reading up along its left edge, turned 90° counterclockwise and 24 px in from the safe area;
+  - the Library grid's target row height and gap at the grid while a zoom lasts and for 3 seconds after it settles;
+  - the box the mockup shows, at the bottom left of what shows on screen, 8 px inside the safe areas.
 - The panel host exposes the player column's width and the panel's widest width (`playerWidth` and `maxWidth` in `src/panel/panelHost.ts`).
 - The grid controller gives the zoom's live target row height and its gap through the library (`src/library/libraryGridController.ts`, `src/library/library.ts`).
 - The overlay observes what nothing measures yet, and only while it is on: the panel's box, the viewport, `visualViewport`, `#library-controls`, the pointer and installed-app media queries, and the safe areas through a hidden probe element.
 - `.panel`'s `container: panel / inline-size` goes, since no query uses it (`src/styles.css`).
-- `CONTEXT.md` describes the figures.
+- A mouse wheel notch zooms the grid 10%, where it zoomed 15% (`ZOOM_NOTCH` in `src/library/libraryGridZoom.ts`), and the tests that use it follow, while a trackpad's small deltas and a touch screen's pinch zoom as before.
+- `CONTEXT.md` describes the figures and the 10% notch.
 
 **Traps**
 
@@ -310,11 +328,14 @@ Last milestone completed: M12m
 - Field tooltips (`.vfield-tip`) are fixed and placed in viewport coordinates, and some sit inside the panel, so they show whether removing the panel's container moves anything (inferred).
 - The last `@container panel` rule went when Auto Tag moved to open over the whole page, and no rule has used the panel's container since (measured).
 - happy-dom has no layout, so tests check the figures' wiring and their values from stubbed sizes, and their places are judged on the devices.
+- The grid zoom tests expect a notch's 15% in their scales (`src/test/libraryGridZoom.test.ts`), and the Library screen test of a remembered row height zooms three notches from 160 to 243 px, with its tiles laid out for that height (`src/test/screens/library.test.ts`).
+- `CONTEXT.md` describes a wheel notch as 15%.
 
 **Acceptance**
 
 - With Show layout measurements on, each figure shows its value and follows a change of what it measures, and with it off no figure shows and nothing is observed, in layout measurement screen tests with stubbed sizes.
-- The grid's figures show the zoom's target row height and gap while a zoom lasts, in library grid tests.
+- The grid's figures show the zoom's target row height and gap while a zoom lasts and for 3 seconds after it settles, in library grid tests.
+- A wheel notch zooms the grid 10%, and a trackpad's small deltas and a pinch zoom as before, in library grid zoom tests.
 - The panel's figure reads its width beside the player and as the overlay, in panel screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check in Firefox on the desktop that the figures sit at their elements and the panel and a field's tooltip in it look as before.
@@ -323,12 +344,12 @@ Last milestone completed: M12m
 
 **Scope**
 
-- Diagnostics (`src/ui/SettingsTab.tsx`) shows, worded as the mockup review settles:
-  - the event stream's state: connecting, open, or reconnecting;
-  - the last event number;
-  - the resyncs since the page loaded;
-  - the server address;
-  - the WebUI's API version beside its version on the ReelRoulette row, as the Server row shows the server's.
+- Diagnostics (`src/ui/SettingsTab.tsx`) shows, in the mockup's order:
+  - Server address, after the Server row, with the server address;
+  - the WebUI's API version beside its version on the ReelRoulette row, such as "0.15.0-dev.1 (API 2)" on a dev build, as the Server row shows the server's;
+  - Event stream, with its state: Connecting, Open, Reconnecting, or Stopped;
+  - Last event, with the last event number;
+  - Resyncs, with the resyncs since the page loaded.
 - The server connection exposes the event stream's state, the last event number, and the resync count as signals (`src/state/serverConnection.ts`).
 - The event stream gives the connection each event's revision (`src/events/sseClient.ts`).
 - `WEBUI_API_VERSION` is exported (`src/state/serverCompatibility.ts`).
@@ -341,11 +362,13 @@ Last milestone completed: M12m
 - The event stream keeps its last revision privately, behind `lastRevision()`, which is null until the first event.
 - A resync takes its own revision, which can be lower after a server restart (`nextEventRevision`, locked to `src/test/fixtures/event-revision.json`).
 - The connection already emits `resyncRequired` to its listeners.
+- The connection stops the event stream once the server fails the compatibility check (`blockForCompatibility` in `src/state/serverConnection.ts`), and doesn't start it again.
+- The event stream tries again after every error (`createSseClient` in `src/events/sseClient.ts`), including the server refusing it while it runs without a library or asks for pairing, which doesn't show Reconnecting… on the player.
 - The server address is the runtime config's `apiBaseUrl` (`src/config/runtimeConfig.ts`), and the config also holds `pairToken`, which Diagnostics never shows.
 
 **Acceptance**
 
-- Diagnostics shows the event stream connecting, open, and reconnecting, in Settings screen tests.
+- Diagnostics shows the event stream connecting, open, reconnecting, and stopped, in Settings screen tests.
 - The last event number follows each event and a resync, and the resync count rises with each resync, in Settings screen tests.
 - The server address and the ReelRoulette row's API version show, and the pair token doesn't, in Settings screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.

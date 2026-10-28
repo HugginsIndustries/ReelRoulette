@@ -7,6 +7,7 @@ An interactive mockup of the app's whole visible UI, approved before the v0.15.0
   - the header, the player with its controls, its notifications bell, and its indicator for lasting states, and the popups;
   - the side panel on either side of the player, with its resize handle, or as the full-screen overlay at phone widths;
   - the Library, Tags, Stats, Filter, Randomization, and Settings tabs, with multi-select and bulk actions in the Library;
+  - the Settings tab's Developer section, with Counts disabled on the player and the live layout measurements;
   - the in-app dialogs, the keyboard shortcuts, and the volume control;
   - what Auto-Pause does, shown by a stand-in video that plays;
   - random picks and the play history, how each server situation looks, and each lasting state and kind of notification, set from the magenta Mockup tab.
@@ -14,7 +15,7 @@ An interactive mockup of the app's whole visible UI, approved before the v0.15.0
 - `recovery.html` shows the server's plain recovery page, for when the WebUI's files are missing or broken.
 - `validation.html` shows each state of the field validation pattern.
 
-Magenta dashed boxes and the mockup controls are not part of the design. Every screen is approved, and each decision is recorded in the milestone in `MILESTONES.md` that builds it. Where the shipped app differs from the approved design, that milestone's evidence says so.
+Magenta dashed boxes and the mockup controls are not part of the design, except Counts disabled and the layout measurements, which ship in that look as the app's developer style and stay showing when Hide mockup notes is on. Every screen is approved, and each decision is recorded in the milestone in `MILESTONES.md` that builds it. Where the shipped app differs from the approved design, that milestone's evidence says so.
 
 ## Opening them
 

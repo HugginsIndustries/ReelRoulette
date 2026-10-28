@@ -261,17 +261,6 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   .panel-handle { flex-basis: 20px; }
   .handle-grip { width: 6px; height: 56px; }
 }
-.handle-readout {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 8px;
-  white-space: nowrap;
-  z-index: 50;
-  pointer-events: none;
-}
-
 /* The panel. */
 .panel {
   flex: 0 0 var(--panel-w, 420px);
@@ -763,6 +752,65 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .player-indicator .material-symbol-icon.spins { animation-duration: 3s; } }
+
+/* The Developer section's settings show over the app in the developer style. */
+.dev-note { border: 1px dashed var(--dev); background: var(--dev-bg); color: var(--page-fg); }
+/* Counts disabled, while Don't record plays is on: under the bell, below the indicator on a narrow player, and kept
+   while the controls hide and in fullscreen. */
+.counts-pill {
+  position: absolute;
+  top: 64px;
+  left: 12px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.counts-pill .material-symbol-icon { font-size: 18px; color: var(--dev); }
+.player-col.is-narrow .counts-pill { top: 108px; }
+body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .counts-pill { top: calc(max(12px, env(safe-area-inset-top)) + 52px); }
+body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .player-col.is-narrow .counts-pill { top: calc(max(12px, env(safe-area-inset-top)) + 96px); }
+/* Show layout measurements: figures at what they measure, over everything but menus and dialogs, and never in the way
+   of a tap. */
+.dev-figures { position: fixed; inset: 0; z-index: 1400; pointer-events: none; overflow: hidden; }
+.dev-figure {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.dev-figure.is-centered { transform: translateX(-50%); }
+/* The viewport's height reads up along the left ruler. */
+.dev-figure.is-upward { writing-mode: vertical-rl; padding: 6px 1px; transform: translateY(-50%) rotate(180deg); }
+.dev-ruler { position: absolute; border: 0 dashed var(--dev); }
+.dev-ruler.is-across { height: 0; border-top-width: 1px; }
+.dev-ruler.is-down { width: 0; border-left-width: 1px; }
+.dev-ruler::before, .dev-ruler::after { content: ""; position: absolute; background: var(--dev); }
+.dev-ruler.is-across::before, .dev-ruler.is-across::after { top: -5px; width: 1px; height: 9px; }
+.dev-ruler.is-across::before { left: 0; }
+.dev-ruler.is-across::after { right: 0; }
+.dev-ruler.is-down::before, .dev-ruler.is-down::after { left: -5px; width: 9px; height: 1px; }
+.dev-ruler.is-down::before { top: 0; }
+.dev-ruler.is-down::after { bottom: 0; }
+.dev-box { position: absolute; transform-origin: bottom left; padding: 6px 8px; border-radius: 8px; font-size: 0.75rem; line-height: 1.45; white-space: pre; font-variant-numeric: tabular-nums; }
+/* Its padding holds the safe areas, which only CSS can read. */
+.dev-safe-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
 /* The volume indicator and the seek indicator share their look: white text with a shadow so it reads on a bright
    picture, with no background. They sit outside the controls, so they show while those are hidden. They fade in
    quickly and out more slowly; with reduced motion they show and hide at once. */
@@ -848,6 +896,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
 .mock-hint { position: absolute; top: 64px; right: 12px; z-index: 30; padding: 6px 10px; max-width: min(230px, calc(50% - 18px)); pointer-events: none; }
 /* Below the indicator, which a narrow player shows under the corner buttons. */
 .player-col.is-narrow .mock-chip, .player-col.is-narrow .mock-hint { top: 108px; }
+/* Below Counts disabled while it shows. */
+.media-container.counts-off .mock-chip { top: 100px; }
+.player-col.is-narrow .media-container.counts-off .mock-chip { top: 144px; }
 .mock-toggle {
   position: fixed;
   left: env(safe-area-inset-left);
@@ -925,6 +976,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div id="volume-indicator" class="volume-indicator"><span class="material-symbol-icon">volume_up</span><span id="volume-indicator-text"></span></div>
         <div id="seek-indicator-back" class="seek-indicator is-back"><span class="material-symbol-icon">chevron_left</span><span class="seek-indicator-text"></span></div>
         <div id="seek-indicator-forward" class="seek-indicator is-forward"><span class="seek-indicator-text"></span><span class="material-symbol-icon">chevron_right</span></div>
+        <div id="counts-pill" class="counts-pill dev-note" hidden><span class="material-symbol-icon">play_disabled</span>Counts disabled</div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
@@ -956,7 +1008,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
 
     <div id="handle" class="panel-handle" hidden>
       <span class="handle-grip"></span>
-      <span id="handle-readout" class="handle-readout mock-note" hidden></span>
     </div>
 
     <aside id="panel" class="panel" aria-label="Panel" hidden>
@@ -1471,14 +1522,46 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <dt>Session</dt><dd>7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
-              <dt>Server</dt><dd>0.15.0 (API 2)</dd>
-              <dt>ReelRoulette</dt><dd>0.15.0</dd>
+              <dt>Server</dt><dd>0.15.0-dev.1 (API 2)</dd>
+              <dt>Server address</dt><dd>https://192.168.1.20:45123</dd>
+              <dt>ReelRoulette</dt><dd>0.15.0-dev.1 (API 2)</dd>
+              <dt>Event stream</dt><dd id="diag-stream"></dd>
+              <dt>Last event</dt><dd id="diag-last-event"></dd>
+              <dt>Resyncs</dt><dd id="diag-resyncs"></dd>
             </dl>
+          </div>
+          <div class="settings-section" id="set-developer-section">
+            <h3>Developer</h3>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-dont-record"> Don't record plays on this device</label></div>
+              <p class="setting-hint">Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on.</p>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-layout-figures"> Show layout measurements</label></div>
+              <p class="setting-hint">Shows the layout's sizes and details over the page, as they change.</p>
+            </div>
+            <div class="setting">
+              <button class="btn" type="button" id="set-reset-device">Reset this device's settings</button>
+              <p class="setting-hint">Puts every other setting on this device back to its default and reloads. The Developer settings stay.</p>
+              <p class="mock-note mock-inline">The mockup's reset also keeps the Mockup tab's options.</p>
+            </div>
           </div>
           <p class="setting-hint">Settings apply at once and are kept on this device.</p>
         </div>
       </section>
     </aside>
+
+    <div id="dev-figures" class="dev-figures" hidden>
+      <div id="dev-safe-probe" class="dev-safe-probe"></div>
+      <div id="dev-vw-ruler" class="dev-ruler is-across"></div>
+      <div id="dev-vw" class="dev-figure dev-note is-centered"></div>
+      <div id="dev-vh-ruler" class="dev-ruler is-down"></div>
+      <div id="dev-vh" class="dev-figure dev-note is-upward"></div>
+      <div id="dev-panel" class="dev-figure dev-note is-centered"></div>
+      <div id="dev-player" class="dev-figure dev-note is-centered"></div>
+      <div id="dev-grid" class="dev-figure dev-note is-centered" hidden></div>
+      <div id="dev-box" class="dev-box dev-note"></div>
+    </div>
 
     <div id="autotag" class="autotag-overlay" role="dialog" aria-labelledby="autotag-title" hidden>
       <div class="autotag-head">
@@ -1630,7 +1713,8 @@ let rowHeight = ((kept) => (Number.isInteger(kept) && kept >= ROW_HEIGHT.min && 
 // Tiles sit this far apart, across a row and between rows, in CSS pixels. The row height the rows aim for sets it, not
 // each row's own height, so every gap on screen is the same: 2 px from 120 to 179 px, 3 px from 180 to 239 px, and 4 px
 // from 240 to 300 px.
-const tileGap = () => (rowHeight < 180 ? 2 : rowHeight < 240 ? 3 : 4);
+const gapFor = (height) => (height < 180 ? 2 : height < 240 ? 3 : 4);
+const tileGap = () => gapFor(rowHeight);
 // How far a selected tile's thumbnail is inset on every side, in CSS pixels, at every zoom.
 const SELECT_INSET = 8;
 // The screen's pixels per CSS pixel, which the grid's sizes snap to.
@@ -1642,6 +1726,10 @@ const tileGapPx = () => Math.max(1, Math.round(tileGap() * devicePixels())) / de
 const tileSize = () => ({ target: rowHeight, min: rowHeight * 0.625, max: rowHeight * 1.5 });
 // The zoom gesture under way over the grid, if any.
 let gridZoom = null;
+// The row height a zoom at `scale` settles to.
+const zoomedRowHeight = (scale) => Math.round(Math.min(ROW_HEIGHT.max, Math.max(ROW_HEIGHT.min, rowHeight * scale)));
+// Show layout measurements' pending frame, how long the grid's figures stay after a zoom, and what it observes.
+const figures = { frame: 0, gridUntil: 0, gridTimer: 0, observer: null };
 
 const $ = (id) => document.getElementById(id);
 const stage = $("stage");
@@ -1667,12 +1755,12 @@ const state = {
   volumeStep: store.get("volumeStep", 5),
   // The volume sound plays at when not muted, which Mute remembers: 1 to 100, since 0 is muted.
   volume: ((kept) => (Number.isInteger(kept) && kept >= 1 && kept <= 100 ? kept : 100))(store.get("volume", 100)),
-  serverMachine: store.get("serverMachine", false),
-  deleteFails: store.get("deleteFails", false),
-  pairing: store.get("pairing", false),
-  iosVolume: store.get("iosVolume", false),
-  sound: store.get("sound", true),
-  mockShort: store.get("mockShort", false),
+  serverMachine: store.get("mock.serverMachine", false),
+  deleteFails: store.get("mock.deleteFails", false),
+  pairing: store.get("mock.pairing", false),
+  iosVolume: store.get("mock.iosVolume", false),
+  sound: store.get("mock.sound", true),
+  mockShort: store.get("mock.mockShort", false),
   statsExactTimes: store.get("statsExactTimes", false),
   libCollapsed: store.get("libCollapsed", false),
   tileNames: store.get("tileNames", false),
@@ -1680,8 +1768,8 @@ const state = {
   enhancedAudio: store.get("enhancedAudio", true),
   normalization: store.get("normalization", true),
   compression: store.get("compression", false),
-  audioFails: store.get("audioFails", false),
-  mediaStalled: store.get("mediaStalled", false),
+  audioFails: store.get("mock.audioFails", false),
+  mediaStalled: store.get("mock.mediaStalled", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
@@ -1689,6 +1777,16 @@ const state = {
   randomBehavior: store.get("randomBehavior", "jump"),
   // Whether the Randomization tab's Shuffle cycle card is open.
   cycleOpen: store.get("cycleOpen", true),
+  // The Developer section's settings, which a reset of this device's settings keeps.
+  dontRecordPlays: store.get("developer.dontRecordPlays", false),
+  layoutFigures: store.get("developer.layoutMeasurements", false),
+  // Mockup options for the review of the layout measurements: where the player's width shows, the box's corner, and
+  // how long the grid's figures stay after a zoom ends.
+  // The event stream as Diagnostics shows it: connecting until the first load ends, then following the server's
+  // situation, with the last event's number and the resyncs since the page loaded.
+  streamConnecting: true,
+  lastEvent: 18342,
+  resyncs: 0,
   // Mockup option: the server's situation.
   situation: null,
   // How the Library tab's load goes: it loads, fails, or times out.
@@ -2231,8 +2329,10 @@ function start(item) {
     noticeDialog({ message: failureMessage(item, playback.failed) });
     return;
   }
-  item.plays += 1;
-  item.lastPlayedAt = Date.now();
+  if (!state.dontRecordPlays) {
+    item.plays += 1;
+    item.lastPlayedAt = Date.now();
+  }
   // While Auto-Pause holds playback, the item starts paused, for Auto-Pause to play as it lets go, and nothing waits for
   // its media.
   if (playback.autoHold) {
@@ -2512,6 +2612,7 @@ function applyLayout() {
   notes.renderIndicator();
   syncAutoPause();
   renderReadout();
+  scheduleFigures();
   placeAllTips();
 }
 
@@ -2575,15 +2676,6 @@ let dragging = false;
 function setWidth(width) {
   state.width = Math.round(Math.min(Math.max(width, PANEL_MIN), maxWidth()));
   applyLayout();
-  const readout = $("handle-readout");
-  readout.hidden = false;
-  readout.textContent = `${state.width} px (${PANEL_MIN}–${maxWidth()})`;
-}
-function hideReadoutSoon() {
-  clearTimeout(hideReadoutSoon.timer);
-  hideReadoutSoon.timer = setTimeout(() => {
-    if (!dragging) $("handle-readout").hidden = true;
-  }, 900);
 }
 handle.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
@@ -2603,7 +2695,6 @@ function endDrag() {
   dragging = false;
   handle.classList.remove("is-dragging");
   store.set("width", state.width);
-  hideReadoutSoon();
 }
 handle.addEventListener("pointerup", endDrag);
 handle.addEventListener("pointercancel", endDrag);
@@ -3512,7 +3603,7 @@ new ResizeObserver(() => layoutGrid()).observe($("lib-grid"));
 // pinch's center moving pans them. When it settles, as the fingers lift or the wheel pauses, the rows reflow once to the
 // new height, the tile under the pointer keeps its vertical place, and each tile moves from where it showed to its new
 // place. With reduced motion the tiles take their places at once.
-const ZOOM_NOTCH = 1.15;
+const ZOOM_NOTCH = 1.1;
 const ZOOM_PER_PIXEL = 0.01;
 const ZOOM_EASE = 0.35;
 const ZOOM_SETTLE_MS = 200;
@@ -3535,6 +3626,7 @@ function beginZoom() {
 }
 function showZoom(zoom) {
   zoom.layer.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`;
+  scheduleFigures();
 }
 // Scales the rows to `scale` around a point on the screen, which stays where it is.
 function scaleZoomAround(zoom, scale, clientX, clientY) {
@@ -3644,8 +3736,9 @@ function settleZoom() {
   const anchor = tileAt(before, zoom.focusX, zoom.focusY);
   zoom.layer.style.transform = "";
   zoom.layer.style.willChange = "";
-  rowHeight = Math.round(Math.min(ROW_HEIGHT.max, Math.max(ROW_HEIGHT.min, rowHeight * zoom.scale)));
+  rowHeight = zoomedRowHeight(zoom.scale);
   store.set("rowHeight", rowHeight);
+  lingerGridFigure();
   layoutGrid(true);
   // The point under the pointer stays the same height down its tile, so the tile keeps its vertical place.
   const anchorTile = anchor && grid.querySelector(`.lib-tile[data-id="${anchor.id}"]`);
@@ -5071,7 +5164,13 @@ function applySituation(situation) {
   document.body.classList.toggle("held-back", heldBack());
   document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => (radio.checked = radio.value === situation));
   SERVER_STATES.forEach((id) => notes.setLasting(id, situation === id ? LASTING[id] : null));
-  if (was === "reconnecting" && situation !== "reconnecting") notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+  if (was === "reconnecting" && situation !== "reconnecting") {
+    notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+    // The server restarted, so it asks for a resync, whose event number starts again.
+    state.resyncs += 1;
+    state.lastEvent = 1;
+  }
+  renderDiagnostics();
   renderMockLasting();
   renderLibPresets();
   renderSortControls();
@@ -6904,7 +7003,7 @@ $("pair").addEventListener("submit", (event) => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Pairing failed: Couldn't reach the server." });
   if (pairField.input.value.trim().toLowerCase() === "wrong") return void noticeDialog({ message: "Pairing failed: The pairing token is wrong." });
   state.pairing = false;
-  store.set("pairing", false);
+  store.set("mock.pairing", false);
   $("mock-pairing").checked = false;
   pairField.reset("");
   applyMockOptions();
@@ -6915,6 +7014,7 @@ $("pair").addEventListener("submit", (event) => {
 // ---- Mockup options ----
 function applyMockOptions() {
   $("pair").hidden = !state.pairing;
+  renderDiagnostics();
   // On a phone on its side, the header shows while the server asks for pairing, so its prompt can be reached.
   document.body.classList.toggle("pairing", state.pairing);
   // What loads from the server shows nothing while it asks for pairing, and loads once paired.
@@ -6937,7 +7037,7 @@ $("mock-server-machine").addEventListener("change", () => (controlSession = fals
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;
-    store.set(key, state[key]);
+    store.set(`mock.${key}`, state[key]);
     applyMockOptions();
     applyLayout();
   });
@@ -6959,6 +7059,160 @@ $("lib-collapse").addEventListener("click", () => {
   applyCollapse();
 });
 
+// ---- Developer settings ----
+// Don't record plays on this device: a play leaves its play count and last played as they were, and the player says so.
+function renderCountsPill() {
+  $("counts-pill").hidden = !state.dontRecordPlays;
+  media.classList.toggle("counts-off", state.dontRecordPlays);
+}
+$("set-dont-record").checked = state.dontRecordPlays;
+$("set-dont-record").addEventListener("change", () => {
+  state.dontRecordPlays = $("set-dont-record").checked;
+  store.set("developer.dontRecordPlays", state.dontRecordPlays);
+  renderCountsPill();
+});
+$("set-layout-figures").checked = state.layoutFigures;
+$("set-layout-figures").addEventListener("change", () => {
+  state.layoutFigures = $("set-layout-figures").checked;
+  store.set("developer.layoutMeasurements", state.layoutFigures);
+  showFigures(state.layoutFigures);
+});
+// The reset clears every setting but the Developer ones, then reloads, since each part reads its settings as the page
+// starts.
+$("set-reset-device").addEventListener("click", async () => {
+  const reset = await confirmDialog({
+    message: "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads.",
+    confirmLabel: "Reset",
+    danger: true
+  });
+  if (!reset) return;
+  store.clearSettings();
+  location.reload();
+});
+
+// The event stream as Diagnostics shows it. The server refuses the stream while it runs without a library or asks for
+// pairing, so the WebUI keeps trying it, and the WebUI stops it once the server fails the compatibility check.
+function streamState() {
+  if (state.situation === "incompatible") return "Stopped";
+  if (state.streamConnecting) return "Connecting";
+  if (state.situation === "reconnecting" || state.situation === "nolibrary" || state.pairing) return "Reconnecting";
+  return "Open";
+}
+function renderDiagnostics() {
+  $("diag-stream").textContent = streamState();
+  $("diag-last-event").textContent = String(state.lastEvent);
+  $("diag-resyncs").textContent = String(state.resyncs);
+}
+
+// Show layout measurements: figures over the page at what they measure, following it live, and observed only while
+// the setting is on.
+const installedApp = window.matchMedia("(display-mode: standalone)");
+function showFigures(on) {
+  $("dev-figures").hidden = !on;
+  const viewport = window.visualViewport;
+  const listen = on ? "addEventListener" : "removeEventListener";
+  viewport?.[listen]("resize", scheduleFigures);
+  viewport?.[listen]("scroll", scheduleFigures);
+  installedApp[listen]("change", scheduleFigures);
+  if (on) {
+    figures.observer ??= new ResizeObserver(() => scheduleFigures());
+    [panel, media.parentElement, $("lib-controls"), $("lib-grid")].forEach((el) => figures.observer.observe(el));
+    scheduleFigures();
+  } else {
+    figures.observer?.disconnect();
+  }
+}
+function scheduleFigures() {
+  if (!state.layoutFigures || figures.frame) return;
+  figures.frame = requestAnimationFrame(() => {
+    figures.frame = 0;
+    renderFigures();
+  });
+}
+// After a zoom settles, the grid's figures stay 3 seconds.
+const GRID_FIGURE_STAY_MS = 3000;
+function lingerGridFigure() {
+  figures.gridUntil = Date.now() + GRID_FIGURE_STAY_MS;
+  clearTimeout(figures.gridTimer);
+  figures.gridTimer = setTimeout(scheduleFigures, GRID_FIGURE_STAY_MS);
+  scheduleFigures();
+}
+function placeFigure(el, box, text) {
+  el.hidden = false;
+  Object.entries(box).forEach(([edge, value]) => (el.style[edge] = `${Math.round(value)}px`));
+  if (text !== undefined) el.textContent = text;
+}
+function renderFigures() {
+  if (!state.layoutFigures) return;
+  const probe = getComputedStyle($("dev-safe-probe"));
+  const inset = Object.fromEntries(["top", "right", "bottom", "left"].map((edge) => {
+    const name = `padding${edge[0].toUpperCase()}${edge.slice(1)}`;
+    return [edge, Math.round(parseFloat(probe[name]) || 0)];
+  }));
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // The viewport, along its top and left edges, inside the safe areas. The height reads up along the left ruler, in
+  // from the edge so the Mockup tab doesn't cover it.
+  placeFigure($("dev-vw-ruler"), { left: inset.left, top: inset.top + 3, width: w - inset.left - inset.right });
+  placeFigure($("dev-vw"), { left: (inset.left + w - inset.right) / 2, top: inset.top + 7 }, `${w} px`);
+  placeFigure($("dev-vh-ruler"), { left: inset.left + 3, top: inset.top, height: h - inset.top - inset.bottom });
+  placeFigure($("dev-vh"), { left: inset.left + 24, top: (inset.top + h - inset.bottom) / 2 }, `${h} px`);
+
+  // The panel's width just below its tab row, with the range the handle allows beside the player.
+  const panelBox = panel.getBoundingClientRect();
+  if (panel.hidden || !panelBox.width) $("dev-panel").hidden = true;
+  else {
+    const width = Math.round(panelBox.width);
+    const tabsBottom = panel.querySelector(".panel-tabs").getBoundingClientRect().bottom;
+    placeFigure($("dev-panel"), { left: panelBox.left + panelBox.width / 2, top: tabsBottom + 2 },
+      state.mode === "overlay" ? `${width} px` : `${width} px (${PANEL_MIN}–${maxWidth()})`);
+  }
+
+  // The player's width, centered below the indicator, unless the overlay panel covers the player.
+  const col = media.parentElement;
+  const playerBox = col.getBoundingClientRect();
+  const playerFigure = $("dev-player");
+  if (!playerBox.width || (state.mode === "overlay" && state.open)) playerFigure.hidden = true;
+  else {
+    // The corner buttons' top, which a short screen moves below the status bar outside fullscreen.
+    const top = playerBox.top + (document.body.classList.contains("short-screen") && !isFullscreen() ? Math.max(12, inset.top) : 12);
+    placeFigure(playerFigure, { left: playerBox.left + playerBox.width / 2, top: top + (col.classList.contains("is-narrow") ? 88 : 40) },
+      `${Math.round(playerBox.width)} px`);
+  }
+
+  // The grid's target row height and gap while a zoom lasts, and for a moment after.
+  const gridBox = $("lib-grid").getBoundingClientRect();
+  if (!gridBox.width || !(gridZoom || Date.now() < figures.gridUntil)) $("dev-grid").hidden = true;
+  else {
+    const height = gridZoom ? zoomedRowHeight(gridZoom.scale) : rowHeight;
+    placeFigure($("dev-grid"), { left: gridBox.left + gridBox.width / 2, top: gridBox.top + 8 }, `Rows ${height} px · gap ${gapFor(height)} px`);
+  }
+
+  // The box, at the bottom left of what shows on screen, which a pinch or the on-screen keyboard shrinks.
+  const viewport = window.visualViewport;
+  const ratio = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const controls = $("lib-controls").clientWidth;
+  const lines = [
+    `Pixel ratio: ${ratio}`,
+    `Layout: ${state.mode === "overlay" ? "overlay" : `beside the player, ${state.side}`}${document.body.classList.contains("short-screen") ? " · short screen" : ""}`,
+    `Safe area: ${inset.top} top · ${inset.right} right · ${inset.bottom} bottom · ${inset.left} left`,
+    `Library controls: ${controls ? `${controls} px, ${controls >= 520 ? "520 or wider" : "under 520"}` : "not showing"}`,
+    `Pointer: ${coarse.matches ? "touch" : "mouse"}`,
+    `Running as: ${installedApp.matches || navigator.standalone === true ? "installed app" : "browser tab"}`
+  ];
+  if (viewport && (viewport.width < w - 1 || viewport.height < h - 1)) {
+    lines.push(`Visible area: ${Math.round(viewport.width)} × ${Math.round(viewport.height)}${viewport.scale > 1.01 ? `, zoomed ${Math.round(viewport.scale * 100) / 100}×` : ""}`);
+  }
+  const box = $("dev-box");
+  box.textContent = lines.join("\n");
+  // It keeps its size on screen through a pinch, and stays clear of the safe areas.
+  const scale = viewport ? 1 / viewport.scale : 1;
+  const view = { left: viewport?.offsetLeft ?? 0, top: viewport?.offsetTop ?? 0, height: viewport?.height ?? h };
+  box.style.transform = `scale(${scale})`;
+  box.style.left = `${Math.round(view.left + (8 + inset.left) * scale)}px`;
+  box.style.bottom = `${Math.round(h - view.top - view.height + (8 + inset.bottom) * scale)}px`;
+}
+
 // ---- Start ----
 // The library and presets load after a moment, as they do from the server.
 initSettings();
@@ -6978,11 +7232,15 @@ renderPlayback();
 renderApply();
 applySituation("connected");
 renderLibPresets();
+renderCountsPill();
+showFigures(state.layoutFigures);
 applyLayout();
 applyControlsMode();
 setTimeout(() => {
   libLoading = false;
   presetsLoading = false;
+  state.streamConnecting = false;
+  renderDiagnostics();
   renderLibPresets();
   layoutGrid(true);
 }, instant ? 0 : 400);
