@@ -2160,11 +2160,11 @@ describe("Auto Tag", () => {
     await scan();
     expect(tags.scans()).toEqual([{ scanFullLibrary: false }]);
     await click(autoTagBox("Scan full library"));
-    expect(localStorage.getItem("rr_autoTagScanFullLibrary")).toBe("true");
+    expect(localStorage.getItem("rr_device.tags.scanFullLibrary")).toBe("true");
     await scan();
     expect(tags.scans()[1]).toEqual({ scanFullLibrary: true });
     await click(autoTagBox("Scan full library"));
-    expect(localStorage.getItem("rr_autoTagScanFullLibrary")).toBe("false");
+    expect(localStorage.getItem("rr_device.tags.scanFullLibrary")).toBe("false");
   });
 
   it("shows progress and turns off Scan Files, Apply, the X, Cancel, and Escape while it scans", async () => {
@@ -2479,7 +2479,7 @@ describe("Auto Tag", () => {
 });
 
 describe("storage", () => {
-  it("adds only its expanded categories to the device's memory, and Scan full library to browser storage", async () => {
+  it("adds only its expanded categories and Scan full library to the device's memory", async () => {
     await mountTags();
     await openEditor();
     await click(categoryToggle("Mood"));
@@ -2494,8 +2494,9 @@ describe("storage", () => {
     await expectSaved();
 
     // The panel and the Library tab remember their state on this device, which their own tests cover.
-    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);
+    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_clientId"]);
     expect(storageKeys(localStorage)).toContain("rr_device.tags.expandedCategories");
+    expect(storageKeys(localStorage)).toContain("rr_device.tags.scanFullLibrary");
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
   });
 });

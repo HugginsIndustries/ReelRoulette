@@ -12,13 +12,14 @@ import {
   messageTime
 } from "../notifications/notifications";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 
 function memoryDevice(saved?: unknown) {
   const values = new Map<string, string>();
   if (saved !== undefined) {
     values.set(`rr_device.${POPUP_SETTINGS_KEY}`, JSON.stringify(saved));
   }
-  return createDeviceStore({ getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) });
+  return createDeviceStore(memoryStorage(values));
 }
 
 function setup(saved?: unknown) {
@@ -270,7 +271,7 @@ describe("notifications", () => {
 
   it("changes the popup settings named, a kind at a time, keeps them all on this device, and applies them to the next message", () => {
     const values = new Map<string, string>();
-    const device = createDeviceStore({ getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) });
+    const device = createDeviceStore(memoryStorage(values));
     const notes = createNotifications({ relay: () => {}, device, inFullscreen: signal(false) });
     const shown = () => notes.popups.value.filter((popup) => !popup.leaving).map((popup) => popup.entry.text);
     notes.notify({ kind: "actions", text: "Filters applied." });

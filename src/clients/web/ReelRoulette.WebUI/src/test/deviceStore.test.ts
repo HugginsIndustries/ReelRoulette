@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDeviceStore } from "../state/deviceStore";
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    values,
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    }
-  };
-}
+import { memoryStorage } from "./memoryStorage";
 
 const isNumber = (value: unknown): value is number => typeof value === "number";
 
@@ -38,17 +28,43 @@ describe("device store", () => {
 
   it("keeps working when the browser refuses its storage", () => {
     const refusing = {
+      get length(): number {
+        throw new Error("SecurityError");
+      },
+      key(): string | null {
+        throw new Error("SecurityError");
+      },
       getItem(): string | null {
         throw new Error("SecurityError");
       },
       setItem(): void {
         throw new Error("QuotaExceededError");
+      },
+      removeItem(): void {
+        throw new Error("SecurityError");
       }
     };
     const device = createDeviceStore(refusing);
 
     expect(() => device.write("panel.open", true)).not.toThrow();
     expect(device.read("panel.open", false, (value): value is boolean => typeof value === "boolean")).toBe(false);
+    expect(() => device.clear(() => false)).not.toThrow();
     expect(createDeviceStore(null).read("panel.width", 420, isNumber)).toBe(420);
+    expect(() => createDeviceStore(null).clear(() => false)).not.toThrow();
+  });
+
+  it("clears every setting its keep check turns down, and nothing kept outside the store", () => {
+    const storage = memoryStorage({
+      "rr_device.panel.width": "512",
+      "rr_device.developer.dontRecordPlays": "true",
+      "rr_device.appearance.theme": '"light"',
+      "rr_device.developer.other": "1",
+      rr_clientId: "client-kept",
+      "other.panel.width": "300"
+    });
+
+    createDeviceStore(storage).clear((key) => key.startsWith("developer."));
+
+    expect([...storage.values.keys()].sort()).toEqual(["other.panel.width", "rr_clientId", "rr_device.developer.dontRecordPlays", "rr_device.developer.other"]);
   });
 });

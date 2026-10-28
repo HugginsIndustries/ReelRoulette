@@ -165,7 +165,7 @@ Last milestone completed: M12m
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
-| Developer section | ⏳ Planned | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
+| Developer section | ✅ Complete | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
 | Layout measurements | ⏳ Planned | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, the panel's unused size container gone, and a wheel notch zooming the grid 10%. |
 | Diagnostics | ⏳ Planned | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
 
@@ -283,6 +283,22 @@ Last milestone completed: M12m
 - The client and session ids are kept as before, in foundation screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check of the pill in Firefox on the desktop.
+
+**Evidence**
+
+- The Developer section shows Don't record plays on this device and Reset this device's settings, worded as the mockup shows them; Show layout measurements joins it with the Layout measurements slice.
+- The store keeps Don't record plays as `developer.dontRecordPlays`, and the random pick's record, the history step's play, and the library play read its one signal (`src/state/appStore.ts`, `src/playback/player.ts`, `src/library/library.ts`).
+- `last.log` gets `developer=dont-record-plays-changed on=true` or `on=false` on each change, and `developer=dont-record-plays-on-at-load` when a page loads with it on.
+- Counts disabled sits in the media container at z-index 30, and the container's `clip-path` makes it its own stacking context, so popups beside it at z-index 1200 cover the pill, which a Player screen test checks from the stylesheet.
+- The reset is `resetDevice` in `src/settings/settings.ts`, through the device store's `clear(keep)`, and the page reload reaches it through `renderApp` and `createAppServices`, which `main.ts` gives `window.location.reload`.
+- `browserStorage` in `src/state/deviceStore.ts` replaces `tryGetStorage`, and `DeviceStorage` gains `removeItem`, `key`, and `length` for the clear, so the tests' seven copies of an in-memory storage and their inline ones became one helper, `src/test/memoryStorage.ts`.
+- The library tile's play with the setting on and off is covered in the Player screen tests, beside the existing library play test, in place of a library screen test.
+- The foundation screen tests' starting markup snapshot takes the Developer section.
+- Breaking the random pick's skip, the history step's flag, the library play's flag, the reset's keep check, and the clear's keep check each failed its tests, and each file was restored from a copy (measured).
+- The mockup needed no change, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 95 test files and 2391 tests, 15 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- The spot check of the pill in Firefox on the desktop is the user's.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the section.
 
 #### Layout measurements slice
 

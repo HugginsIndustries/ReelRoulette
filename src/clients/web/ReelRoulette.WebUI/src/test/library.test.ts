@@ -9,6 +9,7 @@ import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore, type DeviceStorage } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 import { createTagCatalog } from "../tags/tagCatalog";
@@ -508,12 +509,6 @@ describe("library window", () => {
 });
 
 describe("row height", () => {
-  /** Browser storage for one device, kept across the libraries a test creates, as across a page refresh. */
-  function deviceStorage(kept: Record<string, string> = {}): DeviceStorage & { entries: Map<string, string> } {
-    const entries = new Map(Object.entries(kept));
-    return { entries, getItem: (key) => entries.get(key) ?? null, setItem: (key, value) => void entries.set(key, value) };
-  }
-
   async function shownGrid(t: ReturnType<typeof setup>) {
     t.emit("serverReady");
     await settle();
@@ -522,24 +517,24 @@ describe("row height", () => {
   }
 
   it("creates the grid at 160 px rows until a zoom sets this device's own", async () => {
-    expect((await shownGrid(setup({ storage: deviceStorage() }))).rowHeight).toBe(160);
+    expect((await shownGrid(setup({ storage: memoryStorage() }))).rowHeight).toBe(160);
   });
 
   it("keeps the row height a zoom settles at, for the next grid and after a page refresh", async () => {
-    const storage = deviceStorage();
+    const storage = memoryStorage();
     const t = setup({ storage });
     const grid = await shownGrid(t);
 
     grid.zoomTo(243);
 
-    expect(storage.entries.get("rr_device.library.rowHeight")).toBe("243");
+    expect(storage.values.get("rr_device.library.rowHeight")).toBe("243");
     expect(t.mountGrid().rowHeight).toBe(243);
     expect((await shownGrid(setup({ storage }))).rowHeight).toBe(243);
   });
 
   for (const kept of ["99", "119", "301", "160.5", "\"200\"", "null", "{"]) {
     it(`creates the grid at 160 px rows when the kept row height is ${kept}`, async () => {
-      const storage = deviceStorage({ "rr_device.library.rowHeight": kept });
+      const storage = memoryStorage({ "rr_device.library.rowHeight": kept });
       expect((await shownGrid(setup({ storage }))).rowHeight).toBe(160);
     });
   }

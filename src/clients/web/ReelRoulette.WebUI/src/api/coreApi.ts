@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
-import type { DeviceStorage } from "../state/deviceStore";
+import { browserStorage } from "../state/deviceStore";
 import { readJson, refusalError, sendRequest, type HttpStatusError } from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
@@ -24,19 +24,6 @@ const SESSION_ID_KEY = "rr_sessionId";
 let fallbackClientId: string | null = null;
 let fallbackSessionId: string | null = null;
 
-function tryGetStorage(storage: unknown): DeviceStorage | null {
-  if (!storage || typeof storage !== "object") {
-    return null;
-  }
-
-  const candidate = storage as Partial<DeviceStorage>;
-  if (typeof candidate.getItem !== "function" || typeof candidate.setItem !== "function") {
-    return null;
-  }
-
-  return candidate as DeviceStorage;
-}
-
 function buildApiUrl(config: Pick<RuntimeConfig, "apiBaseUrl">, path: string): string {
   return new URL(path, `${config.apiBaseUrl}/`).toString();
 }
@@ -46,7 +33,7 @@ function createGuidFallback(): string {
 }
 
 export function getClientId(): string {
-  const storage = tryGetStorage((globalThis as unknown as { localStorage?: unknown }).localStorage);
+  const storage = browserStorage("localStorage");
   let id = storage ? storage.getItem(CLIENT_ID_KEY) : fallbackClientId;
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : createGuidFallback();
@@ -61,7 +48,7 @@ export function getClientId(): string {
 }
 
 export function getSessionId(): string {
-  const storage = tryGetStorage((globalThis as unknown as { sessionStorage?: unknown }).sessionStorage);
+  const storage = browserStorage("sessionStorage");
   let id = storage ? storage.getItem(SESSION_ID_KEY) : fallbackSessionId;
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : createGuidFallback();

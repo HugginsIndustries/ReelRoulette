@@ -11,16 +11,7 @@ import {
   type AmbientTuning
 } from "../playback/ambient";
 import { createDeviceStore } from "../state/deviceStore";
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    }
-  };
-}
+import { memoryStorage } from "./memoryStorage";
 
 /** One thing a canvas was asked to do, with the opacity it was drawn at. */
 interface CanvasCall {

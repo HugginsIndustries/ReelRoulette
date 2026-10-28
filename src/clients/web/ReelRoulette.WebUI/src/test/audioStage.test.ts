@@ -14,6 +14,7 @@ import {
 } from "../playback/audioStage";
 import { COMPRESSION_PRESETS, compressionGainDb, type CompressorSetting } from "../playback/compression";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 
 /** A stand-in for the `<video>` element: `play` and `pause` fire their events as a browser does. */
 function fakeVideo() {
@@ -189,7 +190,7 @@ function setup(
   } = {}
 ) {
   const kept = new Map(Object.entries(options.saved ?? {}));
-  const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
+  const device = createDeviceStore(memoryStorage(kept));
   const contexts: Array<ReturnType<typeof fakeContext>> = [];
   const notices: Array<{ message: string; action: string }> = [];
   const relayed: string[] = [];

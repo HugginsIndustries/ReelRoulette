@@ -20,11 +20,12 @@ Instructions:
 
 Commit Message:
 
-M12n1: Add the Developer section, Counts disabled, layout measurements, and fuller Diagnostics to the mockup
+M12n1: Add the Developer section with Don't record plays and Reset this device's settings to the WebUI
 
-- The mockup's Settings tab ends with a Developer section: Don't record plays on this device, which stops the mockup's plays from counting and shows a Counts disabled pill under the bell; Show layout measurements; and Reset this device's settings, which asks first, clears every setting except the Developer ones, and reloads.
-- The layout measurements show live, in a developer style that Hide mockup notes leaves showing: the viewport's width and height along rulers at its top and left edges, the height reading up its left one; the panel's width with the handle's range just below the tab row, in place of the handle's drag readout; the player's width below the indicator; the grid's row height and gap during a zoom and for 3 seconds after; and a box of layout facts at the bottom left.
-- Diagnostics gains the server address, the WebUI's API version, the event stream's state, the last event number, and the resyncs since the page loaded, and its version rows, like every running version on the admin and recovery pages, show a dev build's full version, as the app's do; the stream follows the Mockup tab's Server choices and shows Stopped while the server fails the compatibility check.
-- A mouse wheel notch zooms the mockup's Library grid 10% instead of 15%, and its index lists the step and the measurements' timing and place.
-- The Mockup tab's own options are kept under mock. keys and the Developer settings under developer. keys, so the reset keeps both, as the app's keeps its developer. settings; play_disabled joins the mockup's icon subset.
-- MILESTONES.md marks the Mockup slice complete with the user's approval, records the review's settled wording and places in the later slices, has the Layout measurements slice bring the 10% notch to the app, and adds the stopped state to the Diagnostics slice, since the WebUI stops the event stream once the server fails the compatibility check.
+- The Settings tab ends with a Developer section, after Diagnostics, worded as the mockup shows it.
+- Don't record plays on this device, kept as developer.dontRecordPlays, stops every play here from counting: a random pick posts no record-playback, and a history step and a library play send recordPlayback: false. last.log gets a line on each change and when a page loads with it on.
+- While it is on, the player shows Counts disabled under the bell, or below the indicator on a narrow player, in a new developer style (--dev and --dev-bg), through the controls hiding and in fullscreen, under any popups.
+- Reset this device's settings asks first with a red Reset, then clears every rr_device. setting except the developer. ones and reloads the page, which renderApp and createAppServices are given so tests replace it; the client and session ids stay.
+- The device store gains a clear, and one browserStorage helper replaces tryGetStorage for the store and the client and session ids; Scan full library moves into the device store as tags.scanFullLibrary, with no carry-over.
+- The tests share one in-memory storage helper in place of their copies, and Player and Settings screen tests cover the three play paths, the pill, the log lines, and the reset.
+- CONTEXT.md, docs/domain-inventory.md, and the changelog describe the section; MILESTONES.md marks the Developer section slice complete with its evidence.

@@ -163,9 +163,8 @@ const AUTO_PAUSE_CHOICES: readonly Choice<AutoPauseMode>[] = [
 ];
 
 /**
- * The panel's Settings tab: the settings kept on this device, in the mockup's sections, and Diagnostics. Each setting
- * applies as it changes, so there is no Save. Keyboard shortcuts, which later work fills, goes in the mockup's place,
- * before Diagnostics.
+ * The panel's Settings tab: the settings kept on this device, in the mockup's sections, Diagnostics, and the Developer
+ * section, for testing on a device. Each setting applies as it changes, so there is no Save.
  */
 export function SettingsTab() {
   return (
@@ -195,6 +194,9 @@ export function SettingsTab() {
         <KeyboardShortcuts />
         <Section id="settings-diagnostics" title="Diagnostics">
           <Diagnostics />
+        </Section>
+        <Section id="settings-developer" title="Developer">
+          <DeveloperSettings />
         </Section>
         <p class="setting-hint">Settings apply at once and are kept on this device.</p>
       </div>
@@ -794,5 +796,30 @@ function Diagnostics() {
         </Fragment>
       ))}
     </dl>
+  );
+}
+
+/**
+ * The Developer section, for testing on a device: Don't record plays on this device, which the store keeps and every
+ * play reads, and Reset this device's settings, which keeps the Developer settings.
+ */
+function DeveloperSettings() {
+  const { store, settings } = useApp();
+  return (
+    <>
+      <Checkbox
+        id="settings-dont-record-plays"
+        label="Don't record plays on this device"
+        hint="Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on."
+        checked={store.dontRecordPlays.value}
+        onChange={store.setDontRecordPlays}
+      />
+      <div class="setting">
+        <button class="btn" type="button" id="settings-reset-device" onClick={() => void settings.resetDevice()}>
+          Reset this device's settings
+        </button>
+        <p class="setting-hint">Puts every other setting on this device back to its default and reloads. The Developer settings stay.</p>
+      </div>
+    </>
   );
 }

@@ -3,26 +3,13 @@ import { createDefaultFilterState, HEADER_PRESET_STARRED_VALUE, serializeFilterS
 import { createAppStore, type AppStoreOptions, type PlayingItem } from "../state/appStore";
 import { DEFAULT_RANDOM_OPTIONS } from "../random/randomOptions";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 
 const FAVORITES = {
   id: "preset-favorites",
   name: "Favorites",
   filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const }
 };
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  const writtenKeys: string[] = [];
-  return {
-    values,
-    writtenKeys,
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      writtenKeys.push(key);
-      values.set(key, value);
-    }
-  };
-}
 
 function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, string> } = {}) {
   const storage = memoryStorage(options.saved);

@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, waitFor } from "@testing-library/preact";
 import type { Window as HappyDomWindow } from "happy-dom";
-import { vi } from "vitest";
+import { vi, type Mock } from "vitest";
 import { unauthorizedLogText } from "../../api/serverRequest";
 import { statusLogLine, type RelayLogCurrentItem } from "../../logging/relayLogLines";
 import { renderApp } from "../../shell";
@@ -921,6 +921,8 @@ export interface MountedPage {
   stream(): FakeEventSource;
   clientId(): string;
   sessionId(): string;
+  /** Stands in for the page's reload, which Reset this device's settings ends with. */
+  reloadPage: Mock<() => void>;
   /** The page's Web Audio. */
   webAudio: FakeWebAudio;
   unmount(): void;
@@ -985,7 +987,8 @@ export function mountPage(options: MountOptions = {}): MountedPage {
   root.id = "app";
   document.body.appendChild(root);
   const config: RuntimeConfig = { apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL, ...options.config };
-  const dispose = renderApp(root, config);
+  const reloadPage = vi.fn<() => void>();
+  const dispose = renderApp(root, config, { reloadPage });
   mounted.push(dispose);
 
   const clientId = () => localStorage.getItem("rr_clientId") ?? "";
@@ -1004,6 +1007,7 @@ export function mountPage(options: MountOptions = {}): MountedPage {
     },
     clientId,
     sessionId,
+    reloadPage,
     webAudio,
     unmount() {
       dispose();

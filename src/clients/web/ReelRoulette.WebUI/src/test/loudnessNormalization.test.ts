@@ -13,6 +13,7 @@ import {
   type NormalizedItem
 } from "../playback/loudnessNormalization";
 import { createDeviceStore } from "../state/deviceStore";
+import { memoryStorage } from "./memoryStorage";
 
 interface GainRuleCase {
   name: string;
@@ -21,17 +22,6 @@ interface GainRuleCase {
 }
 
 const gainRuleCases = JSON.parse(readFileSync(new URL("./fixtures/loudness-gain-rule.json", import.meta.url), "utf8")) as GainRuleCase[];
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    values,
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    }
-  };
-}
 
 describe("loudnessAdjustment", () => {
   it.each(gainRuleCases.map((rule) => [rule.name, rule] as const))("%s", (_, rule) => {

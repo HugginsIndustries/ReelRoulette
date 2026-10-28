@@ -7,17 +7,7 @@ import {
   type PanelTabHooks
 } from "../panel/panelHost";
 import { createDeviceStore } from "../state/deviceStore";
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    values,
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    }
-  };
-}
+import { memoryStorage } from "./memoryStorage";
 
 /** A window whose size and pointer a test sets, telling the host as a resize or a pointer change would. */
 function fakeViewport(width = 1200, height = 800, coarse = false) {
