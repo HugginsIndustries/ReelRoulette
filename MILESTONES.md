@@ -954,6 +954,7 @@ Last milestone completed: M12n1
 - Breaking `pressOn`, the show rules, `saved`, `includesTag`, its read of the working copy, the wait for the tab's load, the category's expansion, the Tags section, the move to the name field, the tag menu's Delete question, the category menu's Delete question, Uncategorized's items, the Stats tag's missing menu, the tint's target, and the tint rule's place, each from a copy under `artifacts/scratch/`, failed 2, 3, 2, 2, 1, 3, 1, 2, 1, 1, 1, 1, 1, 2, and 1 tests (measured).
 - The Tags tab snapshot was updated once with `npx vitest run -u`, with the advisor's approval: only its tags' buttons, the edit buttons, and the `menu-surface` classes changed. Vitest 5's `-u` takes an optional value, so `npx vitest run -u {file}` runs and updates every test file; no other snapshot changed (measured).
 - `npm run verify` passes, with 2,494 tests in 98 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The user's spot check in Firefox on the desktop, on main after the merge: a tag's Filter by this tag opened the Filter tab on Tags with the tag included and its category expanded, the tags showed only + or − with no edit buttons, and a right-click on a category's name opened its menu.
 - CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the menus on tags, the tag's buttons, and the edit buttons' removal.
 
 #### Filter tab slice
