@@ -162,6 +162,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
     <label><input type="checkbox" id="mock-no-library"> Server running without a library</label>
     <label><input type="checkbox" id="mock-dev-run"> A dev run, not a Velopack install</label>
     <label><input type="checkbox" id="mock-short"> A phone on its side</label>
+    <label>Last refresh <select id="mock-last-refresh"><option value="finished">finished earlier today</option><option value="failed">failed earlier today</option><option value="none">none since the server started</option></select></label>
     <button type="button" id="mock-bad-import">Import a file that isn't a library</button>
     <span>The admin view covers the player, so Always and Responsive Auto-Pause pause playback until it closes.</span>
   </div>
@@ -260,7 +261,8 @@ body.short-screen .admin-nav { padding: 4px 8px; }
 
         <section class="card half" id="library">
           <h3><span class="material-symbol-icon">sync</span>Library refresh</h3>
-          <p class="hint" id="refresh-state" style="margin:0">Last refresh 2 hours ago: 3 added, 1 removed, 0 renamed.</p>
+          <p class="hint" id="refresh-state" style="margin:0"></p>
+          <p class="hint" id="refresh-detail" style="margin:2px 0 0;color:var(--muted-fg)" hidden></p>
           <div class="progress" id="refresh-progress" hidden><span></span></div>
           <div class="row" style="margin:8px 0 12px"><button class="btn" type="button" id="refresh-now"><span class="material-symbol-icon">sync</span>Refresh Now</button></div>
           <form id="refresh-form" novalidate>
@@ -560,33 +562,47 @@ $("update-apply").addEventListener("click", async () => {
   }, 4000);
 });
 
-// ---- Refresh: its card shows the stage and progress, and its result pops up ----
+// ---- Refresh: its card shows the stage, percent, and progress line, then the last refresh, and its result pops up ----
+// The card's two lines read as a popup's do: what is happening or happened, then the progress line or the summary.
+function showRefreshCard(text, line = "", percent = null) {
+  $("refresh-state").textContent = text;
+  $("refresh-detail").textContent = line;
+  $("refresh-detail").hidden = !line;
+  $("refresh-progress").hidden = percent === null;
+  if (percent !== null) $("refresh-progress").firstElementChild.style.width = `${percent}%`;
+}
+// The last refresh, with its time as the bell shows times, until the server's first refresh since it started.
+function showLastRefresh(result, time) {
+  if (result === "none") showRefreshCard("No refresh since the server started.");
+  else showRefreshCard(`Last refresh ${result} ${whenText(time)}`, result === "failed" ? REFRESH_FAILED : refreshSummary());
+}
+// It runs as the main page's does, a little faster, and ends as the main page's Mockup tab picks.
+const refreshRun = refreshRunner({
+  wait: 800,
+  onStep: (step) => {
+    showRefreshCard(`${step.stage} (${step.percent}%)`, step.line, step.percent);
+    notes.setLasting("refresh", refreshLasting(step));
+  },
+  onEnd: () => {
+    $("refresh-now").disabled = state.noLibrary;
+    showLastRefresh("finished", Date.now());
+    notes.setLasting("refresh", null);
+    notes.notify(refreshFinished());
+  }
+});
 // Adding a source starts a refresh too, canceling one that runs, which ends without a report.
-let refreshTimer = null;
 function startRefresh() {
-  clearInterval(refreshTimer);
-  const bar = $("refresh-progress");
-  bar.hidden = false;
   $("refresh-now").disabled = true;
-  let percent = 0;
-  const stages = ["Refreshing sources", "Scanning durations", "Scanning loudness", "Generating thumbnails"];
-  refreshTimer = setInterval(() => {
-    percent += 10;
-    bar.firstElementChild.style.width = `${percent}%`;
-    const stage = stages[Math.min(3, Math.floor(percent / 25))];
-    $("refresh-state").textContent = `Refreshing: ${stage} (${percent}%)`;
-    notes.setLasting("refresh", { icon: "autorenew", title: `Library refresh: ${stage}`, progress: `(${percent}%)` });
-    if (percent >= 100) {
-      clearInterval(refreshTimer);
-      bar.hidden = true;
-      $("refresh-now").disabled = state.noLibrary;
-      $("refresh-state").textContent = "Last refresh just now: 2 added, 0 removed, 0 renamed.";
-      notes.setLasting("refresh", null);
-      notes.notify({ kind: "refresh", text: "Library refresh finished", detail: "Source: 2 added", key: "refresh" });
-    }
-  }, 300);
+  refreshRun.start();
 }
 $("refresh-now").addEventListener("click", startRefresh);
+// The mockup bar picks the last refresh the card shows on opening, from 47 minutes before.
+$("mock-last-refresh").value = store.get("mock.adminLastRefresh", "finished");
+$("mock-last-refresh").addEventListener("change", () => {
+  store.set("mock.adminLastRefresh", $("mock-last-refresh").value);
+  showLastRefresh($("mock-last-refresh").value, Date.now() - 47 * 60000);
+});
+showLastRefresh($("mock-last-refresh").value, Date.now() - 47 * 60000);
 $("clear-all-stats").addEventListener("click", async () => {
   if (await confirmDialog({ message: "Clear the playback stats of every item in the library? Plays and last played go back to none.", confirmLabel: "Clear", danger: true })) {
     status("Cleared the library's playback stats.");
@@ -970,9 +986,9 @@ const logStamp = (time) => {
 const LOG_STORY = [
   [60, "[server] [error] Media read failed: file not found."],
   [85, "[webui] [warn] playback=failed reason=format"],
-  [275, "[server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed"],
+  [275, "[webui] [info] status=Library refresh finished: 2 added hasCurrent=false attempt=0"],
   [303, "[server] [warn] Thumbnail failed: unsupported codec while generating the thumbnail for one item in the Videos source, which the next refresh retries."],
-  [325, "[server] [info] Core refresh started"],
+  [325, "[webui] [info] status=Library refresh: Starting (0%) hasCurrent=false attempt=0"],
   [536, "[webui] [info] favorite=set source=player"],
   [934, "[server] [info] Update check: up to date"],
   [1133, "[server] [info] Catalog opened: 49055 items"],

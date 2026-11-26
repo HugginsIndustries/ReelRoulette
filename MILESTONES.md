@@ -455,7 +455,7 @@ Last milestone completed: M12n1
 
 ### M12n3 - Library Refresh Progress and Summary
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: While a library refresh runs, the bell's list shows how far its stage has got, and a finished refresh says in plain words what it changed, from counts the server sends as numbers.
 - **Depends on**: WebUI Notifications, whose bell list's Now entry and Library refresh popup this milestone rewords.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -476,14 +476,14 @@ Last milestone completed: M12n1
 - The summary leaves out the work done for new files, their fingerprints, durations, loudness, and thumbnails, since "added" covers it.
 - A failure that happens again on every refresh, such as a video whose loudness can't be measured, shows in every summary.
 - While ffmpeg or ffprobe isn't found, the stages that need it count no failures for it, and the summary names the missing tool once.
-- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, and a refresh the user starts pops up "No changes".
-- A failed refresh's second line names what failed in plain words, and the exception's own message goes only to `last.log`.
+- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, and the bell doesn't count it as unread, while a refresh the user starts pops up "No changes".
+- A failed refresh's second line names the stage it stopped in, such as "Refreshing sources failed.", and the exception's own message goes only to `last.log`.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The progress line of each stage, the finished summary of each kind of run, a failed refresh's wording, which refreshes pop up, and the admin view's Library refresh card text, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Mockup | ✅ Complete | The progress line of each stage, the finished summary of each kind of run, a failed refresh's wording, which refreshes pop up, and the admin view's Library refresh card text, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Server | ⏳ Planned | The thumbnail cleanup's progress counted over the thumbnails it removes and sent at most every 500 ms, and a failed refresh worded in plain words with its exception in `last.log`. |
 | Contract | ⏳ Planned | One typed object per stage in the refresh status, with the counts the progress line and the summary need, in place of the stages array and its messages, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`, and the WebUI's finished summary built from them. |
 | Progress line and popups | ⏳ Planned | The Now entry's second line while a refresh runs, and an automatic refresh that changes nothing going to the bell's list without a popup. |
@@ -532,12 +532,31 @@ Last milestone completed: M12n1
 
 - The mockup shows the progress line, the summaries, the failed refresh, the popup rule, and the admin card as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
+**Evidence**
+
+- The user approved the mockup in one review on their devices, as first built.
+- The review settled the progress lines as this slice's Scope starts them, with no second line for Starting or for a stage with nothing to do, so "0 of 0" never shows (`REFRESH_STEPS` in `build/common.js`).
+- The review settled the finished summaries as this slice's Scope starts them (`REFRESH_RUNS` in `build/common.js`).
+- The review settled the failed refresh's second line as the stage it stopped in, "Refreshing sources failed.".
+- The review settled that an automatic refresh that changes nothing goes to the bell's list without a popup and isn't counted as unread.
+- The review kept a popup's second line on one line, cut off with an ellipsis where it doesn't fit, as it was.
+- The review settled the admin view's Library refresh card: while a refresh runs, "{Stage} ({percent}%)", the progress line under it, and the bar; afterwards, "Last refresh finished {time}" or "Last refresh failed {time}", with the time as the bell shows times, and the popup's second line under it; and "No refresh since the server started." before the server's first refresh.
+- One refresh simulation in `build/common.js`, `refreshRunner` with its steps, summaries, and messages, replaces the main page's `REFRESH_STAGES` and the admin page's four stages of its own.
+- The mockup's `notify` takes `popup: false`, which adds a message to the list only, and `unread`, which says whether the badge then counts it (`initNotifications` in `build/common.js`).
+- The Mockup tab picks how a finished refresh reads, kept as `mock.refreshRun`, which the admin page's Refresh Now ends with too, and has an Automatic refresh, no changes button beside Refresh finished and Refresh failed.
+- The admin page's mockup bar picks the card's last refresh, finished or failed earlier that day, or none since the server started, in place of the planned checkbox for none, so the failed card shows too.
+- The layout page's `REFRESH_SUMMARY`, the failed sample naming `/media/videos`, and the admin page's "Source: 2 added" and "3 added, 1 removed, 0 renamed" are gone.
+- On the admin and recovery pages, "Core refresh complete | …" became the WebUI's relayed `status=Library refresh finished: 2 added` line, and "Core refresh started", which matches no line the app writes either, became the `status=Library refresh: Starting (0%)` line the player's indicator relays as a refresh starts.
+- In a one-off happy-dom run, the bell's Now entry showed each step's line under "Library refresh: {stage} ({percent}%)", each finished kind and the failed refresh popped up, the automatic refresh added its entry without a popup or a badge, and the admin card showed its three last-refresh texts and each step of its run, with no script errors (measured).
+- The index page's main page and admin notes describe the progress line, the summary, and the popup rule.
+- `node docs/mockups/reelroulette/build/check.mjs` passes (measured).
+
 #### Server slice
 
 **Scope**
 
 - Fixes "Thumbnail cleanup sends a refresh message per removed thumbnail": the cleanup lists the thumbnails outside the catalog first, counts its progress over those, and sends it at most every 500 ms, as the stage's other progress is sent, with its last always sent.
-- A failed refresh's `lastError` is a plain sentence naming what failed, worded as the mockup review settles, in place of the exception's message.
+- A failed refresh's `lastError` names the stage it stopped in, "{Stage} failed.", with the stage's label as the player's indicator shows it, such as "Refreshing sources failed.", in place of the exception's message.
 - A failed refresh writes the exception to `last.log` as an error line.
 - Server Instrumentation's Trap that refresh failures reach `last.log` only as `status=` lines relayed by connected WebUI clients is corrected once this slice writes them.
 
@@ -549,6 +568,8 @@ Last milestone completed: M12n1
 - A failure sets `LastError` to the exception's `Message` and logs the exception only through `ILogger` (`RefreshPipelineService.cs`), which writes no `last.log` line (inferred).
 - The WebUI shows `lastError` as the failed popup's second line and leaves it out of the log relay, since it could name a file (`showRefreshOutcome` in `src/state/serverConnection.ts`).
 - A cancelled run, such as one that shutdown stops, sets neither `CompletedUtc` nor `LastError`.
+- A failure leaves `CurrentStage` set to the stage it stopped in, while a finished or cancelled run clears it (`ExecuteReservedRunAsync` in `RefreshPipelineService.cs`).
+- The stages' labels, such as "Refreshing sources", live only in the WebUI (`src/events/refreshStatusProjection.ts`), so a `lastError` naming the stage needs the server to word them too, unless the WebUI words the failed line from `currentStage`.
 
 **Acceptance**
 
@@ -579,7 +600,7 @@ Last milestone completed: M12n1
 - `CloneStatus` copies the new members.
 - OpenAPI, the generated WebUI types, and `docs/api.md`'s refresh section describe the status.
 - The WebUI reads the new status in `coerceRefreshSnapshot`, `refreshProgress`, `settledKeptSources`, and `newRefreshCompletionRunId` (`src/events/refreshStatusProjection.ts`).
-- The WebUI builds the finished summary from the counts, in the wording the mockup review settles, in place of its message parsers, whose unused "evicted" count goes with them.
+- The WebUI builds the finished summary from the counts, in the mockup's wording (`REFRESH_RUNS` in `build/common.js`), in place of its message parsers, whose unused "evicted" count goes with them.
 - `CONTEXT.md` describes the finished summary.
 
 **Traps**
@@ -624,11 +645,12 @@ Last milestone completed: M12n1
 
 **Scope**
 
-- The refresh's Now entry shows its stage's progress as its second line (`detail` in `src/state/lastingStates.ts`), in the wording the mockup review settles.
+- The refresh's Now entry shows its stage's progress as its second line (`detail` in `src/state/lastingStates.ts`), in the mockup's wording (`REFRESH_STEPS` in `build/common.js`).
+- Starting, and a stage with nothing to do, show no second line, so "0 of 0" never shows.
 - `RefreshProgress` carries the counts the line needs from the status.
 - An "X of Y" helper beside `countText` in `src/text/` groups both numbers.
 - The player's indicator stays "Library refresh: {stage} ({percent}%)".
-- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, counted as unread or not as the mockup review settles.
+- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, not counted as unread.
 - A refresh the user starts that changes nothing pops up "No changes".
 - `notify` takes a request to add an entry without a popup (`src/notifications/notifications.ts`).
 - `CONTEXT.md` describes the progress line and which refreshes pop up.
@@ -1755,7 +1777,7 @@ Last milestone completed: M12n1
 
 - Refresh Now with the refresh status.
 - While a refresh runs, the Library refresh card shows its stage, its percent, and the progress line the bell's Now entry shows, as Library Refresh Progress and Summary words them.
-- Otherwise the card shows its last refresh's time and summary, or the text Library Refresh Progress and Summary's mockup settles for no refresh since the server started.
+- Otherwise the card shows "Last refresh finished {time}" or "Last refresh failed {time}", with the time as the bell shows times, above the popup's second line, or "No refresh since the server started." before the server's first refresh.
 - A refresh's result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
 - The refresh settings: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
 - Clear playback stats for the whole library, which the desktop offered from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.

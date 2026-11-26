@@ -2011,11 +2011,13 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
-  function notify({ kind, text, detail = "", key = "", level = "", icon = "" }) {
+  // `popup: false` adds the message to the list only, as an automatic refresh that changes nothing does, and `unread`
+  // says whether the badge then counts it.
+  function notify({ kind, text, detail = "", key = "", level = "", icon = "", popup = true, unread = true }) {
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;
-    const pops = settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
-    if (!pops && !listOpen) entry.unread = true;
+    const pops = popup && settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
+    if (!pops && !listOpen) entry.unread = popup || unread;
     add(entry);
     if (pops) showToast(entry, toastKey);
     // While the list is open nothing pops up, so a popup showing with this key would now be out of date: it closes,
@@ -2100,6 +2102,81 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   return activeNotifications;
 }
 
+/**
+ * A library refresh as the mockup runs it, on the main page and in the admin view alike. Each step is a stage, its
+ * percent, and the progress line that the bell's Now entry and the admin view's Library refresh card show under it,
+ * with a real catalog's numbers: 49,455 files, 17,840 of them videos. The percent follows the count the line shows, so
+ * a stage with two parts starts again at 0 with its second. Starting has no line, and neither has a stage with nothing
+ * to do, such as durations with no video to scan, so "0 of 0" never shows.
+ */
+// "X of Y", both numbers grouped as the count line groups them, and the noun counted by Y.
+const ofText = (done, total, noun) => `${done.toLocaleString()} of ${total.toLocaleString()} ${total === 1 ? noun : `${noun}s`}`;
+const countStep = (stage, done, total, noun, lead = "") => ({ stage, percent: Math.round((done / total) * 100), line: lead + ofText(done, total, noun) });
+const REFRESH_STEPS = [
+  { stage: "Starting", percent: 0, line: "" },
+  { stage: "Refreshing sources", percent: 20, line: "Source 1 of 3" },
+  { stage: "Refreshing sources", percent: 45, line: `Source 2 of 3 · ${ofText(120, 400, "new file")}` },
+  { stage: "Refreshing sources", percent: 80, line: "Source 3 of 3" },
+  countStep("Sorting names", 1234, 49455, "file"),
+  countStep("Fingerprinting files", 12000, 49455, "file", "Checking "),
+  countStep("Fingerprinting files", 1234, 2000, "file"),
+  countStep("Scanning durations", 12, 40, "video"),
+  countStep("Scanning loudness", 12, 40, "video"),
+  countStep("Generating thumbnails", 12000, 49455, "file"),
+  countStep("Generating thumbnails", 120, 5000, "old thumbnail", "Removing ")
+];
+// The refresh's lasting state at a step: the player's indicator shows its stage and percent, and Now its line too.
+const refreshLasting = ({ stage, percent, line }) => ({ icon: "autorenew", spin: true, title: `Library refresh: ${stage}`, progress: `(${percent}%)`, detail: line, followsControls: true });
+
+// What a finished refresh changed, by the kind of run the main page's Mockup tab picks: "No changes" when nothing did,
+// and otherwise only what did, the library's changes first, then any problems after " · ". The work done for new files,
+// their fingerprints, durations, loudness, and thumbnails, goes unsaid, since "added" covers it.
+const REFRESH_RUNS = {
+  none: "No changes",
+  changes: "12 added, 3 removed, 2 renamed, 1 moved",
+  changed: "1 changed",
+  problems: "12 added · 2 thumbnails failed",
+  unmatched: "3 removed · 2 left unmatched",
+  rescan: "Loudness rescanned: 3 changed",
+  ffmpeg: "12 added · ffmpeg not found"
+};
+const refreshSummary = () => REFRESH_RUNS[store.get("mock.refreshRun", "none")] || REFRESH_RUNS.none;
+// A failed refresh names the stage it stopped in. The error itself goes only to the server's log, since it can name a
+// file or folder.
+const REFRESH_FAILED = "Refreshing sources failed.";
+// How a refresh ended, as the bell's message: finished with its summary, or failed, a warning that stays until closed.
+const refreshFinished = () => ({ kind: "refresh", text: "Library refresh finished", detail: refreshSummary(), key: "refresh" });
+const refreshFailed = () => ({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: REFRESH_FAILED, key: "refresh" });
+
+// Steps a refresh through REFRESH_STEPS, `wait` ms apart, handing each to `onStep`, then runs `onEnd`. `finish()` ends
+// a run at once as finished, and `start()` cancels a run already going without `onEnd`, as a run the server stops says
+// nothing.
+function refreshRunner({ wait, onStep, onEnd }) {
+  let timer = 0;
+  let step = -1;
+  function cancel() {
+    clearTimeout(timer);
+    step = -1;
+  }
+  function finish() {
+    cancel();
+    onEnd();
+  }
+  function advance() {
+    step += 1;
+    if (step >= REFRESH_STEPS.length) return void finish();
+    onStep(REFRESH_STEPS[step]);
+    timer = setTimeout(advance, wait);
+  }
+  return {
+    start() {
+      cancel();
+      advance();
+    },
+    finish
+  };
+}
+
 hydrateIcons();
 initHideMock();
 const $ = (id) => document.getElementById(id);
@@ -2150,8 +2227,8 @@ const TAIL = [
   "[2026-10-08 10:20:05.214] [server] [error] WebUI files missing: index.html not found under wwwroot.",
   "[2026-10-08 10:20:05.210] [server] [info] Serving the recovery page.",
   "[2026-10-08 10:19:40.020] [server] [warn] Static file request failed: /assets/index.js (404)",
-  "[2026-10-08 10:16:30.801] [server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed",
-  "[2026-10-08 10:15:40.002] [server] [info] Core refresh started",
+  "[2026-10-08 10:16:30.801] [webui] [info] status=Library refresh finished: 2 added hasCurrent=false attempt=0",
+  "[2026-10-08 10:15:40.002] [webui] [info] status=Library refresh: Starting (0%) hasCurrent=false attempt=0",
   "[2026-10-08 10:02:12.300] [server] [info] Catalog opened: 49055 items",
   "[2026-10-08 10:02:11.090] [server] [info] Server started on port 45123"
 ];

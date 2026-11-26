@@ -726,6 +726,7 @@ th { font-weight: 600; }
     <ul>
       <li>Nothing plays until a tap or Play starts a random pick. Previous and Next step through what played, and Next and autoplay pick at random at its end. R and the Random button pick from anywhere in it, adding the pick at the end or, with Random behavior's Insert, right after the current item. Each skips a missing file or one this browser can't play, saying so in a popup.</li>
       <li>No status line. Lasting states (reconnecting, a newer build of ReelRoulette on the server, a server that fails the compatibility check or runs without a library, loading, and a library refresh) show one at a time on the player's indicator. One-off messages pop up briefly, three at most. The bell at the player's top left, which shows and hides with its other controls, lists recent messages, the in-app notices included, and every lasting state under Now; its badge counts what didn't pop up, and the bell is orange while there is any. Each message shows its time, "HH:MM" today and "MM-DD HH:MM" for another day, and the list is kept on the device across reloads, with what was read, until Clear.</li>
+      <li>A running library refresh shows its stage and percent on the indicator, and under Now its progress line too, such as "Checking 12,000 of 49,455 files". A finished one pops up only what it changed, "No changes" when nothing did, and a failed one the stage it stopped in. An automatic refresh that changes nothing goes only to the list, and the badge doesn't count it.</li>
       <li>When the server serves a newer build, "ReelRoulette updated · Tap to reload" shows on the indicator and under Now, except while reconnecting, since a reload then would fail. A tap on either reloads the page, after asking "Discard changes?" while the Filter or Tags tab holds unsaved changes. With a server that also fails the compatibility check, the indicator shows the update and Now lists both.</li>
       <li>The player's one panel button opens the panel on its last tab, and closes it. It sits on the panel's side, at the top right, or just right of the bell while the panel is on the left. The rating's star, Favorite, and Blacklist stay on the player; the seek row ends with Mute and the volume slider. The panel's tabs are, in order, Library, Tags, Stats, Filter, Randomization, and Settings.</li>
       <li>The player's controls don't appear, hide, or move on their own; a control may hide only because of a user setting, as the volume slider does on iOS while Enhanced audio is off.</li>
@@ -758,7 +759,7 @@ th { font-weight: 600; }
     <ul>
       <li>The full-page view the header's admin icon opens: server and updates, web access, control, refresh, library transfer, backups, sources, duplicates, the testing suite, clients, the Log Viewer, and events. Daily backups start off, at 0 days, and the restore list shows daily backups only once they're on. Backups, connected clients, and the Log Viewer's lines show their time, "HH:MM" today and with "MM-DD" before it for another day. An import or a restore first backs up the current library, listed first as "(before import)" or "(before restore)". Apply &amp; Restart brings the server back on the new version, and its bell's Now then lists the update notice, whose tap reloads the page. Adding a source starts a library refresh, which brings in its files, and restarts one that runs.</li>
       <li>Duplicate review opens within it. The control token gate shows first from another machine.</li>
-      <li>It has no player, so its bell is at the end of its own bar, which stays on a phone on its side; its acknowledgments pop up, and Refresh Now shows its stage and progress in its own card.</li>
+      <li>It has no player, so its bell is at the end of its own bar, which stays on a phone on its side; its acknowledgments pop up, and Refresh Now shows its stage, percent, and progress line in its own card, which otherwise shows the last refresh's time and summary, or that the server has run none since it started.</li>
       <li>Refresh Status, the import's upload progress, and its notice for a file that isn't a library. The mockup bar also shows a dev run's version line and a phone on its side, where the admin bar stays.</li>
     </ul>
   </a>
@@ -2044,11 +2045,13 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
-  function notify({ kind, text, detail = "", key = "", level = "", icon = "" }) {
+  // `popup: false` adds the message to the list only, as an automatic refresh that changes nothing does, and `unread`
+  // says whether the badge then counts it.
+  function notify({ kind, text, detail = "", key = "", level = "", icon = "", popup = true, unread = true }) {
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;
-    const pops = settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
-    if (!pops && !listOpen) entry.unread = true;
+    const pops = popup && settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
+    if (!pops && !listOpen) entry.unread = popup || unread;
     add(entry);
     if (pops) showToast(entry, toastKey);
     // While the list is open nothing pops up, so a popup showing with this key would now be out of date: it closes,
@@ -2131,6 +2134,81 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     }
   };
   return activeNotifications;
+}
+
+/**
+ * A library refresh as the mockup runs it, on the main page and in the admin view alike. Each step is a stage, its
+ * percent, and the progress line that the bell's Now entry and the admin view's Library refresh card show under it,
+ * with a real catalog's numbers: 49,455 files, 17,840 of them videos. The percent follows the count the line shows, so
+ * a stage with two parts starts again at 0 with its second. Starting has no line, and neither has a stage with nothing
+ * to do, such as durations with no video to scan, so "0 of 0" never shows.
+ */
+// "X of Y", both numbers grouped as the count line groups them, and the noun counted by Y.
+const ofText = (done, total, noun) => `${done.toLocaleString()} of ${total.toLocaleString()} ${total === 1 ? noun : `${noun}s`}`;
+const countStep = (stage, done, total, noun, lead = "") => ({ stage, percent: Math.round((done / total) * 100), line: lead + ofText(done, total, noun) });
+const REFRESH_STEPS = [
+  { stage: "Starting", percent: 0, line: "" },
+  { stage: "Refreshing sources", percent: 20, line: "Source 1 of 3" },
+  { stage: "Refreshing sources", percent: 45, line: `Source 2 of 3 · ${ofText(120, 400, "new file")}` },
+  { stage: "Refreshing sources", percent: 80, line: "Source 3 of 3" },
+  countStep("Sorting names", 1234, 49455, "file"),
+  countStep("Fingerprinting files", 12000, 49455, "file", "Checking "),
+  countStep("Fingerprinting files", 1234, 2000, "file"),
+  countStep("Scanning durations", 12, 40, "video"),
+  countStep("Scanning loudness", 12, 40, "video"),
+  countStep("Generating thumbnails", 12000, 49455, "file"),
+  countStep("Generating thumbnails", 120, 5000, "old thumbnail", "Removing ")
+];
+// The refresh's lasting state at a step: the player's indicator shows its stage and percent, and Now its line too.
+const refreshLasting = ({ stage, percent, line }) => ({ icon: "autorenew", spin: true, title: `Library refresh: ${stage}`, progress: `(${percent}%)`, detail: line, followsControls: true });
+
+// What a finished refresh changed, by the kind of run the main page's Mockup tab picks: "No changes" when nothing did,
+// and otherwise only what did, the library's changes first, then any problems after " · ". The work done for new files,
+// their fingerprints, durations, loudness, and thumbnails, goes unsaid, since "added" covers it.
+const REFRESH_RUNS = {
+  none: "No changes",
+  changes: "12 added, 3 removed, 2 renamed, 1 moved",
+  changed: "1 changed",
+  problems: "12 added · 2 thumbnails failed",
+  unmatched: "3 removed · 2 left unmatched",
+  rescan: "Loudness rescanned: 3 changed",
+  ffmpeg: "12 added · ffmpeg not found"
+};
+const refreshSummary = () => REFRESH_RUNS[store.get("mock.refreshRun", "none")] || REFRESH_RUNS.none;
+// A failed refresh names the stage it stopped in. The error itself goes only to the server's log, since it can name a
+// file or folder.
+const REFRESH_FAILED = "Refreshing sources failed.";
+// How a refresh ended, as the bell's message: finished with its summary, or failed, a warning that stays until closed.
+const refreshFinished = () => ({ kind: "refresh", text: "Library refresh finished", detail: refreshSummary(), key: "refresh" });
+const refreshFailed = () => ({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: REFRESH_FAILED, key: "refresh" });
+
+// Steps a refresh through REFRESH_STEPS, `wait` ms apart, handing each to `onStep`, then runs `onEnd`. `finish()` ends
+// a run at once as finished, and `start()` cancels a run already going without `onEnd`, as a run the server stops says
+// nothing.
+function refreshRunner({ wait, onStep, onEnd }) {
+  let timer = 0;
+  let step = -1;
+  function cancel() {
+    clearTimeout(timer);
+    step = -1;
+  }
+  function finish() {
+    cancel();
+    onEnd();
+  }
+  function advance() {
+    step += 1;
+    if (step >= REFRESH_STEPS.length) return void finish();
+    onStep(REFRESH_STEPS[step]);
+    timer = setTimeout(advance, wait);
+  }
+  return {
+    start() {
+      cancel();
+      advance();
+    },
+    finish
+  };
 }
 
 hydrateIcons();

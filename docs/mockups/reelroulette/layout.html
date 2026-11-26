@@ -2314,13 +2314,25 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <button type="button" data-test="devices">Another device</button>
           <button type="button" data-test="refresh">Refresh finished</button>
           <button type="button" data-test="refresh-failed">Refresh failed</button>
+          <button type="button" data-test="refresh-auto">Automatic refresh, no changes</button>
           <button type="button" data-test="skips">Skipped file</button>
           <button type="button" data-test="connection">Reconnected</button>
           <button type="button" data-test="notice">An error, in the dialog</button>
           <button type="button" data-test="burst">Four at once</button>
           <button type="button" data-test="yesterday">From yesterday</button>
         </div>
-        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it. From yesterday goes only to the list, as one kept from an earlier visit, and shows its date.</p>
+        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it. Automatic refresh, no changes goes only to the list too, as an automatic refresh that changes nothing does, and the bell doesn't count it, while one the user starts pops up "No changes". From yesterday goes only to the list, as one kept from an earlier visit, and shows its date.</p>
+      </fieldset>
+      <fieldset>
+        <legend>How a finished refresh reads</legend>
+        <label><input type="radio" name="mock-refresh-run" value="none"> Nothing changed</label>
+        <label><input type="radio" name="mock-refresh-run" value="changes"> Files added, removed, renamed, and moved</label>
+        <label><input type="radio" name="mock-refresh-run" value="changed"> A file changed on disk, hashed again</label>
+        <label><input type="radio" name="mock-refresh-run" value="problems"> Files added, and thumbnails that failed</label>
+        <label><input type="radio" name="mock-refresh-run" value="unmatched"> Files removed, and moves left unmatched, so their items stay</label>
+        <label><input type="radio" name="mock-refresh-run" value="rescan"> A forced loudness rescan that changed values</label>
+        <label><input type="radio" name="mock-refresh-run" value="ffmpeg"> Files added while ffmpeg isn't found</label>
+        <p class="mock-small mock-keep">A library refresh under Lasting states, Refresh finished, and the admin view's Refresh Now end this way. The summary names only what changed.</p>
       </fieldset>
       <fieldset>
         <legend>Events</legend>
@@ -3601,11 +3613,13 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
-  function notify({ kind, text, detail = "", key = "", level = "", icon = "" }) {
+  // `popup: false` adds the message to the list only, as an automatic refresh that changes nothing does, and `unread`
+  // says whether the badge then counts it.
+  function notify({ kind, text, detail = "", key = "", level = "", icon = "", popup = true, unread = true }) {
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;
-    const pops = settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
-    if (!pops && !listOpen) entry.unread = true;
+    const pops = popup && settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
+    if (!pops && !listOpen) entry.unread = popup || unread;
     add(entry);
     if (pops) showToast(entry, toastKey);
     // While the list is open nothing pops up, so a popup showing with this key would now be out of date: it closes,
@@ -3688,6 +3702,81 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     }
   };
   return activeNotifications;
+}
+
+/**
+ * A library refresh as the mockup runs it, on the main page and in the admin view alike. Each step is a stage, its
+ * percent, and the progress line that the bell's Now entry and the admin view's Library refresh card show under it,
+ * with a real catalog's numbers: 49,455 files, 17,840 of them videos. The percent follows the count the line shows, so
+ * a stage with two parts starts again at 0 with its second. Starting has no line, and neither has a stage with nothing
+ * to do, such as durations with no video to scan, so "0 of 0" never shows.
+ */
+// "X of Y", both numbers grouped as the count line groups them, and the noun counted by Y.
+const ofText = (done, total, noun) => `${done.toLocaleString()} of ${total.toLocaleString()} ${total === 1 ? noun : `${noun}s`}`;
+const countStep = (stage, done, total, noun, lead = "") => ({ stage, percent: Math.round((done / total) * 100), line: lead + ofText(done, total, noun) });
+const REFRESH_STEPS = [
+  { stage: "Starting", percent: 0, line: "" },
+  { stage: "Refreshing sources", percent: 20, line: "Source 1 of 3" },
+  { stage: "Refreshing sources", percent: 45, line: `Source 2 of 3 · ${ofText(120, 400, "new file")}` },
+  { stage: "Refreshing sources", percent: 80, line: "Source 3 of 3" },
+  countStep("Sorting names", 1234, 49455, "file"),
+  countStep("Fingerprinting files", 12000, 49455, "file", "Checking "),
+  countStep("Fingerprinting files", 1234, 2000, "file"),
+  countStep("Scanning durations", 12, 40, "video"),
+  countStep("Scanning loudness", 12, 40, "video"),
+  countStep("Generating thumbnails", 12000, 49455, "file"),
+  countStep("Generating thumbnails", 120, 5000, "old thumbnail", "Removing ")
+];
+// The refresh's lasting state at a step: the player's indicator shows its stage and percent, and Now its line too.
+const refreshLasting = ({ stage, percent, line }) => ({ icon: "autorenew", spin: true, title: `Library refresh: ${stage}`, progress: `(${percent}%)`, detail: line, followsControls: true });
+
+// What a finished refresh changed, by the kind of run the main page's Mockup tab picks: "No changes" when nothing did,
+// and otherwise only what did, the library's changes first, then any problems after " · ". The work done for new files,
+// their fingerprints, durations, loudness, and thumbnails, goes unsaid, since "added" covers it.
+const REFRESH_RUNS = {
+  none: "No changes",
+  changes: "12 added, 3 removed, 2 renamed, 1 moved",
+  changed: "1 changed",
+  problems: "12 added · 2 thumbnails failed",
+  unmatched: "3 removed · 2 left unmatched",
+  rescan: "Loudness rescanned: 3 changed",
+  ffmpeg: "12 added · ffmpeg not found"
+};
+const refreshSummary = () => REFRESH_RUNS[store.get("mock.refreshRun", "none")] || REFRESH_RUNS.none;
+// A failed refresh names the stage it stopped in. The error itself goes only to the server's log, since it can name a
+// file or folder.
+const REFRESH_FAILED = "Refreshing sources failed.";
+// How a refresh ended, as the bell's message: finished with its summary, or failed, a warning that stays until closed.
+const refreshFinished = () => ({ kind: "refresh", text: "Library refresh finished", detail: refreshSummary(), key: "refresh" });
+const refreshFailed = () => ({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: REFRESH_FAILED, key: "refresh" });
+
+// Steps a refresh through REFRESH_STEPS, `wait` ms apart, handing each to `onStep`, then runs `onEnd`. `finish()` ends
+// a run at once as finished, and `start()` cancels a run already going without `onEnd`, as a run the server stops says
+// nothing.
+function refreshRunner({ wait, onStep, onEnd }) {
+  let timer = 0;
+  let step = -1;
+  function cancel() {
+    clearTimeout(timer);
+    step = -1;
+  }
+  function finish() {
+    cancel();
+    onEnd();
+  }
+  function advance() {
+    step += 1;
+    if (step >= REFRESH_STEPS.length) return void finish();
+    onStep(REFRESH_STEPS[step]);
+    timer = setTimeout(advance, wait);
+  }
+  return {
+    start() {
+      cancel();
+      advance();
+    },
+    finish
+  };
 }
 
 
@@ -7480,36 +7569,26 @@ function refreshKeptSources(ids) {
 $("mock-kept-one").addEventListener("click", () => refreshKeptSources(["phone"]));
 $("mock-kept-both").addEventListener("click", () => refreshKeptSources(["videos", "phone"]));
 
-// A library refresh: its stage and progress on the player's indicator while the controls show, and its result in a
-// popup. The summary is today's, without "Core refresh complete".
-// Each stage reads by its label, as the WebUI shows it, in place of the server's long stage message: "Starting" before
-// the first stage.
-const REFRESH_STAGES = [["Starting", 0], ["Refreshing sources", 10], ["Sorting names", 20], ["Fingerprinting files", 35], ["Scanning durations", 60], ["Scanning loudness", 80], ["Generating thumbnails", 95]];
-const REFRESH_SUMMARY = "Source: no changes · Fingerprint: ready 72 · Duration: files 48, all cached · Loudness: files 48, all cached · Thumbnails: reused 72";
-let refreshTimer = 0;
-let refreshStep = -1;
-function startRefresh() {
-  clearTimeout(refreshTimer);
-  refreshStep = -1;
-  const advance = () => {
-    refreshStep += 1;
-    if (refreshStep >= REFRESH_STAGES.length) return void finishRefresh();
-    const [stage, percent] = REFRESH_STAGES[refreshStep];
-    notes.setLasting("refresh", { icon: "autorenew", spin: true, title: `Library refresh: ${stage}`, progress: `(${percent}%)`, followsControls: true });
+// A library refresh, as the shared script runs it: its stage and percent on the player's indicator while the controls
+// show, its progress line too under the bell's Now, and how it ended in a popup, by the kind of run picked below.
+const refreshRun = refreshRunner({
+  wait: instant ? 0 : 2500,
+  onStep: (step) => {
+    notes.setLasting("refresh", refreshLasting(step));
     renderMockLasting();
-    refreshTimer = setTimeout(advance, instant ? 0 : 2500);
-  };
-  advance();
-}
-function finishRefresh() {
-  clearTimeout(refreshTimer);
-  refreshStep = -1;
-  notes.setLasting("refresh", null);
-  notes.notify({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_SUMMARY, key: "refresh" });
-  renderMockLasting();
-  // The library window reloads once the refresh finishes.
-  reloadGrid();
-}
+  },
+  onEnd: () => {
+    notes.setLasting("refresh", null);
+    notes.notify(refreshFinished());
+    renderMockLasting();
+    // The library window reloads once the refresh finishes.
+    reloadGrid();
+  }
+});
+document.querySelectorAll('input[name="mock-refresh-run"]').forEach((radio) => {
+  radio.checked = radio.value === store.get("mock.refreshRun", "none");
+  radio.addEventListener("change", () => store.set("mock.refreshRun", radio.value));
+});
 
 // The Mockup tab's lasting states: the server's follow the Server choice, a newer build stays checked while
 // Reconnecting… holds its notice off, and loading and a refresh run on their own.
@@ -7527,8 +7606,8 @@ $("mock-lasting").addEventListener("change", (event) => {
     renderUpdateNotice();
   } else if (box.value === "loading") setLoading("mock", box.checked);
   else if (box.value === "refresh") {
-    if (box.checked) startRefresh();
-    else finishRefresh();
+    if (box.checked) refreshRun.start();
+    else refreshRun.finish();
   }
 });
 
@@ -7537,8 +7616,10 @@ const sampleName = () => (playback.item || ITEMS[0]).name;
 const TESTS = {
   actions: () => acknowledge("Added to favorites", "flag", sampleName()),
   devices: () => notes.notify({ kind: "devices", text: "Blacklisted on another device", detail: sampleName() }),
-  refresh: () => notes.notify({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_SUMMARY, key: "refresh" }),
-  "refresh-failed": () => notes.notify({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: "Source \"Videos\" is unavailable: /media/videos was not found.", key: "refresh" }),
+  refresh: () => notes.notify(refreshFinished()),
+  "refresh-failed": () => notes.notify(refreshFailed()),
+  // An automatic refresh that changes nothing goes only to the list, and the badge doesn't count it.
+  "refresh-auto": () => notes.notify({ ...refreshFinished(), detail: REFRESH_RUNS.none, popup: false, unread: false }),
   skips: () => notes.notify({ kind: "skips", text: "Skipped a file this browser can't play.", detail: sampleName(), key: "skip" }),
   connection: () => notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" }),
   notice: () => noticeDialog({ message: "Saving presets failed: The server couldn't write to the library." }),
@@ -7553,7 +7634,7 @@ const TESTS = {
     const time = new Date();
     time.setDate(time.getDate() - 1);
     time.setHours(21, 14, 37, 0);
-    notes.record({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_SUMMARY, time: time.getTime() });
+    notes.record({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_RUNS.changes, time: time.getTime() });
   }
 };
 $("mock-tests").addEventListener("click", (event) => {
