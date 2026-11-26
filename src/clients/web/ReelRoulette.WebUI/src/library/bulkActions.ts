@@ -3,12 +3,14 @@ import type { ControlAccess } from "../api/controlAccess";
 import { readWithNotice } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Notifications } from "../notifications/notifications";
+import type { Player } from "../playback/player";
 import { ratingText } from "../rating/rating";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import { countText } from "../text/countText";
 import type { components } from "../types/openapi.generated";
-import type { MenuGroups } from "../ui/menuModel";
+import type { MenuGroups, MenuItem } from "../ui/menuModel";
+import type { FileLocation } from "./fileLocation";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
 import type { LibrarySelection } from "./librarySelection";
 
@@ -89,6 +91,15 @@ export const BULK_FLAG_ACTIONS: readonly BulkFlagAction[] = [
 ];
 
 /**
+ * What a menu knows of the items it acts on, read as it opens: their summary, or null when its read failed, and the one
+ * item it acts on alone, or null when it acts on several or its read failed.
+ */
+export interface MenuFacts {
+  summary: BulkSummary | null;
+  item: LibraryProjectionItem | null;
+}
+
+/**
  * The summary of the items `ids` name from the loaded tiles, or null when one of them isn't loaded, so only the server
  * can say.
  */
@@ -108,7 +119,7 @@ export function summarizeLoaded(ids: readonly string[], loaded: readonly Library
   return summary;
 }
 
-/** The Rate dialog while it shows: how many items it rates, and the rating chosen, or null before one is. */
+/** The Rate dialog while it shows: how many items it rates, and the rating chosen, or null while none is. */
 export interface RateDialogView {
   count: number;
   rating: number | null;
@@ -141,14 +152,24 @@ export interface BulkActions {
   /** The ids `target` names: the selected items' now, or its one item's. */
   targetIds(target: BulkTarget): string[];
   /**
-   * A menu's items for `target`, in their groups: the favorite and blacklist actions that apply to the items `summary`
-   * describes, or all four while it is null, as when its read failed; Rate…; Edit tags…; Clear playback stats…,
-   * disabled with its reason while none has stats to clear; and Delete files…, which names one file for one item.
+   * A menu's items for `target`, in their groups: the favorite and blacklist actions that apply to the items the
+   * summary describes, or all four while it is null, as when its read failed; Rate…, which starts at the rating of the
+   * one item it acts on; Edit tags…; Clear playback stats…, disabled with its reason while none has stats to clear;
+   * Copy path and Show in File Manager, only on one item; and Delete files…, which names one file for one item.
    */
-  menuGroups(target: BulkTarget, summary: BulkSummary | null): MenuGroups;
+  menuGroups(target: BulkTarget, facts: MenuFacts): MenuGroups;
+  /** Edit tags…, which the player's menu shares, on `target`. */
+  editTagsItem(target: BulkTarget): MenuItem;
+  /**
+   * Clear playback stats…, which the player's menu shares, on `target`: disabled with its reason while none of the
+   * items `summary` describes has stats to clear, and enabled while it is null, as when its read failed.
+   */
+  clearPlaybackStatsItem(target: BulkTarget, summary: BulkSummary | null): MenuItem;
+  /** Delete files…, which the player's menu shares, on `target`, reading Delete file… for one item. */
+  deleteFilesItem(target: BulkTarget): MenuItem;
   setFlag(action: BulkFlagAction, target: BulkTarget): Promise<void>;
-  /** Rate…: opens the Rate dialog with no rating chosen. */
-  openRate(target: BulkTarget): void;
+  /** Rate…: opens the Rate dialog at `rating`, the item's own when it rates one, or with none chosen. */
+  openRate(target: BulkTarget, rating: number | null): void;
   /** The dialog's stars choose a rating, which sets nothing yet. */
   chooseRating(rating: number | null): void;
   /** Rate: sets the chosen rating on every item the dialog opened for. */
@@ -160,24 +181,29 @@ export interface BulkActions {
   clearPlaybackStats(target: BulkTarget): Promise<void>;
   /**
    * Delete files…: asks for the control token when the server wants it, then to confirm, then ends selection when it
-   * acts on the selection, and deletes the files and removes their items.
+   * acts on the selection, and deletes the files and removes their items. When the playing item is one of them, the
+   * player moves on, as Next does.
    */
   deleteFiles(target: BulkTarget): Promise<void>;
 }
 
 export interface BulkActionsOptions {
-  store: Pick<AppStore, "identity">;
+  store: Pick<AppStore, "identity" | "current">;
   api: Pick<AppApi, "postJson">;
   dialogs: Pick<Dialogs, "notice" | "confirm">;
   notifications: Pick<Notifications, "notify">;
   controlAccess: Pick<ControlAccess, "ensure">;
   selection: LibrarySelection;
+  /** Copy path and Show in File Manager, for a menu on one item. */
+  fileLocation: Pick<FileLocation, "menuItems">;
+  /** Next, which a delete that removes the playing item moves on with. */
+  player: Pick<Player, "next">;
   /** Edit tags…: points the Tags tab at the items and shows it. */
   editTags(target: BulkTarget): Promise<void>;
 }
 
 export function createBulkActions(options: BulkActionsOptions): BulkActions {
-  const { store, api, dialogs, notifications, controlAccess, selection } = options;
+  const { store, api, dialogs, notifications, controlAccess, selection, fileLocation, player } = options;
   const rateDialog = signal<RateDialogView | null>(null);
   /** The items the Rate dialog rates, as its menu named them when it opened. */
   let rateIds: string[] = [];
@@ -211,8 +237,10 @@ export function createBulkActions(options: BulkActionsOptions): BulkActions {
     rateDialog,
     targetIds,
 
-    menuGroups(target, summary) {
-      const one = targetIds(target).length === 1;
+    menuGroups(target, { summary, item }) {
+      const file = item?.fullPath
+        ? fileLocation.menuItems({ itemId: item.id, path: item.fullPath, name: item.fileName }, { withName: false })
+        : [];
       return [
         BULK_FLAG_ACTIONS.filter((action) => !summary || action.applies(summary)).map((action) => ({
           label: action.label,
@@ -220,25 +248,31 @@ export function createBulkActions(options: BulkActionsOptions): BulkActions {
           onPick: () => void actions.setFlag(action, target)
         })),
         [
-          { label: "Rate…", icon: "star", onPick: () => actions.openRate(target) },
-          { label: "Edit tags…", icon: "tag", onPick: () => void options.editTags(target) },
-          {
-            label: "Clear playback stats…",
-            icon: "delete_history",
-            disabledReason: summary && summary.playedCount === 0 ? NO_PLAYBACK_STATS_REASON : null,
-            onPick: () => void actions.clearPlaybackStats(target)
-          }
+          { label: "Rate…", icon: "star", onPick: () => actions.openRate(target, item?.rating ?? null) },
+          actions.editTagsItem(target),
+          actions.clearPlaybackStatsItem(target, summary)
         ],
-        [
-          {
-            label: one ? "Delete file…" : "Delete files…",
-            icon: "delete_forever",
-            danger: true,
-            onPick: () => void actions.deleteFiles(target)
-          }
-        ]
+        file,
+        [actions.deleteFilesItem(target)]
       ];
     },
+
+    editTagsItem: (target) => ({ label: "Edit tags…", icon: "tag", onPick: () => void options.editTags(target) }),
+
+    clearPlaybackStatsItem: (target, summary) => ({
+      label: "Clear playback stats…",
+      icon: "delete_history",
+      disabledReason: summary && summary.playedCount === 0 ? NO_PLAYBACK_STATS_REASON : null,
+      onPick: () => void actions.clearPlaybackStats(target)
+    }),
+
+    deleteFilesItem: (target) => ({
+      label: targetIds(target).length === 1 ? "Delete file…" : "Delete files…",
+      icon: "delete_forever",
+      danger: true,
+      onPick: () => void actions.deleteFiles(target)
+    }),
+
 
     async setFlag(action, target) {
       const answer = await post<BulkChangeResponse>(`${action.label} failed`, "/api/bulk/item-state", {
@@ -252,9 +286,9 @@ export function createBulkActions(options: BulkActionsOptions): BulkActions {
       }
     },
 
-    openRate(target) {
+    openRate(target, rating) {
       rateIds = targetIds(target);
-      rateDialog.value = { count: rateIds.length, rating: null };
+      rateDialog.value = { count: rateIds.length, rating };
     },
 
     chooseRating(rating) {
@@ -316,6 +350,10 @@ export function createBulkActions(options: BulkActionsOptions): BulkActions {
       }
       if (answer.failedItemIds.length > 0) {
         void dialogs.notice(filesKeptText(answer.failedItemIds.length));
+      }
+      const playing = store.current.peek()?.itemId;
+      if (playing && itemIds.includes(playing) && !answer.failedItemIds.includes(playing)) {
+        player.next();
       }
     }
   };

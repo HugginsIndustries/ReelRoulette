@@ -6,7 +6,8 @@ export interface MenuItem {
   label: string;
   /** Its icon's name, drawn at its left. */
   icon: string;
-  onPick: () => void;
+  /** Runs once the menu has closed, with the item's own button, which tells a copy where its fallback field can go. */
+  onPick: (element: HTMLElement) => void;
   /** Red, for an action that deletes something. */
   danger?: boolean;
   /** Why the action can't act now, which disables it and is its tooltip, or null while it is enabled. */
@@ -25,8 +26,11 @@ export interface ContextMenuView {
   groups: MenuGroups;
   /** The element it acts on, tinted while it is open; one marked its own way, as a tile's ring does, is left out. */
   target?: Element;
-  /** Runs when the menu closes, however it closes, so whoever opened it can let go of what it marked. */
-  onClose?: () => void;
+  /**
+   * Runs when the menu closes, however it closes, so whoever opened it can let go of what it marked. `byUser` is true
+   * for a close the user made: a pick, Escape, or a press outside it.
+   */
+  onClose?: (byUser: boolean) => void;
 }
 
 /** A part of the page with a menu, which a right-click or a long press on it opens. */
@@ -54,7 +58,10 @@ export interface ContextMenu {
   readonly view: ReadonlySignal<ContextMenuView | null>;
   readonly isOpen: ReadonlySignal<boolean>;
   open(view: ContextMenuView): void;
+  /** Closes the menu on its own, as when what it acts on goes. */
   close(): void;
+  /** Closes the menu as the user did: a pick, Escape, or a press outside it. */
+  dismiss(): void;
   /** Gives `surface` a menu until the returned function takes it away. */
   addSurface<T>(surface: MenuSurface<T>): () => void;
   /** The innermost surface `target` is in, or null where it is in none or that surface opens no menu on it. */
@@ -70,13 +77,13 @@ export function createContextMenu(): ContextMenu {
   const view = signal<ContextMenuView | null>(null);
   const surfaces: SurfaceEntry[] = [];
 
-  function close(): void {
+  function close(byUser = false): void {
     const shown = view.peek();
     if (!shown) {
       return;
     }
     view.value = null;
-    shown.onClose?.();
+    shown.onClose?.(byUser);
   }
 
   return {
@@ -86,7 +93,8 @@ export function createContextMenu(): ContextMenu {
       close();
       view.value = next;
     },
-    close,
+    close: () => close(),
+    dismiss: () => close(true),
 
     addSurface(surface) {
       const entry: SurfaceEntry = {

@@ -2295,6 +2295,8 @@ function start(item) {
   // only to the item it was opened for.
   ratings.flush();
   ratingPopover.close();
+  // A menu on the item before closes too, so none acts on an item that has gone.
+  if (contextMenu.openOn()?.matches("#media, #np-name, .stats-file-name, .stats-path")) contextMenu.close();
   playback.item = item;
   // The Stats tab shows when the item was last played before this play.
   item.playedBefore = item.lastPlayedAt;
@@ -5898,7 +5900,8 @@ function markMenuTile() {
 // nothing playing. Its items work as the controls they repeat: Favorite and Blacklist as the player's buttons, Rate…
 // as the star button, which shows its stars at the player's center, and Edit tags… and Show stats as the tabs they
 // open. Delete file… moves on to the next item, as Next does. The controls stay while it is open, and their countdown
-// starts again when it closes.
+// starts again when it closes, showing them only when the user closed it, not when it closed on its own, as when
+// another item plays.
 contextMenu.add("#media", () => {
   const item = playback.item;
   if (!item) return null;
@@ -5916,7 +5919,8 @@ contextMenu.add("#media", () => {
     fileGroup(item),
     [menuItem("delete_forever", "Delete file…", () => runBulk("delete", [item], false), { danger: true })]
   ];
-}, { except: `${CONTROL_PARTS}, .rating-popover, .player-indicator.takes-tap`, mark: false, onClose: () => controlsActivity() });
+}, { except: `${CONTROL_PARTS}, .rating-popover, .player-indicator.takes-tap`, mark: false,
+  onClose: (_el, byUser) => (byUser ? controlsActivity() : restartHideCountdown()) });
 
 // The header's file name: Show stats, which its click does, and the file's copies.
 contextMenu.add("#np-name", () => playback.item && [[menuItem("bar_chart", "Show stats", openStats)], fileGroup(playback.item)]);
@@ -5937,7 +5941,7 @@ async function runBulk(kind, items, fromSelection) {
   if (kind === "bl-remove") { items.forEach((item) => (item.blacklisted = false)); status(`Removed ${noun} from the blacklist.`); }
   if (kind === "tags") return fromSelection ? editSelectionTags() : editItemTags(items[0]);
   if (kind === "rate") {
-    const answer = await rateDialog(noun);
+    const answer = await rateDialog(noun, items.length === 1 ? items[0].rating || null : null);
     if (!answer) return;
     items.forEach((item) => (item.rating = answer.rating));
     status(answer.rating ? `Rated ${noun} ${ratingText(answer.rating)}.` : `Cleared the rating on ${noun}.`);
@@ -5958,17 +5962,17 @@ async function runBulk(kind, items, fromSelection) {
   layoutGrid(true);
 }
 
-// Rate…: the Stats tab's stars, empty at first. A tap, click, or drag only chooses the rating, and Rate sets it on
-// every selected item, so a stray tap can't rate them all; Clear rating clears every selected item's rating. It answers
-// { rating } for either, or nothing for Cancel.
-function rateDialog(noun) {
+// Rate…: the Stats tab's stars, at the item's rating when it rates one, and empty for several. A tap, click, or drag
+// only chooses the rating, and Rate sets it on every selected item, so a stray tap can't rate them all; Clear rating
+// clears every selected item's rating. It answers { rating } for either, or nothing for Cancel.
+function rateDialog(noun, rating) {
   return new Promise((resolve) => {
     const body = document.createElement("div");
     body.className = "dialog-body rate-dialog";
     const heading = document.createElement("h3");
     heading.id = `rate-${++dialogCounter}`;
     heading.textContent = `Rate ${noun}`;
-    const choice = { rating: null };
+    const choice = { rating };
     const stars = ratingStars((target, value) => {
       target.rating = value || null;
       stars.draw();

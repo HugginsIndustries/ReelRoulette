@@ -685,7 +685,7 @@ Last milestone completed: M12n1
 | --- | --- | --- |
 | Mockup | ✅ Complete | Every menu, its items, wording, and order, and the long press, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Foundation | ✅ Complete | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, whose long press opens their menu, with Select in it, and menus closing on scroll, resize, and the browser tab hiding. |
-| Player | ⏳ Planned | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
+| Player | ✅ Complete | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
 | Tags tab | ⏳ Planned | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
 | Filter tab | ⏳ Planned | Menus on the Filter tab's preset rows and sources. |
 | Notifications, Auto Tag, and Settings | ⏳ Planned | Menus on the bell's list entries, the popups, Auto Tag's file rows, and the Settings tab's diagnostics IDs, and the unused notification code removed. |
@@ -843,6 +843,20 @@ Last milestone completed: M12n1
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
+**Evidence**
+
+- `src/playback/playingItemMenus.ts` builds and opens the menus on the playing item, which the media area (`src/ui/Player.tsx`), the header's now-playing name (`src/ui/Header.tsx`), and the Stats tab's file name and path (`src/ui/StatsTab.tsx`) register as surfaces with the `menu-surface` class. The player's menu waits for the item's read, its loaded tile or `POST /api/library/item`, so Clear playback stats… is disabled with its reason when the item has none.
+- `fileLocation.ts` moved from `src/stats/` to `src/library/` and builds every menu's file items (`menuItems`); `appServices.ts` creates it once. A menu item's action gets its own button.
+- A library menu on one item reads that item whole (`readMenuItem` in `src/library/library.ts`), its tile or `POST /api/library/item`, in place of the summary read, which gives the file items their path and Rate… its starting rating; several items still read `POST /api/library/item-summary`. `deleteFiles` in `src/library/bulkActions.ts` moves the player on when it deleted the playing item, and the player's menu takes Edit tags…, Clear playback stats…, and Delete file… from that file's item builders.
+- Planning settled three points the Scope left open, with the advisor's approval: a menu on the playing item closes when another item plays, as the rating's stars do, which the mockup now shows too; the controls stay through a "menu" hold (`src/playback/playerControls.ts`), as the mockup keeps them, so opening the menu while they are hidden leaves them hidden, unlike the bell's list and the rating's stars, and only a close the user makes, a pick, Escape, or a press outside, shows them, while one on its own, as when another item plays, leaves them as they are; and the media gestures' `menuOpened` makes the touch that opened the menu neither a tap nor a swipe.
+- Deviation from the Traps: the copy fallback's field no longer goes next to the element. It goes into the fullscreen stage, where every menu renders, found as the copy starts, since the menu item is gone by the time the Clipboard API refuses.
+- The mockup's Rate dialog starts at one file's rating, and its menus on the playing file close when another file plays and show hidden controls only when the user closes them.
+- Player, header, gesture, and player controls tests cover the player's and the name's menus, and library, Stats, now-playing, and menu tests the file items, the one-item menus, the Rate dialog's start, the Stats tab's menus, and a one-item read that fails with 503; the screen tests' dialog, control-token, and clipboard helpers moved into `pageHarness.ts`.
+- Breaking the menu hold, `menuOpened`, the move-on, the Rate dialog's start, the one-item-only file group, Copy name's absence from tile menus, the one-item read, the close on another item, the field's place, the controls' exclusion, the name's tint, and the item's button, each from a copy under `artifacts/scratch/`, failed 1, 2, 3, 1, 4, 4, 6, 1, 1, 1, 2, and 1 tests (measured). Ending the hold as activity on every close failed the autoplay test, dropping the failed read's log line, or opening no menu after it, failed both failed-read tests, and swapping the context menu's own close and the user's for Escape, a press outside, a pick, or its scroll, resize, and tab hiding each failed one menu test (measured).
+- The foundation screen snapshot's media area and now-playing name gained `menu-surface`, updated once with `npx vitest run -u` with the advisor's approval, and nothing else in it changed.
+- `npm run verify` passes, with 2,467 tests in 97 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- CHANGELOG.md, CONTEXT.md, docs/domain-inventory.md, docs/architecture.md, docs/api.md, and the contract's descriptions of the item and item-summary reads describe the menus, and the testing checklist's Show in File Manager check uses the player's menu.
+
 #### Tags tab slice
 
 **Scope**
@@ -869,6 +883,7 @@ Last milestone completed: M12n1
 - A category's drag handle starts a drag only after moving 5 px (`src/reorder/reorder.ts`), and its header notes where a press began without timing a hold (`src/ui/TagCategory.tsx`).
 - The Stats tab's tags are plain text (`src/ui/StatsTab.tsx`).
 - The opener skips a long press on any button inside a surface (`LONG_PRESS_SKIPS` in `src/ui/menuOpener.ts`) and has no exception for a surface's own buttons yet, which a category's name, its header's button, needs.
+- The Stats tab's file name and path register their surfaces in `FileStats` (`src/ui/StatsTab.tsx`), and their menus come from `src/playback/playingItemMenus.ts`, which closes a menu on the playing item when another item plays.
 - `.tag-chip.state-all`'s own `box-shadow` comes after the menu's tint rule in `src/styles.css`, with the same specificity, so it wins: a green chip, on every selected item, shows no tint while its menu is open until that's handled. In the mockup the tint rule comes later and wins (`build/common.css`).
 
 **Acceptance**
@@ -934,6 +949,7 @@ Last milestone completed: M12n1
 - Auto Tag's file rows are labels around their checkbox, with the full path as their tooltip (`src/ui/AutoTag.tsx`).
 - `toggleList` has no caller, and `dismissAll` is called only from `src/test/screens/notifications.test.ts` (measured).
 - The Settings tab's diagnostics IDs are plain text (`src/ui/SettingsTab.tsx`).
+- `menuItems` in `src/library/fileLocation.ts` builds Copy path and Show in File Manager, without Copy name when asked, and a copy's fallback field goes into the fullscreen stage, so a menu rendered inside Auto Tag's modal dialog, where the page outside it is inert, needs its field placed inside the dialog (inferred).
 
 **Acceptance**
 

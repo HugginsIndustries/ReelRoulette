@@ -1863,7 +1863,8 @@ function placeAtPoint(menu, x, y) {
  * - `except`: parts of the surface that open nothing, such as the player's controls.
  * - `pressOn`: buttons in the surface that a long press still opens its menu on.
  * - `mark`: false, or a test of the element, to leave out the highlight on the element the menu acts on.
- * - `onOpen(el)` and `onClose(el)`, run as the menu opens on the surface and as it closes, however it closes.
+ * - `onOpen(el)` and `onClose(el, byUser)`, run as the menu opens on the surface and as it closes, however it closes;
+ *   `byUser` is true for a close the user made: a pick, a press outside, or Escape.
  * The innermost surface under the pointer wins. One menu shows at a time. It closes on a pick, a press outside, which
  * still does what it does, Escape, before anything else Escape would close, a scroll, a resize, and the page hiding.
  */
@@ -1904,7 +1905,7 @@ const contextMenu = (() => {
   function open(surface, el, x, y) {
     close();
     const groups = surface.groupsFor(el);
-    if (!groups || !fillMenu(menu, groups, close)) return;
+    if (!groups || !fillMenu(menu, groups, () => close(true))) return;
     menu.hidden = false;
     placeAtPoint(menu, x, y);
     const marked = surface.mark === false ? null : typeof surface.mark === "function" && !surface.mark(el) ? null : el;
@@ -1912,13 +1913,13 @@ const contextMenu = (() => {
     shown = { surface, el, marked };
     surface.onOpen?.(el);
   }
-  function close() {
+  function close(byUser = false) {
     if (!shown) return;
     const { surface, el, marked } = shown;
     shown = null;
     menu.hidden = true;
     marked?.classList.remove("is-menu-target");
-    surface.onClose?.(el);
+    surface.onClose?.(el, byUser);
   }
   function cancelPress() {
     clearTimeout(press?.timer);
@@ -1936,7 +1937,7 @@ const contextMenu = (() => {
     pressPointer = event.pointerType;
     // A press that ended without a click, as some long presses do, leaves no click to swallow.
     swallowClick = false;
-    if (shown && !menu.contains(event.target)) close();
+    if (shown && !menu.contains(event.target)) close(true);
     // A second finger cancels the press, and starts none of its own.
     cancelPress();
     if (!mounted || !event.isPrimary || event.pointerType === "mouse") return;
@@ -1967,12 +1968,12 @@ const contextMenu = (() => {
     if (!shown || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    close();
+    close(true);
   }, true);
   window.addEventListener("scroll", (event) => {
     if (shown && !menu.contains(event.target)) close();
   }, true);
-  window.addEventListener("resize", close);
+  window.addEventListener("resize", () => close());
   document.addEventListener("visibilitychange", () => document.hidden && close());
   menu.addEventListener("contextmenu", (event) => event.preventDefault());
 
@@ -1988,7 +1989,7 @@ const contextMenu = (() => {
       surfaces.push({ selector, groupsFor, ...options });
       style.textContent += `${selector} { -webkit-touch-callout: none; }\n@media (hover: none) { ${selector} { -webkit-user-select: none; user-select: none; } }\n`;
     },
-    close,
+    close: () => close(),
     /** The surface element the menu is open on, or null. */
     openOn: () => shown?.el || null,
     contains: (el) => menu.contains(el)

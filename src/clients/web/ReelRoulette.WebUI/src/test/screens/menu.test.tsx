@@ -72,10 +72,29 @@ describe("the menu", () => {
     fireEvent.click(item(menu, "Rename"));
     expect(happened).toEqual(["close", "rate"]);
   });
+
+  it("gives a picked item's action that item's own button", () => {
+    const picked: Array<[string, HTMLElement]> = [];
+    const groups: MenuItem[][] = [
+      [
+        { label: "Copy name", icon: "content_copy", onPick: (element) => picked.push(["name", element]) },
+        { label: "Copy path", icon: "content_copy", onPick: (element) => picked.push(["path", element]) }
+      ]
+    ];
+    const { container } = render(<Menu groups={groups} onClose={() => {}} />);
+    const menu = container.querySelector<HTMLElement>(".menu")!;
+
+    fireEvent.click(item(menu, "Copy path"));
+    expect(picked.map(([which]) => which)).toEqual(["path"]);
+    expect(picked[0]![1]).toBe(item(menu, "Copy path"));
+  });
 });
 
 describe("the context menu", () => {
-  /** The context menu's host, rendered on its own, with a menu of one item open on `target`. */
+  /**
+   * The context menu's host, rendered on its own, with a menu of one item open on `target`, whose `onClose` records
+   * whether the user closed it.
+   */
   function openOn(target?: Element) {
     const contextMenu = createContextMenu();
     render(
@@ -84,14 +103,15 @@ describe("the context menu", () => {
       </AppContext.Provider>
     );
     const groups = [[{ label: "Rate…", icon: "star", onPick: () => {} }]];
-    const open = () => act(() => contextMenu.open({ point: { x: 10, y: 10 }, groups, target }));
+    const onClose = vi.fn((_byUser: boolean) => {});
+    const open = () => act(() => contextMenu.open({ point: { x: 10, y: 10 }, groups, target, onClose }));
     open();
-    return { contextMenu, open };
+    return { contextMenu, open, onClose };
   }
 
-  it("closes on a scroll outside it, a resize, and the browser tab hiding, but not on a scroll inside it", () => {
+  it("closes on its own on a scroll outside it, a resize, and the browser tab hiding, but not on a scroll inside it", () => {
     const list = document.body.appendChild(document.createElement("div"));
-    const { contextMenu, open } = openOn();
+    const { contextMenu, open, onClose } = openOn();
     fireEvent.scroll(document.querySelector("#context-menu .menu")!);
     expect(contextMenu.isOpen.peek()).toBe(true);
     act(() => void fireEvent.scroll(list));
@@ -107,7 +127,24 @@ describe("the context menu", () => {
     vi.spyOn(document, "hidden", "get").mockReturnValue(true);
     act(() => void fireEvent(document, new Event("visibilitychange")));
     expect(contextMenu.isOpen.peek()).toBe(false);
+    // None of them is the user's close.
+    expect(onClose.mock.calls).toEqual([[false], [false], [false]]);
     list.remove();
+  });
+
+  it("is the user's close on Escape, a press outside it, and a pick", () => {
+    const { contextMenu, open, onClose } = openOn();
+    act(() => void fireEvent.keyDown(document, { key: "Escape" }));
+    expect(contextMenu.isOpen.peek()).toBe(false);
+
+    open();
+    act(() => void fireEvent.pointerDown(document.body, { pointerType: "mouse", button: 0 }));
+    expect(contextMenu.isOpen.peek()).toBe(false);
+
+    open();
+    act(() => void fireEvent.click(item(document.querySelector<HTMLElement>("#context-menu .menu")!, "Rate…")));
+    expect(contextMenu.isOpen.peek()).toBe(false);
+    expect(onClose.mock.calls).toEqual([[true], [true], [true]]);
   });
 
   it("tints the element it acts on while it is open", () => {

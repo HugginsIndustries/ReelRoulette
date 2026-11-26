@@ -16,10 +16,23 @@ import {
   FakeServer,
   SSE_URL,
   IPHONE_USER_AGENT,
+  buttonIn,
   closeNotices,
+  CONTROL_TOKEN,
+  contextMenuPlace,
+  contextMenuShown,
+  dialogWith,
+  findDialog,
   json,
+  menuIcons,
+  menuItemIn,
+  menuParts,
   mountPage,
   movePointer,
+  rightClick,
+  serveControlFromAnotherMachine,
+  stubClipboard,
+  stubContextMenuSize,
   openNotices,
   pageReady,
   popupsShown,
@@ -3918,5 +3931,553 @@ describe("without a library", () => {
     }
     expect(randomPicks(server)).toBe(0);
     expect(playRecords(server)).toBe(0);
+  });
+});
+
+describe("the player's menu", () => {
+  const MENU_WIDTH = 240;
+  const MENU_HEIGHT = 300;
+  const DELETE_ONE = "Permanently delete 1 file from disk and remove it from the library? This can't be undone.";
+  const OTHER_ROW_ID = "item-other";
+
+  /** An item the player plays as the library's query and `POST /api/library/item` give it, with playback stats. */
+  function libraryRow(item: typeof VIDEO_ITEM, overrides: Record<string, unknown> = {}) {
+    return {
+      id: item.itemId,
+      sourceId: "source-1",
+      fileName: item.displayName,
+      fullPath: item.id,
+      relativePath: item.displayName,
+      mediaType: 0,
+      durationSeconds: item.durationSeconds,
+      playCount: 3,
+      lastPlayedUtc: "2026-10-07T00:00:00Z",
+      isFavorite: item.isFavorite,
+      isBlacklisted: item.isBlacklisted,
+      tags: [] as string[],
+      hasThumbnail: false,
+      ...overrides
+    };
+  }
+
+  /** A server that picks the video and then the second one, and reads either whole with `read`'s changes. */
+  function menuServer(read: Record<string, unknown> = {}): FakeServer {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("POST", "/api/library/item", (call) => json(libraryRow(call.body?.id === SECOND_VIDEO.itemId ? SECOND_VIDEO : VIDEO_ITEM, read)));
+    return server;
+  }
+
+  /** The reads of one item whole the page asked for, by id. */
+  function itemReads(server: FakeServer): string[] {
+    return server.requests("POST", "/api/library/item").map((call) => call.body?.id);
+  }
+
+  /** Opens the player's menu with a right-click on `element` at `x`, `y`, once its read has landed. */
+  async function openMenu(element: Element = video(), x = 120, y = 140): Promise<HTMLElement> {
+    rightClick(element, x, y);
+    await flush();
+    const menu = contextMenuShown();
+    if (!menu) {
+      throw new Error("No menu opened.");
+    }
+    return menu;
+  }
+
+  async function pick(label: string): Promise<void> {
+    await click(menuItemIn(contextMenuShown()!, label));
+  }
+
+  /** Presses `label` in the open dialog that reads `text`. */
+  async function pressIn(text: string, label: string): Promise<void> {
+    await click(buttonIn(dialogWith(text), label));
+  }
+
+  /** A finger lands on `target` at `x`, `y`, as a browser sends it: the pointer's press, then the touch. */
+  function fingerDown(target: Element, x = 120, y = 140): void {
+    fireEvent.pointerDown(target, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: x, clientY: y });
+    fireEvent.touchStart(target, { touches: [{ clientX: x, clientY: y }] });
+  }
+
+  /** The finger lifts at `x`, `y`: the pointer, then the touch, then, unless it moved, the click a browser sends after it. */
+  async function fingerUp(target: Element, x = 120, y = 140, { withClick = true } = {}): Promise<void> {
+    fireEvent.pointerUp(target, { pointerType: "touch", pointerId: 1, button: 0, clientX: x, clientY: y });
+    fireEvent.touchEnd(target, { changedTouches: [{ clientX: x, clientY: y }] });
+    if (withClick) {
+      fireEvent.click(target, { clientX: x, clientY: y });
+    }
+    await flush();
+  }
+
+  /** A finger resting on the video at `x`, `y` until it counts as a long press, with the menu's read landed. */
+  async function longPress(x = 120, y = 140): Promise<void> {
+    fingerDown(video(), x, y);
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+  }
+
+  /** Gives the playing video its length, as its metadata does, and gives the player a 400 px box, so a double-tap seeks. */
+  async function loadVideo(seconds: number): Promise<void> {
+    Object.defineProperty(video(), "duration", { configurable: true, value: seconds });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    Object.defineProperty(mediaArea(), "getBoundingClientRect", { configurable: true, value: () => new DOMRect(0, 0, 400, 300) });
+    await flush();
+  }
+
+  it("opens at a right-click on the picture, in place of the browser's menu, with the playing item's actions in their groups, leaving the picture untinted", async () => {
+    stubContextMenuSize(MENU_WIDTH, MENU_HEIGHT);
+    const server = menuServer();
+    await mountAndPlay(server);
+
+    expect(rightClick(video(), 120, 140)).toBe(false);
+    await flush();
+    const menu = contextMenuShown()!;
+    expect(menu).not.toBeNull();
+    expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 120, top: 140 });
+    expect(menuParts(menu)).toEqual([
+      "Add to favorites",
+      "Add to blacklist",
+      "—",
+      "Rate…",
+      "Edit tags…",
+      "Show stats",
+      "Clear playback stats…",
+      "—",
+      "Copy name",
+      "Copy path",
+      "—",
+      "Delete file…"
+    ]);
+    expect(menuIcons(menu)).toEqual([
+      "heart_plus Add to favorites",
+      "thumb_down Add to blacklist",
+      "star Rate…",
+      "tag Edit tags…",
+      "bar_chart Show stats",
+      "delete_history Clear playback stats…",
+      "content_copy Copy name",
+      "content_copy Copy path",
+      "delete_forever Delete file…"
+    ]);
+    expect(menuItemIn(menu, "Delete file…").classList.contains("menu-danger")).toBe(true);
+    expect([...menu.querySelectorAll("button")].every((item) => !item.disabled)).toBe(true);
+    expect(mediaArea().classList.contains("is-menu-target")).toBe(false);
+    // The playing item isn't a loaded tile, so the menu read it whole.
+    expect(itemReads(server)).toEqual(["item-video"]);
+  });
+
+  it("offers Remove from favorites or Remove from the blacklist while the playing item is one, as the player's buttons do", async () => {
+    const server = serverPicking({ ...VIDEO_ITEM, isFavorite: true });
+    server.on("POST", "/api/library/item", () => json(libraryRow(VIDEO_ITEM, { isFavorite: true })));
+    await mountAndPlay(server);
+    expect(menuIcons(await openMenu()).slice(0, 2)).toEqual(["heart_minus Remove from favorites", "thumb_down Add to blacklist"]);
+
+    resetPage();
+    const blacklisted = serverPicking({ ...VIDEO_ITEM, isBlacklisted: true });
+    blacklisted.on("POST", "/api/library/item", () => json(libraryRow(VIDEO_ITEM, { isBlacklisted: true })));
+    await mountAndPlay(blacklisted);
+    expect(menuIcons(await openMenu()).slice(0, 2)).toEqual(["heart_plus Add to favorites", "thumb_up Remove from blacklist"]);
+  });
+
+  it("opens none at a right-click on a control, the scrub bar, the seek row, or the open rating's stars, nor with nothing playing", async () => {
+    const server = menuServer();
+    await mount(server);
+    for (const target of [emptyState(), mediaArea()]) {
+      expect(rightClick(target)).toBe(false);
+      await flush();
+      expect(contextMenuShown()).toBeNull();
+    }
+
+    await click(emptyState());
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(false);
+    expect(mediaArea().contains(ratingPopover())).toBe(true);
+    // The stars first, since a press elsewhere closes them.
+    for (const target of [popoverStars(), button("Loop"), ratingButton(), seekSlider(), seekRow()]) {
+      rightClick(target);
+      await flush();
+      expect(contextMenuShown()).toBeNull();
+    }
+    expect(itemReads(server)).toEqual([]);
+  });
+
+  it("opens at a long press with a finger on the picture, where it began, and the touch's end neither shows nor hides the controls, nor counts as a tap a next one double-taps with", async () => {
+    hideControlsOnClick();
+    useFakeClock();
+    stubContextMenuSize(MENU_WIDTH, MENU_HEIGHT);
+    const server = menuServer();
+    await mountAndPlay(server);
+    await loadVideo(120);
+    video().currentTime = 60;
+    expect(controlsShown()).toBe(true);
+
+    fingerDown(video(), 300, 140);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(contextMenuShown()).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await flush();
+    expect(contextMenuShown()).not.toBeNull();
+    expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 300, top: 140 });
+    // Chrome on Android sends `contextmenu` for a long press, which opens nothing more.
+    expect(fireEvent.contextMenu(video(), { clientX: 300, clientY: 140 })).toBe(false);
+    await flush();
+    expect(itemReads(server)).toEqual(["item-video"]);
+
+    await fingerUp(video(), 300, 140);
+    expect([contextMenuShown() !== null, controlsShown()]).toEqual([true, true]);
+
+    // A tap at once after it, which closes the menu, is a single tap: it seeks nothing, and hides the controls once
+    // 300 ms pass.
+    fingerDown(video(), 300, 140);
+    await fingerUp(video(), 300, 140);
+    expect(contextMenuShown()).toBeNull();
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS);
+    expect([video().currentTime, controlsShown()]).toEqual([60, false]);
+  });
+
+  it("a finger that slides after a long press opened it plays neither the next item nor the previous one as it lifts", async () => {
+    useFakeClock();
+    const server = menuServer();
+    await mountAndPlay(server);
+    await click(button("Next"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+
+    await longPress(200, 140);
+    expect(contextMenuShown()).not.toBeNull();
+    fireEvent.pointerMove(video(), { pointerType: "touch", pointerId: 1, clientX: 40, clientY: 140 });
+    await fingerUp(video(), 40, 140, { withClick: false });
+    expect([video().src, randomPicks(server)]).toEqual([SECOND_VIDEO_URL, 2]);
+
+    // Its press closes the menu before, and opens another.
+    await longPress(200, 140);
+    expect(contextMenuShown()).not.toBeNull();
+    await fingerUp(video(), 360, 140, { withClick: false });
+    expect([video().src, randomPicks(server)]).toEqual([SECOND_VIDEO_URL, 2]);
+  });
+
+  it("opens none for a finger that moves 8 px before 500 ms, which still swipes, or when a second finger lands", async () => {
+    useFakeClock();
+    const server = menuServer();
+    await mountAndPlay(server);
+
+    fingerDown(video(), 300, 140);
+    await vi.advanceTimersByTimeAsync(200);
+    fireEvent.pointerMove(video(), { pointerType: "touch", pointerId: 1, clientX: 292, clientY: 140 });
+    await vi.advanceTimersByTimeAsync(400);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+    await fingerUp(video(), 200, 140, { withClick: false });
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+
+    fingerDown(video(), 300, 140);
+    fireEvent.pointerDown(video(), { pointerType: "touch", pointerId: 2, isPrimary: false, button: 0, clientX: 300, clientY: 200 });
+    await vi.advanceTimersByTimeAsync(600);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+    expect(itemReads(server)).toEqual([]);
+  });
+
+  it("Add to favorites and Add to blacklist send what the player's buttons send, with the same popups, and the menu follows the item's state", async () => {
+    const server = menuServer();
+    server.on("POST", "/api/favorite", flagAnswer);
+    server.on("POST", "/api/blacklist", flagAnswer);
+    const page = await mountAndPlay(server);
+
+    await openMenu();
+    await pick("Add to favorites");
+    expect(contextMenuShown()).toBeNull();
+    expect(server.requests("POST", "/api/favorite").map((call) => call.body)).toEqual([{ itemId: "item-video", isFavorite: true, clientId: page.clientId() }]);
+    expect(isLit("Favorite")).toBe(true);
+    expect(popups()).toEqual([{ text: "Added to favorites", detail: "holiday clip.mp4" }]);
+    expect(menuParts(await openMenu()).slice(0, 2)).toEqual(["Remove from favorites", "Add to blacklist"]);
+    await pick("Remove from favorites");
+    expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ itemId: "item-video", isFavorite: false, clientId: page.clientId() });
+    expect(popups()).toEqual([{ text: "Removed from favorites", detail: "holiday clip.mp4" }]);
+
+    await openMenu();
+    await pick("Add to blacklist");
+    expect(server.requests("POST", "/api/blacklist").map((call) => call.body)).toEqual([{ itemId: "item-video", isBlacklisted: true, clientId: page.clientId() }]);
+    expect(isLit("Blacklist")).toBe(true);
+    expect(popups()).toEqual([{ text: "Blacklisted", detail: "holiday clip.mp4" }]);
+    expect(menuParts(await openMenu()).slice(0, 2)).toEqual(["Add to favorites", "Remove from blacklist"]);
+    await pick("Remove from blacklist");
+    expect(server.requests("POST", "/api/blacklist")[1]!.body).toEqual({ itemId: "item-video", isBlacklisted: false, clientId: page.clientId() });
+  });
+
+  it("Rate… opens the rating's stars, Edit tags… the Tags tab on the playing item, and Show stats the Stats tab", async () => {
+    const server = menuServer();
+    await mountAndPlay(server);
+
+    await openMenu();
+    await pick("Rate…");
+    expect(ratingPopover().hidden).toBe(false);
+
+    await openMenu();
+    await pick("Edit tags…");
+    await waitFor(() => expect(isShowing("Tags")).toBe(true));
+    await waitFor(() => expect(server.requests("POST", "/api/tag-editor/model").map((call) => call.body)).toContainEqual({ itemIds: ["item-video"] }));
+    await closePanel();
+
+    await openMenu();
+    await pick("Show stats");
+    await waitFor(() => expect([panel().hidden, document.getElementById("panel-page-stats")!.hidden]).toEqual([false, false]));
+  });
+
+  it("Clear playback stats… asks first, then clears the playing item's, and is disabled with its reason while it has none", async () => {
+    const server = menuServer();
+    server.on("POST", "/api/playback/clear-stats", () => json({ count: 1 }));
+    await mountAndPlay(server);
+
+    await openMenu();
+    await pick("Clear playback stats…");
+    expect(server.requests("POST", "/api/playback/clear-stats")).toEqual([]);
+    await pressIn("Clear playback stats for 1 item?", "Clear");
+    expect(server.requests("POST", "/api/playback/clear-stats").map((call) => call.body)).toEqual([{ itemIds: ["item-video"] }]);
+    await waitFor(() => expect(popupsShown()).toEqual(["Cleared playback stats for 1 item."]));
+
+    server.on("POST", "/api/library/item", () => json(libraryRow(VIDEO_ITEM, { playCount: 0, lastPlayedUtc: null })));
+    const clear = menuItemIn(await openMenu(), "Clear playback stats…");
+    expect([clear.disabled, clear.title]).toEqual([true, "No playback stats to clear"]);
+  });
+
+  it("Delete file… asks for the control token from another machine, then to confirm, deletes the playing item's file, and moves on to the next item", async () => {
+    const server = menuServer();
+    serveControlFromAnotherMachine(server);
+    server.on("POST", "/api/library/delete-files", () => json({ deletedCount: 1, failedItemIds: [] }));
+    await mountAndPlay(server);
+
+    await openMenu();
+    await pick("Delete file…");
+    expect(findDialog("Control token")).not.toBeNull();
+    expect(findDialog(DELETE_ONE)).toBeNull();
+    fireEvent.input(document.getElementById("control-token-input")!, { target: { value: CONTROL_TOKEN } });
+    await flush();
+    await click(document.getElementById("control-token-continue")!);
+    expect(server.requests("POST", "/control/pair").map((call) => call.body)).toEqual([{ token: CONTROL_TOKEN }]);
+    expect(server.requests("POST", "/api/library/delete-files")).toEqual([]);
+    expect(video().src).toBe(VIDEO_URL);
+
+    await pressIn(DELETE_ONE, "Delete 1 File");
+    expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: ["item-video"] }]);
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    expect(randomPicks(server)).toBe(2);
+  });
+
+  it("Copy name and Copy path copy the playing item's name and path, and say so with its name", async () => {
+    const writeText = stubClipboard();
+    await mountAndPlay(menuServer());
+
+    await openMenu();
+    await pick("Copy path");
+    expect(writeText.mock.calls).toEqual([[VIDEO_ITEM.id]]);
+    await waitFor(() => expect(popups()).toEqual([{ text: "Path copied.", detail: "holiday clip.mp4" }]));
+
+    await openMenu();
+    await pick("Copy name");
+    expect(writeText.mock.calls.at(-1)).toEqual(["holiday clip.mp4"]);
+    await waitFor(() => expect(popups()).toEqual([{ text: "Name copied.", detail: "holiday clip.mp4" }]));
+  });
+
+  it("Show in File Manager shows while the server lists it, and opens the server's file manager at the playing item", async () => {
+    const server = menuServer();
+    server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [...COMPATIBLE_VERSION.capabilities, "api.showInFileManager"] }));
+    server.on("POST", "/api/show-in-file-manager/item-video", () => status(204));
+    mountPage({ server });
+    await pageReady(server);
+    await click(emptyState());
+
+    const menu = await openMenu();
+    expect(menuParts(menu).slice(-5)).toEqual(["Copy name", "Copy path", "Show in File Manager", "—", "Delete file…"]);
+    expect(menuIcons(menu)).toContain("folder_open Show in File Manager");
+    await pick("Show in File Manager");
+    expect(server.requests("POST", "/api/show-in-file-manager/item-video")).toHaveLength(1);
+    await waitFor(() => expect(popups()).toEqual([{ text: "Opened in the file manager.", detail: "holiday clip.mp4" }]));
+  });
+
+  it("closes when another item plays, and one still reading the item opens none once another plays", async () => {
+    const server = menuServer();
+    await mountAndPlay(server);
+
+    await openMenu();
+    // A click alone, with no press before it to close the menu.
+    await click(button("Next"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+    expect(contextMenuShown()).toBeNull();
+
+    let release = () => {};
+    server.on("POST", "/api/library/item", () => new Promise<Response>((resolve) => (release = () => resolve(json(libraryRow(SECOND_VIDEO))))));
+    rightClick(video());
+    await flush();
+    expect(itemReads(server).at(-1)).toBe("item-video-2");
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+    release();
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+  });
+
+  it("opens none when the server answers the item's read with 401", async () => {
+    const server = menuServer();
+    server.on("POST", "/api/library/item", () => status(401));
+    await mountAndPlay(server);
+
+    rightClick(video());
+    await flush();
+    expect(itemReads(server)).toEqual(["item-video"]);
+    expect(contextMenuShown()).toBeNull();
+  });
+
+  it("opens with Clear playback stats… enabled when the item's read fails, and logs it", async () => {
+    const server = menuServer();
+    server.on("POST", "/api/library/item", () => json({ error: "The library is busy." }, 503));
+    await mountAndPlay(server);
+
+    const menu = await openMenu();
+    expect(menuParts(menu)).toEqual([
+      "Add to favorites",
+      "Add to blacklist",
+      "—",
+      "Rate…",
+      "Edit tags…",
+      "Show stats",
+      "Clear playback stats…",
+      "—",
+      "Copy name",
+      "Copy path",
+      "—",
+      "Delete file…"
+    ]);
+    expect(menuItemIn(menu, "Clear playback stats…").disabled).toBe(false);
+    await waitFor(() => expect(server.logLines()).toContain("library=item-read-failed status=503"));
+    expect(openNotices()).toEqual([]);
+  });
+
+  describe("a delete that removes the playing item", () => {
+    /**
+     * Mounts the page with the playing video and another item as loaded tiles, plays the video, and shows the Library
+     * tab, answering a delete with `failedItemIds`.
+     */
+    async function playWithTiles(failedItemIds: string[] = []): Promise<FakeServer> {
+      stubLayoutSize();
+      const server = menuServer();
+      const rows = [libraryRow(VIDEO_ITEM), libraryRow({ ...SECOND_VIDEO, itemId: OTHER_ROW_ID, displayName: "other.mp4" })];
+      server.on("POST", "/api/library/query", () => json({ items: rows, totalCount: rows.length, searchBaselineCount: rows.length }));
+      server.on("POST", "/api/library/query-ids", () => json({ ids: rows.map((row) => row.id) }));
+      server.on("GET", "/control/access", () => status(204));
+      server.on("POST", "/api/library/delete-files", (call) => json({ deletedCount: call.body.itemIds.length - failedItemIds.length, failedItemIds }));
+      mountPage({ server });
+      await pageReady(server);
+      await click(emptyState());
+      await openPanel("Library");
+      await waitFor(() => expect(tile("item-video")).not.toBeNull());
+      return server;
+    }
+
+    function tile(itemId: string): HTMLElement | null {
+      return overlay("library-overlay").querySelector(`.library-grid-tile[data-item-id="${itemId}"]`);
+    }
+
+    async function deleteFromTileMenu(itemId: string): Promise<void> {
+      rightClick(tile(itemId)!);
+      await flush();
+      await pick("Delete file…");
+      await pressIn(DELETE_ONE, "Delete 1 File");
+    }
+
+    it("moves on to the next item from a tile's menu", async () => {
+      const server = await playWithTiles();
+      await deleteFromTileMenu("item-video");
+      expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: ["item-video"] }]);
+      await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+      // The tile is loaded, so the menu asked the server nothing about it.
+      expect(itemReads(server)).toEqual([]);
+    });
+
+    it("moves on to the next item from Selection actions", async () => {
+      const server = await playWithTiles();
+      await click(within(tile("item-video")!).getByTitle("Select"));
+      await click(within(document.getElementById("library-selection-bar")!).getByRole("button", { name: "Selection actions", hidden: true }));
+      await click(menuItemIn(document.getElementById("library-selection-menu")!, "Delete file…"));
+      await pressIn(DELETE_ONE, "Delete 1 File");
+      expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: ["item-video"] }]);
+      await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    });
+
+    it("keeps playing after a delete of another item, or one whose file the server kept", async () => {
+      const server = await playWithTiles();
+      await deleteFromTileMenu(OTHER_ROW_ID);
+      expect(server.requests("POST", "/api/library/delete-files").map((call) => call.body)).toEqual([{ itemIds: [OTHER_ROW_ID] }]);
+      await settle();
+      expect([video().src, randomPicks(server)]).toEqual([VIDEO_URL, 1]);
+
+      resetPage();
+      const kept = await playWithTiles(["item-video"]);
+      await deleteFromTileMenu("item-video");
+      await waitFor(() => expect(openNotices()).toEqual(["1 file couldn't be deleted, so its item stays in the library."]));
+      await settle();
+      expect([video().src, randomPicks(kept)]).toEqual([VIDEO_URL, 1]);
+    });
+  });
+
+  describe("with Hide player controls on Timeout", () => {
+    async function pass(ms: number): Promise<void> {
+      await vi.advanceTimersByTimeAsync(ms);
+    }
+
+    it("keeps the controls shown while it's open, and its close starts their countdown again", async () => {
+      useFakeClock();
+      await mountAndPlay(menuServer());
+      await pass(2000);
+      expect(controlsShown()).toBe(true);
+
+      await openMenu();
+      await pass(10000);
+      expect(controlsShown()).toBe(true);
+      // A press outside it closes it; a press there is no activity of its own.
+      fireEvent.pointerDown(document.body, { pointerType: "mouse", button: 0 });
+      await flush();
+      expect(contextMenuShown()).toBeNull();
+      await pass(2900);
+      expect(controlsShown()).toBe(true);
+      await pass(100);
+      expect(controlsShown()).toBe(false);
+    });
+
+    it("leaves hidden controls hidden while a long press keeps it open", async () => {
+      useFakeClock();
+      await mountAndPlay(menuServer());
+      await pass(3000);
+      expect(controlsShown()).toBe(false);
+
+      await longPress();
+      await fingerUp(video());
+      expect(contextMenuShown()).not.toBeNull();
+      expect(controlsShown()).toBe(false);
+      await pass(10000);
+      expect([contextMenuShown() !== null, controlsShown()]).toEqual([true, false]);
+    });
+
+    it("leaves hidden controls hidden when it closes on its own as autoplay moves on, and shows them when the user closes it", async () => {
+      useFakeClock();
+      localStorage.setItem("rr_device.player.autoplay", JSON.stringify(true));
+      await mountAndPlay(menuServer());
+      await pass(3000);
+      expect(controlsShown()).toBe(false);
+
+      await longPress();
+      await fingerUp(video());
+      expect([contextMenuShown() !== null, controlsShown()]).toEqual([true, false]);
+      fireEvent.ended(video());
+      await flush();
+      expect(video().src).toBe(SECOND_VIDEO_URL);
+      expect([contextMenuShown(), controlsShown()]).toEqual([null, false]);
+
+      // A press outside it is the user's close, which shows them; a press there is no activity of its own.
+      await longPress();
+      await fingerUp(video());
+      fireEvent.pointerDown(document.body, { pointerType: "mouse", button: 0 });
+      await flush();
+      expect([contextMenuShown(), controlsShown()]).toEqual([null, true]);
+    });
   });
 });

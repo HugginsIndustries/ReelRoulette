@@ -63,10 +63,11 @@ export function playingFileName(item: Pick<NowPlayingItem, "id" | "displayName">
   return basenameFromPath(item.displayName || item.id);
 }
 
+/** `name` cut to `maxChars`, ending in "…" where it was cut. */
 export function truncateName(name: string | null | undefined, maxChars: number): string {
   const text = String(name || "");
   if (text.length <= maxChars) return text;
-  return `${text.slice(0, Math.max(0, maxChars - 3))}...`;
+  return `${text.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 /** What the now-playing line shows for an item, or null before anything has played. */

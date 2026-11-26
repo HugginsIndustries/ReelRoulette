@@ -3,8 +3,25 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Window as HappyDomWindow } from "happy-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mountPage, pageReady, resetPage, settle } from "./pageHarness";
+import { fireEvent, screen, waitFor } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  COMPATIBLE_VERSION,
+  FakeServer,
+  contextMenuShown,
+  json,
+  menuItemIn,
+  menuParts,
+  mountPage,
+  pageReady,
+  popupsShown,
+  randomAnswer,
+  resetPage,
+  stubClipboard,
+  rightClick,
+  settle,
+  status
+} from "./pageHarness";
 
 /** The app's stylesheet, which decides which of the header's logo images shows. */
 const STYLESHEET = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
@@ -76,5 +93,117 @@ describe("header logo", () => {
     expect(images.map((image) => image.className)).toEqual(["brand-on-dark", "brand-on-light", "brand-icon"]);
     expect(images.map((image) => image.alt)).toEqual(["ReelRoulette", "ReelRoulette", "ReelRoulette"]);
     expect(header.textContent).not.toContain("ReelRoulette");
+  });
+});
+
+describe("the now-playing name's menu", () => {
+  /** A name longer than the header shows, which it cuts short. */
+  const LONG_NAME = "a holiday clip whose name runs well past what the header shows.mp4";
+  const ITEM = {
+    id: `C:\\media\\${LONG_NAME}`,
+    itemId: "item-video",
+    displayName: LONG_NAME,
+    mediaType: "video",
+    durationSeconds: 65,
+    mediaUrl: "/api/media/item-video?token=t",
+    isFavorite: false,
+    isBlacklisted: false
+  };
+
+  /** Mounts the page and plays the item, with Show in File Manager listed for this browser when `fileManager` is. */
+  async function mountPlaying(fileManager = false): Promise<FakeServer> {
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () => randomAnswer(ITEM));
+    if (fileManager) {
+      server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [...COMPATIBLE_VERSION.capabilities, "api.showInFileManager"] }));
+    }
+    mountPage({ server });
+    await pageReady(server);
+    fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await waitFor(() => expect(name().textContent).not.toBe(""));
+    return server;
+  }
+
+  function name(): HTMLElement {
+    return document.getElementById("now-playing-name") as HTMLElement;
+  }
+
+  function statsTabShown(): boolean {
+    return !(document.getElementById("panel") as HTMLElement).hidden && !(document.getElementById("panel-page-stats") as HTMLElement).hidden;
+  }
+
+  /** Lets fetch replies and renders finish, with real or fake timers. */
+  async function flush(): Promise<void> {
+    if (vi.isFakeTimers()) {
+      await vi.advanceTimersByTimeAsync(0);
+    } else {
+      await settle();
+    }
+  }
+
+  async function pick(label: string): Promise<void> {
+    fireEvent.click(menuItemIn(contextMenuShown()!, label));
+    await flush();
+  }
+
+  it("opens at a right-click on the name with Show stats, then Copy name and Copy path, tinting the name while it's open", async () => {
+    await mountPlaying();
+    expect(name().textContent).not.toBe(LONG_NAME);
+
+    expect(rightClick(name())).toBe(false);
+    await settle();
+    expect(menuParts(contextMenuShown()!)).toEqual(["Show stats", "—", "Copy name", "Copy path"]);
+    expect(name().classList.contains("is-menu-target")).toBe(true);
+    expect(statsTabShown()).toBe(false);
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await settle();
+    expect([contextMenuShown(), name().classList.contains("is-menu-target")]).toEqual([null, false]);
+  });
+
+  it("lists Show in File Manager while the server lists it for this browser, which opens the server's file manager at the item", async () => {
+    const server = await mountPlaying(true);
+    server.on("POST", "/api/show-in-file-manager/item-video", () => status(204));
+
+    rightClick(name());
+    await settle();
+    expect(menuParts(contextMenuShown()!)).toEqual(["Show stats", "—", "Copy name", "Copy path", "Show in File Manager"]);
+    await pick("Show in File Manager");
+    expect(server.requests("POST", "/api/show-in-file-manager/item-video")).toHaveLength(1);
+    await waitFor(() => expect(popupsShown()).toEqual([`Opened in the file manager. | ${LONG_NAME}`]));
+  });
+
+  it("opens at a long press on the name, whose click doesn't open the Stats tab, though Show stats does", async () => {
+    await mountPlaying();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    fireEvent.pointerDown(name(), { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 40, clientY: 20 });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(menuParts(contextMenuShown()!)).toEqual(["Show stats", "—", "Copy name", "Copy path"]);
+    expect(name().classList.contains("is-menu-target")).toBe(true);
+    fireEvent.pointerUp(name(), { pointerType: "touch", pointerId: 1, button: 0, clientX: 40, clientY: 20 });
+    fireEvent.click(name());
+    await flush();
+    expect([contextMenuShown() !== null, statsTabShown()]).toEqual([true, false]);
+
+    await pick("Show stats");
+    expect([contextMenuShown(), statsTabShown()]).toEqual([null, true]);
+  });
+
+  it("Copy name copies the full name, and Copy path the path, each saying so with the name on its second line", async () => {
+    const writeText = stubClipboard();
+    await mountPlaying();
+
+    rightClick(name());
+    await settle();
+    await pick("Copy name");
+    expect(writeText.mock.calls).toEqual([[LONG_NAME]]);
+    await waitFor(() => expect(popupsShown()).toEqual([`Name copied. | ${LONG_NAME}`]));
+
+    rightClick(name());
+    await settle();
+    await pick("Copy path");
+    expect(writeText.mock.calls.at(-1)).toEqual([ITEM.id]);
+    await waitFor(() => expect(popupsShown()).toEqual([`Path copied. | ${LONG_NAME}`]));
   });
 });

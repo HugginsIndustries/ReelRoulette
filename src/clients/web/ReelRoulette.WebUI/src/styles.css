@@ -1319,7 +1319,6 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .stats-file-name { font-weight: 600; word-break: break-word; margin: 0 0 4px; }
 .stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
-.stats-path .icon-btn .material-symbol-icon { font-size: 24px; }
 /* The rating's line: its label at the left, and the stars at the right, lined up with the table's values, wrapping
    under the label on a screen too narrow for both. The stars start at the first star, whose left edge clears the
    rating, and each is only as tall as its icon. A touch that starts on them stays theirs however the finger moves, so

@@ -766,6 +766,66 @@ export function stubContextMenuSize(width: number, height: number): void {
   }
 }
 
+/** The in-app dialogs open now, oldest first. */
+export function shownDialogs(): HTMLDialogElement[] {
+  return Array.from(document.querySelectorAll<HTMLDialogElement>("dialog.app-dialog"));
+}
+
+/** The open dialog whose heading or message reads `text`, or null. */
+export function findDialog(text: string): HTMLDialogElement | null {
+  return shownDialogs().find((dialog) => dialog.querySelector("h3, .dialog-message")?.textContent === text) ?? null;
+}
+
+export function dialogWith(text: string): HTMLDialogElement {
+  const found = findDialog(text);
+  if (!found) {
+    throw new Error(`No dialog reads "${text}".`);
+  }
+  return found;
+}
+
+export function buttonIn(dialog: HTMLElement, label: string): HTMLButtonElement {
+  const found = Array.from(dialog.querySelectorAll("button")).find((button) => button.textContent?.trim() === label);
+  if (!found) {
+    throw new Error(`No ${label} button in the dialog.`);
+  }
+  return found;
+}
+
+export const CONTROL_TOKEN = "control-secret";
+export const WRONG_TOKEN_REASON = "The control token is wrong.";
+
+/**
+ * Answers the control routes as the server answers another machine: `GET /control/access` with 401 until the control
+ * token is paired, and `POST /control/pair` with 401 and its reason for a wrong token.
+ */
+export function serveControlFromAnotherMachine(server: FakeServer): void {
+  let session = false;
+  server.on("GET", "/control/access", () => (session ? status(204) : json({ error: "Unauthorized" }, 401)));
+  server.on("POST", "/control/pair", (call) => {
+    if (call.body?.token !== CONTROL_TOKEN) {
+      return json({ error: WRONG_TOKEN_REASON }, 401);
+    }
+    session = true;
+    return json({ paired: true, message: "Control paired." });
+  });
+}
+
+/**
+ * Gives the browser a Clipboard API whose `writeText` answers as `writeText` does, until the page is reset, and
+ * answers the spy on it.
+ */
+export function stubClipboard(writeText: (text: string) => Promise<void> = () => Promise.resolve()): ReturnType<typeof vi.fn> {
+  const spy = vi.fn(writeText);
+  stubProperty(restores, window.navigator, "clipboard", { value: { writeText: spy } });
+  return spy;
+}
+
+/** The browser has no Clipboard API until the page is reset, as on a page served over plain HTTP to another device. */
+export function removeClipboard(): void {
+  stubProperty(restores, window.navigator, "clipboard", { value: undefined });
+}
+
 /**
  * Where the context menu was placed, `{ left, top }`, with its stubbed size, after checking that it sits wholly
  * inside the window with at least 8 px to spare.

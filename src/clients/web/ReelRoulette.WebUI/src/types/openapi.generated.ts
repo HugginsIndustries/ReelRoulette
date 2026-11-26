@@ -554,8 +554,9 @@ export interface paths {
          * Count the named library items and their states
          * @description How many of the named items are in the library, and how many of those are favorites, are blacklisted, and have
          *     playback stats to clear, which is a play count or a last played time, as `POST /api/playback/clear-stats`
-         *     counts them. The library menus ask it for a selection that reaches items the client hasn't loaded, to offer
-         *     only the actions that would change something. Ids match exactly and each counts once; an id no item has isn't
+         *     counts them. The library menus ask it when they act on several items, some of which the client hasn't loaded,
+         *     to offer only the actions that would change something; a menu on one item reads it with
+         *     `POST /api/library/item` instead. Ids match exactly and each counts once; an id no item has isn't
          *     counted, and no ids count none. It is a read and publishes no event. Each request writes one `last.log` line
          *     with how many ids it named, the counts, and the elapsed time.
          */
@@ -609,7 +610,7 @@ export interface paths {
          * Read one library item
          * @description Returns one catalog item by its catalog id. The body matches a list-query item, including tags,
          *     favorite, blacklist, playback stats, duration, and loudness. Thumbnail layout fields stay on
-         *     `POST /api/library/query`.
+         *     `POST /api/library/query`. The WebUI's menus on one item it hasn't loaded read it too.
          */
         post: operations["postLibraryItem"];
         delete?: never;

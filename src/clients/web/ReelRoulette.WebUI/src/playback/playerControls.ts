@@ -31,9 +31,10 @@ function isHideAfter(value: unknown): value is number {
 
 /**
  * What keeps the controls shown under Timeout, besides a pause, the bell's list, and the rating's stars: a mouse or pen
- * pointer over a control and a drag of the scrub bar or the volume.
+ * pointer over a control, a drag of the scrub bar or the volume, and the player's menu, which leaves them hidden when
+ * it opens while they are, and shows them as it closes only when the user closed it.
  */
-export type ControlsHold = "pointer" | "drag";
+export type ControlsHold = "pointer" | "drag" | "menu";
 
 export interface PlayerControlsOptions {
   device: DeviceStore;
@@ -77,8 +78,11 @@ export interface PlayerControls {
    * mode, and restarts the countdown under Timeout.
    */
   show(): void;
-  /** Starts or ends a hold. Ending one is activity, so the countdown starts again from there. */
-  hold(reason: ControlsHold, held: boolean): void;
+  /**
+   * Starts or ends a hold. Ending one is activity, so the countdown starts again from there, unless `quietly`, as when
+   * the player's menu closes on its own, which starts the countdown again without showing hidden controls.
+   */
+  hold(reason: ControlsHold, held: boolean, options?: { quietly?: boolean }): void;
 }
 
 export function createPlayerControls(options: PlayerControlsOptions): PlayerControls {
@@ -173,11 +177,15 @@ export function createPlayerControls(options: PlayerControlsOptions): PlayerCont
         visible.value = true;
       }
     },
-    hold(reason, on) {
+    hold(reason, on, { quietly = false } = {}) {
       if (on) {
         holds.add(reason);
       } else if (holds.delete(reason)) {
-        activity();
+        if (quietly) {
+          restartCountdown();
+        } else {
+          activity();
+        }
       }
     }
   };

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import type { BulkTarget } from "../library/bulkActions";
+import { createFileLocation } from "../library/fileLocation";
 import { createLibrary, GRID_ZOOM_FIGURES_STAY_MS } from "../library/library";
 import { LIBRARY_LOAD_TIMEOUT_MESSAGE } from "../library/libraryOverlayModel";
 import type { LibraryGridController, LibraryGridCoverage, LibraryGridOptions } from "../library/libraryGridController";
@@ -176,7 +177,8 @@ function setup(options: { storage?: DeviceStorage } = {}) {
   const player = {
     playCurrent: vi.fn((options?: { origin?: string }) => {
       playCalls.push(`current=${store.current.peek()?.itemId} closeIfOverlay=${panel.closeIfOverlay.mock.calls.length} origin=${options?.origin}`);
-    })
+    }),
+    next: vi.fn()
   };
   const grids: Array<ReturnType<typeof fakeGrid>> = [];
   const frames: Array<() => void> = [];
@@ -204,6 +206,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     dialogs,
     notifications,
     controlAccess: { ensure: () => Promise.resolve(true) },
+    fileLocation: createFileLocation({ api, dialogs, notifications, capabilities: store.serverCapabilities }),
     panel,
     device: createDeviceStore(options.storage ?? null),
     tagCatalog: createTagCatalog({ api, connection }),
@@ -1435,11 +1438,14 @@ describe("menus", () => {
     return t.library.selectionMenuGroups.peek().flat().map((item) => (item.disabledReason ? `${item.label} (${item.disabledReason})` : item.label));
   }
 
-  /** Picks `label` in the open context menu, as a click does: the menu closes, then the action runs. */
+  /**
+   * Picks `label` in the open context menu, as a click does: the menu closes, then the action runs. These tests run
+   * without a page, and the actions they pick don't use the item's button, so a stand-in takes its place.
+   */
   async function pick(t: Shown, label: string): Promise<void> {
     const item = t.contextMenu.view.peek()!.groups.flat().find((candidate) => candidate.label === label)!;
     t.contextMenu.close();
-    item.onPick();
+    item.onPick({} as HTMLElement);
     await settle();
   }
 

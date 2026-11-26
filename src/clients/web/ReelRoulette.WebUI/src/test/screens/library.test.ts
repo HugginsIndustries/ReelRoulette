@@ -8,8 +8,12 @@ import { statusLogLine } from "../../logging/relayLogLines";
 import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
   API_BASE_URL,
+  buttonIn,
   COMPATIBLE_VERSION,
+  CONTROL_TOKEN,
+  dialogWith,
   FakeServer,
+  findDialog,
   closeNotices,
   contextMenuPlace,
   contextMenuShown,
@@ -26,13 +30,17 @@ import {
   popupsShown,
   presetSelect,
   randomAnswer,
+  REQUIRED_CAPABILITIES,
   resetPage,
   rightClick,
   selectedPresetLabel,
+  serveControlFromAnotherMachine,
   setViewport,
   settle,
+  shownDialogs,
   status,
   starsShown,
+  stubClipboard,
   stubContextMenuSize,
   stubElementProperty,
   stubLayoutSize,
@@ -41,6 +49,7 @@ import {
   tapStars,
   unauthorizedLogLine,
   useStylesheet,
+  WRONG_TOKEN_REASON,
   xFor,
   type MountedPage
 } from "./pageHarness";
@@ -2357,54 +2366,9 @@ async function pickAction(label: string): Promise<void> {
   await click(menuItem(label));
 }
 
-/** The in-app dialogs open now, oldest first. */
-function shownDialogs(): HTMLDialogElement[] {
-  return Array.from(document.querySelectorAll<HTMLDialogElement>("dialog.app-dialog"));
-}
-
-/** The open dialog whose heading or message reads `text`, or null. */
-function findDialog(text: string): HTMLDialogElement | null {
-  return shownDialogs().find((dialog) => dialog.querySelector("h3, .dialog-message")?.textContent === text) ?? null;
-}
-
-function dialogWith(text: string): HTMLDialogElement {
-  const found = findDialog(text);
-  if (!found) {
-    throw new Error(`No dialog reads "${text}".`);
-  }
-  return found;
-}
-
-function buttonIn(dialog: HTMLElement, label: string): HTMLButtonElement {
-  const found = Array.from(dialog.querySelectorAll("button")).find((button) => button.textContent?.trim() === label);
-  if (!found) {
-    throw new Error(`No ${label} button in the dialog.`);
-  }
-  return found;
-}
-
 /** The popups of other devices' changes showing. */
 function otherDevicePopups(): string[] {
   return popupsShown().filter((text) => text.includes("another device"));
-}
-
-const CONTROL_TOKEN = "control-secret";
-const WRONG_TOKEN_REASON = "The control token is wrong.";
-
-/**
- * Answers the control routes as the server answers another machine: `GET /control/access` with 401 until the control
- * token is paired, and `POST /control/pair` with 401 and its reason for a wrong token.
- */
-function serveControlFromAnotherMachine(server: FakeServer): void {
-  let session = false;
-  server.on("GET", "/control/access", () => (session ? status(204) : json({ error: "Unauthorized" }, 401)));
-  server.on("POST", "/control/pair", (call) => {
-    if (call.body?.token !== CONTROL_TOKEN) {
-      return json({ error: WRONG_TOKEN_REASON }, 401);
-    }
-    session = true;
-    return json({ paired: true, message: "Control paired." });
-  });
 }
 
 function tokenPrompt(): HTMLDialogElement | null {
@@ -3175,6 +3139,7 @@ describe("a tile's menu", () => {
       "star Rate…",
       "tag Edit tags…",
       "delete_history Clear playback stats…",
+      "content_copy Copy path",
       "delete_forever Delete file…"
     ]);
     expect([menuItemIn(menu, "Clear playback stats…").disabled, menuItemIn(menu, "Clear playback stats…").title]).toEqual([true, "No playback stats to clear"]);
@@ -3356,5 +3321,145 @@ describe("a tile's menu", () => {
     expect(server.requests("POST", "/api/library/item-summary").map((call) => call.body)).toEqual([{ itemIds: ids }]);
     expect(partsOf(contextMenuShown()!)).toEqual(["Add to favorites", "Add to blacklist", "—", "Rate…", "Edit tags…", "Clear playback stats…", "—", "Delete files…"]);
     expect(menuItemIn(contextMenuShown()!, "Clear playback stats…").title).toBe("No playback stats to clear");
+  });
+});
+
+describe("a menu on one item's file", () => {
+  /** The server's version for a browser on the server machine, while it has a desktop to open its file manager in. */
+  function offerFileManager(server: FakeServer): void {
+    server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [...REQUIRED_CAPABILITIES, "api.showInFileManager"] }));
+  }
+
+  /** The Selection actions menu's items and rules, once it opens. */
+  async function selectionActions(): Promise<string[]> {
+    await click(barButton("Selection actions"));
+    return menuParts();
+  }
+
+  it("a tile's menu on that tile alone has Copy path, and Show in File Manager while the server lists it, in a group before Delete file…", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    rightClick(tile("item-2")!);
+    await flush();
+    expect(partsOf(contextMenuShown()!).slice(-5)).toEqual(["Clear playback stats…", "—", "Copy path", "—", "Delete file…"]);
+
+    resetPage();
+    await mountLibrary(libraryItems(3), offerFileManager);
+    await openLibrary();
+    rightClick(tile("item-2")!);
+    await flush();
+    expect(menuIcons(contextMenuShown()!).slice(-3)).toEqual(["content_copy Copy path", "folder_open Show in File Manager", "delete_forever Delete file…"]);
+    expect(partsOf(contextMenuShown()!).slice(-6)).toEqual(["Clear playback stats…", "—", "Copy path", "Show in File Manager", "—", "Delete file…"]);
+  });
+
+  it("Selection actions on one selected item has them too, and neither menu has them on several", async () => {
+    await mountLibrary(libraryItems(3), offerFileManager);
+    await openLibrary();
+    await click(check("item-2"));
+    expect((await selectionActions()).slice(-6)).toEqual(["Clear playback stats…", "—", "Copy path", "Show in File Manager", "—", "Delete file…"]);
+    await pressEscape();
+
+    await click(tile("item-3")!);
+    expect(selectedTiles()).toEqual(["item-2", "item-3"]);
+    expect((await selectionActions()).slice(-3)).toEqual(["Clear playback stats…", "—", "Delete files…"]);
+    await pressEscape();
+    rightClick(tile("item-2")!);
+    await flush();
+    expect(partsOf(contextMenuShown()!).slice(-3)).toEqual(["Clear playback stats…", "—", "Delete files…"]);
+  });
+
+  it("Selection actions on one selected item whose tile isn't loaded reads that item, and has them", async () => {
+    const { server, library } = await mountLibrary(libraryItems(MATCHING), (fake, served) => {
+      offerFileManager(fake);
+      fake.on("POST", "/api/library/item", (call) => json(served.items.find((item) => item.id === call.body?.id)));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    // Reversed, item-1 comes last, past the tiles loaded, and a sort change keeps the selection.
+    library.items = [...library.items].reverse();
+    await click(directionButton());
+    await waitFor(() => expect(tile(`item-${MATCHING}`)).not.toBeNull());
+    expect([tile("item-1"), barParts()[2]]).toEqual([null, `1 / ${grouped(MATCHING)} selected`]);
+
+    expect((await selectionActions()).slice(-6)).toEqual(["Clear playback stats…", "—", "Copy path", "Show in File Manager", "—", "Delete file…"]);
+    expect(server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-1" }]);
+    expect(server.requests("POST", "/api/library/item-summary")).toEqual([]);
+  });
+
+  it("Selection actions on one selected item whose read fails has every add and remove and no file items, and logs it", async () => {
+    const { server, library } = await mountLibrary(libraryItems(MATCHING), (fake) => {
+      offerFileManager(fake);
+      fake.on("POST", "/api/library/item", () => json({ error: "The library is busy." }, 503));
+    });
+    await openLibrary();
+    await click(check("item-1"));
+    library.items = [...library.items].reverse();
+    await click(directionButton());
+    await waitFor(() => expect(tile(`item-${MATCHING}`)).not.toBeNull());
+    expect(tile("item-1")).toBeNull();
+
+    expect(await selectionActions()).toEqual([
+      "Add to favorites",
+      "Remove from favorites",
+      "Add to blacklist",
+      "Remove from blacklist",
+      "—",
+      "Rate…",
+      "Edit tags…",
+      "Clear playback stats…",
+      "—",
+      "Delete file…"
+    ]);
+    expect(menuItem("Clear playback stats…").disabled).toBe(false);
+    await waitFor(() => expect(server.logLines()).toContain("library=item-read-failed status=503"));
+    expect(openNotices()).toEqual([]);
+  });
+
+  it("Copy path copies the tile's full path and says so with its name, and Show in File Manager opens the server's file manager at it", async () => {
+    const writeText = stubClipboard();
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      offerFileManager(fake);
+      fake.on("POST", "/api/show-in-file-manager/item-2", () => status(204));
+    });
+    await openLibrary();
+
+    rightClick(tile("item-2")!);
+    await flush();
+    await click(menuItemIn(contextMenuShown()!, "Copy path"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | clip 2.mp4"]));
+    expect(writeText.mock.calls).toEqual([["C:\\media\\clip 2.mp4"]]);
+
+    rightClick(tile("item-2")!);
+    await flush();
+    await click(menuItemIn(contextMenuShown()!, "Show in File Manager"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Opened in the file manager. | clip 2.mp4"]));
+    expect(server.requests("POST", "/api/show-in-file-manager/item-2")).toHaveLength(1);
+  });
+
+  it("Rate… on one rated item opens the Rate dialog at its rating, ready to Rate", async () => {
+    stubStarLayout();
+    await mountLibrary([libraryItem(1), libraryItem(2, { rating: 3.5 }), libraryItem(3)]);
+    await openLibrary();
+
+    rightClick(tile("item-2")!);
+    await flush();
+    await click(menuItemIn(contextMenuShown()!, "Rate…"));
+    const dialog = dialogWith("Rate 1 item");
+    expect([starsShown(dialog.querySelector<HTMLElement>(".rating")!), dialog.querySelector(".rate-dialog-words")?.textContent]).toEqual([3.5, "3.5 stars"]);
+    expect(buttonIn(dialog, "Rate").disabled).toBe(false);
+  });
+
+  it("Rate… on several rated items opens the Rate dialog with no rating chosen", async () => {
+    stubStarLayout();
+    await mountLibrary([libraryItem(1, { rating: 4 }), libraryItem(2, { rating: 4 }), libraryItem(3)]);
+    await openLibrary();
+    await click(check("item-1"));
+    await click(tile("item-2")!);
+
+    await click(barButton("Selection actions"));
+    await click(menuItem("Rate…"));
+    const dialog = dialogWith("Rate 2 items");
+    expect([starsShown(dialog.querySelector<HTMLElement>(".rating")!), dialog.querySelector(".rate-dialog-words")?.textContent]).toEqual([0, "Choose a rating"]);
+    expect(buttonIn(dialog, "Rate").disabled).toBe(true);
   });
 });

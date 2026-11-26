@@ -168,8 +168,9 @@ function SelectionBar() {
 }
 
 /**
- * Rate…: the Stats tab's stars, empty at first, with the rating chosen in words under them. The stars only choose, so a
- * stray tap can't rate every selected item; Rate sets the rating chosen, and Clear rating clears it.
+ * Rate…: the Stats tab's stars, at the item's rating when it rates one and empty for several, with the rating chosen in
+ * words under them. The stars only choose, so a stray tap can't rate every selected item; Rate sets the rating chosen,
+ * and Clear rating clears it.
  */
 function RateDialog() {
   const { library } = useApp();

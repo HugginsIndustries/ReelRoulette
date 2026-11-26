@@ -61,10 +61,10 @@ describe("nowPlaying", () => {
     });
   });
 
-  it("shortens a name over 45 characters and keeps the full name as the title", () => {
+  it("shortens a name over 45 characters with \"…\" and keeps the full name as the title", () => {
     const longName = `${"b".repeat(50)}.mkv`;
     const view = nowPlayingView({ id: longName, displayName: longName });
-    expect(view?.name).toBe(`${"b".repeat(42)}...`);
+    expect(view?.name).toBe(`${"b".repeat(44)}…`);
     expect(view?.name).toHaveLength(45);
     expect(view?.title).toBe(longName);
   });

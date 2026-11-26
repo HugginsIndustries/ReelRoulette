@@ -34,9 +34,9 @@ export function Menu({ id, class: extraClass, hidden, groups, onClose }: MenuPro
               class={item.danger ? "menu-danger" : undefined}
               disabled={!!item.disabledReason}
               title={item.disabledReason ?? undefined}
-              onClick={() => {
+              onClick={(event) => {
                 onClose();
-                item.onPick();
+                item.onPick(event.currentTarget);
               }}
             >
               <span class="material-symbol-icon" aria-hidden="true">{item.icon}</span>
@@ -64,8 +64,8 @@ export function ContextMenuHost() {
   useLightDismiss({
     open: contextMenu.isOpen,
     keepsOpen: (target) => !!target && !!host.current?.contains(target),
-    onPressOutside: contextMenu.close,
-    onEscape: contextMenu.close
+    onPressOutside: contextMenu.dismiss,
+    onEscape: contextMenu.dismiss
   });
 
   const open = view !== null;
@@ -116,7 +116,7 @@ export function ContextMenuHost() {
   }
   return (
     <div id="context-menu" class="context-menu" ref={host}>
-      <Menu groups={view.groups} onClose={contextMenu.close} />
+      <Menu groups={view.groups} onClose={contextMenu.dismiss} />
     </div>
   );
 }

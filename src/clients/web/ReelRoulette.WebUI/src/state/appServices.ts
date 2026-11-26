@@ -4,6 +4,7 @@ import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
+import { createFileLocation } from "../library/fileLocation";
 import { createLibrary, type Library } from "../library/library";
 import { createNotifications, type Notifications } from "../notifications/notifications";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
@@ -14,6 +15,7 @@ import { createCompression, type Compression } from "../playback/compression";
 import { createLoudnessNormalization, type LoudnessNormalization } from "../playback/loudnessNormalization";
 import { createPlayer, type Player } from "../playback/player";
 import { createPlayerControls, type PlayerControls } from "../playback/playerControls";
+import { createPlayingItemMenus, type PlayingItemMenus } from "../playback/playingItemMenus";
 import { createItemRatings } from "../rating/itemRatings";
 import { createPlayerRating, type PlayerRating } from "../rating/playerRating";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
@@ -79,6 +81,8 @@ export interface AppServices {
   notifications: Notifications;
   /** The context menu that shows at a point, one at a time, such as a library tile's. */
   contextMenu: ContextMenu;
+  /** The menus on the playing item: the player's picture's, the header's now-playing name's, and the Stats tab's. */
+  playingMenus: PlayingItemMenus;
   /** The Settings tab's settings that nothing else keeps. */
   settings: Settings;
 }
@@ -120,6 +124,8 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     record: (message) => notifications.record(message)
   });
   const controlAccess = createControlAccess({ api, dialogs });
+  // Copy name, Copy path, and Show in File Manager, in the menus that act on a file.
+  const fileLocation = createFileLocation({ api, dialogs, notifications, capabilities: store.serverCapabilities });
   const connection = createServerConnection({
     sseUrl: config.sseUrl,
     pairToken: config.pairToken,
@@ -174,6 +180,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     dialogs,
     notifications,
     controlAccess,
+    fileLocation,
     panel,
     device,
     tagCatalog,
@@ -200,10 +207,18 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     tagCatalog,
     normalization,
     enhanced: audio.enhanced,
-    dialogs,
-    notifications,
     ratings,
     device
+  });
+  const playingMenus = createPlayingItemMenus({
+    store,
+    player,
+    playerRating,
+    playerControls,
+    panel,
+    library,
+    fileLocation,
+    contextMenu
   });
   const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
   const settings = createSettings({ device, dialogs, reloadPage: options.reloadPage });
@@ -298,6 +313,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     indicator: createPlayerIndicator(store),
     notifications,
     contextMenu,
+    playingMenus,
     settings
   };
 }

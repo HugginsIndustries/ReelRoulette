@@ -16,11 +16,11 @@ exports[`page structure > keeps the starting markup 1`] = `
         <span class="btn-label">
           "Pair"
     <div class="now-playing" id="now-playing" style="display: none">
-      <span class="is-link" id="now-playing-name">
+      <span class="is-link menu-surface" id="now-playing-name">
       <span class="muted" id="now-playing-duration">
   <div class="fullscreen-stage" data-panel-mode="side" data-side="right" id="fullscreen-stage" style="--panel-width: 420px">
     <main class="player-col">
-      <div class="media-container controls-visible" id="media-container">
+      <div class="media-container menu-surface controls-visible" id="media-container">
         <div class="ambient" hidden="" id="ambient" style="--ambient-blur: 64px; --ambient-dark: 0.5; --ambient-light: 0.75; --ambient-saturation: 1">
           <canvas height="18" width="32">
         <video disablepictureinpicture="" disableremoteplayback="" id="video" playsinline="" preload="auto" style="display: none" webkit-playsinline="">

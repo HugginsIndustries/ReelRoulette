@@ -40,7 +40,8 @@ export interface MediaGestureActions {
  * last seeks back by the seek step on the player's left half and forward on its right, leaving the controls as they
  * were, and so does each further one, so a triple-tap seeks twice. Two fingers dragged up or down change the volume a
  * step per 30 px, and are never taken for a swipe or a tap. The scroll wheel changes the volume a step per notch, a
- * trackpad's small deltas adding up to notches, so a light swipe doesn't jump it. Each shows the controls.
+ * trackpad's small deltas adding up to notches, so a light swipe doesn't jump it. Each shows the controls. A touch that
+ * opens the player's menu is neither a swipe nor a tap, however its finger moves before it lifts.
  */
 export interface MediaGestures {
   /** A finger lands, with every finger now on the screen. */
@@ -51,6 +52,8 @@ export interface MediaGestures {
   touchEnd(touch: TouchPoint | undefined, remaining: number): void;
   /** The wheel turns over the media area, which never scrolls the page. */
   wheel(delta: WheelDelta): void;
+  /** The player's menu opened, as from a long press, so a touch still on the screen ends as neither a swipe nor a tap. */
+  menuOpened(): void;
   /**
    * A click on the media area. True when the gestures take it: the click that follows a swipe, and the one that follows
    * a tap on a video, which waits for a double-tap or seeks as one. A click no touch came before, as a mouse's, and a
@@ -73,6 +76,8 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
   let tapWindow: ReturnType<typeof setTimeout> | null = null;
   let singleTapWaits = false;
   let ignoreTouch = false;
+  /** How many fingers are on the media area. */
+  let fingers = 0;
   /** A second finger landed, so the touch is neither a swipe nor a tap until every finger lifts. */
   let multiTouch = false;
   let drag: { y: number; rest: number } | null = null;
@@ -89,6 +94,7 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
   return {
     touchStart(startsOnControls, touches) {
       tapX = null;
+      fingers = touches.length;
       if (touches.length >= 2) {
         multiTouch = true;
         // A finger that lifts and lands again mid-drag moves the fingers' middle, so the drag measures from there on,
@@ -131,6 +137,7 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
     },
 
     touchEnd(touch, remaining) {
+      fingers = remaining;
       if (multiTouch) {
         if (remaining === 0) {
           multiTouch = false;
@@ -181,6 +188,12 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
         wheelRest = 0;
       }, WHEEL_PAUSE_MS);
       step(steps);
+    },
+
+    menuOpened() {
+      if (fingers > 0) {
+        ignoreTouch = true;
+      }
     },
 
     takeClick() {

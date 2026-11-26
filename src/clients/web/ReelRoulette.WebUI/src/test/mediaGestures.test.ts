@@ -219,6 +219,38 @@ describe("createMediaGestures", () => {
     expect([actions.seek.mock.calls.length, actions.tap.mock.calls.length]).toEqual([0, 1]);
   });
 
+  it("ends a touch the player's menu opened during as neither a swipe nor a tap, however far it moved, and leaves its click, and the next touch is a swipe again", () => {
+    vi.useFakeTimers();
+    const { actions, gestures, touch } = setup(true, { seekable: true });
+    gestures.touchStart(false, [{ clientX: 300, clientY: 100 }]);
+    gestures.menuOpened();
+    gestures.touchEnd({ clientX: 100, clientY: 100 }, 0);
+    expect(gestures.takeClick()).toBe(false);
+
+    gestures.touchStart(false, [{ clientX: 300, clientY: 100 }]);
+    gestures.menuOpened();
+    gestures.touchEnd({ clientX: 301, clientY: 100 }, 0);
+    expect(gestures.takeClick()).toBe(false);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    expect([actions.next, actions.previous, actions.tap, actions.seek].map((action) => action.mock.calls.length)).toEqual([0, 0, 0, 0]);
+
+    touch([300, 100], [100, 100]);
+    expect(actions.next).toHaveBeenCalledTimes(1);
+  });
+
+  it("changes nothing when the menu opens with no finger on the screen, as at a right-click, so two fingers landing together still change the volume", () => {
+    const { gestures, touch, stepped } = setup();
+    touch([100, 100], [101, 100]);
+    gestures.takeClick();
+    gestures.menuOpened();
+
+    gestures.touchStart(false, [{ clientX: 120, clientY: 300 }, { clientX: 120, clientY: 340 }]);
+    expect(gestures.touchMove([{ clientX: 120, clientY: 240 }, { clientX: 120, clientY: 280 }])).toBe(true);
+    gestures.touchEnd({ clientX: 120, clientY: 240 }, 1);
+    gestures.touchEnd({ clientX: 120, clientY: 280 }, 0);
+    expect(stepped()).toEqual([2]);
+  });
+
   it("leaves the volume alone where it can't change, still claiming a two-finger drag", () => {
     const { actions, gestures, twoFingerDrag } = setup(false);
     gestures.wheel({ deltaY: -100, deltaMode: 0 });

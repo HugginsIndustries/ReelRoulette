@@ -1,4 +1,4 @@
-import { useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { nowPlayingView } from "../playback/nowPlaying";
 import { useApp } from "./appContext";
 import { HeldButton } from "./FieldValidation";
@@ -36,16 +36,31 @@ function PairingPrompt() {
   );
 }
 
-/** The playing file's name and duration. A click on the name opens the panel on the Stats tab. */
+/**
+ * The playing file's name and duration. A click on the name opens the panel on the Stats tab, and a right-click or a
+ * long press opens its menu.
+ */
 function NowPlaying() {
-  const { panel, store } = useApp();
+  const { panel, store, contextMenu, playingMenus } = useApp();
   const view = nowPlayingView(store.current.value);
+  const name = useRef<HTMLSpanElement>(null);
   const showStats = () => void panel.showTab("stats");
+
+  useLayoutEffect(
+    () =>
+      contextMenu.addSurface({
+        element: name.current!,
+        menuAt: () => (store.current.peek() ? true : null),
+        open: (_on, point) => playingMenus.openNameMenu(point, name.current!)
+      }),
+    []
+  );
   return (
     <div id="now-playing" class="now-playing" style={{ display: view ? "block" : "none" }}>
       <span
         id="now-playing-name"
-        class="is-link"
+        class="is-link menu-surface"
+        ref={name}
         title={view ? `${view.title}\nShow stats` : undefined}
         onClick={showStats}
       >

@@ -20,7 +20,8 @@ import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { RefreshKeptSource } from "../types/serverContracts";
 import type { ContextMenu, MenuGroups, MenuItem } from "../ui/menuModel";
 import type { WindowPoint } from "../ui/placement";
-import { createBulkActions, summarizeLoaded, type BulkActions, type BulkSummary, type BulkTarget } from "./bulkActions";
+import { createBulkActions, summarizeLoaded, type BulkActions, type BulkSummary, type BulkTarget, type MenuFacts } from "./bulkActions";
+import type { FileLocation } from "./fileLocation";
 import { KEPT_SOURCES_LOG_TEXT, keptSourcesMessage, type KeptSourceFolder } from "./keptSources";
 import {
   LIBRARY_SORT_MODES,
@@ -40,7 +41,13 @@ import {
 import { DEFAULT_TARGET_ROW_HEIGHT, isTargetRowHeight } from "./libraryGridLayout";
 import { libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
 import { playRefusalFailure } from "./libraryPlayModel";
-import { parseItemSummary, parseLibraryIds, parseLibraryQueryPage } from "./libraryProjectionModel";
+import {
+  parseItemSummary,
+  parseLibraryIds,
+  parseLibraryItem,
+  parseLibraryQueryPage,
+  type LibraryProjectionItem
+} from "./libraryProjectionModel";
 import {
   LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
   createLibraryQuerySession,
@@ -194,6 +201,12 @@ export interface Library {
    * leaves the grid, the tab hides, or a selection it acts on ends.
    */
   openTileMenu(itemId: string, point: WindowPoint): Promise<void>;
+  /**
+   * The item a menu on it alone acts on, for a menu about to open, as the player's is: its tile while it is loaded, and
+   * otherwise the server's read of it. Null when the read failed, which only logs, and "unauthorized" for a 401, whose
+   * pairing prompt is the only signal, so no menu opens.
+   */
+  readMenuItem(itemId: string, abort: AbortSignal): Promise<LibraryProjectionItem | null | "unauthorized">;
 }
 
 export interface LibraryOptions {
@@ -201,7 +214,8 @@ export interface LibraryOptions {
   store: AppStore;
   api: AppApi;
   connection: ServerConnection;
-  player: Pick<Player, "playCurrent">;
+  /** Plays a chosen tile, and moves on, as Next does, after a delete removes the playing item. */
+  player: Pick<Player, "playCurrent" | "next">;
   /**
    * The in-app dialogs, for a play that fails, a refresh that kept a source's items, and the bulk actions' confirmations
    * and failures.
@@ -211,6 +225,8 @@ export interface LibraryOptions {
   notifications: Pick<Notifications, "notify">;
   /** Asks for the control token before the delete action, when the server wants it. */
   controlAccess: Pick<ControlAccess, "ensure">;
+  /** Copy path and Show in File Manager, in a menu on one item. */
+  fileLocation: Pick<FileLocation, "menuItems">;
   /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
   panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
   /** Remembers whether the controls are collapsed, the sort and direction, and the grid's row height. */
@@ -265,6 +281,8 @@ export function createLibrary(options: LibraryOptions): Library {
     notifications,
     controlAccess,
     selection,
+    fileLocation: options.fileLocation,
+    player,
     async editTags(target) {
       if (await options.editTags(target)) {
         await panel.showTab("tags");
@@ -716,6 +734,34 @@ export function createLibrary(options: LibraryOptions): Library {
     }
   }
 
+  async function readMenuItem(itemId: string, abort: AbortSignal): Promise<LibraryProjectionItem | null | "unauthorized"> {
+    const loaded = session.snapshot().items.find((item) => item.id === itemId);
+    if (loaded) {
+      return loaded;
+    }
+    try {
+      return parseLibraryItem(await api.postJson("/api/library/item", { id: itemId }, { signal: abort }));
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return "unauthorized";
+      }
+      if (!abort.aborted) {
+        void api.relayLog("warn", failureLine("library=item-read-failed", error));
+      }
+      return null;
+    }
+  }
+
+  /** What a menu about to open knows of `ids`: the one item, read whole, or the summary of several. */
+  async function readMenuFacts(ids: string[], abort: AbortSignal): Promise<MenuFacts | "unauthorized"> {
+    if (ids.length === 1) {
+      const item = await readMenuItem(ids[0]!, abort);
+      return item === "unauthorized" ? item : { summary: item && summarizeLoaded(ids, [item]), item };
+    }
+    const summary = await readMenuSummary(ids, abort);
+    return summary === "unauthorized" ? summary : { summary, item: null };
+  }
+
   /**
    * The items of `menu` about to open on `target`, once what it acts on is known, so they never appear or vanish under
    * the pointer; null when a newer open, a close, a change to the selection, or a 401 dropped the menu.
@@ -725,8 +771,8 @@ export function createLibrary(options: LibraryOptions): Library {
     const read = { menu, request: new AbortController() };
     menuRead = read;
     try {
-      const summary = await readMenuSummary(bulk.targetIds(target), read.request.signal);
-      return read.request.signal.aborted || summary === "unauthorized" ? null : bulk.menuGroups(target, summary);
+      const facts = await readMenuFacts(bulk.targetIds(target), read.request.signal);
+      return read.request.signal.aborted || facts === "unauthorized" ? null : bulk.menuGroups(target, facts);
     } finally {
       if (menuRead === read) {
         menuRead = null;
@@ -1043,6 +1089,7 @@ export function createLibrary(options: LibraryOptions): Library {
     clickTile,
     selectAll,
     toggleSelectionMenu,
-    openTileMenu
+    openTileMenu,
+    readMenuItem
   };
 }

@@ -1,4 +1,5 @@
 import { Fragment } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { StatsFileView, StatsLibraryView } from "../stats/statsModel";
 import { useApp } from "./appContext";
 import { RatingStars } from "./RatingStars";
@@ -42,26 +43,30 @@ export function StatsTab() {
 }
 
 /**
- * The file's name and full path, with Show in File Manager where the server offers it and Copy Path everywhere else,
- * as an icon button named by its tooltip, then once they load its rating, its stats, and its tags in a row of their
- * own, which a file without tags doesn't show.
+ * The file's name and full path, each with a menu that copies them or shows the file in the file manager, then once
+ * they load its rating, its stats, and its tags in a row of their own, which a file without tags doesn't show.
  */
 function FileStats({ file }: { file: StatsFileView }) {
-  const { statsTab } = useApp();
+  const { statsTab, contextMenu, playingMenus } = useApp();
+  const name = useRef<HTMLParagraphElement>(null);
+  const path = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const removes = [name.current!, path.current!].map((element) =>
+      contextMenu.addSurface({
+        element,
+        menuAt: () => true,
+        open: (_on, point) => playingMenus.openFileMenu(point, element)
+      })
+    );
+    return () => removes.forEach((remove) => remove());
+  }, []);
+
   return (
     <>
-      <p class="stats-file-name">{file.name}</p>
-      <div class="stats-path">
+      <p class="stats-file-name menu-surface" ref={name}>{file.name}</p>
+      <div class="stats-path menu-surface" ref={path}>
         <code>{file.path}</code>
-        {file.canShowInFileManager ? (
-          <button type="button" class="icon-btn" aria-label="Show in File Manager" title="Show in File Manager" onClick={() => void statsTab.showInFileManager()}>
-            <span class="material-symbol-icon" aria-hidden="true">folder_open</span>
-          </button>
-        ) : (
-          <button type="button" class="icon-btn" aria-label="Copy Path" title="Copy Path" onClick={(event) => void statsTab.copyPath(event.currentTarget)}>
-            <span class="material-symbol-icon" aria-hidden="true">content_copy</span>
-          </button>
-        )}
       </div>
       {file.rows ? (
         <>

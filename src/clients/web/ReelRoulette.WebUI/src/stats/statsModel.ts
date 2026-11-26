@@ -27,8 +27,6 @@ export interface StatsFileView {
   name: string;
   /** The file's full path. */
   path: string;
-  /** The server opens its file manager at the file for this browser, which offers that in place of Copy Path. */
-  canShowInFileManager: boolean;
   /** Its stats, or null until they load for it, and while the server holds back or asks for pairing. */
   rows: StatsRow[] | null;
   /** Its rating in stars, or null for none, which shows with the rows. */

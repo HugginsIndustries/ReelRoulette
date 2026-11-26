@@ -1,8 +1,6 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import { HttpStatusError, requestFailure, UnauthorizedError } from "../api/serverRequest";
-import type { Dialogs } from "../dialogs/dialogs";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
-import type { Notifications } from "../notifications/notifications";
 import type { LoudnessNormalization } from "../playback/loudnessNormalization";
 import { playingFileName } from "../playback/nowPlaying";
 import type { ItemRatings } from "../rating/itemRatings";
@@ -13,7 +11,6 @@ import { heldBackText } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import { createCoalescedRefresh } from "./coalescedRefresh";
-import { createFileLocation, SHOW_IN_FILE_MANAGER_CAPABILITY } from "./fileLocation";
 import { createLastPlayedBeforePlay } from "./lastPlayed";
 import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, type StatsLibraryView, type StatsView } from "./statsModel";
 
@@ -22,10 +19,9 @@ import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, t
  * once, and while it shows, a new playing item and the server's events load again, a burst of them once. A failed load
  * keeps what the tab showed; with nothing loaded yet, the Library section says why. Nothing loads while the server
  * fails the compatibility check, runs without a library, or asks for pairing, nor once the connection stops, as when
- * the page closes, not even a load that was waiting. Beside the file's path, Show in File Manager opens the server
- * machine's file manager at it where the server offers that, and Copy Path copies it everywhere else. Under it, the
- * file's rating shows and is set once its stats load. Show exact times, which this device remembers, shows the file's
- * times themselves in place of how long ago they were.
+ * the page closes, not even a load that was waiting. Under the file's name and path, its rating shows and is set once
+ * its stats load. Show exact times, which this device remembers, shows the file's times themselves in place of how long
+ * ago they were.
  */
 export interface StatsTab {
   readonly view: ReadonlySignal<StatsView>;
@@ -35,10 +31,6 @@ export interface StatsTab {
   open(): void;
   /** The tab hides: nothing loads until it shows again. */
   close(): void;
-  /** Opens the server machine's file manager at the file the tab shows. */
-  showInFileManager(): Promise<void>;
-  /** Copies the path of the file the tab shows; `button` copied it, and the fallback's text field goes next to it. */
-  copyPath(button: HTMLElement): Promise<void>;
   /** Sets the rating of the file the tab shows, or clears it with null. */
   setRating(rating: number | null): void;
   /** Turns Show exact times on or off, which this device remembers. */
@@ -47,7 +39,7 @@ export interface StatsTab {
 
 export interface StatsTabOptions {
   store: AppStore;
-  api: Pick<AppApi, "getJson" | "postJson" | "url" | "request">;
+  api: Pick<AppApi, "getJson" | "postJson">;
   connection: Pick<ServerConnection, "on">;
   /** The tag catalog the Tags and Filter tabs share, which orders the file's tags. */
   tagCatalog: TagCatalog;
@@ -55,10 +47,6 @@ export interface StatsTabOptions {
   normalization: Pick<LoudnessNormalization, "adjustment">;
   /** Enhanced audio, without which nothing is applied. */
   enhanced: ReadonlySignal<boolean>;
-  /** The notice Show in File Manager's and Copy Path's failures show. */
-  dialogs: Pick<Dialogs, "notice">;
-  /** The popups that say a path was shown or copied. */
-  notifications: Pick<Notifications, "notify">;
   /** The ratings this device sets and shows. */
   ratings: Pick<ItemRatings, "shown" | "set">;
   /** Where this device remembers Show exact times. */
@@ -73,8 +61,7 @@ interface LoadedItem {
 }
 
 export function createStatsTab(options: StatsTabOptions): StatsTab {
-  const { store, api, connection, tagCatalog, normalization, enhanced, dialogs, notifications, ratings, device } = options;
-  const fileLocation = createFileLocation({ api, dialogs, notifications });
+  const { store, api, connection, tagCatalog, normalization, enhanced, ratings, device } = options;
   const isOpen = signal(false);
   const stats = signal<LibraryStats | null>(null);
   const loadedItem = signal<LoadedItem | null>(null);
@@ -101,7 +88,6 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
         itemId: playing.itemId,
         name: playingFileName(playing),
         path: playing.id,
-        canShowInFileManager: !!playing.itemId && store.serverCapabilities.value.includes(SHOW_IN_FILE_MANAGER_CAPABILITY),
         rows: item
           ? fileRows(
               item,
@@ -218,18 +204,6 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
     },
     close() {
       isOpen.value = false;
-    },
-    async showInFileManager() {
-      const file = view.peek().file;
-      if (file?.canShowInFileManager) {
-        await fileLocation.showInFileManager(file.itemId, file.name);
-      }
-    },
-    async copyPath(button) {
-      const file = view.peek().file;
-      if (file) {
-        await fileLocation.copyPath(file.path, file.name, button);
-      }
     },
     setRating(rating) {
       const file = view.peek().file;

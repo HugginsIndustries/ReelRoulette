@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CLEAR_EDGE_X,
   COMPATIBLE_VERSION,
+  contextMenuShown,
   currentStyle,
   FakeServer,
   json,
+  menuIcons,
+  menuItemIn,
+  menuParts,
   mountPage,
   movePointer,
   openNotices,
@@ -20,7 +24,10 @@ import {
   ratingRequests,
   releasePointer,
   REQUIRED_CAPABILITIES,
+  removeClipboard,
   resetPage,
+  stubClipboard,
+  rightClick,
   settle,
   STARS_LEFT,
   starsShown,
@@ -724,9 +731,31 @@ async function openOnFile(options: { fileManager: boolean; setup?: (server: Fake
   return page;
 }
 
-/** The icon button beside the path, found by the name its tooltip gives it. */
-function pathButton(name: string): HTMLButtonElement | null {
-  return [...statsBody().querySelectorAll<HTMLButtonElement>(".stats-path button")].find((button) => button.getAttribute("aria-label") === name) ?? null;
+/** The Current file section's file name, which has a menu. */
+function fileName(): HTMLElement {
+  return statsBody().querySelector<HTMLElement>(".stats-file-name")!;
+}
+
+/** The Current file section's path, which has a menu. */
+function filePath(): HTMLElement {
+  return statsBody().querySelector<HTMLElement>(".stats-path")!;
+}
+
+/** Right-clicks `element` and answers the menu that opens on it. */
+async function openMenuOn(element: HTMLElement): Promise<HTMLElement> {
+  expect(rightClick(element)).toBe(false);
+  await settle();
+  const menu = contextMenuShown();
+  if (!menu) {
+    throw new Error("No menu opened.");
+  }
+  return menu;
+}
+
+/** Right-clicks `element` and picks `label` in its menu. */
+async function pickOn(element: HTMLElement, label: string): Promise<void> {
+  fireEvent.click(menuItemIn(await openMenuOn(element), label));
+  await settle();
 }
 
 /** Whether any line the page relayed names the file or its path. */
@@ -734,21 +763,10 @@ function relayedFile(server: FakeServer): boolean {
   return server.logLines().some((line) => line.includes("holiday clip") || line.includes("C:\\media"));
 }
 
-/** The browser has no Clipboard API, as on a page served over plain HTTP to another device. */
-function removeClipboard(): void {
-  Object.defineProperty(window.navigator, "clipboard", { value: undefined, configurable: true });
-}
-
-function stubClipboard(writeText: (text: string) => Promise<void>): ReturnType<typeof vi.fn> {
-  const spy = vi.fn(writeText);
-  Object.defineProperty(window.navigator, "clipboard", { value: { writeText: spy }, configurable: true });
-  return spy;
-}
-
 interface ExecCopy {
   commands: string[];
   /** The field's value, selection, and place when the copy ran. */
-  fields: Array<{ value: string; selected: string; inStatsTab: boolean; focused: boolean }>;
+  fields: Array<{ value: string; selected: string; inStage: boolean; focused: boolean }>;
 }
 
 /** Stands in for `document.execCommand`, which happy-dom lacks, answering `result`. */
@@ -761,7 +779,7 @@ function stubExecCommand(result: boolean): ExecCopy {
       copy.fields.push({
         value: field.value,
         selected: field.value.slice(field.selectionStart ?? 0, field.selectionEnd ?? 0),
-        inStatsTab: !!field.closest("#stats-tab"),
+        inStage: field.parentElement === document.getElementById("fullscreen-stage"),
         focused: document.activeElement === field
       });
     }
@@ -770,48 +788,74 @@ function stubExecCommand(result: boolean): ExecCopy {
   return copy;
 }
 
-describe("Stats tab's Show in File Manager and Copy Path", () => {
+const PATH = "C:\\media\\holiday clip.mp4";
+
+describe("Stats tab's file menus", () => {
   beforeEach(() => {
     resetPage();
   });
 
   afterEach(() => {
-    delete (window.navigator as unknown as Record<string, unknown>).clipboard;
     delete (document as unknown as Record<string, unknown>).execCommand;
     vi.unstubAllGlobals();
   });
 
-  it("offers Show in File Manager only where the server offers it, and Copy Path otherwise, as an icon button named by its tooltip", async () => {
+  it("open on the file's name and on its path with Copy name, Copy path, and Show in File Manager, tinting the one pressed", async () => {
     await openOnFile({ fileManager: true });
-    const show = pathButton("Show in File Manager");
-    expect(show).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Show in File Manager" })).toBe(show);
-    expect([show!.className, show!.title, show!.textContent]).toEqual(["icon-btn", "Show in File Manager", "folder_open"]);
-    expect(show!.querySelector(".material-symbol-icon")?.getAttribute("aria-hidden")).toBe("true");
-    expect(pathButton("Copy Path")).toBeNull();
+    expect([fileName().classList.contains("menu-surface"), filePath().classList.contains("menu-surface")]).toEqual([true, true]);
+
+    expect(menuIcons(await openMenuOn(fileName()))).toEqual([
+      "content_copy Copy name",
+      "content_copy Copy path",
+      "folder_open Show in File Manager"
+    ]);
+    expect([fileName().classList.contains("is-menu-target"), filePath().classList.contains("is-menu-target")]).toEqual([true, false]);
+
+    expect(menuIcons(await openMenuOn(filePath()))).toEqual([
+      "content_copy Copy name",
+      "content_copy Copy path",
+      "folder_open Show in File Manager"
+    ]);
+    expect([fileName().classList.contains("is-menu-target"), filePath().classList.contains("is-menu-target")]).toEqual([false, true]);
+  });
+
+  it("leave out Show in File Manager while the server doesn't list it", async () => {
+    await openOnFile({ fileManager: false });
+    expect(menuParts(await openMenuOn(filePath()))).toEqual(["Copy name", "Copy path"]);
+  });
+
+  it("open at a long press with a finger", async () => {
+    await openOnFile({ fileManager: true });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    fireEvent.pointerDown(filePath(), { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 120, clientY: 140 });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(menuParts(contextMenuShown()!)).toEqual(["Copy name", "Copy path", "Show in File Manager"]);
+    expect(filePath().classList.contains("is-menu-target")).toBe(true);
+  });
+
+  it("show the path with no button beside it, which the menus replace", async () => {
+    await openOnFile({ fileManager: true });
+    expect([...filePath().children].map((child) => child.tagName)).toEqual(["CODE"]);
 
     resetPage();
     await openOnFile({ fileManager: false });
-    const copy = pathButton("Copy Path");
-    expect(copy).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Copy Path" })).toBe(copy);
-    expect([copy!.className, copy!.title, copy!.textContent]).toEqual(["icon-btn", "Copy Path", "content_copy"]);
-    expect(pathButton("Show in File Manager")).toBeNull();
+    expect([...filePath().children].map((child) => child.tagName)).toEqual(["CODE"]);
   });
 
-  it("shows Copy Path beside the path of a playing item no longer in the catalog", async () => {
+  it("open on a playing item no longer in the catalog", async () => {
     await mountStats({ items: [] });
     fireEvent.click(document.getElementById("now-playing-name")!);
     await waitFor(() => expect(cards()).toHaveLength(12));
 
     expect(statsBody().querySelector("dl")).toBeNull();
-    expect(pathButton("Copy Path")).not.toBeNull();
+    expect(menuParts(await openMenuOn(filePath()))).toEqual(["Copy name", "Copy path"]);
   });
 
-  it("asks the server to open its file manager at the item, and says so with the file's name", async () => {
+  it("Show in File Manager asks the server to open its file manager at the item, and says so with the file's name", async () => {
     const { server } = await openOnFile({ fileManager: true, setup: (fake) => fake.on("POST", SHOW_IN_FILE_MANAGER_ROUTE, () => status(204)) });
 
-    fireEvent.click(pathButton("Show in File Manager")!);
+    await pickOn(filePath(), "Show in File Manager");
     await waitFor(() => expect(popupsShown()).toEqual(["Opened in the file manager. | holiday clip.mp4"]));
     expect(server.requests("POST", SHOW_IN_FILE_MANAGER_ROUTE)).toHaveLength(1);
     expect(server.requests("POST", SHOW_IN_FILE_MANAGER_ROUTE)[0]!.body).toBeUndefined();
@@ -820,7 +864,7 @@ describe("Stats tab's Show in File Manager and Copy Path", () => {
     expect(relayedFile(server)).toBe(false);
   });
 
-  it("says why the server refused to open its file manager, or that it failed without a reason, logging only the status", async () => {
+  it("Show in File Manager says why the server refused, or that it failed without a reason, logging only the status", async () => {
     const { server } = await openOnFile({
       fileManager: true,
       setup: (fake) =>
@@ -829,54 +873,78 @@ describe("Stats tab's Show in File Manager and Copy Path", () => {
         )
     });
 
-    fireEvent.click(pathButton("Show in File Manager")!);
+    await pickOn(filePath(), "Show in File Manager");
     await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed: The server has no desktop to open a file manager in."]));
     expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (HTTP 409)."))).toBe(true);
     fireEvent.click(document.querySelector("dialog.app-dialog .dialog-actions button")!);
     await settle();
 
     server.on("POST", SHOW_IN_FILE_MANAGER_ROUTE, () => new Response("Internal error", { status: 500 }));
-    fireEvent.click(pathButton("Show in File Manager")!);
+    await pickOn(fileName(), "Show in File Manager");
     await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed."]));
     expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (HTTP 500)."))).toBe(true);
     expect(popupsShown()).toEqual([]);
     expect(relayedFile(server)).toBe(false);
   });
 
-  it("copies the path with the Clipboard API, and says so with the file's name", async () => {
+  it("Copy path copies the path with the Clipboard API, and says so with the file's name", async () => {
     const writeText = stubClipboard(() => Promise.resolve());
     const execCopy = stubExecCommand(true);
-    const { server } = await openOnFile({ fileManager: false });
+    const { server } = await openOnFile({ fileManager: true });
 
-    fireEvent.click(pathButton("Copy Path")!);
+    await pickOn(filePath(), "Copy path");
     await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
-    expect(writeText.mock.calls).toEqual([["C:\\media\\holiday clip.mp4"]]);
+    expect(writeText.mock.calls).toEqual([[PATH]]);
     expect(execCopy.commands).toEqual([]);
     expect(server.logLines().some((line) => line.startsWith("status=Path copied."))).toBe(true);
     expect(relayedFile(server)).toBe(false);
   });
 
-  it("copies the path from a hidden field without the Clipboard API, as over plain HTTP from another device", async () => {
+  it("Copy name copies the file's name, and says so with it", async () => {
+    const writeText = stubClipboard(() => Promise.resolve());
+    const { server } = await openOnFile({ fileManager: false });
+
+    await pickOn(fileName(), "Copy name");
+    await waitFor(() => expect(popupsShown()).toEqual(["Name copied. | holiday clip.mp4"]));
+    expect(writeText.mock.calls).toEqual([["holiday clip.mp4"]]);
+    expect(server.logLines().some((line) => line.startsWith("status=Name copied."))).toBe(true);
+    expect(relayedFile(server)).toBe(false);
+  });
+
+  it("Copy path copies from a hidden field in the fullscreen stage without the Clipboard API, as over plain HTTP from another device", async () => {
     removeClipboard();
     const execCopy = stubExecCommand(true);
     const { server } = await openOnFile({ fileManager: false });
 
-    fireEvent.click(pathButton("Copy Path")!);
+    await pickOn(filePath(), "Copy path");
     await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
     expect(execCopy.commands).toEqual(["copy"]);
-    const path = "C:\\media\\holiday clip.mp4";
-    expect(execCopy.fields).toEqual([{ value: path, selected: path, inStatsTab: true, focused: true }]);
+    expect(execCopy.fields).toEqual([{ value: PATH, selected: PATH, inStage: true, focused: true }]);
     expect(document.querySelector("textarea")).toBeNull();
     expect(openNotices()).toEqual([]);
     expect(relayedFile(server)).toBe(false);
   });
 
-  it("falls back to the hidden field when the Clipboard API refuses, and says when that fails too", async () => {
+  it("Copy path falls back to the hidden field in the fullscreen stage when the Clipboard API refuses, after the menu has gone", async () => {
+    let refuse!: (error: Error) => void;
+    stubClipboard(() => new Promise<void>((_resolve, reject) => (refuse = reject)));
+    const execCopy = stubExecCommand(true);
+    await openOnFile({ fileManager: false });
+
+    await pickOn(filePath(), "Copy path");
+    expect(contextMenuShown()).toBeNull();
+    refuse(new Error("Write permission denied."));
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
+    expect(execCopy.fields).toEqual([{ value: PATH, selected: PATH, inStage: true, focused: true }]);
+    expect(document.querySelector("textarea")).toBeNull();
+  });
+
+  it("Copy path says when the Clipboard API refuses and the hidden field fails too", async () => {
     const writeText = stubClipboard(() => Promise.reject(new Error("Write permission denied.")));
     const execCopy = stubExecCommand(false);
     const { server } = await openOnFile({ fileManager: false });
 
-    fireEvent.click(pathButton("Copy Path")!);
+    await pickOn(filePath(), "Copy path");
     await waitFor(() => expect(openNotices()).toEqual(["Couldn't copy the path."]));
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(execCopy.commands).toEqual(["copy"]);
@@ -884,6 +952,16 @@ describe("Stats tab's Show in File Manager and Copy Path", () => {
     expect(popupsShown()).toEqual([]);
     expect(server.logLines().some((line) => line.startsWith("status=Couldn't copy the path."))).toBe(true);
     expect(relayedFile(server)).toBe(false);
+  });
+
+  it("Copy name says when it can't copy the name", async () => {
+    stubClipboard(() => Promise.reject(new Error("Write permission denied.")));
+    stubExecCommand(false);
+    await openOnFile({ fileManager: false });
+
+    await pickOn(fileName(), "Copy name");
+    await waitFor(() => expect(openNotices()).toEqual(["Couldn't copy the name."]));
+    expect(popupsShown()).toEqual([]);
   });
 });
 

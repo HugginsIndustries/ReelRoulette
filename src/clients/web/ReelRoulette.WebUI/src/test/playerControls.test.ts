@@ -93,13 +93,28 @@ describe("Timeout", () => {
     expect(page.shown()).toBe(false);
   });
 
-  it.each(["pointer", "drag"] as const)("stays while the %s hold lasts, and hides Hide after once it ends", (reason) => {
+  it.each(["pointer", "drag", "menu"] as const)("stays while the %s hold lasts, and hides Hide after once it ends", (reason) => {
     const page = setup();
     page.controls.hold(reason, true);
     page.wait(10);
     expect(page.shown()).toBe(true);
 
     page.controls.hold(reason, false);
+    page.wait(2.9);
+    expect(page.shown()).toBe(true);
+    page.wait(0.1);
+    expect(page.shown()).toBe(false);
+  });
+
+  it("leaves them hidden while the player's menu holds them, and its end shows them and starts the countdown again", () => {
+    const page = setup();
+    page.wait(3);
+    page.controls.hold("menu", true);
+    page.wait(10);
+    expect(page.shown()).toBe(false);
+
+    page.controls.hold("menu", false);
+    expect(page.shown()).toBe(true);
     page.wait(2.9);
     expect(page.shown()).toBe(true);
     page.wait(0.1);

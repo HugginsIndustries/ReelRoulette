@@ -481,7 +481,7 @@ describe("now playing", () => {
     expect((line.textContent ?? "").replace(/\s+/g, " ").trim()).toBe("holiday clip.mp4 1:05");
   });
 
-  it("shortens a long name to 45 characters and keeps the full name in the tooltip", async () => {
+  it("shortens a long name to 45 characters with \"…\" and keeps the full name in the tooltip", async () => {
     const longName = `${"a".repeat(60)}.mp4`;
     const server = new FakeServer();
     server.on("POST", "/api/random", () => randomAnswer({ ...VIDEO_ITEM, displayName: longName, id: `C:\\media\\${longName}` }));
@@ -489,7 +489,7 @@ describe("now playing", () => {
 
     await startRandomPick();
     const name = document.getElementById("now-playing-name")!;
-    await waitFor(() => expect(name.textContent).toBe(`${"a".repeat(42)}...`));
+    await waitFor(() => expect(name.textContent).toBe(`${"a".repeat(44)}…`));
     expect(name.title).toBe(`${longName}\nShow stats`);
   });
 });

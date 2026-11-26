@@ -21,6 +21,9 @@ const OVERLAY_TOGGLE = "overlay-btn icon-glyph-base icon-glyph-toggle overlay-to
 /** The controls a mouse or pen pointer over keeps shown: the buttons and the seek row. */
 const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
 
+/** What over the picture opens no menu: the controls and the rating's stars. */
+const NO_MENU_PARTS = `${CONTROL_PARTS}, .rating-popover`;
+
 function lit(className: string, active: boolean): string {
   return active ? `${className} active` : className;
 }
@@ -46,9 +49,11 @@ function stopPropagation(event: Event): void {
  * and on a photo too, so the controls never move. The player claims its touches (`touch-action: none`), so a two-finger
  * drag changes the volume without the browser scrolling or zooming, and over it the scroll wheel never scrolls the page.
  * Hide player controls decides when the controls show; hidden, they can't be pressed, so a first tap only shows them.
+ * A right-click or a long press on the picture, not on the controls or the rating's stars, opens the playing item's
+ * menu, and with nothing playing opens nothing.
  */
 export function Player() {
-  const { store, player, playerControls: controls, audio, ambient, fullscreen, settings } = useApp();
+  const { store, player, playerControls: controls, audio, ambient, fullscreen, settings, contextMenu, playingMenus } = useApp();
   const container = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const ambientLayer = useRef<HTMLDivElement>(null);
@@ -164,7 +169,18 @@ export function Player() {
     area.addEventListener("pointermove", onPointerMove, { passive: true });
     controlsLayer.addEventListener("pointerover", onPointerOver);
     controlsLayer.addEventListener("pointerout", onPointerOut);
+
+    // The touch that opens the menu with a long press ends as neither a swipe nor a tap.
+    const removeMenu = contextMenu.addSurface({
+      element: area,
+      menuAt: (target) => (store.current.peek()?.itemId && !target.closest(NO_MENU_PARTS) ? true : null),
+      open(_on, point) {
+        gestures.menuOpened();
+        void playingMenus.openPlayerMenu(point);
+      }
+    });
     return () => {
+      removeMenu();
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
       area.removeEventListener("pointermove", onPointerMove);
@@ -213,7 +229,7 @@ export function Player() {
   const play = player.playButton.value;
   const seekBar = player.seekBar.value;
   return (
-    <div id="media-container" class={controls.shown.value ? "media-container controls-visible" : "media-container"} ref={container} onClick={onAreaClick}>
+    <div id="media-container" class={controls.shown.value ? "media-container menu-surface controls-visible" : "media-container menu-surface"} ref={container} onClick={onAreaClick}>
       <div id="ambient" class="ambient" ref={ambientLayer}>
         <canvas width="32" height="18" ref={ambientCanvas}></canvas>
       </div>
