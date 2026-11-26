@@ -1,5 +1,7 @@
 import type { ComponentChildren, Ref } from "preact";
 import { useRef } from "preact/hooks";
+import { useMenuSurface } from "./Menu";
+import type { MenuGroups } from "./menuModel";
 
 export interface TagCategoryProps {
   name: string;
@@ -15,6 +17,8 @@ export interface TagCategoryProps {
   handle?: ComponentChildren;
   /** Its own controls, after its name, which keep their own actions. */
   controls?: ComponentChildren;
+  /** Its header's menu, which a right-click or a long press on the header, its name included, opens; none without. */
+  menu?: () => MenuGroups;
   /** The section's class, which says while it is being dragged. */
   class?: string;
   sectionRef?: Ref<HTMLElement>;
@@ -26,12 +30,15 @@ export interface TagCategoryProps {
  * the header's own padding, and its tags. Its drag handle and its controls keep their own actions, and a press on them
  * let go elsewhere on the header doesn't toggle it. Expanded or collapsed, the header shows how many of its tags are
  * in use while any are, and the orange dot while it holds unsaved changes, and its toggle's name says both while they
- * show.
+ * show. With a menu, a long press on its name opens the menu, as on the rest of the header, in place of the name's
+ * tooltip.
  */
 export function TagCategory(props: TagCategoryProps) {
   const { collapsed, inUse, unsaved } = props;
   /** Whether the last press on the header started on the header itself, or null before any press. */
   const pressOnHeader = useRef<boolean | null>(null);
+  const header = useRef<HTMLDivElement>(null);
+  useMenuSurface(header, props.menu, { pressOn: ".tag-category-toggle" });
   const showCount = inUse > 0;
   const showDot = unsaved;
   const label = [props.name, showCount ? props.inUseTitle : null, showDot ? "unsaved changes" : null].filter(Boolean).join(", ");
@@ -39,7 +46,8 @@ export function TagCategory(props: TagCategoryProps) {
   return (
     <section class={classes} ref={props.sectionRef}>
       <div
-        class="tag-category-header"
+        class={props.menu ? "tag-category-header menu-surface" : "tag-category-header"}
+        ref={header}
         onPointerDown={(event) => {
           pressOnHeader.current = event.target === event.currentTarget;
         }}

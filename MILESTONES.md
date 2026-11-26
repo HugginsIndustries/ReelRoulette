@@ -731,7 +731,7 @@ Last milestone completed: M12n1
 | Mockup | ✅ Complete | Every menu, its items, wording, and order, and the long press, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Foundation | ✅ Complete | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, whose long press opens their menu, with Select in it, and menus closing on scroll, resize, and the browser tab hiding. |
 | Player | ✅ Complete | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
-| Tags tab | ⏳ Planned | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
+| Tags tab | ✅ Complete | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
 | Filter tab | ⏳ Planned | Menus on the Filter tab's preset rows and sources. |
 | Notifications, Auto Tag, and Settings | ⏳ Planned | Menus on the bell's list entries, the popups, Auto Tag's file rows, and the Settings tab's diagnostics IDs, and the unused notification code removed. |
 
@@ -942,6 +942,20 @@ Last milestone completed: M12n1
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
+**Evidence**
+
+- `src/tags/tagMenus.ts` builds the menus on tags, which the Tags tab's tags (`src/ui/TagEditor.tsx`), its category headers (`src/ui/TagCategory.tsx`, given a `menu`, which the Filter tab's don't get), and the Stats tab's tags (`src/ui/StatsTab.tsx`) register through `useMenuSurface` (`src/ui/Menu.tsx`), with the `menu-surface` class. A surface can name buttons a long press still opens its menu on (`pressOn` in `src/ui/menuModel.ts`), and a category's header names its toggle, which holds the name.
+- The tag editor gained `deleteTag`, `deleteCategory`, which ask as the dialogs' Delete does, and `newTagIn`, which moves to the footer's name through the field reveal, as the Filter tab's held actions do. A tag's row says which buttons show (`canAdd`, `canRemove`) and whether Save has given it its name (`saved`), and the four disabled reasons went.
+- The Filter tab gained `includesTag`, which reads its working copy while it holds unsaved changes and otherwise the applied filter, which it starts over from, and `filterByTag`, which shows the tab on its Tags section through the panel and waits for the load the tab starts as it shows, so a tag saved since it last showed is in its category.
+- Planning settled three points with the advisor's approval: Filter by this tag is disabled with "Save this tag first" on a tag Save hasn't created or renamed yet, since the Filter tab matches against the server's catalog, which the mockup now shows too; a Stats tab tag's menu stays open when another item plays, as the mockup's does, since it acts on the tag; and a tag's button's accessible name is its tooltip, then the tag's name, as in the mockup.
+- The tint's rules moved to the end of `src/styles.css`, where the mockup's are, so they win over a green or orange tag's own ring.
+- The library screen tests' finger press moved into `pageHarness.ts`, which the Tags screen tests share.
+- Tags screen tests cover the tag's and the category's menus, Filter by this tag on a tab that never opened, on one with unsaved changes, and on a tag saved since the tab last showed, its absence for an included tag and its reason on new and renamed tags, the long presses, and the tint on a green and an orange tag; Stats, library, menu opener, and model tests cover the Stats tab's tag menu, a selection's buttons, `pressOn`, and the show rules.
+- Breaking `pressOn`, the show rules, `saved`, `includesTag`, its read of the working copy, the wait for the tab's load, the category's expansion, the Tags section, the move to the name field, the tag menu's Delete question, the category menu's Delete question, Uncategorized's items, the Stats tag's missing menu, the tint's target, and the tint rule's place, each from a copy under `artifacts/scratch/`, failed 2, 3, 2, 2, 1, 3, 1, 2, 1, 1, 1, 1, 1, 2, and 1 tests (measured).
+- The Tags tab snapshot was updated once with `npx vitest run -u`, with the advisor's approval: only its tags' buttons, the edit buttons, and the `menu-surface` classes changed. Vitest 5's `-u` takes an optional value, so `npx vitest run -u {file}` runs and updates every test file; no other snapshot changed (measured).
+- `npm run verify` passes, with 2,494 tests in 98 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the menus on tags, the tag's buttons, and the edit buttons' removal.
+
 #### Filter tab slice
 
 **Scope**
@@ -953,6 +967,7 @@ Last milestone completed: M12n1
 - Preset rows lose their edit button (`src/ui/FilterDialog.tsx`).
 - A source in the Sources section has a menu with Only this source, which checks it and unchecks the others, shown while other sources are checked.
 - A disabled source's row and its Only this source give "This source is turned off on the server" as their tooltip.
+- `useMenuSurface` takes an optional open override, and the header's now-playing name and the Stats tab's file name and path, whose menus open through the playing item's menus, move onto it.
 
 **Traps**
 
@@ -964,12 +979,15 @@ Last milestone completed: M12n1
 - A disabled source's checkbox has no tooltip (`src/ui/FilterDialog.tsx`).
 - No preset may hold another preset's filter: the server refuses one with 409 "Preset "{name}" already has this filter." (`src/core/ReelRoulette.Server/Services/ServerStateService.cs`), and the Filter tab disables Add Preset and Update preset for it.
 - Source rows are labels around their checkbox, so the click a long press ends with would toggle it unless it is used up (inferred).
+- `useMenuSurface` in `src/ui/Menu.tsx` gives a component's element a menu from the groups it gives at the press, tinting the element, and `pressOn` names buttons a long press still opens it on (`src/ui/menuModel.ts`).
+- `useMenuSurface` always opens its menu through `contextMenu.open`, so `NowPlaying` (`src/ui/Header.tsx`) and `FileStats` (`src/ui/StatsTab.tsx`), whose menus open through `src/playback/playingItemMenus.ts`, still attach their surfaces with `addSurface` by hand.
 
 **Acceptance**
 
 - Each preset row menu item works as the control it repeats does, Apply is disabled with its reason while the tab holds unsaved changes, Delete asks first, and preset rows have no edit button, in Filter screen tests.
 - Only this source checks only that source, and a disabled source's checkbox and menu item give their reason, in Filter screen tests.
 - A long press on a preset row outside its drag handle, or on a source, opens its menu without starting a drag or toggling the source, in Filter screen tests with touch pointers.
+- The header's now-playing name's and the Stats tab's file name's and path's menus open as before through `useMenuSurface`, in Header and Stats screen tests.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -996,6 +1014,7 @@ Last milestone completed: M12n1
 - `toggleList` has no caller, and `dismissAll` is called only from `src/test/screens/notifications.test.ts` (measured).
 - The Settings tab's diagnostics IDs are plain text (`src/ui/SettingsTab.tsx`).
 - `menuItems` in `src/library/fileLocation.ts` builds Copy path and Show in File Manager, without Copy name when asked, and a copy's fallback field goes into the fullscreen stage, so a menu rendered inside Auto Tag's modal dialog, where the page outside it is inert, needs its field placed inside the dialog (inferred).
+- `useMenuSurface` in `src/ui/Menu.tsx` gives a component's element a menu from the groups it gives at the press, tinting the element, and `pressOn` names buttons a long press still opens it on (`src/ui/menuModel.ts`).
 
 **Acceptance**
 

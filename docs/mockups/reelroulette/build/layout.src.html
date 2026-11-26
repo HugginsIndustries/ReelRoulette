@@ -4858,15 +4858,18 @@ contextMenu.add("#tags-body .tag-category-header", (header) => {
     ]
   ];
 }, { pressOn: ".tag-category-toggle" });
-// The Stats tab's tags: Filter by this tag.
+// The Stats tab's tags: Filter by this tag. They are the server's tags, so they are always saved.
 contextMenu.add(".stats-tag", (el) => {
   const { chip } = chipByKey(el.dataset.key);
-  return chip && [[filterByTagItem(chip)]];
+  return chip && [[filterByTagItem(chip, true)]];
 });
+// Whether Save has given the tag its name: a new tag, or one renamed since, has none yet.
+const tagSaved = (chip) => savedTags.some((category) => category.chips.some((c) => c.key === chip.key && c.name.toLowerCase() === chip.name.toLowerCase()));
 // Filter by this tag adds the tag to the Filter tab's filter as a tag to include, until Apply, and opens the Filter tab
 // on its Tags section with the tag's category open, so the change shows. It shows while the tab's filter doesn't
-// include the tag already.
-function filterByTagItem(chip) {
+// include the tag already. A tag Save hasn't created or renamed yet isn't in the server's catalog, which the filter
+// matches against, so it is disabled, saying why, until Save.
+function filterByTagItem(chip, saved = tagSaved(chip)) {
   return filterTagState.get(chip.key) !== "inc" && menuItem("filter_alt", "Filter by this tag", () => {
     filterTagState.set(chip.key, "inc");
     setCategoryExpanded("filter", chipByKey(chip.key).category.id, true);
@@ -4874,7 +4877,7 @@ function filterByTagItem(chip) {
     renderApply();
     openPanel("filter");
     showSub("tags");
-  });
+  }, { reason: saved ? null : "Save this tag first" });
 }
 // A delete from a menu asks first, as the dialog's Delete does.
 async function confirmDelete(message, onDelete) {

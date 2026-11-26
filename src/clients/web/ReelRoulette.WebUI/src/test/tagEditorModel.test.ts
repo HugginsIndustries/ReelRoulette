@@ -7,11 +7,7 @@ import {
   categoryOptions,
   chipState,
   createPendingTagEdits,
-  EVERY_ITEM_HAS_TAG_REASON,
   hasPendingTagEdits,
-  ITEM_HAS_TAG_REASON,
-  ITEM_LACKS_TAG_REASON,
-  NO_ITEM_HAS_TAG_REASON,
   initialCategoryOrder,
   moveCategoryInOrder,
   newTagNameProblem,
@@ -145,7 +141,7 @@ describe("tagEditorDisplay", () => {
       ORDER
     );
     expect(lower.counts.get("beach")).toBe(2);
-    const chips = tagCategoryRows(lower, new Set(), new Map(), THREE, true).flatMap((row) => row.chips);
+    const chips = tagCategoryRows(lower, new Set(), new Map(), THREE).flatMap((row) => row.chips);
     expect(chips.find((chip) => chip.name === "Beach")?.state).toBe("state-some");
   });
 
@@ -203,9 +199,9 @@ describe("category order and options", () => {
 });
 
 describe("rows and chips", () => {
-  it("gives each category its controls and its tags with what the items have and what is held", () => {
+  it("gives each category its tags with what the items have and what is held", () => {
     const display = tagEditorDisplay(MODEL, createPendingTagEdits(), ORDER);
-    const rows = tagCategoryRows(display, new Set(["mood"]), new Map([["calm", { action: "add" as const, name: "Calm" }]]), MODEL, false);
+    const rows = tagCategoryRows(display, new Set(["mood"]), new Map([["calm", { action: "add" as const, name: "Calm" }]]), MODEL);
     // Only the categories expanded show their tags.
     expect(rows.map((row) => [row.name, row.collapsed, row.uncategorized])).toEqual([
       ["Places", true, false],
@@ -214,61 +210,62 @@ describe("rows and chips", () => {
       ["Uncategorized", true, true]
     ]);
     expect(rows[0]!.chips).toEqual([
-      {
-        name: "alps",
-        state: "state-none",
-        pending: null,
-        canChangeItems: true,
-        addDisabledReason: null,
-        removeDisabledReason: ITEM_LACKS_TAG_REASON
-      },
-      {
-        name: "Beach",
-        state: "state-all",
-        pending: null,
-        canChangeItems: true,
-        addDisabledReason: ITEM_HAS_TAG_REASON,
-        removeDisabledReason: null
-      }
+      { name: "alps", state: "state-none", pending: null, canAdd: true, canRemove: false, saved: true },
+      { name: "Beach", state: "state-all", pending: null, canAdd: false, canRemove: true, saved: true }
     ]);
     expect(rows[1]!.chips[0]!.pending).toBe("add");
     expect(rows[3]!.chips.map((chip) => chip.name)).toEqual(["Loose"]);
   });
 
-  it("changes no item's tags while no item being edited is in the library, with no reason on either button", () => {
-    const alone = tagEditorDisplay({ ...MODEL, tagCounts: [], itemCount: 0 }, createPendingTagEdits(), ["places"]);
-    expect(tagCategoryRows(alone, new Set(), new Map(), MODEL, false)[0]!.chips[0]).toMatchObject({
-      canChangeItems: false,
-      addDisabledReason: null,
-      removeDisabledReason: null
-    });
+  it("shows neither Add nor Remove while no item being edited is in the library", () => {
+    const alone = tagEditorDisplay({ ...MODEL, tagCounts: [{ name: "Beach", itemCount: 1 }], itemCount: 0 }, createPendingTagEdits(), ["places"]);
+    expect(tagCategoryRows(alone, new Set(), new Map(), MODEL)[0]!.chips.map((chip) => [chip.name, chip.canAdd, chip.canRemove])).toEqual([
+      ["alps", false, false],
+      ["Beach", false, false]
+    ]);
   });
 
-  it("disables Add on a tag every item has and Remove on one none has, naming the item or the selected items", () => {
-    const chip = (model: TagEditorModel, several: boolean, name: string) =>
-      tagCategoryRows(tagEditorDisplay(model, createPendingTagEdits(), ORDER), new Set(), new Map(), model, several)
+  it("shows Add while some item lacks the tag and Remove while some item has it, so a tag only some have shows both", () => {
+    const chip = (model: TagEditorModel, name: string) =>
+      tagCategoryRows(tagEditorDisplay(model, createPendingTagEdits(), ORDER), new Set(), new Map(), model)
         .flatMap((row) => row.chips)
         .find((candidate) => candidate.name === name)!;
-    expect(chip(MODEL, false, "Bob")).toMatchObject({ addDisabledReason: ITEM_HAS_TAG_REASON, removeDisabledReason: null });
-    expect(chip(MODEL, false, "Calm")).toMatchObject({ addDisabledReason: null, removeDisabledReason: ITEM_LACKS_TAG_REASON });
-    expect(chip(THREE, true, "Bob")).toMatchObject({ addDisabledReason: EVERY_ITEM_HAS_TAG_REASON, removeDisabledReason: null });
-    expect(chip(THREE, true, "Calm")).toMatchObject({ addDisabledReason: null, removeDisabledReason: NO_ITEM_HAS_TAG_REASON });
-    // A tag only some have can be added to the rest or removed from those that have it.
-    expect(chip(THREE, true, "Beach")).toMatchObject({ state: "state-some", addDisabledReason: null, removeDisabledReason: null });
+    expect(chip(MODEL, "Bob")).toMatchObject({ canAdd: false, canRemove: true });
+    expect(chip(MODEL, "Calm")).toMatchObject({ canAdd: true, canRemove: false });
+    expect(chip(THREE, "Bob")).toMatchObject({ canAdd: false, canRemove: true });
+    expect(chip(THREE, "Calm")).toMatchObject({ canAdd: true, canRemove: false });
+    expect(chip(THREE, "Beach")).toMatchObject({ state: "state-some", canAdd: true, canRemove: true });
   });
 
-  it("keeps a held change's button enabled, so it can be undone", () => {
+  it("keeps a held change's button, so it can be undone", () => {
     const chip = (selections: Map<string, { action: "add" | "remove"; name: string }>, name: string) =>
-      tagCategoryRows(tagEditorDisplay(THREE, createPendingTagEdits(), ORDER), new Set(), selections, THREE, true)
+      tagCategoryRows(tagEditorDisplay(THREE, createPendingTagEdits(), ORDER), new Set(), selections, THREE)
         .flatMap((row) => row.chips)
         .find((candidate) => candidate.name === name)!;
-    expect(chip(new Map([["bob", { action: "add", name: "Bob" }]]), "Bob").addDisabledReason).toBeNull();
-    expect(chip(new Map([["calm", { action: "remove", name: "Calm" }]]), "Calm").removeDisabledReason).toBeNull();
+    expect(chip(new Map([["bob", { action: "add", name: "Bob" }]]), "Bob")).toMatchObject({ canAdd: true, canRemove: true });
+    expect(chip(new Map([["calm", { action: "remove", name: "Calm" }]]), "Calm")).toMatchObject({ canAdd: true, canRemove: true });
+  });
+
+  it("marks a tag Save hasn't created or renamed yet as not saved, but not one only moved to another category", () => {
+    const edits = pending({
+      upsertTags: new Map([["sunset", { name: "Sunset", categoryId: "places" }]]),
+      renameTags: new Map([
+        ["calm", { oldName: "Calm", newName: "Quiet", newCategoryId: null }],
+        ["bob", { oldName: "Bob", newName: "Bob", newCategoryId: "places" }]
+      ])
+    });
+    const chips = tagCategoryRows(tagEditorDisplay(MODEL, edits, ORDER), new Set(), new Map(), MODEL).flatMap((row) => row.chips);
+    expect(["Sunset", "Quiet", "Bob", "Beach"].map((name) => [name, chips.find((chip) => chip.name === name)?.saved])).toEqual([
+      ["Sunset", false],
+      ["Quiet", false],
+      ["Bob", true],
+      ["Beach", true]
+    ]);
   });
 
   it("counts each category's tags the items have, and marks one with a held change or a name or tags unlike the saved ones", () => {
     const rows = (edits: PendingTagEdits, selections = new Map<string, { action: "add" | "remove"; name: string }>()) =>
-      tagCategoryRows(tagEditorDisplay(MODEL, edits, ORDER), new Set(), selections, MODEL, false).map((row) => [row.name, row.inUse, row.unsaved]);
+      tagCategoryRows(tagEditorDisplay(MODEL, edits, ORDER), new Set(), selections, MODEL).map((row) => [row.name, row.inUse, row.unsaved]);
     expect(rows(createPendingTagEdits())).toEqual([
       ["Places", 1, false],
       ["Mood", 0, false],
@@ -297,7 +294,7 @@ describe("rows and chips", () => {
       pending({ upsertCategories: new Map([["food", { id: "food", name: "Food", sortOrder: 3 }]]) }),
       ["people", "mood", "places", "food", "uncategorized"]
     );
-    expect(tagCategoryRows(added, new Set(), new Map(), MODEL, false).map((row) => [row.name, row.unsaved])).toEqual([
+    expect(tagCategoryRows(added, new Set(), new Map(), MODEL).map((row) => [row.name, row.unsaved])).toEqual([
       ["People", false],
       ["Mood", false],
       ["Places", false],
@@ -312,7 +309,7 @@ describe("rows and chips", () => {
     expect(chipState(0, 2)).toBe("state-none");
     expect(chipState(0, 0)).toBe("state-none");
     // Counts by tag name ignore case, as the server counts them.
-    const rows = tagCategoryRows(tagEditorDisplay(THREE, createPendingTagEdits(), ORDER), new Set(), new Map(), THREE, true);
+    const rows = tagCategoryRows(tagEditorDisplay(THREE, createPendingTagEdits(), ORDER), new Set(), new Map(), THREE);
     expect(rows.flatMap((row) => row.chips).map((chip) => [chip.name, chip.state])).toEqual([
       ["alps", "state-none"],
       ["Beach", "state-some"],

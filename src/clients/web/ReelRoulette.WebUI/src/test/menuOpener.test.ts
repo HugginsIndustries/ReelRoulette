@@ -45,12 +45,16 @@ function clickHeard(target: Element): boolean {
   return heard;
 }
 
-/** Gives `element` a menu that opens on its `[data-name]` part a press lands in, and none elsewhere. */
-function surface(element: Element): () => void {
+/**
+ * Gives `element` a menu that opens on its `[data-name]` part a press lands in, and none elsewhere, counting the buttons
+ * `pressOn` names as part of it.
+ */
+function surface(element: Element, pressOn?: string): () => void {
   return contextMenu.addSurface({
     element,
     menuAt: (target) => target.closest("[data-name]")?.getAttribute("data-name") ?? null,
-    open: (name, point) => opened.push(`${name} at ${point.x},${point.y}`)
+    open: (name, point) => opened.push(`${name} at ${point.x},${point.y}`),
+    pressOn
   });
 }
 
@@ -62,6 +66,7 @@ beforeEach(() => {
         <span class="row-text">Row</span>
         <div id="inner" data-name="chip"><span class="chip-text">Chip</span></div>
         <button type="button">Edit</button>
+        <button id="name" type="button"><span class="name-text">Name</span></button>
         <span class="drag-handle"></span>
         <div class="rating"><span class="star"></span></div>
         <div class="panel-handle"></div>
@@ -144,6 +149,14 @@ describe("context menus", () => {
     }
     expect(longPress($(".gap"))).toBe(true);
     expect(opened).toEqual([]);
+  });
+
+  it("open at a long press on a button the surface counts as part of it, but on no other button", () => {
+    surface($("#list"), "#name");
+    expect(longPress($(".name-text"), 20, 30)).toBe(false);
+    expect(longPress($("#list button"))).toBe(true);
+    expect(longPress($(".drag-handle"))).toBe(true);
+    expect(opened).toEqual(["row at 20,30"]);
   });
 
   it("open nothing once their surface is gone, or the opener stops", () => {

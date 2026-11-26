@@ -23,15 +23,6 @@ export interface CatalogTag {
  */
 export type TagEditorModel = components["schemas"]["TagEditorModelResponse"];
 
-/** Add's tooltip while the one item being edited already has the tag. */
-export const ITEM_HAS_TAG_REASON = "This item already has this tag";
-/** Remove's tooltip while the one item being edited doesn't have the tag. */
-export const ITEM_LACKS_TAG_REASON = "This item doesn't have this tag";
-/** Add's tooltip while every selected item being edited has the tag. */
-export const EVERY_ITEM_HAS_TAG_REASON = "Every selected item has this tag";
-/** Remove's tooltip while no selected item being edited has the tag. */
-export const NO_ITEM_HAS_TAG_REASON = "No selected item has this tag";
-
 export type TagAction = "add" | "remove";
 
 /** A tag the user asked to add to or remove from the items being edited, keyed by its normalized name. */
@@ -77,12 +68,12 @@ export interface TagChipRow {
   name: string;
   state: ChipState;
   pending: TagAction | null;
-  /** Adding and removing need at least one item being edited. */
-  canChangeItems: boolean;
-  /** Why Add is disabled, its tooltip: every item being edited has the tag and no add is held, or null. */
-  addDisabledReason: string | null;
-  /** Why Remove is disabled, its tooltip: no item being edited has the tag and no remove is held, or null. */
-  removeDisabledReason: string | null;
+  /** Add shows: some item being edited lacks the tag, or its add is held, which a press undoes. */
+  canAdd: boolean;
+  /** Remove shows: some item being edited has the tag, or its remove is held, which a press undoes. */
+  canRemove: boolean;
+  /** The saved catalog has a tag by this name, which a tag Save hasn't created or renamed yet doesn't. */
+  saved: boolean;
 }
 
 export interface TagCategoryRow {
@@ -434,12 +425,6 @@ export function chipState(count: number, itemCount: number): ChipState {
   return itemCount > 0 && count >= itemCount ? "state-all" : "state-some";
 }
 
-/** Each category's name and its tags' names in order, as the model saved them. */
-function savedCategoryShapes(model: TagEditorModel | null): Map<string, string> {
-  const saved = tagEditorDisplay(model, createPendingTagEdits(), []);
-  return new Map(saved.categories.map((category) => [category.id, categoryShape(category, saved.tags)]));
-}
-
 function categoryShape(category: TagCategory, tags: readonly CatalogTag[]): string {
   const names = tags
     .filter((tag) => (isUncategorizedCategoryId(tag.categoryId) ? UNCATEGORIZED_CATEGORY_ID : tag.categoryId) === category.id)
@@ -448,37 +433,35 @@ function categoryShape(category: TagCategory, tags: readonly CatalogTag[]): stri
 }
 
 /**
- * The Tags tab's categories, each with its controls and its tags by name. A category is collapsed unless `expanded`
- * holds it, and the saved `model` tells which ones hold unsaved changes. `several` is whether the tab edits the
- * selected items, which the disabled Add's and Remove's reasons name.
+ * The Tags tab's categories, each with its tags by name. A category is collapsed unless `expanded` holds it, and the
+ * saved `model` tells which ones hold unsaved changes and which tags Save hasn't created or renamed yet.
  */
 export function tagCategoryRows(
   display: TagEditorDisplay,
   expanded: ReadonlySet<string>,
   selections: ReadonlyMap<string, TagSelection>,
-  model: TagEditorModel | null,
-  several: boolean
+  model: TagEditorModel | null
 ): TagCategoryRow[] {
-  const canChangeItems = display.itemCount > 0;
-  const saved = savedCategoryShapes(model);
-  const hasReason = several ? EVERY_ITEM_HAS_TAG_REASON : ITEM_HAS_TAG_REASON;
-  const lacksReason = several ? NO_ITEM_HAS_TAG_REASON : ITEM_LACKS_TAG_REASON;
+  const saved = tagEditorDisplay(model, createPendingTagEdits(), []);
+  const savedShapes = new Map(saved.categories.map((category) => [category.id, categoryShape(category, saved.tags)]));
+  const savedNames = new Set(saved.tags.map((tag) => normalizeTagKey(tag.name)));
   return display.categories.map((category) => {
     const isUncategorized = isUncategorizedCategoryId(category.id);
     const chips = display.tags
       .filter((tag) => (isUncategorizedCategoryId(tag.categoryId) ? UNCATEGORIZED_CATEGORY_ID : tag.categoryId) === category.id)
       .map((tag): TagChipRow => {
-        const state = chipState(display.counts.get(normalizeTagKey(tag.name)) ?? 0, display.itemCount);
-        const pending = selections.get(normalizeTagKey(tag.name))?.action ?? null;
-        // Add on a tag every item has, or Remove on one none has, would change nothing, unless its own change is held,
-        // which it then undoes.
+        const key = normalizeTagKey(tag.name);
+        const state = chipState(display.counts.get(key) ?? 0, display.itemCount);
+        const pending = selections.get(key)?.action ?? null;
+        // Only what would change something shows: with no item being edited, Add and Remove change nothing, nor does
+        // Add on a tag every item has, or Remove on one none has, unless its own change is held, which a press undoes.
         return {
           name: tag.name,
           state,
           pending,
-          canChangeItems,
-          addDisabledReason: canChangeItems && state === "state-all" && pending !== "add" ? hasReason : null,
-          removeDisabledReason: canChangeItems && state === "state-none" && pending !== "remove" ? lacksReason : null
+          canAdd: pending === "add" || (display.itemCount > 0 && state !== "state-all"),
+          canRemove: pending === "remove" || (display.itemCount > 0 && state !== "state-none"),
+          saved: savedNames.has(key)
         };
       });
     return {
@@ -488,7 +471,7 @@ export function tagCategoryRows(
       collapsed: !expanded.has(category.id),
       chips,
       inUse: chips.filter((chip) => chip.state !== "state-none").length,
-      unsaved: chips.some((chip) => chip.pending !== null) || saved.get(category.id) !== categoryShape(category, display.tags)
+      unsaved: chips.some((chip) => chip.pending !== null) || savedShapes.get(category.id) !== categoryShape(category, display.tags)
     };
   });
 }

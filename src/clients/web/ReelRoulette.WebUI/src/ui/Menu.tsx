@@ -1,4 +1,4 @@
-import { Fragment } from "preact";
+import { Fragment, type RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
@@ -119,4 +119,33 @@ export function ContextMenuHost() {
       <Menu groups={view.groups} onClose={contextMenu.dismiss} />
     </div>
   );
+}
+
+/**
+ * Gives the element `element` holds a context menu while it is mounted: a right-click or a long press on it opens the
+ * groups `groupsFor` gives at that moment, tinting the element, and nothing while it gives null. Without `groupsFor`
+ * the element has no menu. `pressOn` names its buttons a long press still opens the menu on.
+ */
+export function useMenuSurface(
+  element: RefObject<Element | null>,
+  groupsFor: (() => MenuGroups | null) | undefined,
+  options: { pressOn?: string } = {}
+): void {
+  const { contextMenu } = useApp();
+  // The latest render's `groupsFor` is the one a press asks.
+  const latest = useRef(groupsFor);
+  latest.current = groupsFor;
+  const hasMenu = !!groupsFor;
+  useLayoutEffect(() => {
+    const target = element.current;
+    if (!hasMenu || !target) {
+      return;
+    }
+    return contextMenu.addSurface({
+      element: target,
+      menuAt: () => latest.current?.() ?? null,
+      open: (groups, point) => contextMenu.open({ point, target, groups }),
+      pressOn: options.pressOn
+    });
+  }, [hasMenu]);
 }

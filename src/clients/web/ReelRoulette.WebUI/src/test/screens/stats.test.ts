@@ -999,6 +999,50 @@ async function pressShortcut(key: string): Promise<void> {
   await settle();
 }
 
+describe("Stats tab's tag menus", () => {
+  beforeEach(() => {
+    resetPage();
+  });
+
+  function statsTag(name: string): HTMLElement {
+    const found = [...statsBody().querySelectorAll<HTMLElement>(".stats-tag")].find((tag) => tag.textContent === name);
+    if (!found) {
+      throw new Error(`The Stats tab shows no tag ${name}.`);
+    }
+    return found;
+  }
+
+  /** The tags the Filter tab's filter includes, in order. */
+  function filterIncluded(): string[] {
+    return [...document.querySelectorAll("#filter-dialog .tag-chip")]
+      .filter((chip) => chip.querySelector("[title='Include']")?.classList.contains("is-selected"))
+      .map((chip) => chip.querySelector(".tag-chip-label")?.textContent ?? "");
+  }
+
+  it("filter by the tag, including it in the Filter tab's filter until Apply, on that tab's Tags section, and none opens once it does", async () => {
+    await mountStats({ items: [itemRow(VIDEO, { tags: ["Beach", "Calm"] })] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(tagChips()).toEqual(["Beach", "Calm"]));
+    expect(statsTag("Beach").classList.contains("menu-surface")).toBe(true);
+
+    expect(menuIcons(await openMenuOn(statsTag("Beach")))).toEqual(["filter_alt Filter by this tag"]);
+    expect(statsTag("Beach").classList.contains("is-menu-target")).toBe(true);
+    fireEvent.click(menuItemIn(contextMenuShown()!, "Filter by this tag"));
+    await waitFor(() => expect(filterIncluded()).toEqual(["Beach"]));
+    expect(document.getElementById("panel-page-filter")!.hidden).toBe(false);
+    expect(document.querySelector("#filter-dialog [data-filter-tab][aria-selected='true']")?.getAttribute("data-filter-tab")).toBe("tags");
+    expect(document.getElementById("filter-apply-btn")!.classList.contains("has-pending")).toBe(true);
+
+    // Back on the Stats tab, the tag the filter includes has no menu, and the browser's own stays off.
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(tagChips()).toEqual(["Beach", "Calm"]));
+    expect(rightClick(statsTag("Beach"))).toBe(false);
+    await settle();
+    expect(contextMenuShown()).toBeNull();
+    expect(menuParts(await openMenuOn(statsTag("Calm")))).toEqual(["Filter by this tag"]);
+  });
+});
+
 describe("Stats tab's rating", () => {
   beforeEach(() => {
     resetPage();

@@ -721,8 +721,8 @@ describe("Edit tags…", () => {
     expect(context.modelRequests()).toEqual([["item-1"], ["item-2", "item-3"]]);
     expect(context.confirm).not.toHaveBeenCalled();
     // Bob is on both, and Beach on only one.
-    expect(chip(context, "Bob")).toMatchObject({ state: "state-all", addDisabledReason: "Every selected item has this tag" });
-    expect(chip(context, "Beach")).toMatchObject({ state: "state-some", addDisabledReason: null, removeDisabledReason: null });
+    expect(chip(context, "Bob")).toMatchObject({ state: "state-all", canAdd: false, canRemove: true });
+    expect(chip(context, "Beach")).toMatchObject({ state: "state-some", canAdd: true, canRemove: true });
   });
 
   it("follows the selection's changes while it shows, and once selection ends without adds or removes, the playing item", async () => {
@@ -782,8 +782,8 @@ describe("Edit tags…", () => {
     expect(await editTags(context, { kind: "item", itemId: "item-1" })).toBe(true);
     expect(context.view()).toMatchObject({ editingFor: "clip.mp4", editingForTitle: "clip.mp4", editsSeveral: false, itemIds: ["item-1"] });
     expect(context.modelRequests().at(-1)).toEqual(["item-1"]);
-    expect(chip(context, "Beach")?.addDisabledReason).toBe("This item already has this tag");
-    expect(chip(context, "Bob")?.removeDisabledReason).toBe("This item doesn't have this tag");
+    expect(chip(context, "Beach")).toMatchObject({ canAdd: false, canRemove: true });
+    expect(chip(context, "Bob")).toMatchObject({ canAdd: true, canRemove: false });
 
     // Undoing the last add leaves the tab on the tile, as it does a catalog change.
     context.editor.toggleTag("Bob", "add");
@@ -857,7 +857,7 @@ describe("Edit tags…", () => {
     expect(context.modelRequests().at(-1)).toEqual(["item-3"]);
   });
 
-  it("shows no tag on the new items' chips, with Add and Remove disabled, until their counts load after a save on its way", async () => {
+  it("shows no tag on the new items' chips, with no Add or Remove, until their counts load after a save on its way", async () => {
     const context = await withItems();
     context.tiles.push({ id: "item-3", fileName: "third.mp4", tags: ["Bob"] });
     // The playing item-1 has Beach, and a save adding Bob to it is on its way when Edit tags… chooses item-3's tile.
@@ -869,14 +869,14 @@ describe("Edit tags…", () => {
     await editTags(context, { kind: "item", itemId: "item-3" });
     expect(context.view()).toMatchObject({ itemIds: ["item-3"], editingFor: "third.mp4" });
     for (const name of ["Beach", "Bob"]) {
-      expect(chip(context, name)).toMatchObject({ state: "state-none", canChangeItems: false, addDisabledReason: null, removeDisabledReason: null });
+      expect(chip(context, name)).toMatchObject({ state: "state-none", canAdd: false, canRemove: false });
     }
 
     replies.forEach((reply) => reply());
     await settle();
     expect(context.modelRequests().at(-1)).toEqual(["item-3"]);
-    expect(chip(context, "Bob")).toMatchObject({ state: "state-all", canChangeItems: true, addDisabledReason: "This item already has this tag" });
-    expect(chip(context, "Beach")).toMatchObject({ state: "state-none", canChangeItems: true, removeDisabledReason: "This item doesn't have this tag" });
+    expect(chip(context, "Bob")).toMatchObject({ state: "state-all", canAdd: false, canRemove: true });
+    expect(chip(context, "Beach")).toMatchObject({ state: "state-none", canAdd: true, canRemove: false });
   });
 
   it("says how many items the server updated for a selection, and that the changes applied for one item or catalog changes alone", async () => {
@@ -1152,9 +1152,9 @@ describe("saving", () => {
           name: "Beach",
           state: "state-none",
           pending: null,
-          canChangeItems: true,
-          addDisabledReason: null,
-          removeDisabledReason: "This item doesn't have this tag"
+          canAdd: true,
+          canRemove: false,
+          saved: true
         }
       ],
       []

@@ -2,6 +2,7 @@ import { Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import type { StatsFileView, StatsLibraryView } from "../stats/statsModel";
 import { useApp } from "./appContext";
+import { useMenuSurface } from "./Menu";
 import { RatingStars } from "./RatingStars";
 import { StatCards, StatCardsMessage } from "./StatCards";
 
@@ -44,7 +45,8 @@ export function StatsTab() {
 
 /**
  * The file's name and full path, each with a menu that copies them or shows the file in the file manager, then once
- * they load its rating, its stats, and its tags in a row of their own, which a file without tags doesn't show.
+ * they load its rating, its stats, and its tags in a row of their own, which a file without tags doesn't show, each
+ * with a menu that filters by it.
  */
 function FileStats({ file }: { file: StatsFileView }) {
   const { statsTab, contextMenu, playingMenus } = useApp();
@@ -85,7 +87,7 @@ function FileStats({ file }: { file: StatsFileView }) {
           {file.tags.length > 0 ? (
             <div class="stats-tags">
               {file.tags.map((tag) => (
-                <span key={tag} class="stats-tag">{tag}</span>
+                <StatsTag key={tag} name={tag} />
               ))}
             </div>
           ) : null}
@@ -93,6 +95,14 @@ function FileStats({ file }: { file: StatsFileView }) {
       ) : null}
     </>
   );
+}
+
+/** One of the file's tags, whose menu filters by it while the Filter tab's filter doesn't include it already. */
+function StatsTag({ name }: { name: string }) {
+  const { tagMenus } = useApp();
+  const element = useRef<HTMLSpanElement>(null);
+  useMenuSurface(element, () => tagMenus.statsTagGroups(name));
+  return <span class="stats-tag menu-surface" ref={element}>{name}</span>;
 }
 
 /** The library's cards, or a message in their place, such as why they couldn't load. */

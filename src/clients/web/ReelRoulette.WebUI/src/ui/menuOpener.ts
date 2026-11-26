@@ -4,7 +4,8 @@ import type { WindowPoint } from "./placement";
 
 /**
  * What a long press leaves alone inside a surface, so it stays free for its own press: buttons, which keep their
- * tooltips, drag handles, the rating's stars, and the panel's resize handle.
+ * tooltips, but those the surface counts as part of it (`pressOn`), drag handles, the rating's stars, and the panel's
+ * resize handle.
  */
 const LONG_PRESS_SKIPS = "button, .drag-handle, .rating, .panel-handle";
 
@@ -27,8 +28,12 @@ export function listenForMenus(contextMenu: ContextMenu, root: Document = docume
   const press = listenForLongPress<(point: WindowPoint) => void>(root, {
     pressAt(target) {
       const hit = contextMenu.surfaceAt(target);
+      if (!hit) {
+        return null;
+      }
       const skipped = target.closest(LONG_PRESS_SKIPS);
-      return hit && !(skipped && hit.element.contains(skipped)) ? hit.open : null;
+      const partOfSurface = !!skipped && !!hit.pressOn && skipped.matches(hit.pressOn);
+      return skipped && hit.element.contains(skipped) && !partOfSurface ? null : hit.open;
     },
     onLongPress: (open, point) => open(point)
   });

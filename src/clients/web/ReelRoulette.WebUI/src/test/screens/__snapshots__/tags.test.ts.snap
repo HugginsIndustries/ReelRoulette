@@ -122,7 +122,7 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
   <p class="tags-target" hidden="" id="tag-editor-target">
   <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
     <section class="tag-category">
-      <div class="tag-category-header">
+      <div class="tag-category-header menu-surface">
         <button aria-label="Reorder Places" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
@@ -132,36 +132,21 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <span class="category-count" title="1 tag on this item">
             "1"
           <span class="unsaved-dot category-dot" title="Unsaved changes">
-        <button aria-label="Edit category Places" class="icon-btn" title="Edit category" type="button">
-          <span class="material-symbol-icon">
-            "edit_note"
       <div class="tag-grid">
-        <div class="tag-chip state-none">
+        <div class="tag-chip state-none menu-surface">
           <span class="tag-chip-label">
             "alps"
-          <button aria-label="Add tag alps" class="icon-btn is-selected" title="Add tag" type="button">
+          <button aria-label="Add to item alps" class="icon-btn is-selected" title="Add to item" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag alps" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
-            <span class="material-symbol-icon">
-              "remove"
-          <button aria-label="Edit tag alps" class="icon-btn" title="Edit tag" type="button">
-            <span class="material-symbol-icon">
-              "edit_note"
-        <div class="tag-chip state-all">
+        <div class="tag-chip state-all menu-surface">
           <span class="tag-chip-label">
             "Beach"
-          <button aria-label="Add tag Beach" class="icon-btn" disabled="" title="This item already has this tag" type="button">
-            <span class="material-symbol-icon">
-              "add"
-          <button aria-label="Remove tag Beach" class="icon-btn" title="Remove tag" type="button">
+          <button aria-label="Remove from item Beach" class="icon-btn" title="Remove from item" type="button">
             <span class="material-symbol-icon">
               "remove"
-          <button aria-label="Edit tag Beach" class="icon-btn" title="Edit tag" type="button">
-            <span class="material-symbol-icon">
-              "edit_note"
     <section class="tag-category is-collapsed">
-      <div class="tag-category-header">
+      <div class="tag-category-header menu-surface">
         <button aria-label="Reorder Mood" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
@@ -171,24 +156,15 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <span class="category-count" hidden="" title="0 tags on this item">
             "0"
           <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-        <button aria-label="Edit category Mood" class="icon-btn" title="Edit category" type="button">
-          <span class="material-symbol-icon">
-            "edit_note"
       <div class="tag-grid" hidden="">
-        <div class="tag-chip state-none">
+        <div class="tag-chip state-none menu-surface">
           <span class="tag-chip-label">
             "Calm"
-          <button aria-label="Add tag Calm" class="icon-btn" title="Add tag" type="button">
+          <button aria-label="Add to item Calm" class="icon-btn" title="Add to item" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag Calm" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
-            <span class="material-symbol-icon">
-              "remove"
-          <button aria-label="Edit tag Calm" class="icon-btn" title="Edit tag" type="button">
-            <span class="material-symbol-icon">
-              "edit_note"
     <section class="tag-category">
-      <div class="tag-category-header">
+      <div class="tag-category-header menu-surface">
         <button aria-label="Reorder People" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
@@ -198,36 +174,21 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
           <span class="category-count" title="1 tag on this item">
             "1"
           <span class="unsaved-dot category-dot" title="Unsaved changes">
-        <button aria-label="Edit category People" class="icon-btn" title="Edit category" type="button">
-          <span class="material-symbol-icon">
-            "edit_note"
       <div class="tag-grid">
-        <div class="tag-chip state-none">
+        <div class="tag-chip state-none menu-surface">
           <span class="tag-chip-label">
             "Alice"
-          <button aria-label="Add tag Alice" class="icon-btn" title="Add tag" type="button">
+          <button aria-label="Add to item Alice" class="icon-btn" title="Add to item" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag Alice" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
-            <span class="material-symbol-icon">
-              "remove"
-          <button aria-label="Edit tag Alice" class="icon-btn" title="Edit tag" type="button">
-            <span class="material-symbol-icon">
-              "edit_note"
-        <div class="tag-chip state-all">
+        <div class="tag-chip state-all menu-surface">
           <span class="tag-chip-label">
             "Bob"
-          <button aria-label="Add tag Bob" class="icon-btn" disabled="" title="This item already has this tag" type="button">
-            <span class="material-symbol-icon">
-              "add"
-          <button aria-label="Remove tag Bob" class="icon-btn is-selected" title="Remove tag" type="button">
+          <button aria-label="Remove from item Bob" class="icon-btn is-selected" title="Remove from item" type="button">
             <span class="material-symbol-icon">
               "remove"
-          <button aria-label="Edit tag Bob" class="icon-btn" title="Edit tag" type="button">
-            <span class="material-symbol-icon">
-              "edit_note"
     <section class="tag-category">
-      <div class="tag-category-header">
+      <div class="tag-category-header menu-surface">
         <button aria-label="Uncategorized stays last" class="drag-handle" disabled="" title="Uncategorized stays last" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
@@ -238,18 +199,12 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
             "0"
           <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
       <div class="tag-grid">
-        <div class="tag-chip state-none">
+        <div class="tag-chip state-none menu-surface">
           <span class="tag-chip-label">
             "Loose"
-          <button aria-label="Add tag Loose" class="icon-btn" title="Add tag" type="button">
+          <button aria-label="Add to item Loose" class="icon-btn" title="Add to item" type="button">
             <span class="material-symbol-icon">
               "add"
-          <button aria-label="Remove tag Loose" class="icon-btn" disabled="" title="This item doesn't have this tag" type="button">
-            <span class="material-symbol-icon">
-              "remove"
-          <button aria-label="Edit tag Loose" class="icon-btn" title="Edit tag" type="button">
-            <span class="material-symbol-icon">
-              "edit_note"
   <div class="tag-editor-footer">
     <div class="tag-editor-footer-row">
       <button aria-label="Add category" class="icon-btn" id="tag-editor-add-category-btn" title="Add category" type="button">

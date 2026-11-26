@@ -640,7 +640,7 @@ describe("Filter tab's Apply and Discard changes", () => {
 describe("Tags tab", () => {
   /** The Alice chip's add. */
   function addAlice(): HTMLButtonElement | null {
-    return panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add tag']");
+    return panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add to item']");
   }
 
   async function openTagsWithChange(): Promise<MountedPage> {
@@ -737,7 +737,7 @@ describe("unsaved changes", () => {
     await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
     await click(panelButton());
     await click(tab("Tags"));
-    const alice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add tag']")!;
+    const alice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add to item']")!;
     await waitFor(() => expect(alice()).not.toBeNull());
 
     await click(alice());
@@ -781,7 +781,7 @@ describe("unsaved changes", () => {
     await click(tab("Filter"));
     await click(neverPlayed());
     await click(tab("Tags"));
-    const alice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add tag']")!;
+    const alice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add to item']")!;
     await waitFor(() => expect(alice()).not.toBeNull());
     await click(alice());
 

@@ -754,6 +754,18 @@ export function rightClick(element: Element, x = 100, y = 100): boolean {
   return fireEvent.contextMenu(element, { button: 2, clientX: x, clientY: y });
 }
 
+/**
+ * A finger resting on `element` for as long as `ms`, under fake timers, then lifting, with the click a browser sends
+ * after it, and the render that follows.
+ */
+export async function fingerPress(element: Element, ms: number): Promise<void> {
+  fireEvent.pointerDown(element, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+  await vi.advanceTimersByTimeAsync(ms);
+  fireEvent.pointerUp(element, { pointerType: "touch", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+  fireEvent.click(element);
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 /** Gives the context menu a layout size, which happy-dom does not compute, so its placement can be checked. */
 export function stubContextMenuSize(width: number, height: number): void {
   for (const [name, value] of [["offsetWidth", width], ["offsetHeight", height]] as const) {

@@ -18,6 +18,7 @@ import {
   contextMenuPlace,
   contextMenuShown,
   currentStyle,
+  fingerPress,
   json,
   menuIcons,
   menuItemIn,
@@ -1938,14 +1939,6 @@ async function pressEscape(): Promise<void> {
   await flush();
 }
 
-/** A finger resting on `element` for as long as `ms`, then lifting, with the click a browser sends after it. */
-async function fingerPress(element: Element, ms: number): Promise<void> {
-  fireEvent.pointerDown(element, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
-  await vi.advanceTimersByTimeAsync(ms);
-  fireEvent.pointerUp(element, { pointerType: "touch", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
-  await click(element);
-}
-
 /** The text inside each `@media {query} { ... }` block of `css`. */
 function mediaBlocks(css: string, query: string): string[] {
   const blocks: string[] = [];
@@ -2337,9 +2330,14 @@ function tagChip(name: string): HTMLElement {
   return found;
 }
 
-/** A tag chip's Add or Remove, by its name, which stays the action's. */
-function tagChipButton(name: string, label: "Add tag" | "Remove tag"): HTMLButtonElement {
-  return tagChip(name).querySelector<HTMLButtonElement>(`button[aria-label="${label} ${name}"]`)!;
+/** The tooltips of the buttons a tag's chip shows, in order: only those that would change something. */
+function tagChipButtons(name: string): string[] {
+  return Array.from(tagChip(name).querySelectorAll("button")).map((button) => button.title);
+}
+
+/** A tag chip's button, by its tooltip, such as "Add to items". */
+function tagChipButton(name: string, title: string): HTMLButtonElement {
+  return tagChip(name).querySelector<HTMLButtonElement>(`button[title="${title}"]`)!;
 }
 
 /** The Tags tab shows. */
@@ -2445,19 +2443,21 @@ describe("bulk actions", () => {
     expect(tagTargetLine().querySelector("b")?.textContent).toBe(`${grouped(MATCHING)} items`);
     // Every item has Beach, only some have Calm, and none has Sunset.
     expect(["Beach", "Calm", "Sunset"].map((name) => tagChip(name).className)).toEqual([
-      "tag-chip state-all",
-      "tag-chip state-some",
-      "tag-chip state-none"
+      "tag-chip state-all menu-surface",
+      "tag-chip state-some menu-surface",
+      "tag-chip state-none menu-surface"
     ]);
     expect(document.querySelector("#tag-editor .category-count")?.getAttribute("title")).toBe("2 tags on the selected items");
-    const reason = (button: HTMLButtonElement) => [button.disabled, button.title];
-    expect(reason(tagChipButton("Beach", "Add tag"))).toEqual([true, "Every selected item has this tag"]);
-    expect(reason(tagChipButton("Sunset", "Remove tag"))).toEqual([true, "No selected item has this tag"]);
-    expect(reason(tagChipButton("Calm", "Add tag"))).toEqual([false, "Add tag"]);
-    expect(reason(tagChipButton("Calm", "Remove tag"))).toEqual([false, "Remove tag"]);
+    // Only what would change something shows, both on a tag only some of the items have.
+    expect(["Beach", "Calm", "Sunset"].map(tagChipButtons)).toEqual([
+      ["Remove from items"],
+      ["Add to items", "Remove from items"],
+      ["Add to items"]
+    ]);
+    expect(tagChipButton("Calm", "Add to items").getAttribute("aria-label")).toBe("Add to items Calm");
 
-    await click(tagChipButton("Calm", "Add tag"));
-    await click(tagChipButton("Beach", "Remove tag"));
+    await click(tagChipButton("Calm", "Add to items"));
+    await click(tagChipButton("Beach", "Remove from items"));
     await click(document.getElementById("tag-editor-apply-btn")!);
     await waitFor(() => expect(popupsShown()).toContain(`Updated tags on ${grouped(ANSWERED)} items.`));
     expect(server.requests("POST", "/api/tag-editor/apply-item-tags").map((call) => call.body)).toEqual([
@@ -3218,8 +3218,7 @@ describe("a tile's menu", () => {
     await waitFor(() => expect(server.requests("POST", "/api/tag-editor/model").map((call) => call.body)).toContainEqual({ itemIds: ["item-2"] }));
     expect([tagTargetLine().hidden, tagTargetLine().textContent, tagTargetLine().title]).toEqual([false, "Editing tags for clip 2.mp4", "clip 2.mp4"]);
     await waitFor(() => expect(tagChip("Calm").classList.contains("state-all")).toBe(true));
-    expect([tagChipButton("Calm", "Add tag").disabled, tagChipButton("Calm", "Add tag").title]).toEqual([true, "This item already has this tag"]);
-    expect([tagChipButton("Sunset", "Remove tag").disabled, tagChipButton("Sunset", "Remove tag").title]).toEqual([true, "This item doesn't have this tag"]);
+    expect([tagChipButtons("Calm"), tagChipButtons("Sunset")]).toEqual([["Remove from item"], ["Add to item"]]);
     expect(document.querySelector("#tag-editor .category-count")?.getAttribute("title")).toBe("2 tags on this item");
   });
 

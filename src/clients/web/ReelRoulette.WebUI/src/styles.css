@@ -480,14 +480,6 @@ html.theme-light .app-dialog {
     -webkit-user-select: none;
   }
 }
-/* The element a context menu acts on is tinted while the menu is open, as a pointer tints a menu's item, with 4 px
-   corners unless it has its own shape, as a popup and a tag do. A library tile keeps its ring instead. */
-.is-menu-target:not(.library-grid-tile) {
-  box-shadow: inset 0 0 0 100vmax rgba(127, 127, 127, 0.16);
-}
-.is-menu-target:not(.toast, .tag-chip, .stats-tag, .library-grid-tile) {
-  border-radius: 4px;
-}
 
 /* Icon-only buttons in the panel's tabs and Auto Tag. */
 .icon-btn {
@@ -2308,4 +2300,14 @@ body.short-screen .app-dialog {
 body.short-screen .dialog-body {
   padding: 10px 12px;
   gap: 6px;
+}
+
+/* The element a context menu acts on is tinted while the menu is open, as a pointer tints a menu's item, with 4 px
+   corners unless it has its own shape, as a popup and a tag do. A library tile keeps its ring instead. It comes last,
+   so it shows over an element's own shadow, such as a green or orange tag's ring. */
+.is-menu-target:not(.library-grid-tile) {
+  box-shadow: inset 0 0 0 100vmax rgba(127, 127, 127, 0.16);
+}
+.is-menu-target:not(.toast, .tag-chip, .stats-tag, .library-grid-tile) {
+  border-radius: 4px;
 }

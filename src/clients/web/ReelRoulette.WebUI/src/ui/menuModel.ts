@@ -41,12 +41,15 @@ export interface MenuSurface<T> {
   menuAt(target: Element): T | null;
   /** Opens the menu on what `menuAt` gave, at `point`. */
   open(on: T, point: WindowPoint): void;
+  /** Buttons inside it that a long press still opens its menu on, as part of it, such as a tag category's name. */
+  pressOn?: string;
 }
 
 /** The surface a press landed on: its element, and how to open its menu on what the press was on. */
 export interface MenuSurfaceHit {
   element: Element;
   open(point: WindowPoint): void;
+  pressOn?: string;
 }
 
 /**
@@ -70,6 +73,7 @@ export interface ContextMenu {
 
 interface SurfaceEntry {
   element: Element;
+  pressOn?: string;
   at(target: Element): ((point: WindowPoint) => void) | null;
 }
 
@@ -99,6 +103,7 @@ export function createContextMenu(): ContextMenu {
     addSurface(surface) {
       const entry: SurfaceEntry = {
         element: surface.element,
+        pressOn: surface.pressOn,
         at(target) {
           const on = surface.menuAt(target);
           return on === null ? null : (point) => surface.open(on, point);
@@ -118,7 +123,7 @@ export function createContextMenu(): ContextMenu {
         const entry = surfaces.find((surface) => surface.element === element);
         if (entry) {
           const open = entry.at(target);
-          return open ? { element: entry.element, open } : null;
+          return open ? { element: entry.element, open, pressOn: entry.pressOn } : null;
         }
       }
       return null;

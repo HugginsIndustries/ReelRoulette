@@ -177,10 +177,13 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
     notices.push(message);
     noticeLogs.push(logText);
   };
-  /** The panel, which Apply closes as the overlay. */
+  /** The panel, which Apply closes as the overlay, and which shows the tab as the panel does, by opening it. */
   const panel = {
     closeIfOverlay: vi.fn(async () => {
       steps.push("closeIfOverlay");
+    }),
+    showTab: vi.fn(async () => {
+      void dialog.open();
     })
   };
   const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm, notice }, notifications });

@@ -25,6 +25,7 @@ import { createLibraryBaseline } from "../stats/libraryBaseline";
 import { createStatsTab, type StatsTab } from "../stats/statsTab";
 import { createTagCatalog } from "../tags/tagCatalog";
 import { createTagEditor, type TagEditor } from "../tags/tagEditor";
+import { createTagMenus, type TagMenus } from "../tags/tagMenus";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import { createContextMenu, type ContextMenu } from "../ui/menuModel";
 import { createAppApi, type AppApi } from "./appApi";
@@ -84,6 +85,8 @@ export interface AppServices {
   contextMenu: ContextMenu;
   /** The menus on the playing item: the player's picture's, the header's now-playing name's, and the Stats tab's. */
   playingMenus: PlayingItemMenus;
+  /** The menus on tags: the Tags tab's tags' and categories', and the Stats tab's tags'. */
+  tagMenus: TagMenus;
   /** The Settings tab's settings that nothing else keeps. */
   settings: Settings;
 }
@@ -222,6 +225,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     fileLocation,
     contextMenu
   });
+  const tagMenus = createTagMenus({ tagEditor, filterDialog });
   const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
   const settings = createSettings({ device, dialogs, reloadPage: options.reloadPage });
   const ambient = createAmbient({
@@ -316,6 +320,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     notifications,
     contextMenu,
     playingMenus,
+    tagMenus,
     settings
   };
 }

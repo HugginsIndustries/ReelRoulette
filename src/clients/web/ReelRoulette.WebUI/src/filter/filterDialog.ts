@@ -35,6 +35,9 @@ import {
   generalDraftAfterApply,
   generalDraftFromFilter,
   presetLoopReason,
+  containsIgnoringCase,
+  filterTagCategories,
+  namesEqualIgnoringCase,
   presetRowsFromApi,
   sharedFilterReason,
   toggleFilterTag,
@@ -219,6 +222,16 @@ export interface FilterDialog {
   setLocalMatch(categoryId: string, mode: TagMatchMode): void;
   /** Expands or collapses a tag category, which this device remembers. */
   toggleCategory(collapseKey: string): void;
+  /**
+   * Whether the filter the tab shows includes the tag, ignoring case: its working copy while it holds unsaved changes,
+   * and otherwise the applied filter, which it starts over from when it next shows.
+   */
+  includesTag(name: string): boolean;
+  /**
+   * Filter by this tag, in a tag's menu: shows the tab on its Tags section, once the load it starts as it shows has
+   * landed, with the tag included in the working filter, until Apply, and the category that lists it expanded.
+   */
+  filterByTag(name: string): Promise<void>;
   /** Chooses the preset Load and Update act on, by id, or None for an empty id. It loads nothing. */
   choosePreset(id: string): void;
   /**
@@ -264,8 +277,8 @@ export interface FilterDialogOptions {
   api: AppApi;
   connection: Pick<ServerConnection, "loadPresets" | "on">;
   library: Pick<Library, "commitQuery">;
-  /** Apply closes the panel as the overlay; beside the player it stays open. */
-  panel: Pick<PanelHost, "closeIfOverlay">;
+  /** Apply closes the panel as the overlay; beside the player it stays open. Filter by this tag shows the tab. */
+  panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
   /** This device's memory, for the tag categories expanded. */
   device: DeviceStore;
   /** The in-app dialogs, for the confirmations and the notices of what failed. */
@@ -291,6 +304,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
    * finish.
    */
   let savingPresets = false;
+  /** The load the tab started as it showed, until it ends, which Filter by this tag waits for. */
+  let opening: Promise<boolean> | null = null;
 
   /**
    * Works out the heading, the unsaved changes, whether the filter is the default one, and the fields' and actions'
@@ -608,6 +623,12 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     startChoiceOver();
   }
 
+  /** Takes the Tags section's expanded categories, which this device remembers, with `change`. */
+  function setExpanded(expanded: ReadonlySet<string>, change: Partial<FilterDialogState> = {}): void {
+    device.write(EXPANDED_CATEGORIES_KEY, Array.from(expanded));
+    update({ ...change, expanded });
+  }
+
   /** Choose Preset starts over on the preset the heading names, its base while starred. */
   function startChoiceOver(): void {
     const current = view.peek();
@@ -715,7 +736,15 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       if (tab.peek() === "presets") {
         startChoiceOver();
       }
-      await start("Filter load failed");
+      const load = start("Filter load failed");
+      opening = load;
+      try {
+        await load;
+      } finally {
+        if (opening === load) {
+          opening = null;
+        }
+      }
     },
 
     close() {
@@ -866,8 +895,31 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       if (!expanded.delete(collapseKey)) {
         expanded.add(collapseKey);
       }
-      device.write(EXPANDED_CATEGORIES_KEY, Array.from(expanded));
-      update({ expanded });
+      setExpanded(expanded);
+    },
+
+    includesTag(name) {
+      const current = view.peek();
+      const shown = current?.unsaved ? current.working : store.appliedFilter.peek();
+      return containsIgnoringCase(shown.selectedTags, name);
+    },
+
+    async filterByTag(name) {
+      dialog.showTab("tags");
+      // Showing the tab starts it over from the applied filter while it holds no changes, and loads it, so the tag's
+      // category comes from the catalog as it is now, which a tag saved since it last showed has changed.
+      await panel.showTab("filter");
+      await opening;
+      const current = view.peek();
+      if (!current) {
+        return;
+      }
+      const included = containsIgnoringCase(current.working.selectedTags, name);
+      const working = included ? current.working : toggleFilterTag(current.working, name, "include");
+      const holder = filterTagCategories(current.tagModel, working, current.expanded).find((category) =>
+        category.chips.some((chip) => chip.included && namesEqualIgnoringCase(chip.name, name))
+      );
+      setExpanded(holder ? new Set(current.expanded).add(holder.collapseKey) : current.expanded, { working });
     },
 
     reviseTags(revise) {

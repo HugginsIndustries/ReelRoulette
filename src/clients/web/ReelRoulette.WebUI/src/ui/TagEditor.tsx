@@ -1,9 +1,11 @@
+import { useRef } from "preact/hooks";
 import type { TagEditorView } from "../tags/tagEditor";
 import type { TagCategory as CatalogCategory, TagCategoryRow, TagChipRow } from "../tags/tagEditorModel";
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import { ValidatedField } from "./FieldValidation";
 import { Icon } from "./Icon";
+import { useMenuSurface } from "./Menu";
 import { DragHandle, useReorder, type Reorder } from "./Reorder";
 import { TagCategory, tagsInUse } from "./TagCategory";
 
@@ -44,7 +46,7 @@ export function TagEditor() {
             </select>
           </div>
           <div class="tag-editor-footer-row">
-            <ValidatedField problem={view?.newTagProblem ?? null} flagged={view?.newTagFlagged ?? false}>
+            <ValidatedField problem={view?.newTagProblem ?? null} flagged={view?.newTagFlagged ?? false} reveal={{ from: tagEditor.reveal, field: "newTag" }}>
               {(control) => (
                 <input
                   {...control}
@@ -92,11 +94,12 @@ function CategoryOptions({ options }: { options: readonly CatalogCategory[] }) {
 }
 
 /**
- * A category, which moves by its drag handle. Uncategorized's handle is dimmed, since it stays last, and it has no
- * Edit. Its count's tooltip says whose tags they are: the selected items' while `several`, or the item's.
+ * A category, which moves by its drag handle; Uncategorized's handle is dimmed, since it stays last. Its header's menu
+ * adds a new tag to it, edits it, or deletes it. Its count's tooltip says whose tags they are: the selected items'
+ * while `several`, or the item's.
  */
 function Category({ category, reorder, several }: { category: TagCategoryRow; reorder: Reorder; several: boolean }) {
-  const { tagEditor } = useApp();
+  const { tagEditor, tagMenus } = useApp();
   const fixed = category.uncategorized;
   return (
     <TagCategory
@@ -107,33 +110,36 @@ function Category({ category, reorder, several }: { category: TagCategoryRow; re
       unsaved={category.unsaved}
       onToggle={() => tagEditor.toggleCategory(category.id)}
       handle={fixed ? <DragHandle fixed="Uncategorized stays last" /> : <DragHandle control={reorder.handle(category.id)} />}
-      controls={
-        fixed ? null : (
-          <button class="icon-btn" type="button" title="Edit category" aria-label={`Edit category ${category.name}`} onClick={() => tagEditor.editCategory(category.id)}><Icon name="edit_note" /></button>
-        )
-      }
+      menu={() => tagMenus.categoryGroups(category)}
       class={reorder.dragging === category.id ? "is-dragging" : undefined}
       sectionRef={fixed ? undefined : reorder.row(category.id)}
     >
       {category.chips.map((chip) => (
-        <Chip key={chip.name} chip={chip} />
+        <Chip key={chip.name} chip={chip} several={several} />
       ))}
     </TagCategory>
   );
 }
 
 /**
- * A tag: green when every item being edited has it and orange when only some do, its add, remove, and Edit. An add or
- * remove that would change nothing is disabled, with its reason as its tooltip; its name stays the action's.
+ * A tag: green when every item being edited has it and orange when only some do, with only the add and remove that
+ * would change something for them, and a menu that filters by it, edits it, or deletes it. They say "items" while the
+ * tab edits the selected items, `several`.
  */
-function Chip({ chip }: { chip: TagChipRow }) {
-  const { tagEditor } = useApp();
+function Chip({ chip, several }: { chip: TagChipRow; several: boolean }) {
+  const { tagEditor, tagMenus } = useApp();
+  const element = useRef<HTMLDivElement>(null);
+  useMenuSurface(element, () => tagMenus.tagGroups(chip));
+  const noun = several ? "items" : "item";
   return (
-    <div class={`tag-chip ${chip.state}`}>
+    <div class={`tag-chip ${chip.state} menu-surface`} ref={element}>
       <span class="tag-chip-label">{chip.name}</span>
-      <button class={chip.pending === "add" ? "icon-btn is-selected" : "icon-btn"} type="button" title={chip.addDisabledReason ?? "Add tag"} aria-label={`Add tag ${chip.name}`} disabled={!chip.canChangeItems || chip.addDisabledReason !== null} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
-      <button class={chip.pending === "remove" ? "icon-btn is-selected" : "icon-btn"} type="button" title={chip.removeDisabledReason ?? "Remove tag"} aria-label={`Remove tag ${chip.name}`} disabled={!chip.canChangeItems || chip.removeDisabledReason !== null} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
-      <button class="icon-btn" type="button" title="Edit tag" aria-label={`Edit tag ${chip.name}`} onClick={() => tagEditor.editTag(chip.name)}><Icon name="edit_note" /></button>
+      {chip.canAdd ? (
+        <button class={chip.pending === "add" ? "icon-btn is-selected" : "icon-btn"} type="button" title={`Add to ${noun}`} aria-label={`Add to ${noun} ${chip.name}`} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
+      ) : null}
+      {chip.canRemove ? (
+        <button class={chip.pending === "remove" ? "icon-btn is-selected" : "icon-btn"} type="button" title={`Remove from ${noun}`} aria-label={`Remove from ${noun} ${chip.name}`} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
+      ) : null}
     </div>
   );
 }

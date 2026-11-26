@@ -24,7 +24,7 @@ import type { ServerConnection } from "../state/serverConnection";
 import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import { countText } from "../text/countText";
 import type { components } from "../types/openapi.generated";
-import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
+import { actionBlock, createFieldReveal, isFlagged, type FieldProblem, type FieldReveal } from "../validation/fieldValidation";
 import {
   AUTO_TAG_SCANNING,
   autoTagApplyPending,
@@ -195,6 +195,8 @@ export interface TagEditor {
   readonly autoTagOpen: ReadonlySignal<boolean>;
   /** Null before the editor first opens. */
   readonly view: ReadonlySignal<TagEditorView | null>;
+  /** Moves to the footer's new tag name, which New tag in this category does. */
+  readonly reveal: FieldReveal<"newTag">;
 
   /**
    * The tab shows: loads the tags of the item it edits, which it doesn't while the server fails the compatibility
@@ -245,10 +247,17 @@ export interface TagEditor {
   cancelCategoryEdit(): void;
   /** Asks first, then deletes the category, its tags becoming Uncategorized, and closes the dialog. */
   deleteEditedCategory(): Promise<void>;
+  /** Delete… in a category's menu: asks first, then deletes the category, its tags becoming Uncategorized. Not for Uncategorized. */
+  deleteCategory(categoryId: string): Promise<void>;
 
   toggleTag(tagName: string, action: TagAction): void;
   typeNewTag(text: string): void;
   chooseNewTagCategory(categoryId: string): void;
+  /**
+   * New tag in this category, in a category's menu: chooses the category for the new tag and moves to its name, at once,
+   * so a phone opens its keyboard.
+   */
+  newTagIn(categoryId: string): void;
   /**
    * Creates the tag in the chosen category, until Save, expanding the category so its chip shows. It doesn't put the tag
    * on the playing item; the chip's add does. Does nothing while the name is empty or another tag's.
@@ -264,6 +273,8 @@ export interface TagEditor {
   cancelEdit(): void;
   /** Asks first about the tag as it was when the dialog opened, then deletes it and closes the dialog. */
   deleteEditedTag(): Promise<void>;
+  /** Delete… in a tag's menu: asks first, then deletes the tag. */
+  deleteTag(tagName: string): Promise<void>;
 
   /** Opens Auto Tag over the whole page, with its last scan. */
   openAutoTag(): void;
@@ -323,6 +334,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   const isOpen = signal(false);
   const autoTagOpen = signal(false);
   const view = signal<TagEditorView | null>(null);
+  const reveal = createFieldReveal<"newTag">();
   let state: TagEditorState = {
     model: null,
     target: PLAYING,
@@ -365,7 +377,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     if (next.model) {
       const display = tagEditorDisplay(next.model, next.pending, next.order);
       tags = display.tags;
-      categories = tagCategoryRows(display, next.expanded, next.selections, next.model, next.target.kind === "selection");
+      categories = tagCategoryRows(display, next.expanded, next.selections, next.model);
       options = categoryOptions(display.categories);
       const newTagCategoryId = options.some((option) => option.id === next.newTagCategoryId)
         ? next.newTagCategoryId
@@ -834,6 +846,17 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return view.peek()?.categories?.find((category) => category.id === categoryId);
   }
 
+  /** Asks before deleting a tag, as Edit Tag's Delete and a tag's menu do. */
+  function askToDeleteTag(tagName: string): Promise<boolean> {
+    return dialogs.confirm({ message: `Delete tag "${tagName}"?`, confirmLabel: "Delete", danger: true });
+  }
+
+  /** Asks before deleting a category, as Edit Category's Delete and a category's menu do. */
+  function askToDeleteCategory(category: TagCategoryRow): Promise<boolean> {
+    const message = `Delete category "${category.name || "Category"}"? Tags will become Uncategorized.`;
+    return dialogs.confirm({ message, confirmLabel: "Delete", danger: true });
+  }
+
   /** Deletes a tag, with any change held for it, as part of `change`. */
   function deleteTag(tagName: string, change: Partial<TagEditorState>): void {
     const key = normalizeTagKey(tagName);
@@ -872,6 +895,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     isOpen,
     autoTagOpen,
     view,
+    reveal,
 
     open() {
       settleTarget(false);
@@ -1037,16 +1061,19 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     async deleteEditedCategory() {
       const category = state.categoryEdit ? findCategory(state.categoryEdit.categoryId) : undefined;
-      if (!category || category.uncategorized) {
-        return;
-      }
-      const message = `Delete category "${category.name || "Category"}"? Tags will become Uncategorized.`;
-      if (!(await dialogs.confirm({ message, confirmLabel: "Delete", danger: true }))) {
+      if (!category || category.uncategorized || !(await askToDeleteCategory(category))) {
         return;
       }
       // The dialog may have closed while it asked.
       if (state.categoryEdit?.categoryId === category.id) {
         deleteCategory(category.id, { categoryEdit: null });
+      }
+    },
+
+    async deleteCategory(categoryId) {
+      const category = findCategory(categoryId);
+      if (category && !category.uncategorized && (await askToDeleteCategory(category))) {
+        deleteCategory(category.id, {});
       }
     },
 
@@ -1062,6 +1089,11 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     chooseNewTagCategory(categoryId) {
       update({ newTagCategoryId: categoryId });
+    },
+
+    newTagIn(categoryId) {
+      update({ newTagCategoryId: categoryId });
+      reveal.reveal("newTag");
     },
 
     addTag() {
@@ -1146,15 +1178,18 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     async deleteEditedTag() {
       const edit = state.edit;
-      if (!edit || !state.editing) {
-        return;
-      }
-      if (!(await dialogs.confirm({ message: `Delete tag "${edit.oldName}"?`, confirmLabel: "Delete", danger: true }))) {
+      if (!edit || !state.editing || !(await askToDeleteTag(edit.oldName))) {
         return;
       }
       // The dialog may have closed while it asked.
       if (state.editing) {
         deleteTag(edit.oldName, { editing: false });
+      }
+    },
+
+    async deleteTag(tagName) {
+      if (await askToDeleteTag(tagName)) {
+        deleteTag(tagName, {});
       }
     },
 
