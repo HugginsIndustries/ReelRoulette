@@ -25,6 +25,8 @@ export interface SseClientOptions {
   handlers: Record<string, SseEventHandler>;
   onOpen?: () => void;
   onError?: () => void;
+  /** After each event, `streamOpened` included, the revision the stream now resumes from. */
+  onRevision?: (revision: number) => void;
   createEventSource?: (url: string) => EventSourceLike;
   reconnectDelayMs?: number;
 }
@@ -33,8 +35,6 @@ export interface SseClient {
   /** Opens a new stream that resumes after the last revision received. */
   connect: () => void;
   stop: () => void;
-  /** Null until the first event, including `streamOpened`, arrives. */
-  lastRevision: () => number | null;
 }
 
 /**
@@ -114,6 +114,7 @@ export function createSseClient(options: SseClientOptions): SseClient {
           return;
         }
         lastRevision = nextEventRevision(lastRevision, envelope.eventType, envelope.revision);
+        options.onRevision?.(lastRevision);
         if (envelope.payload == null || !handler) {
           return;
         }
@@ -124,7 +125,6 @@ export function createSseClient(options: SseClientOptions): SseClient {
 
   return {
     connect,
-    stop: closeSource,
-    lastRevision: () => lastRevision
+    stop: closeSource
   };
 }

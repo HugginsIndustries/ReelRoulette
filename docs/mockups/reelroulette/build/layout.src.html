@@ -1749,9 +1749,9 @@ const state = {
   // Mockup options for the review of the layout measurements: where the player's width shows, the box's corner, and
   // how long the grid's figures stay after a zoom ends.
   // The event stream as Diagnostics shows it: connecting until the first load ends, then following the server's
-  // situation, with the last event's number and the resyncs since the page loaded.
+  // situation, with the last event's number, none until the stream opens, and the resyncs since the page loaded.
   streamConnecting: true,
-  lastEvent: 18342,
+  lastEvent: null,
   resyncs: 0,
   // Mockup option: the server's situation.
   situation: null,
@@ -5267,10 +5267,16 @@ document.querySelectorAll('input[name="mock-stats-load"]').forEach((radio) => {
   });
 });
 
-// Events from the server, as the event stream brings them.
+// Events from the server, as the event stream brings them, each moving Diagnostics' last event on by one.
+function streamEvent(count = 1) {
+  if (state.lastEvent === null) return;
+  state.lastEvent += count;
+  renderDiagnostics();
+}
 $("mock-sync").addEventListener("click", () => {
   const item = playback.item || visibleItems().items[0];
   if (!item) return;
+  streamEvent();
   item.favorite = !item.favorite;
   if (item.favorite) item.blacklisted = false;
   notes.notify({ kind: "devices", text: `${item.favorite ? "Added to" : "Removed from"} favorites on another device`, detail: item.name, key: `sync:${item.id}` });
@@ -5282,6 +5288,7 @@ $("mock-sync").addEventListener("click", () => {
 $("mock-sync-rating").addEventListener("click", () => {
   const item = playback.item || visibleItems().items[0];
   if (!item) return;
+  streamEvent();
   item.rating = item.rating ? null : 3.5;
   const text = item.rating ? `Rated ${ratingText(item.rating)}` : "Rating cleared";
   notes.notify({ kind: "devices", text: `${text} on another device`, detail: item.name, key: `sync-rating:${item.id}` });
@@ -5338,6 +5345,8 @@ function presetsFromAnotherDevice(edit) {
     else if (!sameFilter(server.filters.get(id), before.filters.get(id))) changes.push({ id, kind: "updated", name: server.names.get(id) });
     else if (server.names.get(id) !== name) changes.push({ id, kind: "renamed", name, to: server.names.get(id) });
   });
+  // Each preset changed is an event of its own.
+  streamEvent(changes.length);
   // Your preset's new filter applies while its filter is unchanged; a delete keeps its filter, shown as modified.
   const yourChange = yours && changes.find((change) => change.id === yours.id);
   const follows = yourChange?.kind === "updated" && !yours.starred;
@@ -5419,6 +5428,7 @@ function keptSourcesMessage(sources) {
     : `Library refresh found no media files in ${where}, so it kept the library's ${items} from them. If the folders are on a drive or share, check that it's connected.`;
 }
 function refreshKeptSources(ids) {
+  streamEvent();
   const fresh = ids.filter((id) => !keptNoticed.has(id));
   if (!fresh.length) return;
   fresh.forEach((id) => keptNoticed.add(id));
@@ -7125,7 +7135,7 @@ function streamState() {
 contextMenu.add(".diag dd[data-copy]", (dd) => [[menuItem("content_copy", "Copy", () => copyText(dd.textContent, `${dd.dataset.copy} copied.`))]]);
 function renderDiagnostics() {
   $("diag-stream").textContent = streamState();
-  $("diag-last-event").textContent = String(state.lastEvent);
+  $("diag-last-event").textContent = state.lastEvent === null ? "None" : String(state.lastEvent);
   $("diag-resyncs").textContent = String(state.resyncs);
 }
 
@@ -7268,6 +7278,7 @@ setTimeout(() => {
   libLoading = false;
   presetsLoading = false;
   state.streamConnecting = false;
+  state.lastEvent = 18342;
   renderDiagnostics();
   renderLibPresets();
   layoutGrid(true);

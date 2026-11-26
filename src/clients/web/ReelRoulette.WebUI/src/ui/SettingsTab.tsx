@@ -22,6 +22,8 @@ import {
 } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
 import type { AutoplayMode } from "../state/appStore";
+import { WEBUI_API_VERSION } from "../state/serverCompatibility";
+import type { EventStreamState } from "../state/serverConnection";
 import type { FieldProblem } from "../validation/fieldValidation";
 import { useApp } from "./appContext";
 import { SettingTextField } from "./FieldValidation";
@@ -774,18 +776,33 @@ function KeyboardShortcuts() {
   );
 }
 
-/** What identifies this page in `last.log`, shown in full, and the server's and the app's versions. */
+const EVENT_STREAM_STATE_LABELS: Record<EventStreamState, string> = {
+  connecting: "Connecting",
+  open: "Open",
+  reconnecting: "Reconnecting",
+  stopped: "Stopped"
+};
+
+/**
+ * What identifies this page in `last.log`, shown in full, the server's and the app's versions, the server's address,
+ * and the event stream's state, last event number, and resyncs since the page loaded.
+ */
 function Diagnostics() {
-  const { store } = useApp();
+  const { store, config, connection } = useApp();
   const { identity } = store;
   const server = store.serverVersion.value;
+  const lastEvent = connection.lastEventRevision.value;
   const rows: [string, string][] = [
     ["Client", identity.clientId],
     ["Session", identity.sessionId],
     ["Client type", identity.clientType],
     ["Device name", identity.deviceName],
     ["Server", server ? `${server.version || "Unknown"} (API ${server.apiVersion || "unknown"})` : "Unknown"],
-    ["ReelRoulette", APP_VERSION]
+    ["Server address", config.apiBaseUrl],
+    ["ReelRoulette", `${APP_VERSION} (API ${WEBUI_API_VERSION})`],
+    ["Event stream", EVENT_STREAM_STATE_LABELS[connection.streamState.value]],
+    ["Last event", lastEvent === null ? "None" : String(lastEvent)],
+    ["Resyncs", String(connection.resyncs.value)]
   ];
   return (
     <dl class="diag">

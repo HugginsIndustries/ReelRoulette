@@ -138,6 +138,9 @@ These need a person, real devices, or the Windows VM.
 - [ ] On the iPad and the Android phone, a long press on a library tile selects it and starts selection, with no menu or text highlight of the browser's own.
 - [ ] On Firefox on the desktop, the iPad, and the Android phone, every gap in the library grid looks the same, unselected and selected, the grid's scrollbar sits in the tab's right margin, and the preset dropdown reads "Preset: {name}" with its arrow.
 - [ ] In Firefox on the desktop, right-clicking a library tile opens the app's menu at the pointer, never Firefox's own, with only the items that apply, and its actions reach the selection or that tile alone.
+- [ ] In Firefox on the desktop, with Don't record plays on, a random pick and a library play leave the file's play count in the Stats tab unchanged, and Counts disabled shows and hides with the controls, on the player and in fullscreen.
+- [ ] On the iPad, with Show layout measurements on, the figures show at their elements and follow a rotation.
+- [ ] On the iPad and the Android phone, the panel beside the player, the overlay panel, and a field's tooltip in the Settings tab look and sit as before.
 
 ## Release Flow
 

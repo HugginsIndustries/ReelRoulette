@@ -141,7 +141,7 @@ Last milestone completed: M12m
 
 ### M12n1 - WebUI Developer Settings
 
-- **Status**: 🚧 In Progress
+- **Status**: ✅ Complete
 - **Goal**: A Developer section at the bottom of the Settings tab lets a device play without counting plays, show the layout's measurements live, and reset its settings, and Diagnostics shows the event stream and the server address.
 - **Depends on**: WebUI Settings Panel, whose Settings tab and Diagnostics section this milestone extends, and WebUI Responsive Layout and Panels, whose panel host the figures read, and WebUI Grid Row Reuse and Zoom, whose zoom the grid's figures follow.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -167,7 +167,7 @@ Last milestone completed: M12m
 | Mockup | ✅ Complete | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Developer section | ✅ Complete | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
 | Layout measurements | ✅ Complete | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, the panel's unused size container gone, and a wheel notch zooming the grid 10%. |
-| Diagnostics | ⏳ Planned | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
+| Diagnostics | ✅ Complete | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
 
 #### Mockup slice
 
@@ -416,6 +416,23 @@ Last milestone completed: M12m
 - The server address and the ReelRoulette row's API version show, and the pair token doesn't, in Settings screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- Diagnostics shows Server address, the ReelRoulette row's API version, Event stream, Last event, and Resyncs in the mockup's order, with "None" as Last event before the first event arrives (`src/ui/SettingsTab.tsx`).
+- The connection gives `streamState`, `lastEventRevision`, and `resyncs` as signals, and its private `streamOpen` became `streamState`, while `streamFailed` stays, since pairing clears it without the stream opening (`src/state/serverConnection.ts`).
+- A reconnect the page starts while the stream is open, as on focus, keeps Event stream at Open unless it fails.
+- The event stream reports the revision it resumes from after each event through `onRevision`, so Last event is the number the stream sends the server as its last event ID, and its `lastRevision()` getter, which only its tests read, is gone (`src/events/sseClient.ts`).
+- `WEBUI_API_VERSION` is exported (`src/state/serverCompatibility.ts`).
+- Settings screen tests cover the rows on a desktop browser and a phone, the stream connecting, open, kept open through a focus reconnect, reconnecting, and open again, stopped for a server that fails the compatibility check, Last event through `streamOpened`, events, two resyncs, and a reconnect whose `streamOpened` is later than the held number, the resync count, and the pair token not shown in Diagnostics.
+- The event stream's tests check `onRevision` where they checked `lastRevision()`, and that a restarted server's lower `streamOpened` revision leaves it at the held number.
+- Breaking each of these failed its tests, and each file was restored from a copy: no Reconnecting on an error, no Stopped on the compatibility block, the raw revision in place of the resume revision, no resync count, the pair token shown, and Connecting on every reconnect (measured).
+- The foundation screen tests' starting markup snapshot takes the four new labels and nothing else.
+- The mockup's Last event shows None while it connects and moves on by one with each event the Mockup tab sends from another device.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 96 test files and 2411 tests, 4 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe the new rows.
+- The milestone's Release checks are in the testing checklist's Release Specific section, under Manual checks.
 
 #### Release checks
 

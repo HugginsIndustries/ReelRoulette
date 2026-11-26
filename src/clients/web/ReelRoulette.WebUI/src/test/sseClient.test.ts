@@ -53,19 +53,21 @@ function setup() {
   }
   const onOpen = vi.fn();
   const onError = vi.fn();
+  const onRevision = vi.fn();
   const client = createSseClient({
     sseUrl: "http://localhost:51301/api/events",
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     handlers,
     onOpen,
     onError,
+    onRevision,
     createEventSource: (url) => {
       const source = new FakeEventSource(url);
       sources.push(source);
       return source;
     }
   });
-  return { client, sources, received, onOpen, onError, latest: () => sources[sources.length - 1] };
+  return { client, sources, received, onOpen, onError, onRevision, latest: () => sources[sources.length - 1] };
 }
 
 describe("sseClient", () => {
@@ -100,7 +102,7 @@ describe("sseClient", () => {
   });
 
   it("reconnects after an error with the last event ID and applies the replayed events", () => {
-    const { client, sources, latest, received, onError } = setup();
+    const { client, sources, latest, received, onError, onRevision } = setup();
     client.connect();
     latest().emit("itemStateChanged", 41, { path: "a.mp4", isFavorite: true });
     latest().emit("playbackRecorded", 42, { itemId: "item-b", playCount: 3 });
@@ -119,21 +121,25 @@ describe("sseClient", () => {
       { eventType: "itemTagsChanged", payload: { resolvedItemIds: ["item-c"], addedTags: ["Beach"], removedTags: [] } },
       { eventType: "itemStateChanged", payload: { path: "a.mp4", isFavorite: false } }
     ]);
-    expect(client.lastRevision()).toBe(44);
+    expect(onRevision).toHaveBeenLastCalledWith(44);
     client.stop();
   });
 
   it("resumes from the resync revision after a server restart", () => {
-    const { client, latest, received } = setup();
+    const { client, latest, received, onRevision } = setup();
     client.connect();
     latest().emit("itemStateChanged", 500, { path: "a.mp4" });
     latest().fail();
     vi.advanceTimersByTime(SSE_RECONNECT_DELAY_MS);
     expect(new URL(latest().url).searchParams.get("lastEventId")).toBe("500");
 
+    // The restarted server opens at its own, lower revision, which the stream doesn't resume from.
+    latest().emit("streamOpened", 3, { currentRevision: 3 });
+    expect(onRevision).toHaveBeenLastCalledWith(500);
     latest().emit("resyncRequired", 4, { reason: "revisionGap", lastEventId: 500, currentRevision: 3 });
     latest().emit("playbackRecorded", 5, { itemId: "item-b" });
     expect(received.map((entry) => entry.eventType)).toEqual(["itemStateChanged", "resyncRequired", "playbackRecorded"]);
+    expect(onRevision).toHaveBeenLastCalledWith(5);
     latest().fail();
     vi.advanceTimersByTime(SSE_RECONNECT_DELAY_MS);
     expect(new URL(latest().url).searchParams.get("lastEventId")).toBe("5");
@@ -141,17 +147,17 @@ describe("sseClient", () => {
   });
 
   it("resumes from a quiet server's opening revision after a restart", () => {
-    const { client, latest, received } = setup();
+    const { client, latest, received, onRevision } = setup();
     client.connect();
     latest().emit("streamOpened", 0, { currentRevision: 0 });
-    expect(client.lastRevision()).toBe(0);
+    expect(onRevision).toHaveBeenLastCalledWith(0);
     latest().fail();
     vi.advanceTimersByTime(SSE_RECONNECT_DELAY_MS);
 
     expect(new URL(latest().url).searchParams.get("lastEventId")).toBe("0");
     latest().emit("itemStateChanged", 1, { path: "a.mp4", isFavorite: true });
     expect(received).toEqual([{ eventType: "itemStateChanged", payload: { path: "a.mp4", isFavorite: true } }]);
-    expect(client.lastRevision()).toBe(1);
+    expect(onRevision).toHaveBeenLastCalledWith(1);
     client.stop();
   });
 
@@ -176,7 +182,7 @@ describe("sseClient", () => {
   });
 
   it("ignores events from a stream it has replaced", () => {
-    const { client, sources, received } = setup();
+    const { client, sources, received, onRevision } = setup();
     client.connect();
     client.connect();
     sources[0].emit("itemStateChanged", 9, { path: "old.mp4" });
@@ -185,7 +191,7 @@ describe("sseClient", () => {
 
     expect(received).toEqual([]);
     expect(sources).toHaveLength(2);
-    expect(client.lastRevision()).toBeNull();
+    expect(onRevision).not.toHaveBeenCalled();
     client.stop();
   });
 

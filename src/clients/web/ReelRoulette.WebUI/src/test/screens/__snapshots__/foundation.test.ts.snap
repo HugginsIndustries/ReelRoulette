@@ -1059,7 +1059,23 @@ exports[`page structure > keeps the starting markup 1`] = `
                 <dd>
                   "…"
                 <dt>
+                  "Server address"
+                <dd>
+                  "…"
+                <dt>
                   "ReelRoulette"
+                <dd>
+                  "…"
+                <dt>
+                  "Event stream"
+                <dd>
+                  "…"
+                <dt>
+                  "Last event"
+                <dd>
+                  "…"
+                <dt>
+                  "Resyncs"
                 <dd>
                   "…"
             <section class="settings-section">

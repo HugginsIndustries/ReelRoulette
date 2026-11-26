@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  API_BASE_URL,
   COMPATIBLE_VERSION,
   currentStyle,
   DESKTOP_USER_AGENT,
@@ -1321,7 +1322,7 @@ describe("Diagnostics", () => {
     ["a desktop browser", DESKTOP_USER_AGENT, "web", "Web Browser"],
     ["a phone", IPHONE_USER_AGENT, "mobile-web", "Mobile Browser"]
   ] as const) {
-    it(`shows the ids, the client type, the device name, and the server's and the app's versions on ${browser}`, async () => {
+    it(`shows the ids, the client type, the device name, the versions, the server's address, and the event stream on ${browser}`, async () => {
       resetPage(userAgent);
       const server = new FakeServer();
       server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, appVersion: "0.15.0.0", assetsVersion: "0.15.0-dev.1" }));
@@ -1334,7 +1335,11 @@ describe("Diagnostics", () => {
         "Client type": clientType,
         "Device name": `${prefix} (${navigator.platform}; ${userAgent.slice(0, 40)})`,
         Server: "0.15.0-dev.1 (API 2)",
-        ReelRoulette: RELEASE_VERSION
+        "Server address": API_BASE_URL,
+        ReelRoulette: `${RELEASE_VERSION} (API 2)`,
+        "Event stream": "Connecting",
+        "Last event": "None",
+        Resyncs: "0"
       });
       expect(page.clientId()).toMatch(/^[0-9a-f-]{36}$/);
       expect(page.sessionId()).toMatch(/^[0-9a-f-]{36}$/);
@@ -1365,7 +1370,86 @@ describe("Diagnostics", () => {
     await settle();
     await openSettings();
     expect(diagnostics().Server).toBe("Unknown");
-    expect(diagnostics().ReelRoulette).toBe(RELEASE_VERSION);
+    expect(diagnostics().ReelRoulette).toBe(`${RELEASE_VERSION} (API 2)`);
+  });
+
+  it("shows the event stream connecting until it opens, then open, reconnecting after it fails, and open again", async () => {
+    const page = await mount();
+    await openSettings();
+    expect(diagnostics()["Event stream"]).toBe("Connecting");
+
+    page.stream().open();
+    await settle();
+    expect(diagnostics()["Event stream"]).toBe("Open");
+
+    // A reconnect the page starts while the stream is open, as on focus, keeps showing it open.
+    window.dispatchEvent(new Event("focus"));
+    await settle();
+    expect(page.streams()).toHaveLength(2);
+    expect(diagnostics()["Event stream"]).toBe("Open");
+
+    page.stream().fail();
+    await settle();
+    expect(diagnostics()["Event stream"]).toBe("Reconnecting");
+
+    page.stream().open();
+    await settle();
+    expect(diagnostics()["Event stream"]).toBe("Open");
+  });
+
+  it("shows the event stream stopped once the server fails the compatibility check", async () => {
+    const server = new FakeServer();
+    server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "3" }));
+    const page = mountPage({ server });
+    page.stream().open();
+    await waitFor(() => expect(server.requests("GET", "/api/version").length).toBeGreaterThan(0));
+    await settle();
+    await openSettings();
+    expect(diagnostics()["Event stream"]).toBe("Stopped");
+  });
+
+  it("follows the last event number through events and resyncs, and counts the resyncs since the page loaded", async () => {
+    const page = await mount();
+    await openSettings();
+    page.stream().open();
+    page.stream().emit("streamOpened", 120, { currentRevision: 120 });
+    await settle();
+    expect(diagnostics()).toMatchObject({ "Last event": "120", Resyncs: "0" });
+
+    page.stream().emit("playbackRecorded", 121, { itemId: "item-1", playCount: 1 });
+    await settle();
+    expect(diagnostics()["Last event"]).toBe("121");
+
+    // A restarted server resyncs from its own revision, which is lower.
+    page.stream().emit("resyncRequired", 4, { reason: "revisionGap" });
+    await settle();
+    expect(diagnostics()).toMatchObject({ "Last event": "4", Resyncs: "1" });
+
+    page.stream().emit("resyncRequired", 9, { reason: "gap" });
+    await settle();
+    expect(diagnostics()).toMatchObject({ "Last event": "9", Resyncs: "2" });
+
+    // Reconnected, it keeps its number, though the server opens at a later one, until the events it missed replay.
+    window.dispatchEvent(new Event("focus"));
+    page.stream().open();
+    page.stream().emit("streamOpened", 15, { currentRevision: 15 });
+    await settle();
+    expect(diagnostics()["Last event"]).toBe("9");
+    page.stream().emit("playbackRecorded", 10, { itemId: "item-1", playCount: 2 });
+    await settle();
+    expect(diagnostics()["Last event"]).toBe("10");
+  });
+
+  it("never shows the runtime config's pair token", async () => {
+    const server = new FakeServer();
+    server.on("POST", "/api/pair", () => json({ paired: true }));
+    mountPage({ server, config: { pairToken: "config-token" } });
+    await pageReady(server);
+    await settle();
+    await openSettings();
+
+    expect(diagnostics()["Server address"]).toBe(API_BASE_URL);
+    expect(settingsPage().querySelector("dl.diag")!.textContent).not.toContain("config-token");
   });
 });
 

@@ -1,4 +1,4 @@
-import { batch } from "@preact/signals";
+import { batch, signal, type ReadonlySignal } from "@preact/signals";
 import {
   coerceRefreshSnapshot,
   newRefreshCompletionRunId,
@@ -33,6 +33,12 @@ export const VERSION_CHECK_TIMEOUT_MS = 10_000;
  * since nothing else asks for a check while the stream stays open.
  */
 export const VERSION_RECHECK_MS = 3_000;
+
+/**
+ * The event stream's state, which Diagnostics shows: connecting until it first opens or fails, open, reconnecting from
+ * an error until it opens again, or stopped, once the server fails the compatibility check or the connection stops.
+ */
+export type EventStreamState = "connecting" | "open" | "reconnecting" | "stopped";
 
 /** What the last version check found. */
 type VersionCheckResult = "none" | "reached" | "unreachable" | "unauthorized" | "incompatible";
@@ -82,6 +88,12 @@ export interface ServerConnectionEvents {
 }
 
 export interface ServerConnection {
+  /** The event stream's state. A reconnect the page starts while the stream is open keeps it open unless it fails. */
+  readonly streamState: ReadonlySignal<EventStreamState>;
+  /** The revision the event stream resumes from, the last event's number, or null until the first event arrives. */
+  readonly lastEventRevision: ReadonlySignal<number | null>;
+  /** The resyncs the server asked for since the page loaded. */
+  readonly resyncs: ReadonlySignal<number>;
   /**
    * Checks the server version, opens the event stream, and pairs with the config's token, which pops nothing up. The
    * version is checked again each time the event stream opens, or fails while the server doesn't ask for pairing, and
@@ -150,8 +162,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   let lastCheck: VersionCheckResult = "none";
   /** The event stream has failed since it last opened. */
   let streamFailed = false;
-  /** The event stream is open. */
-  let streamOpen = false;
+  const streamState = signal<EventStreamState>("connecting");
+  const lastEventRevision = signal<number | null>(null);
+  const resyncs = signal(0);
   /** The next check while the stream is open and the last check didn't reach the server. */
   let recheckTimer: ReturnType<typeof setTimeout> | null = null;
   /** The presets the preset events since the last reload named, by id, each as the page held it when its first arrived. */
@@ -222,7 +235,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
    */
   function scheduleRecheck(): void {
     cancelRecheck();
-    if (!streamOpen || lastCheck !== "unreachable") {
+    if (streamState.peek() !== "open" || lastCheck !== "unreachable") {
       return;
     }
     recheckTimer = setTimeout(() => {
@@ -239,7 +252,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     // Nothing a preset picks can load, so the preset dropdown says why in place of the presets.
     store.showPresetMenuMessage(PRESET_MENU_BLOCKED);
     eventStream?.stop();
-    streamOpen = false;
+    streamState.value = "stopped";
     cancelRecheck();
     updateReconnecting();
     // The player's indicator and the Library tab show it; the log keeps the full message.
@@ -449,7 +462,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       createEventSource: options.createEventSource,
       onOpen() {
         streamFailed = false;
-        streamOpen = true;
+        streamState.value = "open";
         updateReconnecting();
         // The normal state shows nothing; Reconnected. pops up when Reconnecting… ends, here when only the stream had
         // failed, or once a check reaches the server.
@@ -459,7 +472,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       },
       onError() {
         streamFailed = true;
-        streamOpen = false;
+        streamState.value = "reconnecting";
         cancelRecheck();
         updateReconnecting();
         // A server without a library refuses the stream, so the check tells that apart from one that can't be reached.
@@ -467,6 +480,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         if (!store.pairingRequired.peek()) {
           void checkVersion();
         }
+      },
+      onRevision(revision) {
+        lastEventRevision.value = revision;
       },
       handlers: {
         itemStateChanged(payload) {
@@ -523,6 +539,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
           }
         },
         resyncRequired(payload) {
+          resyncs.value += 1;
           // A refresh that ended while events were missed would otherwise stay showing.
           store.refreshProgress.value = null;
           // Presets changed while events were missed reload as for a preset event.
@@ -610,6 +627,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   }
 
   return {
+    streamState,
+    lastEventRevision,
+    resyncs,
     start() {
       addReconnectListeners();
       void checkVersion();
@@ -622,7 +642,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     stop() {
       removeReconnectListeners();
       eventStream?.stop();
-      streamOpen = false;
+      streamState.value = "stopped";
       cancelRecheck();
       store.reconnecting.value = false;
       emit("stopped");
