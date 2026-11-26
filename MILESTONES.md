@@ -381,7 +381,7 @@ Last milestone completed: M12m
 - `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, with 96 test files and 2407 tests, 15 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
 - `CONTEXT.md` describes the setting and the 10% notch, and `docs/domain-inventory.md` and `CHANGELOG.md` describe the setting.
-- The quick spot check in Firefox on the desktop waits for main after the squash merge, since a branch doesn't run against the user's data.
+- The user's quick spot check in Firefox on the desktop, on main after the merge, found the figures at their elements, and the panel and a field's tooltip in it looking as before.
 
 #### Diagnostics slice
 
