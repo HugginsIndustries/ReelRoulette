@@ -125,7 +125,7 @@ public sealed class ServerAuthRegressionTests
 
     private static CoreSettingsService CreateSettingsService(ServerRuntimeOptions options)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "rr-auth-test", Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(TestIsolation.RootDirectory, "server-auth-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         return new CoreSettingsService(options, tempDir);
     }
