@@ -419,6 +419,9 @@ body.short-screen .admin-nav { padding: 4px 8px; }
 hydrateIcons();
 initHideMock();
 const $ = (id) => document.getElementById(id);
+// The admin view is part of the app, so the browser's own menu is off here too, and its bell's entries and popups have
+// the main page's menus.
+contextMenu.mount(document.body);
 // The admin view's acknowledgments pop up as the main page's do, and its refresh shows its progress in its own card.
 // Its list is the main page's, so Now shows every active lasting state; this page's bar sets only running without a library
 // and its own refresh.

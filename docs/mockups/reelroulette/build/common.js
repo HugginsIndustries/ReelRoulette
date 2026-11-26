@@ -697,6 +697,197 @@ function blurDropdownsAfterPick() {
 }
 
 /**
+ * Menus: one look for the Selection actions menu and every context menu. A menu's items come in groups with a rule
+ * between them. Each item is { icon, label, run, danger, reason }: its icon at its left, red for an action that
+ * deletes, and disabled while it has a reason it can't act, which is its tooltip. A menu lists every item it can have,
+ * in order, and an item that doesn't apply to what the menu acts on is false and left out, as is a group left empty.
+ * A pick closes the menu, then runs the item.
+ */
+const menuItem = (icon, label, run, options = {}) => ({ icon, label, run, ...options });
+function fillMenu(menu, groups, close) {
+  menu.textContent = "";
+  groups.map((group) => (group || []).filter(Boolean)).filter((group) => group.length).forEach((group, index) => {
+    if (index) menu.append(Object.assign(document.createElement("hr"), { className: "menu-rule" }));
+    group.forEach(({ icon, label, run, danger, reason }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      if (danger) button.className = "menu-danger";
+      button.disabled = !!reason;
+      if (reason) button.title = reason;
+      button.append(iconSpan(icon), label);
+      button.addEventListener("click", () => {
+        close();
+        run();
+      });
+      menu.append(button);
+    });
+  });
+  return menu.childElementCount > 0;
+}
+
+/** Copies text and says so in a Your actions popup, with `detail`, such as the file's name, on its second line. */
+function copyText(text, message, detail = "", key = "copy") {
+  navigator.clipboard?.writeText(text).catch(() => {});
+  activeNotifications?.notify({ kind: "actions", text: message, detail, key });
+}
+
+// Below and to the right of the point, or on its other side where the menu would cross the window's edge, and kept
+// 8 px inside the window.
+function placeAtPoint(menu, x, y) {
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  const left = x + width + 8 > window.innerWidth ? x - width : x;
+  const top = y + height + 8 > window.innerHeight ? y - height : y;
+  menu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
+}
+
+/**
+ * The context menu. A page mounts it, in the stage on the main page so it shows in fullscreen, and from then on the
+ * browser's own menu is off on the page, except in text fields, which keep it for copy, paste, and spell check. Each
+ * surface with a menu is added by its selector, with `groupsFor(el)` answering its groups, or nothing while it has no
+ * menu. A mouse's right-click anywhere on a surface, its buttons included, opens its menu at the pointer, and a
+ * right-click where no menu exists opens nothing. A long press with a finger or a pen opens it where the press began,
+ * except on a button, a drag handle, or the rating stars, so buttons stay free for their tooltips; a surface may name
+ * buttons that are part of it, such as a category's name. Options:
+ * - `except`: parts of the surface that open nothing, such as the player's controls.
+ * - `pressOn`: buttons in the surface that a long press still opens its menu on.
+ * - `press(el)`: what a long press does in place of opening the menu, as a library tile's selects.
+ * - `mark`: false, or a test of the element, to leave out the highlight on the element the menu acts on.
+ * - `onOpen(el)` and `onClose(el)`, run as the menu opens on the surface and as it closes, however it closes.
+ * The innermost surface under the pointer wins. One menu shows at a time. It closes on a pick, a press outside, which
+ * still does what it does, Escape, before anything else Escape would close, a scroll, a resize, and the page hiding.
+ */
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE = 8;
+const contextMenu = (() => {
+  const menu = document.createElement("div");
+  menu.id = "context-menu";
+  menu.className = "menu context-menu";
+  menu.hidden = true;
+  const surfaces = [];
+  const style = document.createElement("style");
+  let mounted = false;
+  let shown = null;
+  // The kind of pointer that last pressed, so a right-click a long press sends, as Chrome on Android does, opens
+  // nothing of its own.
+  let pressPointer = "mouse";
+  let press = null;
+  let swallowClick = false;
+
+  const takesText = (el) =>
+    el?.tagName === "TEXTAREA" ||
+    (el?.tagName === "INPUT" && !["checkbox", "radio", "range", "button", "submit", "reset", "color", "file", "image"].includes(el.type));
+  // The innermost surface at `target`, or null where none is or the surface leaves that part out. For a long press,
+  // also null on a button, a drag handle, or the rating stars, unless the surface opens its menu there.
+  function surfaceAt(target, pressing) {
+    for (let el = target; el && el !== document.documentElement; el = el.parentElement) {
+      const surface = surfaces.find((s) => el.matches(s.selector));
+      if (!surface) continue;
+      const left = surface.except && target.closest(surface.except);
+      if (left && el.contains(left)) return null;
+      const held = pressing && !surface.press && target.closest("button, .drag-handle, .rating, .panel-handle");
+      if (held && el.contains(held) && !held.matches(surface.pressOn || "*:not(*)")) return null;
+      return { surface, el };
+    }
+    return null;
+  }
+  function open(surface, el, x, y) {
+    close();
+    const groups = surface.groupsFor(el);
+    if (!groups || !fillMenu(menu, groups, close)) return;
+    menu.hidden = false;
+    placeAtPoint(menu, x, y);
+    const marked = surface.mark === false ? null : typeof surface.mark === "function" && !surface.mark(el) ? null : el;
+    marked?.classList.add("is-menu-target");
+    shown = { surface, el, marked };
+    surface.onOpen?.(el);
+  }
+  function close() {
+    if (!shown) return;
+    const { surface, el, marked } = shown;
+    shown = null;
+    menu.hidden = true;
+    marked?.classList.remove("is-menu-target");
+    surface.onClose?.(el);
+  }
+  function cancelPress() {
+    clearTimeout(press?.timer);
+    press = null;
+  }
+
+  document.addEventListener("contextmenu", (event) => {
+    if (!mounted || takesText(event.target)) return;
+    event.preventDefault();
+    if (pressPointer !== "mouse" || menu.contains(event.target)) return;
+    const hit = surfaceAt(event.target, false);
+    if (hit) open(hit.surface, hit.el, event.clientX, event.clientY);
+  });
+  document.addEventListener("pointerdown", (event) => {
+    pressPointer = event.pointerType;
+    // A press that ended without a click, as some long presses do, leaves no click to swallow.
+    swallowClick = false;
+    if (shown && !menu.contains(event.target)) close();
+    // A second finger cancels the press, and starts none of its own.
+    cancelPress();
+    if (!mounted || !event.isPrimary || event.pointerType === "mouse") return;
+    const hit = surfaceAt(event.target, true);
+    if (!hit) return;
+    const x = event.clientX;
+    const y = event.clientY;
+    press = { x, y, id: event.pointerId };
+    press.timer = setTimeout(() => {
+      press = null;
+      // The click the press ends with is used up, so it never also plays, toggles, or dismisses what it was on.
+      swallowClick = true;
+      if (hit.surface.press) hit.surface.press(hit.el);
+      else open(hit.surface, hit.el, x, y);
+    }, LONG_PRESS_MS);
+  }, true);
+  document.addEventListener("pointermove", (event) => {
+    if (press && event.pointerId === press.id && Math.hypot(event.clientX - press.x, event.clientY - press.y) >= LONG_PRESS_MOVE) cancelPress();
+  }, true);
+  // Lifting first cancels it, and so does a scroll the browser takes over, which cancels the pointer.
+  ["pointerup", "pointercancel"].forEach((type) => document.addEventListener(type, cancelPress, true));
+  document.addEventListener("click", (event) => {
+    if (!swallowClick) return;
+    swallowClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (!shown || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    close();
+  }, true);
+  window.addEventListener("scroll", (event) => {
+    if (shown && !menu.contains(event.target)) close();
+  }, true);
+  window.addEventListener("resize", close);
+  document.addEventListener("visibilitychange", () => document.hidden && close());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  return {
+    mount(host) {
+      host.append(menu);
+      document.head.append(style);
+      mounted = true;
+    },
+    // A surface shows no callout of the browser's own on a long press, and on a touch screen selects no text under the
+    // finger; with a mouse, its text still selects.
+    add(selector, groupsFor, options = {}) {
+      surfaces.push({ selector, groupsFor, ...options });
+      style.textContent += `${selector} { -webkit-touch-callout: none; }\n@media (hover: none) { ${selector} { -webkit-user-select: none; user-select: none; } }\n`;
+    },
+    close,
+    /** The surface element the menu is open on, or null. */
+    openOn: () => shown?.el || null,
+    contains: (el) => menu.contains(el)
+  };
+})();
+
+/**
  * Notifications, which replace the status line:
  * - Lasting states, such as Reconnecting…, show as one indicator on the player: the first active one in
  *   `NOTIFY_LASTING_ORDER`. The list shows every active one, with its full text, under Now, on the main page and in
@@ -772,8 +963,12 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   const act = (name) => list.querySelector(`[data-act="${name}"]`);
   if (!onSettings) act("settings").parentElement.hidden = true;
 
-  function entryRow({ icon, text, detail, time, kind, level, highlight }) {
+  // The entry or popup each row shows, for its menu.
+  const shownEntry = new WeakMap();
+  function entryRow(entry) {
+    const { icon, text, detail, time, kind, level, highlight } = entry;
     const row = document.createElement("li");
+    shownEntry.set(row, entry);
     row.className = "notify-entry";
     row.classList.toggle("is-error", kind === "error");
     row.classList.toggle("is-warning", level === "warning");
@@ -802,7 +997,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     const now = activeLasting();
     part("now").hidden = now.length === 0;
     part("now").querySelector("ul").replaceChildren(...now.map((info) =>
-      entryRow({ icon: info.icon, text: info.progress ? `${info.title} ${info.progress}` : info.title, detail: info.detail, level: info.warning ? "warning" : "" })));
+      entryRow({ icon: info.icon, text: info.progress ? `${info.title} ${info.progress}` : info.title, detail: info.detail, level: info.warning ? "warning" : "", lasting: true })));
     const recent = part("recent");
     recent.querySelector("ul").replaceChildren(...entries.map(entryRow));
     recent.querySelector(".notify-group-title").hidden = entries.length === 0;
@@ -867,9 +1062,10 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     closeList();
     onSettings?.();
   });
-  // A press outside closes the list, and Escape closes it before anything else it would close.
+  // A press outside closes the list, and Escape closes it before anything else it would close. A menu opened from the
+  // list keeps it open while it is used.
   document.addEventListener("pointerdown", (event) => {
-    if (listOpen && !list.contains(event.target) && !button.contains(event.target)) closeList();
+    if (listOpen && !list.contains(event.target) && !button.contains(event.target) && !contextMenu.contains(event.target)) closeList();
   }, true);
   document.addEventListener("keydown", (event) => {
     if (!listOpen || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
@@ -890,7 +1086,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     setTimeout(() => toast.remove(), instant || now ? 0 : 160);
   }
   function resume(toast) {
-    if (!toast.remaining || toast.hover) return;
+    if (!toast.remaining || toast.hover || toast.menuOpen) return;
     toast.started = Date.now();
     toast.running = true;
     clearTimeout(toast.timer);
@@ -976,6 +1172,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     close.append(iconSpan("close"));
     close.addEventListener("click", () => dismiss(toast));
     toast.replaceChildren(iconSpan(icon), words, close);
+    shownEntry.set(toast, { text, detail });
     // A warning stays until it is closed.
     clearTimeout(toast.timer);
     toast.running = false;
@@ -983,6 +1180,31 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     resume(toast);
     return toast;
   }
+
+  // An entry's menu, and a popup's: Copy text, which copies its detail too, on its own line, and Dismiss, which removes
+  // that one. A lasting state stays while it lasts, so its entry has no Dismiss. A popup holds its time while its menu
+  // is open, as it does while pointed at.
+  const copyEntry = ({ text, detail }) => menuItem("content_copy", "Copy text", () => copyText(detail ? `${text}\n${detail}` : text, "Text copied."));
+  contextMenu.add(".notify-entry", (row) => {
+    const entry = shownEntry.get(row);
+    return entry && [[
+      copyEntry(entry),
+      !entry.lasting && menuItem("close", "Dismiss", () => {
+        if (entries.includes(entry)) entries.splice(entries.indexOf(entry), 1);
+        renderList();
+      })
+    ]];
+  });
+  contextMenu.add(".toast", (toast) => [[copyEntry(shownEntry.get(toast)), menuItem("close", "Dismiss", () => dismiss(toast))]], {
+    onOpen: (toast) => {
+      toast.menuOpen = true;
+      pause(toast);
+    },
+    onClose: (toast) => {
+      toast.menuOpen = false;
+      resume(toast);
+    }
+  });
 
   function add(entry) {
     entries.unshift(entry);

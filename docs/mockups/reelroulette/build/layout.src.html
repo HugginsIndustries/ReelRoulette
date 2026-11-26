@@ -546,43 +546,8 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .bulk-bar .btn { min-height: 40px; padding: 4px 10px; }
 /* A count wider than its room is cut off with "…" rather than wrapping. */
 #bulk-count { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* The app's menu: actions in groups with a rule between them, one look for every menu. Its container places it. */
-.menu {
-  min-width: 230px;
-  padding: 6px;
-  background: var(--surface-raised);
-  border: 1px solid var(--control-border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-}
-/* Each item has its icon at its left, in the item's color. */
-.menu button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--page-fg);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.menu button .material-symbol-icon { font-size: 20px; }
-@media (hover: hover) { .menu button:hover:not(:disabled) { background: rgba(127, 127, 127, 0.16); } }
-/* An item that applies but can't act now is disabled, with its reason as its tooltip. */
-.menu button:disabled { opacity: 0.45; cursor: not-allowed; }
-.menu .menu-danger { color: var(--error); }
-.menu-rule { border: 0; border-top: 1px solid var(--surface-border); margin: 4px 0; }
 /* The Selection actions menu opens above its button. */
 .bulk-menu { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 40; }
-/* A tile's menu opens at the pointer, placed by script inside the window, over the panel and the popups. It sits in the
-   stage, so it shows in fullscreen and the panel doesn't clip it. */
-.context-menu { position: fixed; z-index: 1500; max-height: calc(100dvh - 16px); overflow-y: auto; }
 /* The tile a menu acts on alone, rather than on the selection: an orange ring inside its edge while the menu is open.
    The selection's own marks show what a menu on the selection reaches. */
 .lib-tile.is-menu-target::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--huggins-orange); border-radius: 4px; pointer-events: none; }
@@ -597,7 +562,6 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .stats-file-name { font-weight: 600; word-break: break-word; margin: 0 0 4px; }
 .stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
-.stats-path .icon-btn .material-symbol-icon { font-size: 24px; }
 /* The rating's line: its label at the left, and the stars at the right, lined up with the table's values, wrapping
    under the label on a screen too narrow for both. */
 .stats-rating { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 6px; font-size: 0.92rem; }
@@ -1106,9 +1070,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <h3>Sources (Client Filter)</h3>
               <p class="filter-hint">Checked sources are included. If all are checked, no source restriction is stored.</p>
               <div class="filter-stack">
-                <label><input type="checkbox" checked> Videos (/media/videos)</label>
-                <label><input type="checkbox" checked> Phone backup (/media/phone)</label>
-                <label><input type="checkbox" checked disabled> Archive (/mnt/archive)</label>
+                <label class="filter-source"><input type="checkbox" checked> Videos (/media/videos)</label>
+                <label class="filter-source"><input type="checkbox" checked> Phone backup (/media/phone)</label>
+                <label class="filter-source" title="This source is turned off on the server"><input type="checkbox" checked disabled> Archive (/mnt/archive)</label>
                 <span class="filter-hint" id="no-sources" hidden>No sources returned from server.</span>
               </div>
             </div>
@@ -1520,8 +1484,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div class="settings-section">
             <h3>Diagnostics</h3>
             <dl class="diag">
-              <dt>Client</dt><dd>3f9c2e81-5b7d-4c2a-9e6f-1d8b0a4c7e53</dd>
-              <dt>Session</dt><dd>7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
+              <dt>Client</dt><dd data-copy="Client ID">3f9c2e81-5b7d-4c2a-9e6f-1d8b0a4c7e53</dd>
+              <dt>Session</dt><dd data-copy="Session ID">7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
               <dt>Server</dt><dd>0.15.0-dev.1 (API 2)</dd>
@@ -1603,7 +1567,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       </main>
     </div>
 
-    <div id="tile-menu" class="menu context-menu" hidden></div>
 
     <button id="mock-toggle" class="mock-toggle" type="button">Mockup</button>
     <div id="mock-sheet" class="mock-sheet mock-note mock-keep" hidden>
@@ -1735,6 +1698,8 @@ const figures = { frame: 0, gridUntil: 0, gridTimer: 0, observer: null };
 
 const $ = (id) => document.getElementById(id);
 const stage = $("stage");
+// Menus show in the stage, so they show in fullscreen.
+contextMenu.mount(stage);
 const panel = $("panel");
 const handle = $("handle");
 const media = $("media");
@@ -2821,7 +2786,8 @@ function waitsForUser() {
   return !playback.playing && !(photo && !photoBarFills());
 }
 function controlsHeld() {
-  return pointerOnControls || draggingControl || (state.keepWhilePaused && waitsForUser()) || notes.listShown() || ratingPopover.isOpen();
+  return pointerOnControls || draggingControl || (state.keepWhilePaused && waitsForUser()) || notes.listShown() || ratingPopover.isOpen() ||
+    contextMenu.openOn() === media;
 }
 function restartHideCountdown() {
   clearTimeout(hideTimer);
@@ -3768,10 +3734,6 @@ function settleZoom() {
 function chooseTile(event) {
   const tile = event.target.closest(".lib-tile");
   if (!tile || tile.classList.contains("is-placeholder")) return;
-  if (swallowClick) {
-    swallowClick = false;
-    return;
-  }
   const id = Number(tile.dataset.id);
   // The selection icon, or a Shift, Ctrl, or Cmd+click, selects its tile and starts selection. In selection, a click or
   // a Ctrl or Cmd+click adds or removes a tile, and Shift+click adds the range from the last tile chosen.
@@ -3843,8 +3805,11 @@ function renderLibPresets() {
   fit();
 }
 $("lib-preset").addEventListener("change", (event) => {
-  if (event.target.value === "*") return;
-  lib.preset = event.target.value;
+  if (event.target.value !== "*") pickLibPreset(event.target.value);
+});
+// A preset picked in the dropdown, or with Apply in a preset row's menu, applies at once, with the saved presets.
+function pickLibPreset(id) {
+  lib.preset = id;
   saveLibState();
   presets.splice(0, presets.length, ...presetSnapshot);
   presetNames = new Map(savedPresetNames);
@@ -3858,7 +3823,7 @@ $("lib-preset").addEventListener("change", (event) => {
   renderApply();
   renderLibPresets();
   reloadGrid();
-});
+}
 
 // ---- Filter tab ----
 const filterBody = $("filter-body");
@@ -4362,16 +4327,59 @@ $("filter-clear").addEventListener("click", () => {
 });
 // Load puts the chosen preset's filter in the tab, or the default filter for None, which Apply then applies, as picking a
 // preset did before. It leaves the preset list as it is.
-$("filter-load-preset").addEventListener("click", () => {
-  applyFilterValue(chosenFilter());
-  tabBase = chosenPreset;
+$("filter-load-preset").addEventListener("click", () => loadPresetIntoFilter(chosenPreset));
+function loadPresetIntoFilter(id) {
+  applyFilterValue(id ? presetFilters.get(id) : DEFAULT_FILTER);
+  tabBase = id;
   renderApply();
-});
+}
 // Update saves the tab's filter into the chosen preset until Apply saves the list.
-$("filter-update-preset").addEventListener("click", () => {
-  acknowledge(`Updated preset "${presetNames.get(chosenPreset)}" locally — Apply to save.`, "filter");
-  presetFilters.set(chosenPreset, filterValue());
+$("filter-update-preset").addEventListener("click", () => updatePresetFromFilter(chosenPreset));
+function updatePresetFromFilter(id) {
+  acknowledge(`Updated preset "${presetNames.get(id)}" locally — Apply to save.`, "filter");
+  presetFilters.set(id, filterValue());
   renderApply();
+}
+
+// A preset row's menu: Apply, which applies the saved preset at once, as picking it in the Library tab's dropdown does,
+// shown while it isn't the applied filter and waiting while the tab holds changes; Load into filter and Update from
+// filter, as Load and Update do for the chosen preset, shown while the tab's filter isn't the preset's; and Edit… and
+// Delete…, as the Edit Preset dialog's. All but Apply wait for Apply, as the list's other changes do. Update from
+// filter is disabled while Update would be, with its reason, naming another preset that has the filter.
+contextMenu.add("#filter-preset-list .filter-preset-row", (row) => {
+  const id = row.dataset.key;
+  if (!presets.includes(id)) return null;
+  const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
+  const own = sameFilter(filterValue(), presetFilters.get(id));
+  const flagged = generalFields.find((field) => field.flagged);
+  const holder = presets.find((other) => sameFilter(presetFilters.get(other), filterValue()));
+  const updateReason = flagged ? generalReason(flagged, "first")
+    : filterIsDefault() ? "Choose a filter to save as a preset."
+    : holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
+  return [
+    [(anchor.id !== id || anchor.starred) && menuItem("filter_alt", "Apply", () => pickLibPreset(id), { reason: unsaved.filter ? "Apply or discard the Filter tab's changes first" : null })],
+    [
+      !own && menuItem("sync", "Load into filter", () => loadPresetIntoFilter(id)),
+      !own && menuItem("save", "Update from filter", () => updatePresetFromFilter(id), { reason: updateReason })
+    ],
+    [
+      menuItem("edit_note", "Edit…", () => openEditPreset(presets.indexOf(id))),
+      menuItem("delete", "Delete…", () => confirmDelete(presetDeleteMessage(id), () => removePreset(id)), { danger: true })
+    ]
+  ];
+});
+// A source's menu: Only this source, which checks it and unchecks the others, until Apply, shown while others are
+// checked. A disabled source can't be checked, so it gives its reason, as its row does.
+const SOURCE_OFF = "This source is turned off on the server";
+contextMenu.add("#filter-body .filter-source", (row) => {
+  const box = row.querySelector("input");
+  const others = [...filterBody.querySelectorAll(".filter-source input")].filter((other) => other !== box && !other.disabled);
+  if (box.checked && !box.disabled && !others.some((other) => other.checked)) return null;
+  return [[menuItem("filter_alt", "Only this source", () => {
+    box.checked = true;
+    others.forEach((other) => (other.checked = false));
+    renderApply();
+  }, { reason: box.disabled ? SOURCE_OFF : null })]];
 });
 
 function presetsChanged() {
@@ -4397,7 +4405,8 @@ function renderPresets() {
     list.append(Object.assign(document.createElement("span"), { className: "filter-hint", textContent: "No presets" }));
     return;
   }
-  presets.forEach((id, index) => {
+  // Edit Preset opens from a row's menu.
+  presets.forEach((id) => {
     const name = presetNames.get(id);
     const row = document.createElement("div");
     row.className = "filter-preset-row";
@@ -4405,14 +4414,7 @@ function renderPresets() {
     const label = document.createElement("span");
     label.className = "filter-preset-name";
     label.textContent = name;
-    const edit = document.createElement("button");
-    edit.type = "button";
-    edit.className = "icon-btn";
-    edit.title = "Edit preset";
-    edit.setAttribute("aria-label", `Edit preset ${name}`);
-    edit.append(iconSpan("edit_note"));
-    edit.addEventListener("click", () => openEditPreset(index));
-    row.append(dragHandle(name), label, edit);
+    row.append(dragHandle(name), label);
     list.append(row);
   });
 }
@@ -4437,13 +4439,15 @@ function openEditPreset(index) {
       presetNames.set(own, name);
       presetsChanged();
     },
-    deleteMessage: () => `Delete preset "${presetNames.get(own)}"?`,
-    onDelete: () => {
-      presets.splice(presets.indexOf(own), 1);
-      if (tabBase === own) tabBase = "";
-      presetsChanged();
-    }
+    deleteMessage: () => presetDeleteMessage(own),
+    onDelete: () => removePreset(own)
   });
+}
+const presetDeleteMessage = (id) => `Delete preset "${presetNames.get(id)}"?`;
+function removePreset(id) {
+  presets.splice(presets.indexOf(id), 1);
+  if (tabBase === id) tabBase = "";
+  presetsChanged();
 }
 // Add Preset adds the preset last, with an id of its own.
 $("filter-add-preset").addEventListener("click", () => {
@@ -4520,13 +4524,11 @@ function chipEl(name, buttons, stateClass) {
   label.className = "tag-chip-label";
   label.textContent = name;
   chip.append(label);
-  // A disabled button's reason, when it has one, is its tooltip; its name stays the action's.
-  buttons.forEach(([icon, title, selected, onClick, disabled, reason]) => {
+  buttons.forEach(([icon, title, selected, onClick]) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "icon-btn" + (selected ? " is-selected" : "");
-    button.title = reason || title;
-    button.disabled = !!disabled;
+    button.title = title;
     button.setAttribute("aria-label", `${title} ${name}`);
     button.append(iconSpan(icon));
     button.addEventListener("click", onClick);
@@ -4724,29 +4726,17 @@ function renderTags() {
   // compatibility check or runs without a library, nothing loads.
   const shown = state.pairing || heldBack() ? [] : state.situation === "empty" ? TAGS.filter((category) => category.id === UNCATEGORIZED).map((category) => ({ ...category, chips: [] })) : TAGS;
   shown.forEach((category) => {
-    const fixed = category.id === UNCATEGORIZED;
-    let controls = null;
-    // Uncategorized has a dimmed, disabled handle, so its name lines up and it is clear it can't move.
+    // Uncategorized has a dimmed, disabled handle, so its name lines up and it is clear it can't move. Edit Category
+    // opens from the category's menu.
     const handleEl = dragHandle(category.name);
-    if (fixed) {
+    if (category.id === UNCATEGORIZED) {
       handleEl.disabled = true;
       handleEl.title = "Uncategorized stays last";
       handleEl.setAttribute("aria-label", "Uncategorized stays last");
-    } else {
-      controls = document.createElement("div");
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.className = "icon-btn";
-      edit.title = "Edit category";
-      edit.setAttribute("aria-label", `Edit category ${category.name}`);
-      edit.append(iconSpan("edit_note"));
-      edit.addEventListener("click", () => openEditCategory(category));
-      controls.append(edit);
     }
     const inUse = category.chips.filter((chip) => items.some((item) => item.tags.has(chip.key))).length;
     const { section, grid } = categoryEl("tags", category.id, category.name, {
       handle: handleEl,
-      controls,
       inUse,
       inUseTitle: `${inUse} ${inUse === 1 ? "tag" : "tags"} on ${tagSelection ? "the selected items" : "this item"}`,
       unsaved: categoryUnsaved(category)
@@ -4755,23 +4745,10 @@ function renderTags() {
     category.chips.forEach((chip) => {
       pending = pending || !!chip.pending;
       // Green: every item being edited has the tag. Orange: only some do. Add or Remove applies to all of them.
-      const count = items.filter((item) => item.tags.has(chip.key)).length;
-      // Add does nothing on a tag every item has, and Remove on one none has, so each is disabled with its reason as its
-      // tooltip, unless its change is held, so it can be undone.
-      const several = !!tagSelection;
-      const addReason = items.length && count === items.length && chip.pending !== "add"
-        ? (several ? "Every selected item has this tag" : "This item already has this tag")
-        : null;
-      const removeReason = items.length && count === 0 && chip.pending !== "remove"
-        ? (several ? "No selected item has this tag" : "This item doesn't have this tag")
-        : null;
-      grid.append(
-        chipEl(chip.name, [
-          ["add", "Add tag", chip.pending === "add", () => { chip.pending = chip.pending === "add" ? null : "add"; renderTags(); }, !items.length || !!addReason, addReason],
-          ["remove", "Remove tag", chip.pending === "remove", () => { chip.pending = chip.pending === "remove" ? null : "remove"; renderTags(); }, !items.length || !!removeReason, removeReason],
-          ["edit_note", "Edit tag", false, () => openEditTag(category, chip)]
-        ], count && count === items.length ? "state-all" : count ? "state-some" : "")
-      );
+      const { count, buttons } = chipButtons(chip, items);
+      const el = chipEl(chip.name, buttons, count && count === items.length ? "state-all" : count ? "state-some" : "");
+      el.dataset.key = chip.key;
+      grid.append(el);
     });
     host.append(section);
   });
@@ -4789,6 +4766,89 @@ function renderTags() {
   TAGS.forEach((category) => select.append(Object.assign(document.createElement("option"), { value: category.id, textContent: category.name })));
   if (TAGS.some((category) => category.id === keep)) select.value = keep;
 }
+// A tag shows only the buttons that would change something for the items the tab edits: Add to item while the tag
+// isn't on every one of them, and Remove from item while it is on some, so one item's tag shows one of them, and only
+// a tag some of several items have shows both. A button whose change is held for Save stays, so a press undoes it.
+// With nothing to edit, a tag shows none. They say "items" while the tab edits the selection.
+function chipButtons(chip, items) {
+  const noun = tagSelection ? "items" : "item";
+  const count = items.filter((item) => item.tags.has(chip.key)).length;
+  const toggle = (kind) => () => {
+    chip.pending = chip.pending === kind ? null : kind;
+    renderTags();
+  };
+  const add = chip.pending === "add" || (items.length && count < items.length);
+  const remove = chip.pending === "remove" || count > 0;
+  return {
+    count,
+    buttons: [
+      add && ["add", `Add to ${noun}`, chip.pending === "add", toggle("add")],
+      remove && ["remove", `Remove from ${noun}`, chip.pending === "remove", toggle("remove")]
+    ].filter(Boolean)
+  };
+}
+const chipByKey = (key) => {
+  for (const category of TAGS) {
+    const chip = category.chips.find((c) => c.key === key);
+    if (chip) return { category, chip };
+  }
+  return {};
+};
+
+// A tag's menu in the Tags tab: Filter by this tag, and Edit… and Delete…, as the Edit Tag dialog's, which wait for
+// Save. Its Add and Remove stay on the tag itself.
+contextMenu.add("#tags-body .tag-chip", (el) => {
+  const { category, chip } = chipByKey(el.dataset.key);
+  if (!chip) return null;
+  return [
+    [filterByTagItem(chip)],
+    [
+      menuItem("edit_note", "Edit…", () => openEditTag(category, chip)),
+      menuItem("delete", "Delete…", () => confirmDelete(tagDeleteMessage(chip), () => deleteTag(category, chip)), { danger: true })
+    ]
+  ];
+});
+// A category's menu: New tag in this category, which sets the footer's category and puts the cursor in its name, and
+// Edit… and Delete…, as the Edit Category dialog's. Uncategorized can't be edited or deleted. A long press on the
+// category's name opens it too, as on the rest of its header.
+contextMenu.add("#tags-body .tag-category-header", (header) => {
+  const category = TAGS.find((c) => c.id === header.closest(".tag-category").dataset.key);
+  if (!category) return null;
+  const fixed = category.id === UNCATEGORIZED;
+  return [
+    [menuItem("new_label", "New tag in this category", () => {
+      $("tags-category-select").value = category.id;
+      $("tags-new-name").focus();
+    })],
+    [
+      !fixed && menuItem("edit_note", "Edit…", () => openEditCategory(category)),
+      !fixed && menuItem("delete", "Delete…", () => confirmDelete(categoryDeleteMessage(category), () => deleteCategory(category)), { danger: true })
+    ]
+  ];
+}, { pressOn: ".tag-category-toggle" });
+// The Stats tab's tags: Filter by this tag.
+contextMenu.add(".stats-tag", (el) => {
+  const { chip } = chipByKey(el.dataset.key);
+  return chip && [[filterByTagItem(chip)]];
+});
+// Filter by this tag adds the tag to the Filter tab's filter as a tag to include, until Apply, and opens the Filter tab
+// on its Tags section with the tag's category open, so the change shows. It shows while the tab's filter doesn't
+// include the tag already.
+function filterByTagItem(chip) {
+  return filterTagState.get(chip.key) !== "inc" && menuItem("filter_alt", "Filter by this tag", () => {
+    filterTagState.set(chip.key, "inc");
+    setCategoryExpanded("filter", chipByKey(chip.key).category.id, true);
+    renderFilterTags();
+    renderApply();
+    openPanel("filter");
+    showSub("tags");
+  });
+}
+// A delete from a menu asks first, as the dialog's Delete does.
+async function confirmDelete(message, onDelete) {
+  if (await confirmDialog({ message, confirmLabel: "Delete", danger: true })) onDelete();
+}
+
 // A category holds unsaved changes while a chip's Add or Remove is pending, or its name or tags differ from the saved
 // ones; a new category always does until saved.
 function categoryUnsaved(category) {
@@ -4929,12 +4989,14 @@ function openEditTag(category, chip) {
       }
       tagsChanged();
     },
-    deleteMessage: () => `Delete tag "${chip.name}"?`,
-    onDelete: () => {
-      category.chips.splice(category.chips.indexOf(chip), 1);
-      tagsChanged();
-    }
+    deleteMessage: () => tagDeleteMessage(chip),
+    onDelete: () => deleteTag(category, chip)
   });
+}
+const tagDeleteMessage = (chip) => `Delete tag "${chip.name}"?`;
+function deleteTag(category, chip) {
+  category.chips.splice(category.chips.indexOf(chip), 1);
+  tagsChanged();
 }
 
 function openEditCategory(category) {
@@ -4947,14 +5009,16 @@ function openEditCategory(category) {
       category.name = name;
       tagsChanged();
     },
-    deleteMessage: () => `Delete category "${category.name}"? Tags will become Uncategorized.`,
-    onDelete: () => {
-      TAGS.splice(TAGS.indexOf(category), 1);
-      TAGS.find((c) => c.id === UNCATEGORIZED).chips.push(...category.chips);
-      if (category.chips.length) setCategoryExpanded("tags", UNCATEGORIZED, true);
-      tagsChanged();
-    }
+    deleteMessage: () => categoryDeleteMessage(category),
+    onDelete: () => deleteCategory(category)
   });
+}
+const categoryDeleteMessage = (category) => `Delete category "${category.name}"? Tags will become Uncategorized.`;
+function deleteCategory(category) {
+  TAGS.splice(TAGS.indexOf(category), 1);
+  TAGS.find((c) => c.id === UNCATEGORIZED).chips.push(...category.chips);
+  if (category.chips.length) setCategoryExpanded("tags", UNCATEGORIZED, true);
+  tagsChanged();
 }
 
 // ---- Auto Tag ----
@@ -5053,6 +5117,7 @@ function renderAutoTag() {
       files.forEach((file) => {
         const line = document.createElement("label");
         line.className = "autotag-file";
+        line.dataset.id = String(file.item.id);
         const fileCheck = document.createElement("input");
         fileCheck.type = "checkbox";
         // With View all matches, a file that already has the tag shows checked and can't be unchecked.
@@ -5072,6 +5137,8 @@ function renderAutoTag() {
     host.append(box);
   });
 }
+// A file row's menu: Copy path and Show in File Manager. It shows over Auto Tag, and Escape closes it first.
+contextMenu.add(".autotag-file", (line) => [fileGroup(ITEMS[Number(line.dataset.id)], { name: false })]);
 function openAutoTag() {
   state.autoTag = true;
   $("autotag").hidden = false;
@@ -5610,7 +5677,6 @@ function reloadGrid() {
 // ---- Multi-select and bulk actions ----
 let selecting = false;
 let lastSelected = null;
-let swallowClick = false;
 // The tile whose menu is open, and whether the menu acts on the selection or on that tile alone, or null.
 let tileMenu = null;
 const selected = new Set();
@@ -5696,160 +5762,123 @@ $("bulk-all").addEventListener("click", () => {
   renderSelection();
 });
 
-// A long press on a tile starts selection on touch screens. A tile pressed with a finger or a pen opens no menu of the
-// browser's own.
-let pressTimer = 0;
-let touchPress = false;
-$("lib-grid").addEventListener("pointerdown", (event) => {
-  // A press that ended without a click, as when the finger moved after a long press, leaves no click to swallow.
-  swallowClick = false;
-  touchPress = event.pointerType !== "mouse";
-  const tile = event.target.closest(".lib-tile");
-  if (!tile || !touchPress) return;
-  const start = { x: event.clientX, y: event.clientY };
-  clearTimeout(pressTimer);
-  pressTimer = setTimeout(() => {
-    swallowClick = true;
-    selectTile(Number(tile.dataset.id), false);
-  }, 500);
-  const cancel = (move) => {
-    if (move.type === "pointermove" && Math.hypot(move.clientX - start.x, move.clientY - start.y) < 8) return;
-    clearTimeout(pressTimer);
-    $("lib-grid").removeEventListener("pointermove", cancel);
-  };
-  $("lib-grid").addEventListener("pointermove", cancel);
-  $("lib-grid").addEventListener("pointerup", cancel, { once: true });
-  $("lib-grid").addEventListener("pointercancel", cancel, { once: true });
-});
-// A right-click on a tile shows only the app's menu, never the browser's own. With a mouse it opens the tile's menu at
-// the pointer; a finger's or a pen's long press selects instead, so it opens none.
-$("lib-grid").addEventListener("contextmenu", (event) => {
-  const tile = event.target.closest(".lib-tile");
-  if (!tile) return;
-  event.preventDefault();
-  if (!touchPress && !tile.classList.contains("is-placeholder")) openTileMenu(Number(tile.dataset.id), event.clientX, event.clientY);
-});
-
 // ---- Menus ----
 const selectedItems = () => [...selected].map((id) => ITEMS[id]);
 
-// The Selection actions menu's items, which a tile's menu shows too, in their groups, each with its icon, for the items
-// they act on. An add or remove shows only while it applies: Add to favorites while some of the items aren't
-// favorites, Remove from favorites while some are, and the same for the blacklist. An item that applies but can't act
-// is disabled, with its reason as its tooltip, as Clear playback stats is when none of them has stats to clear. Delete
-// names one file for one item.
-function fillMenu(menu, items) {
+// The Selection actions menu's items, which a tile's menu shows too, in their groups, for the items they act on. An add
+// or remove shows only while it applies: Add to favorites while some of the items aren't favorites, Remove from
+// favorites while some are, and the same for the blacklist. An item that applies but can't act is disabled, with its
+// reason as its tooltip, as Clear playback stats is when none of them has stats to clear. Copy path and Show in File
+// Manager apply to one item, not to several. Delete names one file for one item.
+function itemGroups(items, fromSelection) {
   const some = (test) => items.some(test);
-  const groups = [
+  const run = (kind) => () => runBulk(kind, items, fromSelection);
+  return [
     [
-      some((item) => !item.favorite) && ["fav-add", "heart_plus", "Add to favorites"],
-      some((item) => item.favorite) && ["fav-remove", "heart_minus", "Remove from favorites"],
-      some((item) => !item.blacklisted) && ["bl-add", "thumb_down", "Add to blacklist"],
-      some((item) => item.blacklisted) && ["bl-remove", "thumb_up", "Remove from blacklist"]
+      some((item) => !item.favorite) && menuItem("heart_plus", "Add to favorites", run("fav-add")),
+      some((item) => item.favorite) && menuItem("heart_minus", "Remove from favorites", run("fav-remove")),
+      some((item) => !item.blacklisted) && menuItem("thumb_down", "Add to blacklist", run("bl-add")),
+      some((item) => item.blacklisted) && menuItem("thumb_up", "Remove from blacklist", run("bl-remove"))
     ],
-    [["rate", "star", "Rate…"], ["tags", "tag", "Edit tags…"], ["clear", "delete_history", "Clear playback stats…"]],
-    [["delete", "delete_forever", items.length === 1 ? "Delete file…" : "Delete files…"]]
+    [
+      menuItem("star", "Rate…", run("rate")),
+      menuItem("tag", "Edit tags…", run("tags")),
+      menuItem("delete_history", "Clear playback stats…", run("clear"), { reason: clearStatsReason(items) })
+    ],
+    items.length === 1 ? fileGroup(items[0], { name: false }) : [],
+    [menuItem("delete_forever", items.length === 1 ? "Delete file…" : "Delete files…", run("delete"), { danger: true })]
   ];
-  const reasons = { clear: some((item) => item.plays || item.lastPlayedAt) ? null : "No playback stats to clear" };
-  menu.textContent = "";
-  groups.forEach((group, index) => {
-    if (index) {
-      const rule = document.createElement("hr");
-      rule.className = "menu-rule";
-      menu.append(rule);
-    }
-    for (const [kind, icon, label] of group.filter(Boolean)) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.bulk = kind;
-      button.append(iconSpan(icon), label);
-      if (kind === "delete") button.className = "menu-danger";
-      const reason = reasons[kind] || null;
-      button.disabled = !!reason;
-      if (reason) button.title = reason;
-      menu.append(button);
-    }
-  });
+}
+const clearStatsReason = (items) => (items.some((item) => item.plays || item.lastPlayedAt) ? null : "No playback stats to clear");
+// Copy name, Copy path, and Show in File Manager for a file. Copy path works on every device; Show in File Manager shows
+// only where the server offers it, for a browser on the server machine.
+function fileGroup(item, { name = true } = {}) {
+  return [
+    name && menuItem("content_copy", "Copy name", () => copyText(item.name, "Name copied.", item.name, "path")),
+    menuItem("content_copy", "Copy path", () => copyText(item.path, "Path copied.", item.name, "path")),
+    state.serverMachine && menuItem("folder_open", "Show in File Manager", () => acknowledge("Opened in the file manager.", "path", item.name))
+  ];
 }
 
 function closeBulkMenu() {
   $("bulk-menu").hidden = true;
 }
-// One menu shows at a time: opening the Selection actions menu closes a tile's menu.
-$("bulk-actions").addEventListener("click", (event) => {
-  event.stopPropagation();
+// One menu shows at a time: opening the Selection actions menu closes a context menu, and a press outside it, which
+// opens a context menu too, closes it.
+$("bulk-actions").addEventListener("click", () => {
   const opening = $("bulk-menu").hidden;
   if (opening) {
-    closeTileMenu();
-    fillMenu($("bulk-menu"), selectedItems());
+    contextMenu.close();
+    fillMenu($("bulk-menu"), itemGroups(selectedItems(), true), closeBulkMenu);
   }
   $("bulk-menu").hidden = !opening;
 });
-document.addEventListener("click", (event) => {
-  if (!$("bulk-menu").hidden && !event.target.closest("#bulk-menu")) closeBulkMenu();
-});
-$("bulk-menu").addEventListener("click", (event) => {
-  const item = event.target.closest("[data-bulk]");
-  if (item) runBulk(item.dataset.bulk, selectedItems(), true);
-});
+document.addEventListener("pointerdown", (event) => {
+  if (!$("bulk-menu").hidden && !event.target.closest("#bulk-menu, #bulk-actions")) closeBulkMenu();
+}, true);
 
-// A tile's menu, at the pointer. It acts on the selection when the tile is selected, and otherwise on that tile alone,
-// leaving any selection as it is, so a right-click never changes a selection. It closes any other menu, the Selection
-// actions menu included.
-function openTileMenu(id, x, y) {
+// A tile's menu, at the pointer, for a right-click with a mouse; a finger's or a pen's long press on a tile selects it
+// instead, which starts selection. The menu acts on the selection when the tile is selected, and otherwise on that tile
+// alone, which shows an orange ring, leaving any selection as it is, so a right-click never changes a selection.
+contextMenu.add("#lib-grid .lib-tile:not(.is-placeholder)", (tile) => {
+  const id = Number(tile.dataset.id);
   const onSelection = selecting && selected.has(id);
-  closeBulkMenu();
-  tileMenu = { id, onSelection };
-  const menu = $("tile-menu");
-  fillMenu(menu, onSelection ? selectedItems() : [ITEMS[id]]);
-  menu.hidden = false;
-  placeAtPoint(menu, x, y);
-  markMenuTile();
-}
+  return itemGroups(onSelection ? selectedItems() : [ITEMS[id]], onSelection);
+}, {
+  press: (tile) => selectTile(Number(tile.dataset.id), false),
+  mark: false,
+  onOpen: (tile) => {
+    const id = Number(tile.dataset.id);
+    tileMenu = { id, onSelection: selecting && selected.has(id) };
+    closeBulkMenu();
+    markMenuTile();
+  },
+  onClose: () => {
+    tileMenu = null;
+    markMenuTile();
+  }
+});
 function closeTileMenu() {
-  if (!tileMenu) return;
-  tileMenu = null;
-  $("tile-menu").hidden = true;
-  markMenuTile();
+  if (tileMenu) contextMenu.close();
 }
 // It closes when its tile leaves the results, or the grid shows a message in place of the tiles.
 function closeTileMenuIfGone() {
   if (tileMenu && (libraryMessage() || !visibleItems().items.some((item) => item.id === tileMenu.id))) closeTileMenu();
-}
-// Below and to the right of the pointer, or on its other side where the menu would cross the window's edge, and kept
-// 8 px inside the window.
-function placeAtPoint(menu, x, y) {
-  const width = menu.offsetWidth;
-  const height = menu.offsetHeight;
-  const left = x + width + 8 > window.innerWidth ? x - width : x;
-  const top = y + height + 8 > window.innerHeight ? y - height : y;
-  menu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
-  menu.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
 }
 const ringedTileId = () => (tileMenu && !tileMenu.onSelection ? tileMenu.id : null);
 function markMenuTile() {
   const id = ringedTileId();
   $("lib-grid").querySelectorAll(".lib-tile").forEach((tile) => tile.classList.toggle("is-menu-target", Number(tile.dataset.id) === id));
 }
-$("tile-menu").addEventListener("click", (event) => {
-  const item = event.target.closest("[data-bulk]");
-  if (!item || !tileMenu) return;
-  const { id, onSelection } = tileMenu;
-  runBulk(item.dataset.bulk, onSelection ? selectedItems() : [ITEMS[id]], onSelection);
-});
-// A right-click on the menu itself opens nothing more.
-$("tile-menu").addEventListener("contextmenu", (event) => event.preventDefault());
-// A press outside closes it and still does what it does, and Escape closes it before anything else it would close, as
-// the notifications list does.
-document.addEventListener("pointerdown", (event) => {
-  if (tileMenu && !$("tile-menu").contains(event.target)) closeTileMenu();
-}, true);
-document.addEventListener("keydown", (event) => {
-  if (!tileMenu || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeTileMenu();
-}, true);
+
+// The player's menu, on its picture, not on its controls or the rating's stars, for the playing item, and none with
+// nothing playing. Its items work as the controls they repeat: Favorite and Blacklist as the player's buttons, Rate…
+// as the star button, which shows its stars at the player's center, and Edit tags… and Show stats as the tabs they
+// open. Delete file… moves on to the next item, as Next does. The controls stay while it is open, and their countdown
+// starts again when it closes.
+contextMenu.add("#media", () => {
+  const item = playback.item;
+  if (!item) return null;
+  return [
+    [
+      menuItem(item.favorite ? "heart_minus" : "heart_plus", item.favorite ? "Remove from favorites" : "Add to favorites", () => toggleFlag("favorite")),
+      menuItem(item.blacklisted ? "thumb_up" : "thumb_down", item.blacklisted ? "Remove from blacklist" : "Add to blacklist", () => toggleFlag("blacklisted"))
+    ],
+    [
+      menuItem("star", "Rate…", () => ratingPopover.open()),
+      menuItem("tag", "Edit tags…", () => editItemTags(item)),
+      menuItem("bar_chart", "Show stats", openStats),
+      menuItem("delete_history", "Clear playback stats…", () => runBulk("clear", [item], false), { reason: clearStatsReason([item]) })
+    ],
+    fileGroup(item),
+    [menuItem("delete_forever", "Delete file…", () => runBulk("delete", [item], false), { danger: true })]
+  ];
+}, { except: `${CONTROL_PARTS}, .rating-popover`, mark: false, onClose: () => controlsActivity() });
+
+// The header's file name: Show stats, which its click does, and the file's copies.
+contextMenu.add("#np-name", () => playback.item && [[menuItem("bar_chart", "Show stats", openStats)], fileGroup(playback.item)]);
+// The Stats tab's file name and path: the file's copies, in place of a button beside the path.
+contextMenu.add(".stats-file-name, .stats-path", (el) => [fileGroup(ITEMS[Number(el.dataset.id)])]);
 
 const countOf = (n) => (n === 1 ? "1 item" : `${n.toLocaleString()} items`);
 const filesOf = (n) => (n === 1 ? "1 file" : `${n.toLocaleString()} files`);
@@ -5989,6 +6018,8 @@ async function deleteFiles(items, fromSelection) {
     const stay = failed.length === 1 ? "1 file couldn't be deleted, so its item stays" : `${filesOf(failed.length)} couldn't be deleted, so their items stay`;
     void noticeDialog({ message: `${stay} in the library.` });
   }
+  // A delete that removes the playing item moves on, as Next does, whichever menu it came from.
+  if (deleted.includes(playback.item)) goNext();
 }
 
 // ---- Stats tab ----
@@ -6226,14 +6257,14 @@ const ratingPopover = (() => {
     controlsActivity();
   }
   // Nothing opens with nothing playing or while the server asks for pairing, as Favorite does nothing then.
-  button.addEventListener("click", () => {
-    if (open) return close();
+  function show() {
     if (!playback.item || state.pairing) return;
     open = true;
     control.show(playback.item);
     $("volume-indicator").classList.remove("is-shown");
     popover.hidden = false;
-  });
+  }
+  button.addEventListener("click", () => (open ? close() : show()));
   // A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch could land on the
   // video under it, which would act on the player. A touch on the stars sends no click.
   popover.addEventListener("touchend", (event) => event.preventDefault());
@@ -6252,6 +6283,11 @@ const ratingPopover = (() => {
 
   return {
     isOpen: () => open,
+    // Rate… in the player's menu: the stars show with the controls, which stay while they are open.
+    open() {
+      setControlsShown(true);
+      show();
+    },
     close,
     draw() {
       const rating = playback.item?.rating || 0;
@@ -6279,24 +6315,9 @@ function fileStats(item) {
   path.className = "stats-path";
   const code = document.createElement("code");
   code.textContent = item.path;
-  // The server opens its file manager only for a browser on the server machine; elsewhere the path is copied. An icon
-  // button, named by its tooltip.
-  const label = state.serverMachine ? "Show in File Manager" : "Copy Path";
-  const action = document.createElement("button");
-  action.type = "button";
-  action.className = "icon-btn";
-  action.setAttribute("aria-label", label);
-  action.title = label;
-  action.append(iconSpan(state.serverMachine ? "folder_open" : "content_copy"));
-  action.addEventListener("click", () => {
-    if (state.serverMachine) {
-      acknowledge("Opened in the file manager.", "path", item.name);
-    } else {
-      navigator.clipboard?.writeText(item.path).catch(() => {});
-      acknowledge("Path copied.", "path", item.name);
-    }
-  });
-  path.append(code, action);
+  path.append(code);
+  // Their menu copies the name or the path, or shows the file in the file manager.
+  name.dataset.id = path.dataset.id = String(item.id);
   // The name and path come with the playing item; the rest needs the load, whose message shows once, in Library. A
   // playing file the server no longer has, whose read answers 404, shows only them while the library's cards load.
   if (statsMessage() || state.statsLoad === "removed") return [name, path];
@@ -6325,6 +6346,7 @@ function fileStats(item) {
   TAGS.flatMap((category) => category.chips).filter((chip) => item.tags.has(chip.key)).forEach((chip) => {
     const tag = document.createElement("span");
     tag.className = "stats-tag";
+    tag.dataset.key = chip.key;
     tag.textContent = chip.name;
     tags.append(tag);
   });
@@ -7100,6 +7122,8 @@ function streamState() {
   if (state.situation === "reconnecting" || state.situation === "nolibrary" || state.pairing) return "Reconnecting";
   return "Open";
 }
+// The IDs' menu: Copy, in place of copying the selected text with the browser's menu.
+contextMenu.add(".diag dd[data-copy]", (dd) => [[menuItem("content_copy", "Copy", () => copyText(dd.textContent, `${dd.dataset.copy} copied.`))]]);
 function renderDiagnostics() {
   $("diag-stream").textContent = streamState();
   $("diag-last-event").textContent = String(state.lastEvent);

@@ -7,6 +7,7 @@ An interactive mockup of the app's whole visible UI, approved before the v0.15.0
   - the header, the player with its controls, its notifications bell, and its indicator for lasting states, and the popups;
   - the side panel on either side of the player, with its resize handle, or as the full-screen overlay at phone widths;
   - the Library, Tags, Stats, Filter, Randomization, and Settings tabs, with multi-select and bulk actions in the Library;
+  - the right-click menus across the page, which a long press opens on a touch screen;
   - the Settings tab's Developer section, with Counts disabled on the player and the live layout measurements;
   - the in-app dialogs, the keyboard shortcuts, and the volume control;
   - what Auto-Pause does, shown by a stand-in video that plays;

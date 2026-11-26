@@ -900,7 +900,7 @@ Last milestone completed: M12m
 
 ### M12n4 - WebUI Context Menus
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: A right-click, or a long press on a touch screen, opens an app-styled menu of actions on the player, the now-playing name, tags, categories, presets, sources, notifications, and file paths across the WebUI, in place of the browser's own menu.
 - **Depends on**: WebUI Multi-Select and Bulk Actions, whose shared context menu, item list, and delete action the menus here use.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -917,12 +917,15 @@ Last milestone completed: M12m
 - Menus hold actions on their item, not playback controls.
 - A menu shows only the items that apply to what it acts on, such as Add to favorites only while something it acts on isn't a favorite, and an item that applies but can't act at the moment is disabled with its reason as its tooltip.
 - A menu item works as the control it repeats does, with the same confirmations, the same wait for Save or Apply, and the same popups.
+- The element a menu acts on is tinted while its menu is open, as a pointer tints a menu's item, and a library tile keeps its orange ring.
+- A copy says so in a Your actions popup: "Name copied.", "Path copied.", "Text copied.", "Client ID copied.", or "Session ID copied.", with the file's name on its second line for a file's.
+- Edit Tag, Edit Category, and Edit Preset open from Edit… in their menus, so tags, category headers, and preset rows have no edit button.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | Every menu, its items, wording, and order, and the long press, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Mockup | ✅ Complete | Every menu, its items, wording, and order, and the long press, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Foundation | ⏳ Planned | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, and menus closing on scroll, resize, and the browser tab hiding. |
 | Player | ⏳ Planned | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
 | Tags tab | ⏳ Planned | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
@@ -963,6 +966,22 @@ Last milestone completed: M12m
 
 - The mockup shows the menus as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
+**Evidence**
+
+- The user approved the mockup on their devices after one round of changes, which dropped Add to item and Remove from item from a tag's menu, made Filter by this tag a change in the Filter tab, removed the edit buttons from tags, category headers, and preset rows, and showed a tag only the buttons that change something.
+- The review settled the open questions:
+  - With nothing playing, the player's picture has no menu.
+  - A delete that removes the playing item moves on as Next does, from the player's menu, a tile's menu, or Selection actions.
+  - Filter by this tag adds the tag to the Filter tab's filter, pending until Apply, and opens that tab's Tags section.
+  - New tag in this category sets the footer's category and puts the cursor in its name field.
+  - Duplicate left the preset row's menu, since no preset may hold another preset's filter.
+  - Apply on a preset row is disabled with its reason while the Filter tab holds unsaved changes.
+  - A tag's buttons read "Add to item" and "Remove from item".
+- The bell entry's menu holds only Copy text and Dismiss, since Clear all and Notification settings don't act on the entry.
+- The mockup's shared code holds one context menu, its long press, and the block on the browser's menu, which the main page and the admin view use; the tile's own menu and long press moved onto them.
+- The icon font gains `new_label`, and the mockup's index page and README describe the menus.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+
 #### Foundation slice
 
 **Scope**
@@ -971,6 +990,8 @@ Last milestone completed: M12m
 - The library tiles' long press (`src/library/libraryTilePress.ts`) becomes a shared long-press helper in `src/ui/`, with the same rules: it fires after 500 ms, moving 8 px, a second finger, a scroll the browser takes over, or lifting first cancels it, and the click it ends with is used up.
 - The tiles' selection and every menu's long press use that helper.
 - A surface with a menu sets `-webkit-touch-callout: none`, so Safari on iOS shows no callout of its own on a long press.
+- On a touch screen, a surface with a menu selects no text, so a long press doesn't select the word under the finger; with a mouse, its text still selects.
+- The shared context menu tints the element it acts on while it is open.
 - A menu closes on scroll, resize, and the browser tab hiding, as well as when WebUI Multi-Select and Bulk Actions closes it.
 
 **Traps**
@@ -997,17 +1018,17 @@ Last milestone completed: M12m
 
 **Scope**
 
-- The player's menu opens from its picture, not from its controls, buttons, or scrub bar, and holds the playing item's actions:
+- The player's menu opens from its picture, not from its controls, buttons, or scrub bar, and holds the playing item's actions, in these groups:
   - Add to or Remove from favorites, and Add to or Remove from the blacklist, as the player's buttons do;
-  - Rate…, which opens the rating's stars as the star button does;
-  - Edit tags, which opens the Tags tab, and Show stats, which opens the Stats tab;
+  - Rate…, which opens the rating's stars as the star button does, Edit tags…, which opens the Tags tab on the item, Show stats, which opens the Stats tab, and Clear playback stats…, which asks first and sends the item's id to `POST /api/playback/clear-stats`;
   - Copy name, Copy path, and Show in File Manager;
-  - Clear playback stats…, which asks first and sends the item's id to `POST /api/playback/clear-stats`;
   - Delete file…, WebUI Multi-Select and Bulk Actions' delete action for the one item, with its control-token prompt from another machine and its confirmation.
+- With nothing playing, the picture has no menu.
+- A delete from this device that removes the playing item, from the player's menu, a tile's menu, or Selection actions, moves on to the next item as Next does.
 - The player's controls stay shown while its menu is open, as they do for the bell's list and the rating's stars.
-- The header's now-playing name has a menu with Show stats, Copy name, Copy path, and Show in File Manager.
-- The Stats tab's file path has a menu with Copy name, Copy path, and Show in File Manager.
-- A library tile's menu gains Copy path and Show in File Manager while it acts on one item. They don't apply to several, so a menu on several selected items doesn't show them.
+- The header's now-playing name has a menu with Show stats, then Copy name, Copy path, and Show in File Manager.
+- The Stats tab's file name and path have a menu with Copy name, Copy path, and Show in File Manager.
+- A library tile's menu and the Selection actions menu gain Copy path and Show in File Manager, in a group before Delete file…, while they act on one item. They don't apply to several, so a menu on several items doesn't show them.
 - Copy path works on every device, the server machine included, where the Stats tab shows only Show in File Manager today.
 - The Stats tab's Copy Path or Show in File Manager button beside the file path goes, since the path's menu holds both, and the path takes its room.
 - The now-playing name shortens with "…", as the rest of the app does, in place of "...".
@@ -1029,11 +1050,12 @@ Last milestone completed: M12m
 
 **Acceptance**
 
-- A right-click or a long press on the player's picture opens its menu, and one on its controls or scrub bar doesn't, in Player screen tests.
+- A right-click or a long press on the player's picture opens its menu, one on its controls or scrub bar doesn't, and with nothing playing none opens, in Player screen tests.
+- A delete that removes the playing item, from the player's menu, a tile's menu, or Selection actions, moves on to the next item, in Player screen tests.
 - Each of the player menu's items acts on the playing item as the control it repeats does, Clear playback stats and Delete file ask first, and Delete file asks for the control token from another machine, in Player screen tests.
 - The click a long press ends with neither shows nor hides the controls nor starts a double-tap seek, and a swipe or a two-finger drag opens no menu, in gesture tests.
 - The controls stay shown while the player's menu is open, in player controls tests.
-- The now-playing name's, the Stats path's, and a tile's menus copy the name or path and show the file in the file manager while the server lists it, and a tile's show them only while it acts on one item, in Header, Stats, and library screen tests.
+- The now-playing name's, the Stats tab's file name's and path's, and a tile's menus copy the name or path and show the file in the file manager while the server lists it, and a tile's and Selection actions show them only while they act on one item, in Header, Stats, and library screen tests.
 - The Stats tab's file path shows with no Copy Path or Show in File Manager button beside it, in Stats screen tests.
 - The now-playing name shortens with "…", in now-playing tests.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -1043,17 +1065,21 @@ Last milestone completed: M12m
 
 **Scope**
 
-- A tag's menu holds Add to item, Remove from item, Edit…, Delete…, and Filter by this tag.
-- A category's menu holds New tag in this category, Edit…, and Delete…, and Uncategorized's holds only New tag in this category.
+- A tag's menu holds Filter by this tag, then Edit… and Delete…. Its Add and Remove stay on the tag's own buttons.
+- A category's menu holds New tag in this category, then Edit… and Delete…, and Uncategorized's holds only New tag in this category.
+- New tag in this category sets the footer's category dropdown to the category and puts the cursor in the footer's name field.
 - Delete… asks first and waits for Save, as the Edit Tag and Edit Category dialogs' Delete does.
-- Filter by this tag works through the Filter tab's tag filter, as the mockup review settles.
+- Filter by this tag adds the tag to the Filter tab's filter as a tag to include, pending until Apply, and opens the Filter tab on its Tags section with the tag's category expanded. It shows while the tab's filter doesn't include the tag.
 - The Stats tab's tags each have a menu with Filter by this tag.
-- A tag's Add and Remove buttons, disabled while no item is loaded, give their reason as their tooltip, as the menu's items do.
+- Tags and category headers lose their edit buttons (`src/ui/TagEditor.tsx`).
+- A tag shows only the buttons that would change something for the items the tab edits: Add while the tag isn't on every one of them, and Remove while it is on some. One item's tag shows one of them, a tag some of several selected items have shows both, and with no item loaded a tag shows none. A button whose change waits for Save stays, so a press undoes it.
+- A tag's buttons read "Add to item" and "Remove from item", or "items" while the tab edits a selection, so "Add tag" means only the footer's, which creates a tag.
+- A long press on a category's name, its header's button, opens the category's menu, as one elsewhere on its header does.
 
 **Traps**
 
 - The tag editor edits one item, the playing one or the one it holds (`src/tags/tagEditor.ts`), and every change waits for Save, deletes included.
-- A tag's Add and Remove are disabled while no item is loaded (`canChangeItems` in `src/tags/tagEditorModel.ts`) and keep the tooltips "Add tag" and "Remove tag" without a reason (`src/ui/TagEditor.tsx`).
+- A tag's Add and Remove are disabled with their reason as their tooltip where they would change nothing (`addDisabledReason` and `removeDisabledReason`), disabled without one while no item is loaded (`canChangeItems` in `src/tags/tagEditorModel.ts`), and otherwise read "Add tag" and "Remove tag" (`src/ui/TagEditor.tsx`).
 - A tag's "Add tag" tooltip is also the footer's Add tag, which creates a tag in the catalog.
 - A tag's rename, category, and Delete live only in the Edit Tag dialog, and a category's rename and Delete only in the Edit Category dialog, whose Delete moves the category's tags to Uncategorized (`src/tags/tagEditor.ts`).
 - The Filter tab's Tags section includes or excludes tags (`src/ui/FilterDialog.tsx`), and nothing in the Tags tab links to it.
@@ -1063,11 +1089,11 @@ Last milestone completed: M12m
 
 **Acceptance**
 
-- A tag's menu adds the tag to or removes it from the item, opens Edit Tag, deletes the tag after asking, pending until Save, and filters the library by it, in Tags screen tests.
-- A category's menu starts a new tag in it, opens Edit Category, and deletes it after asking, pending until Save, and Uncategorized's holds only New tag in this category, in Tags screen tests.
-- The Stats tab's tag menu filters the library by the tag, in Stats screen tests.
-- A tag's disabled Add and Remove give their reason, in Tags screen tests.
-- A long press on a tag or a category's header opens its menu, and one on their buttons or a drag handle doesn't, in Tags screen tests with touch pointers.
+- A tag's menu opens Edit Tag, deletes the tag after asking, pending until Save, and adds the tag to the Filter tab's filter, pending until Apply, with that tab's Tags section open, in Tags screen tests.
+- A category's menu sets the footer's category for a new tag, opens Edit Category, and deletes it after asking, pending until Save, and Uncategorized's holds only New tag in this category, in Tags screen tests.
+- The Stats tab's tag menu adds the tag to the Filter tab's filter, in Stats screen tests.
+- A tag shows only the Add and Remove buttons that would change something, and none with no item loaded, and tags and category headers have no edit button, in Tags screen tests.
+- A long press on a tag or a category's header, its name included, opens its menu, and one on a tag's buttons or a drag handle doesn't, in Tags screen tests with touch pointers.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -1075,13 +1101,13 @@ Last milestone completed: M12m
 
 **Scope**
 
-- A preset row in the Presets section's list has a menu with Apply, Load into filter, Update from filter, Duplicate, Edit…, and Delete….
-- Apply applies the preset to the library at once, as picking it in the Library tab's preset dropdown does.
-- Load into filter and Update from filter do what Load preset and Update preset do for the preset chosen in the section's dropdown.
-- Duplicate adds a copy of the preset, pending until Apply as the list's other changes are.
+- A preset row in the Presets section's list has a menu with Apply, then Load into filter and Update from filter, then Edit… and Delete….
+- Apply applies the preset to the library at once, as picking it in the Library tab's preset dropdown does. It shows while the preset isn't the applied filter, and is disabled with "Apply or discard the Filter tab's changes first" while the tab holds unsaved changes.
+- Load into filter and Update from filter do what Load preset and Update preset do for the preset chosen in the section's dropdown. They show while the tab's filter isn't the preset's, and Update from filter is disabled with Update preset's reasons.
 - Delete… asks first, as Edit Preset's Delete does, and waits for Apply.
-- A source in the Sources section has a menu with Only this source, which checks it and unchecks the others.
-- A disabled source's checkbox and its Only this source give the reason as their tooltip.
+- Preset rows lose their edit button (`src/ui/FilterDialog.tsx`).
+- A source in the Sources section has a menu with Only this source, which checks it and unchecks the others, shown while other sources are checked.
+- A disabled source's row and its Only this source give "This source is turned off on the server" as their tooltip.
 
 **Traps**
 
@@ -1091,11 +1117,12 @@ Last milestone completed: M12m
 - A preset row's drag handle starts a drag on pointer down (`src/ui/Reorder.tsx`).
 - `filterWithGeneralDraft` writes an empty source list when every listed source is checked, and an empty list means every source (`src/filter/filterDialogModel.ts`).
 - A disabled source's checkbox has no tooltip (`src/ui/FilterDialog.tsx`).
+- No preset may hold another preset's filter: the server refuses one with 409 "Preset "{name}" already has this filter." (`src/core/ReelRoulette.Server/Services/ServerStateService.cs`), and the Filter tab disables Add Preset and Update preset for it.
 - Source rows are labels around their checkbox, so the click a long press ends with would toggle it unless it is used up (inferred).
 
 **Acceptance**
 
-- Each preset row menu item works as the control it repeats does, Duplicate adds a copy pending until Apply, and Delete asks first, in Filter screen tests.
+- Each preset row menu item works as the control it repeats does, Apply is disabled with its reason while the tab holds unsaved changes, Delete asks first, and preset rows have no edit button, in Filter screen tests.
 - Only this source checks only that source, and a disabled source's checkbox and menu item give their reason, in Filter screen tests.
 - A long press on a preset row outside its drag handle, or on a source, opens its menu without starting a drag or toggling the source, in Filter screen tests with touch pointers.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -1105,11 +1132,12 @@ Last milestone completed: M12m
 
 **Scope**
 
-- An entry in the bell's list has a menu with Copy text, Dismiss, which removes that entry, Clear all, and Notification settings.
+- An entry in the bell's list has a menu with Copy text and Dismiss, which removes that entry. An entry under Now, a lasting state, has no Dismiss.
+- Copy text copies the message, with its detail on a line of its own.
 - A menu opened from the bell's list keeps the list open while it is used.
 - A popup has a menu with Copy text and Dismiss, and holds its timer while the menu is open, as hovering does.
-- An Auto Tag file row has a menu with Copy path, shown inside the Auto Tag dialog, and Escape closes it before the dialog.
-- Each of the Settings tab's diagnostics IDs has a menu with Copy.
+- An Auto Tag file row has a menu with Copy path and Show in File Manager, shown inside the Auto Tag dialog, and Escape closes it before the dialog.
+- The Settings tab's Client and Session IDs each have a menu with Copy.
 - The unused `toggleList` and `dismissAll` in `src/notifications/notifications.ts` go, with the test that calls `dismissAll`.
 
 **Traps**
@@ -1125,10 +1153,10 @@ Last milestone completed: M12m
 
 **Acceptance**
 
-- An entry's menu copies its text, dismisses only it, clears all, and opens Notification settings, and the list stays open while the menu is used, in notifications screen tests.
+- An entry's menu copies its text and dismisses only it, a lasting state's has no Dismiss, and the list stays open while the menu is used, in notifications screen tests.
 - A popup's menu copies its text and dismisses it, and its timer holds while the menu is open, in notifications screen tests.
-- An Auto Tag file row's menu shows inside the dialog and copies the path, and Escape closes the menu before the dialog, in Auto Tag screen tests.
-- Each diagnostics ID's menu copies it, in Settings screen tests.
+- An Auto Tag file row's menu shows inside the dialog, copies the path, and shows the file in the file manager while the server lists it, and Escape closes the menu before the dialog, in Auto Tag screen tests.
+- The Client and Session IDs' menus copy them, in Settings screen tests.
 - A long press on an entry, a popup, an Auto Tag row, or a diagnostics ID opens its menu without dismissing, swiping, or toggling, in screen tests with touch pointers.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
@@ -1156,6 +1184,9 @@ Last milestone completed: M12m
 - Copy on selected text outside text fields, which the browser's menu gave; Ctrl+C still copies it.
 - Firefox's Shift+right-click, which always opens Firefox's own menu.
 - Opening a menu from the keyboard.
+- Duplicating a preset from its row's menu, since no preset may hold another preset's filter.
+- Add to item and Remove from item in a tag's menu, since the tag's own buttons do it in one tap.
+- Clear all and Notification settings in a bell entry's menu, since they don't act on the entry.
 
 ### M12n5 - WebUI Loop Range
 
@@ -3750,7 +3781,7 @@ Last milestone completed: M12m
 - Reordering presets and tag categories starts a drag on pointer down on a row's handle (`src/ui/Reorder.tsx`).
 - The player's taps and swipes are handled in `src/playback/mediaGestures.ts`, which ignores the click the browser sends after a swipe or a handled tap.
 - WebUI Multi-Select and Bulk Actions starts a selection with a long press on a tile.
-- WebUI Context Menus opens a surface's menu on a long press wherever it has one but on buttons, so some elements with a tooltip, such as the header's now-playing name and Auto Tag's file rows, open a menu instead.
+- WebUI Context Menus opens a surface's menu on a long press wherever it has one but on buttons, a tag category's name excepted, so some elements with a tooltip, such as the header's now-playing name, Auto Tag's file rows, and a tag category's name, open a menu instead.
 
 #### Acceptance
 
