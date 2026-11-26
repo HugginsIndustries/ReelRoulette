@@ -48,7 +48,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Worktrees
 
-- Each session works in its own git worktree under `.claude/worktrees/`, on a `claude/` branch the advisor cut from local main, or, for a review, from the branch under review. Change repo files only in your own worktree. The main checkout only receives the advisor's squash merges and the small docs edits the user asks the advisor to make there.
+- Each session works in its own git worktree under `.claude/worktrees/`, on a `claude/` branch the advisor cut from local main. Change repo files only in your own worktree. The main checkout only receives the advisor's squash merges and the small docs edits the user asks the advisor to make there.
 - When a session starts in a new worktree, a hook copies the WebUI's `node_modules` from the main checkout. If it says it couldn't, ask the user before running `npm ci` in `src/clients/web/ReelRoulette.WebUI`.
 - Other sessions' work reaches your branch only when you merge main.
 - When the user or the advisor says the work is ready, `git add` your changes and commit them with `git commit -F COMMIT-MESSAGE.txt`. Every commit on the branch, a merge from main included, uses the draft this way, so the newest one carries it.
@@ -61,7 +61,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - Generated files: resolve their sources, then regenerate. After `shared/api/openapi.yaml`, run `npm run generate:contracts`. For `foundation.test.ts.snap`, take either side, run `npx vitest run -u src/test/screens/foundation.test.ts` in the WebUI folder, and check that only the snapshot changed. For the mockup's built pages, resolve their sources under `docs/mockups/reelroulette/build/` and run `build_pages.py`.
   - Anything else: keep what both sides meant, and ask the user when that isn't clear.
 - A squash-merged branch is finished: commit nothing more to it. The next change starts in a fresh session on a fresh branch.
-- Reviews run in a session started from the branch under review. That session applies the fixes the user chooses on its own branch, which then replaces the reviewed one.
+- The advisor reviews a finished branch with `reviewer` subagents, through review-branch's lenses. The session that built the branch applies the fixes the user chooses, with the review-fix skill, on that same branch.
 - The user reviews a mockup branch on their devices before it merges, by serving that worktree's `docs/mockups/reelroulette/` on its own port.
 - Never run `run-server.ps1` from a worktree. It runs against the user's real data, and a branch that changes the catalog's schema would upgrade their library so main's server refuses it. Manual spot checks on devices happen on main after the squash merge, before the advisor pushes main.
 

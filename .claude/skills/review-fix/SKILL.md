@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Use when the user asks to fix findings from a review of a branch, usually in the same session as the review. Applies only the findings the user chose, with their decisions, verifies them, and keeps the message draft and records current. Commits on this session's branch only once the user or the advisor says the fixes are ready.
+description: Use when the user asks to fix findings from a review of a branch, usually in the session that built the branch, after the advisor's review. Applies only the findings the user chose, with their decisions, verifies them, and keeps the message draft and records current. Commits on this session's branch only once the user or the advisor says the fixes are ready.
 ---
 
 # Review fix
@@ -21,12 +21,12 @@ If a fix turns out larger than the finding described, needs a decision the user 
 
 ## Keeping records current
 
-- Start this worktree's `COMMIT-MESSAGE.txt` draft from the reviewed branch's newest commit of its own, per `AGENTS.md`, and update it if the fixes change what it describes. The advisor merges this branch with it.
+- Update this worktree's `COMMIT-MESSAGE.txt` draft, per `AGENTS.md`, if the fixes change what it describes; start it from the branch's newest commit of its own if the worktree has none. The advisor merges this branch with it.
 - Re-check the `[Unreleased]` changelog against the style note at the top of `CHANGELOG.md` if any fix touches it.
 - Update milestone evidence in `MILESTONES.md` if the milestone is part of this change.
 - When the user asks to record a finding, add a bug as an issue in `ISSUES.md`, in that file's format, and an improvement as a backlog item or to the existing milestone that will do it, following the maintenance rules in `MILESTONES.md`.
 - When a fix closes an issue in `ISSUES.md`, delete it there.
-- When the user or the advisor says the fixes are ready, commit them on this session's branch per `AGENTS.md`. This branch then replaces the reviewed one.
+- When the user or the advisor says the fixes are ready, commit them on this session's branch per `AGENTS.md`.
 
 ## Verification
 
