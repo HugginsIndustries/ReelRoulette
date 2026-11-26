@@ -784,6 +784,7 @@ Last milestone completed: M12n1
 - The header's now-playing name has a menu with Show stats, then Copy name, Copy path, and Show in File Manager.
 - The Stats tab's file name and path have a menu with Copy name, Copy path, and Show in File Manager.
 - A library tile's menu and the Selection actions menu gain Copy path and Show in File Manager, in a group before Delete file…, while they act on one item. They don't apply to several, so a menu on several items doesn't show them.
+- On one item, the Rate dialog from a tile's menu or Selection actions starts at that item's rating; on several, it starts empty.
 - Copy path works on every device, the server machine included, where the Stats tab shows only Show in File Manager today.
 - The Stats tab's Copy Path or Show in File Manager button beside the file path goes, since the path's menu holds both, and the path takes its room.
 - The now-playing name shortens with "…", as the rest of the app does, in place of "...".
