@@ -171,7 +171,7 @@ Last milestone completed: M12n1
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The update notice on the indicator and in the bell's Now section with its tap and the discard question, the notice in the admin view after Apply & Restart, the bell's new times and Show seconds, the bell's messages kept across reloads, and every time and date in the mockup in 24-hour time and ISO dates, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
-| Dev server | ⏳ Planned | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
+| Dev server | ✅ Complete | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
 | Build check | ⏳ Planned | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
 | Reload notice | ⏳ Planned | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
 | Times and dates | ⏳ Planned | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
@@ -274,6 +274,16 @@ Last milestone completed: M12n1
 **Acceptance**
 
 - With `run-server.ps1` running, an `npm run build` after a WebUI change leaves the page that Firefox on the desktop loads on the earlier build until `run-server.ps1` runs again, in one quick spot check.
+
+**Evidence**
+
+- `run-server.ps1` builds the WebUI, deletes `artifacts/run-server/webui/`, copies `dist` there, points `ServerApp__WebUiStaticRootPath` at the copy, and prints the copy's path as its "WebUI static root".
+- A `Copy-Item -Recurse` into a folder that already exists puts the build one level down, in `webui/dist/`, so the script deletes the old copy before copying (measured).
+- The script's copy lines, run as written against a copy of a build, gave a copy identical to `dist` on a first run with no `artifacts/` folder and on a second run over a copy with a leftover file in it (measured).
+- PowerShell's parser finds no errors in the script (measured).
+- `dist` held 15 files, about 11 MB, so each run copies that much (measured).
+- No session runs `run-server.ps1`, so the spot check runs on main after the merge.
+- `docs/dev-setup.md`, `CONTEXT.md`, and `docs/domain-inventory.md` say the script serves a copy, and the troubleshooting note on WebUI changes says the server needs `ServerApp__WebUiStaticRootPath` pointed at a WebUI build, such as `dist` or the script's copy.
 
 #### Build check slice
 

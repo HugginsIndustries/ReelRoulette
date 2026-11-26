@@ -29,7 +29,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
   - Windows (`net10.0-windows`): `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
   - Linux/macOS (`net10.0`): `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Avalonia tray when the session supports it; otherwise headless)
 - Scripted (from repo root):
-  - `pwsh ./tools/scripts/run-server.ps1` installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` changed since the last install, builds the WebUI, and runs the server on your real settings, serving that build.
+  - `pwsh ./tools/scripts/run-server.ps1` installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` changed since the last install, builds the WebUI, and runs the server on your real settings, serving a copy of that build in `artifacts/run-server/webui/`. Another build, such as `npm run verify`'s, then reaches the running server only when the script runs again.
 
 Runtime notes:
 
@@ -245,7 +245,7 @@ Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance ru
 ## Troubleshooting
 
 - WebUI changes not appearing:
-  - `run-server.ps1` rebuilds the WebUI on every run, so stop it and run it again. A server started with `dotnet run` serves the WebUI only when `ServerApp__WebUiStaticRootPath` points at the WebUI's `dist`, which `run-server.ps1` sets.
+  - `run-server.ps1` rebuilds the WebUI on every run, so stop it and run it again. A server started with `dotnet run` serves the WebUI only when `ServerApp__WebUiStaticRootPath` points at a WebUI build, such as the WebUI's `dist` or the copy `run-server.ps1` makes.
 - Version/capability startup blocks:
   - check `/api/version` and `/api/capabilities` output against expected client requirements.
 - Velopack release workflow failures:

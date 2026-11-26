@@ -1,6 +1,7 @@
 #!/usr/bin/env pwsh
-# Builds the WebUI and runs the server from the repo, on your real settings, serving that build. First installs
-# the WebUI's packages with npm ci when node_modules is missing or package-lock.json changed since the last install.
+# Builds the WebUI and runs the server from the repo, on your real settings, serving a copy of that build, so a later
+# build changes nothing the running server serves until this script runs again. First installs the WebUI's packages
+# with npm ci when node_modules is missing or package-lock.json changed since the last install.
 [CmdletBinding()]
 param(
     [int]$Port = 45123,
@@ -28,6 +29,7 @@ $healthUrl = "http://localhost:$Port/health"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
 $webUiProjectDir = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI"
 $webUiDist = Join-Path $webUiProjectDir "dist"
+$webUiCopy = Join-Path $repoRoot "artifacts" "run-server" "webui"
 $serverAppProject = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj"
 
 $installReason = Get-WebUiPackageInstallReason -WebUiPath $webUiProjectDir
@@ -38,7 +40,7 @@ $env:CoreServer__RequireAuth = if ($RequireAuth.IsPresent) { "true" } else { "fa
 $env:CoreServer__BindOnLan = "false"
 $env:CoreServer__TrustLocalhost = if ($DisableLocalhostTrust.IsPresent) { "false" } else { "true" }
 $env:CoreServer__PairingToken = $PairingToken
-$env:ServerApp__WebUiStaticRootPath = $webUiDist
+$env:ServerApp__WebUiStaticRootPath = $webUiCopy
 
 Push-Location $webUiProjectDir
 try {
@@ -60,6 +62,13 @@ if (-not (Test-Path $webUiDist)) {
     exit 1
 }
 
+# Copy-Item into an existing folder would nest the build inside it, so the old copy goes first.
+if (Test-Path -LiteralPath $webUiCopy) {
+    Remove-Item -LiteralPath $webUiCopy -Recurse -Force
+}
+New-Item -ItemType Directory -Path (Split-Path $webUiCopy) -Force | Out-Null
+Copy-Item -LiteralPath $webUiDist -Destination $webUiCopy -Recurse
+
 $framework = if ([string]::IsNullOrWhiteSpace($Framework)) {
     if ($IsWindows) { "net10.0-windows" } else { "net10.0" }
 }
@@ -70,7 +79,7 @@ else {
 Write-Host "Starting ReelRoulette.ServerApp..."
 Write-Host "  Listen URL: $listenUrl"
 Write-Host "  Health URL: $healthUrl"
-Write-Host "  WebUI static root: $webUiDist"
+Write-Host "  WebUI static root: $webUiCopy"
 Write-Host "  WebUI packages: $(if ($installReason) { "installed, $installReason" } else { "up to date, install skipped" })"
 Write-Host "  Require auth: $($RequireAuth.IsPresent)"
 Write-Host "  Remote connections: the saved Allow remote connections setting"

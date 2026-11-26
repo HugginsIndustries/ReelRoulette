@@ -113,7 +113,7 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 - `dotnet test ReelRoulette.sln`
 - `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Windows runtime; tray when available, otherwise headless)
 - `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (non-Windows runtime; tray when available, otherwise headless)
-- `pwsh ./tools/scripts/run-server.ps1` (installs the WebUI's packages when needed, builds the WebUI, and runs the server)
+- `pwsh ./tools/scripts/run-server.ps1` (installs the WebUI's packages when needed, builds the WebUI, and runs the server, serving a copy of that build in `artifacts/run-server/webui/`, so another build reaches it only when the script runs again)
 - `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)
 
 ## Guardrails for Contributors and Agents

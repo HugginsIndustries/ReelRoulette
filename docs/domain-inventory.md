@@ -396,7 +396,7 @@ Canonical gates:
 
 Runtime scripts:
 
-- `tools/scripts/run-server.ps1` (installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` changed since the last install, builds the WebUI, and runs ServerApp from the repo on real settings)
+- `tools/scripts/run-server.ps1` (installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` changed since the last install, builds the WebUI, and runs ServerApp from the repo on real settings, serving a copy of that build in `artifacts/run-server/webui/`)
 - `tools/scripts/webui-packages.ps1` (that install rule, dot-sourced by `run-server.ps1` and `verify-web-deploy.ps1`)
 - scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
