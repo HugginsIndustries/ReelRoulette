@@ -29,7 +29,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Commit + Docs Discipline
 
-- Commit only on your own `claude/` branch, once the user or the advisor says the work is ready, as the Worktrees section describes. Never merge into main or push; only the advisor commits to main, by squash-merging a finished branch. A best-effort hook lets a commit on the session's own `claude/` branch through and asks for approval before any other `git commit` and any `git push`.
+- Commit only on your own `claude/` branch, once the user or the advisor says the work is ready, as the Worktrees section describes. Never merge into main or push; only the advisor commits to main, by squash-merging a finished branch, and only the advisor pushes main. A best-effort hook lets a commit on the session's own `claude/` branch through and asks for approval before any other `git commit` and any `git push`.
 - `COMMIT-MESSAGE.txt` is untracked: it is your worktree's draft of the message the advisor commits your branch's squash merge with, describing the branch's final state as one change. A new worktree has none: start it from your branch's newest commit of its own, `git log -1 --format=%B main..HEAD`, if there is one, and otherwise write a new one. After that, update it in place (final state only). `git diff main...HEAD -- CHANGELOG.md` shows what your branch already added to `[Unreleased]`; update those bullets in place rather than adding new ones.
 - Write the draft by `docs/commit-messages.md`, and keep its style unless the user asks to replace it.
 - Changelog: follow the style note at the top of `CHANGELOG.md`. Record every change a user would notice since the last release in `[Unreleased]`, however small, so the pre-release pass has the full picture; the pre-release pass and the user decide what to condense or drop. Fixes to work that hasn't been released yet get no entry. After any follow-up change, re-check `[Unreleased]` against the style note.
@@ -63,7 +63,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - A squash-merged branch is finished: commit nothing more to it. The next change starts in a fresh session on a fresh branch.
 - Reviews run in a session started from the branch under review. That session applies the fixes the user chooses on its own branch, which then replaces the reviewed one.
 - The user reviews a mockup branch on their devices before it merges, by serving that worktree's `docs/mockups/reelroulette/` on its own port.
-- Never run `run-server.ps1` from a worktree. It runs against the user's real data, and a branch that changes the catalog's schema would upgrade their library so main's server refuses it. Manual spot checks on devices happen on main after the squash merge, before the user pushes.
+- Never run `run-server.ps1` from a worktree. It runs against the user's real data, and a branch that changes the catalog's schema would upgrade their library so main's server refuses it. Manual spot checks on devices happen on main after the squash merge, before the advisor pushes main.
 
 ## Commands + Communication
 
