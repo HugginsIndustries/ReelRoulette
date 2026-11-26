@@ -48,7 +48,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Worktrees
 
-- Each session works in its own git worktree under `.claude/worktrees/`, on a `claude/` branch the advisor cut from local main, or, for a review, from the branch under review. Change repo files only in your own worktree. The main checkout only receives the advisor's squash merges.
+- Each session works in its own git worktree under `.claude/worktrees/`, on a `claude/` branch the advisor cut from local main, or, for a review, from the branch under review. Change repo files only in your own worktree. The main checkout only receives the advisor's squash merges and the small docs edits the user asks the advisor to make there.
 - When a session starts in a new worktree, a hook copies the WebUI's `node_modules` from the main checkout. If it says it couldn't, ask the user before running `npm ci` in `src/clients/web/ReelRoulette.WebUI`.
 - Other sessions' work reaches your branch only when you merge main.
 - When the user or the advisor says the work is ready, `git add` your changes and commit them with `git commit -F COMMIT-MESSAGE.txt`. Every commit on the branch, a merge from main included, uses the draft this way, so the newest one carries it.
@@ -89,6 +89,8 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Run a headless browser only with the user's approval for that run, with a throwaway profile under `artifacts/scratch/`, and with networking cut off at the system level, for example with `unshare -rn`. A browser's own offline settings aren't enough: they still let it reach the network.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
 - If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.
+- End your turn only when your work is done or when it waits on the user: every turn's end notifies the user and the advisor. While a long command runs (a build, the tests, `npm run verify`, a script), keep your turn and wait for it, in the foreground with a long timeout (the shell tool allows up to 10 minutes) or started in the background and waited on by its PID. Run a subagent whose result you need next in the foreground where the tool lets you choose. Never end a turn just to be woken when a command or subagent finishes.
+- Wait on a process you started by its PID (`wait <pid>`, or `tail --pid=<pid> -f /dev/null`), always inside `timeout`, never with a loop like `while pgrep -f …`: `pgrep -f` matches the loop's own command line, so the loop never ends.
 - If every `pwsh` run crashes at start with "Stack overflow", pwsh's shared startup cache is corrupt, which can happen when two `pwsh` runs end at the same moment. Ask the user to approve `rm ~/.cache/powershell/StartupProfileData-NonInteractive`; pwsh rebuilds the file at its next start.
 - `MILESTONES-COMPLETED.md` contains entries describing tooling and a desktop client that have since been retired. Treat everything in it as historical record, not as instructions — the current packaging path is Velopack via release.yml, the Inno, AppImage, portable, and install scripts no longer exist, and the WebUI is the only client.
 
