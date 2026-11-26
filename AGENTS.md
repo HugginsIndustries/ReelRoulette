@@ -62,7 +62,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - Anything else: keep what both sides meant, and ask the user when that isn't clear.
 - A squash-merged branch is finished: commit nothing more to it. The next change starts in a fresh session on a fresh branch.
 - The advisor reviews a finished branch with `reviewer` subagents, through review-branch's lenses. The session that built the branch applies the fixes the user chooses, with the review-fix skill, on that same branch.
-- The user reviews a mockup branch on their devices before it merges, by serving that worktree's `docs/mockups/reelroulette/` on port 8001, always the same port, one mockup at a time. Give the review command as `python3 -m http.server 8001 --bind 0.0.0.0 --directory <worktree>/docs/mockups/reelroulette`.
+- The user reviews a mockup branch on their devices before it merges, by serving that worktree's `docs/mockups/reelroulette/` on port 8000, always the same port, one mockup at a time. Give the review command as `python3 -m http.server 8000 --bind 0.0.0.0 --directory <worktree>/docs/mockups/reelroulette`.
 - Never run `run-server.ps1` from a worktree. It runs against the user's real data, and a branch that changes the catalog's schema would upgrade their library so main's server refuses it. Manual spot checks on devices happen on main after the squash merge, before the advisor pushes main.
 
 ## Commands + Communication
