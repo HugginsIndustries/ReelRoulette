@@ -135,6 +135,19 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `mediaFailedNow` in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` recovers a video that has played while `recovered` is false.
   - `recover` sets `recovered` and plays the fresh URL from the failed position, and `videoPlaying` clears `recovered` on every `playing` event.
 
+### The sound drifts out of sync on iOS with Enhanced audio on
+
+- **What goes wrong**: On the iPad, with Enhanced audio on, a video's sound drifts out of sync with its picture, most of all once the video loops (measured, on the user's iPad). Pause then Play doesn't reliably bring it back in sync (measured).
+- **How to make it happen**: On the iPad's installed app, with Enhanced audio on (its default), play a video with Loop on and let it loop a few times. With Enhanced audio off, the same video stays in sync (measured).
+- **How much it matters**: Moderate. It affects any video that loops on an iPhone or iPad with the default settings (inferred for the iPhone). The workaround is to turn Enhanced audio off in the Settings tab's Audio section on the iPhone or iPad, which gives up the in-app volume, loudness normalization, and compression there.
+- **Since**: v0.15.0, not yet released, whose WebUI added Enhanced audio.
+- **Where**:
+  - `start` in `src/clients/web/ReelRoulette.WebUI/src/playback/audioStage.ts` routes the video's sound through Web Audio with `createMediaElementSource`, on the first tap or key while Enhanced audio is on.
+  - `syncVideo` in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` sets the browser's own `loop`, which seeks back to the start at the video's end. `repeatStretch` repeats Timer mode's stretch by setting `currentTime` while the video plays.
+  - Why WebKit drifts isn't established. WebKit's `AudioSourceProviderAVFObjC`, which feeds a video's sound to Web Audio, doesn't line the sound up with the picture again after a seek (inferred, from WebKit's source), but Pause then Play, which resets its timing, doesn't reliably fix it (measured).
+  - WebKit has open bugs on it: [221334](https://bugs.webkit.org/show_bug.cgi?id=221334), where sound through Web Audio is delayed and out of sync with the video, and [301824](https://bugs.webkit.org/show_bug.cgi?id=301824), where media through Web Audio isn't kept in sync.
+  - Ruled out: the server sends the original file and answers range requests correctly, and a loop fetches nothing new (measured). Nothing in the WebUI seeks, pauses, or changes the gain when the browser's own loop wraps.
+
 ## Server
 
 ### The ffmpeg check can hang on its own output

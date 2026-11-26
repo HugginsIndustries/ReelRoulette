@@ -1178,6 +1178,7 @@ Last milestone completed: M12m
 - WebUI Player Controls keeps the controls shown while the scrub bar or volume is dragged, so dragging a marker has to keep them shown too (inferred).
 - The keyboard shortcuts WebUI Keyboard Shortcuts adds, listed in the mockup's shortcut reference, already take most of the keys a marker could use.
 - WebUI Context Menus opens the player's menu from its picture, not from its controls, so a right-click or a long press on the scrub bar is free for the markers.
+- On iOS with Enhanced audio on, a repeat by seek leaves the sound out of sync with the picture, the known issue "The sound drifts out of sync on iOS with Enhanced audio on" in `ISSUES.md` (inferred).
 
 #### Acceptance
 

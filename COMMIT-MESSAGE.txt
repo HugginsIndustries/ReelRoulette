@@ -20,12 +20,8 @@ Instructions:
 
 Commit Message:
 
-M12n1: Add the Developer section with Don't record plays and Reset this device's settings to the WebUI
+Docs: Record the iOS audio drift with Enhanced audio as a known issue
 
-- The Settings tab ends with a Developer section, after Diagnostics, worded as the mockup shows it.
-- Don't record plays on this device, kept as developer.dontRecordPlays, stops every play here from counting: a random pick posts no record-playback, and a history step and a library play send recordPlayback: false. last.log gets a line on each change and when a page loads with it on.
-- While it is on, the player shows Counts disabled under the bell, or below the indicator on a narrow player, in a new developer style (--dev and --dev-bg), showing and hiding with the player's controls, as the bell does, in fullscreen too, under any popups, and the mockup's pill follows the controls too.
-- Reset this device's settings asks first with a red Reset, then clears every rr_device. setting except the developer. ones and reloads the page; the client and session ids stay.
-- The device store gains a clear and the one developer. prefix the reset keeps, and one browserStorage helper replaces tryGetStorage for the store and the client and session ids; Scan full library moves into the device store as tags.scanFullLibrary, with no carry-over.
-- The tests share one in-memory storage helper in place of their copies, and Player and Settings screen tests cover the three play paths, turning the setting on while the page is open, the pill, the log lines, and the reset.
-- CONTEXT.md, docs/domain-inventory.md, and the changelog describe the section, docs/api.md and the play route's contract say recordPlayback: false is also sent while Don't record plays is on, and MILESTONES.md marks the Developer section slice complete with its evidence.
+- ISSUES.md records that on the iPad, with Enhanced audio on, a video's sound drifts out of sync with its picture, most of all once it loops, and that Pause then Play doesn't reliably resync it; turning Enhanced audio off stops it, at the cost of the in-app volume, loudness normalization, and compression there.
+- It names the likely cause in WebKit's Web Audio path for media, its open WebKit bugs, and what was ruled out, with no intended fix yet.
+- WebUI Loop Range's Traps note that its repeats by seek hit the same issue on iOS.
