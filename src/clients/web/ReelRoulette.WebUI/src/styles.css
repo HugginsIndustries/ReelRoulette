@@ -469,6 +469,25 @@ html.theme-light .app-dialog {
   max-height: calc(100dvh - 16px);
   overflow-y: auto;
 }
+/* A surface with a menu, which a long press opens, shows no callout of the browser's own, such as Safari's image menu,
+   and on a touch screen selects no text under the finger; with a mouse, its text still selects. */
+.menu-surface {
+  -webkit-touch-callout: none;
+}
+@media (hover: none) {
+  .menu-surface {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+/* The element a context menu acts on is tinted while the menu is open, as a pointer tints a menu's item, with 4 px
+   corners unless it has its own shape, as a popup and a tag do. A library tile keeps its ring instead. */
+.is-menu-target:not(.library-grid-tile) {
+  box-shadow: inset 0 0 0 100vmax rgba(127, 127, 127, 0.16);
+}
+.is-menu-target:not(.toast, .tag-chip, .stats-tag, .library-grid-tile) {
+  border-radius: 4px;
+}
 
 /* Icon-only buttons in the panel's tabs and Auto Tag. */
 .icon-btn {
@@ -1652,15 +1671,13 @@ body.sorting * {
   flex-shrink: 0;
   margin-bottom: var(--library-grid-gap);
 }
-/* Every tile has 4 px corners, as a selected tile's thumbnail does. A long press selects a tile, so it opens no callout
-   of the browser's own, such as Safari's image menu. */
+/* Every tile has 4 px corners, as a selected tile's thumbnail does. */
 .library-grid-tile {
   position: relative;
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 4px;
   cursor: pointer;
-  -webkit-touch-callout: none;
 }
 /* The thumbnail and what sits on it. Hovering dims it, on a device that can hover, so a tap leaves no tile dimmed, and
    pressing dims it more; the check icon beside it stays bright. A selected tile's thumbnail is inset by the same margin
@@ -1745,8 +1762,8 @@ body.sorting * {
   background: rgba(0, 0, 0, 0.133);
   overflow: hidden;
 }
-/* A thumbnail can't be dragged, so a long press on it selects its tile rather than lifting the picture, as Safari's
-   image drag would. */
+/* A thumbnail can't be dragged, so a long press on it opens its tile's menu rather than lifting the picture, as
+   Safari's image drag would. */
 .library-grid-tile-image {
   display: block;
   width: 100%;

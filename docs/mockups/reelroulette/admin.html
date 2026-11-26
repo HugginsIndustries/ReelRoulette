@@ -1847,7 +1847,6 @@ function placeAtPoint(menu, x, y) {
  * buttons that are part of it, such as a category's name. Options:
  * - `except`: parts of the surface that open nothing, such as the player's controls.
  * - `pressOn`: buttons in the surface that a long press still opens its menu on.
- * - `press(el)`: what a long press does in place of opening the menu, as a library tile's selects.
  * - `mark`: false, or a test of the element, to leave out the highlight on the element the menu acts on.
  * - `onOpen(el)` and `onClose(el)`, run as the menu opens on the surface and as it closes, however it closes.
  * The innermost surface under the pointer wins. One menu shows at a time. It closes on a pick, a press outside, which
@@ -1870,9 +1869,9 @@ const contextMenu = (() => {
   let press = null;
   let swallowClick = false;
 
+  // Text fields: textareas and the inputs that take typed text, so a date field blocks it too.
   const takesText = (el) =>
-    el?.tagName === "TEXTAREA" ||
-    (el?.tagName === "INPUT" && !["checkbox", "radio", "range", "button", "submit", "reset", "color", "file", "image"].includes(el.type));
+    el?.tagName === "TEXTAREA" || (el?.tagName === "INPUT" && ["text", "search", "url", "tel", "email", "password", "number"].includes(el.type));
   // The innermost surface at `target`, or null where none is or the surface leaves that part out. For a long press,
   // also null on a button, a drag handle, or the rating stars, unless the surface opens its menu there.
   function surfaceAt(target, pressing) {
@@ -1881,7 +1880,7 @@ const contextMenu = (() => {
       if (!surface) continue;
       const left = surface.except && target.closest(surface.except);
       if (left && el.contains(left)) return null;
-      const held = pressing && !surface.press && target.closest("button, .drag-handle, .rating, .panel-handle");
+      const held = pressing && target.closest("button, .drag-handle, .rating, .panel-handle");
       if (held && el.contains(held) && !held.matches(surface.pressOn || "*:not(*)")) return null;
       return { surface, el };
     }
@@ -1935,8 +1934,7 @@ const contextMenu = (() => {
       press = null;
       // The click the press ends with is used up, so it never also plays, toggles, or dismisses what it was on.
       swallowClick = true;
-      if (hit.surface.press) hit.surface.press(hit.el);
-      else open(hit.surface, hit.el, x, y);
+      open(hit.surface, hit.el, x, y);
     }, LONG_PRESS_MS);
   }, true);
   document.addEventListener("pointermove", (event) => {

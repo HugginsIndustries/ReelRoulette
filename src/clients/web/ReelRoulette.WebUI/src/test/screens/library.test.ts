@@ -2035,7 +2035,7 @@ describe("selection", () => {
     expect(outsideMedia(css, "(hover: hover)")).not.toMatch(/library-grid-tile[\w-]*:hover/);
   });
 
-  it("keeps a thumbnail from being dragged, so a long press selects its tile rather than lifting the picture", () => {
+  it("keeps a thumbnail from being dragged, so a long press opens its tile's menu rather than lifting the picture", () => {
     const rule = /\.library-grid-tile-image \{([^}]*)\}/.exec(stylesheetText())?.[1] ?? "";
     expect(rule).toContain("-webkit-user-drag: none;");
   });
@@ -2160,22 +2160,19 @@ describe("selection", () => {
     expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
   });
 
-  it("a long press with a finger selects its tile without playing it, then a tap adds a tile and a long press takes one out", async () => {
+  it("on a touch screen starts from Select in a tile's menu, which a long press opens, then a tap adds a tile", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { server } = await mountLibrary(libraryItems(3));
     await openLibrary();
 
-    fireEvent.pointerDown(tile("item-1")!, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
-    expect(fireEvent.contextMenu(tile("item-1")!)).toBe(false);
-    await vi.advanceTimersByTimeAsync(500);
-    expect([selecting(), selectedTiles()]).toEqual([true, ["item-1"]]);
-    fireEvent.pointerUp(tile("item-1")!, { pointerType: "touch", pointerId: 1, button: 0, clientX: 10, clientY: 10 });
-    await click(tile("item-1")!);
-    expect(selectedTiles()).toEqual(["item-1"]);
+    await fingerPress(tile("item-1")!, 500);
+    expect([selecting(), selectedTiles()]).toEqual([false, []]);
+    await click(menuItemIn(contextMenuShown()!, "Select"));
+    expect([contextMenuShown(), selecting(), selectedTiles()]).toEqual([null, true, ["item-1"]]);
 
     await fingerPress(tile("item-2")!, 100);
     expect(selectedTiles()).toEqual(["item-1", "item-2"]);
-    await fingerPress(tile("item-1")!, 500);
+    await fingerPress(tile("item-1")!, 100);
     expect(selectedTiles()).toEqual(["item-2"]);
     expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
   });
@@ -3172,6 +3169,7 @@ describe("a tile's menu", () => {
     expect([currentStyle(host).position, currentStyle(host).zIndex]).toEqual(["fixed", "1500"]);
     expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 120, top: 140 });
     expect(menuIcons(menu)).toEqual([
+      "check_circle Select",
       "heart_minus Remove from favorites",
       "thumb_down Add to blacklist",
       "star Rate…",
@@ -3301,17 +3299,53 @@ describe("a tile's menu", () => {
     await waitFor(() => expect(contextMenuShown()).toBeNull());
   });
 
-  it("opens for no long press, which selects its tile instead", async () => {
+  it("opens at a long press with a finger, where it began, with the tile ringed, selecting and playing nothing", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    useStylesheet();
+    stubContextMenuSize(MENU_WIDTH, MENU_HEIGHT);
+    const { server } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+    // As a surface with a menu, a tile shows no callout of the browser's own, and on a touch screen selects no text.
+    expect(tile("item-1")!.classList.contains("menu-surface")).toBe(true);
+    const css = stylesheetText().replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(css).toMatch(/\.menu-surface \{\s*-webkit-touch-callout: none;\s*\}/);
+    expect(mediaBlocks(css, "(hover: none)").join("")).toMatch(/\.menu-surface \{\s*user-select: none;\s*-webkit-user-select: none;\s*\}/);
+
+    fireEvent.pointerDown(tile("item-1")!, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 120, clientY: 140 });
+    await vi.advanceTimersByTimeAsync(500);
+    // Chrome on Android sends `contextmenu` for a long press, which opens nothing more.
+    expect(fireEvent.contextMenu(tile("item-1")!, { clientX: 120, clientY: 140 })).toBe(false);
+    await flush();
+    expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 120, top: 140 });
+    expect(partsOf(contextMenuShown()!).slice(0, 2)).toEqual(["Select", "—"]);
+    expect(ringed("item-1")).toBe(true);
+    // The click it ends with, which lands on the menu's corner, picks nothing.
+    fireEvent.pointerUp(tile("item-1")!, { pointerType: "touch", pointerId: 1, button: 0, clientX: 120, clientY: 140 });
+    await click(menuItemIn(contextMenuShown()!, "Select"));
+    expect([contextMenuShown() !== null, selectedTiles()]).toEqual([true, []]);
+    await flush();
+    expect(server.calls.filter((call) => call.path.startsWith("/api/play/"))).toEqual([]);
+
+    // A scroll of the grid closes it.
+    fireEvent.scroll(gridScroll());
+    expect([contextMenuShown(), ringed("item-1")]).toEqual([null, false]);
+  });
+
+  it("opens at a long press while selecting: on a tile outside the selection with Select, which adds it, and on a selected tile for the selection", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await mountLibrary(libraryItems(3));
     await openLibrary();
+    await click(check("item-1"));
 
-    fireEvent.pointerDown(tile("item-1")!, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
-    await vi.advanceTimersByTimeAsync(500);
-    // Chrome on Android sends `contextmenu` for a long press.
-    expect(fireEvent.contextMenu(tile("item-1")!)).toBe(false);
-    await flush();
-    expect([contextMenuShown(), selectedTiles()]).toEqual([null, ["item-1"]]);
+    await fingerPress(tile("item-1")!, 500);
+    expect(partsOf(contextMenuShown()!)).not.toContain("Select");
+    expect([ringed("item-1"), selectedTiles()]).toEqual([false, ["item-1"]]);
+    await pressEscape();
+
+    await fingerPress(tile("item-2")!, 500);
+    expect(ringed("item-2")).toBe(true);
+    await click(menuItemIn(contextMenuShown()!, "Select"));
+    expect([contextMenuShown(), selectedTiles()]).toEqual([null, ["item-1", "item-2"]]);
   });
 
   it("on a selection past the loaded tiles asks the server once what it is, and shows only the items that apply", async () => {

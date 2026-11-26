@@ -4,6 +4,7 @@ import { followTheme } from "../settings/theme";
 import type { AppServices } from "../state/appServices";
 import { AppContext } from "./appContext";
 import { Header } from "./Header";
+import { listenForMenus } from "./menuOpener";
 import { ScreenBoundary } from "./ScreenBoundary";
 import { Stage } from "./Stage";
 
@@ -13,6 +14,9 @@ export function App({ services }: { services: AppServices }) {
     services.connection.start();
     return () => services.connection.stop();
   }, []);
+
+  // The app's own context menus, in place of the browser's, which shows only in text fields.
+  useLayoutEffect(() => listenForMenus(services.contextMenu), []);
 
   // The theme the Settings tab chooses, on the root element and in the metas the browser and an installed app read.
   // `index.html` has already applied the one kept on this device while the page loaded.

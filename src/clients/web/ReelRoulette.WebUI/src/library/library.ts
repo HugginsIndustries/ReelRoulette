@@ -18,7 +18,7 @@ import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { RefreshKeptSource } from "../types/serverContracts";
-import type { ContextMenu, MenuGroups } from "../ui/menuModel";
+import type { ContextMenu, MenuGroups, MenuItem } from "../ui/menuModel";
 import type { WindowPoint } from "../ui/placement";
 import { createBulkActions, summarizeLoaded, type BulkActions, type BulkSummary, type BulkTarget } from "./bulkActions";
 import { KEPT_SOURCES_LOG_TEXT, keptSourcesMessage, type KeptSourceFolder } from "./keptSources";
@@ -176,8 +176,6 @@ export interface Library {
    * fails shows in the notice; one the server answers with 401 shows the pairing prompt.
    */
   clickTile(itemId: string, click: TileClick): Promise<void>;
-  /** A long press on a tile picks it or takes it out, as a click during selection does. */
-  longPressTile(itemId: string): void;
   /**
    * Picks every item the grid's search and filter match, loaded or not, from the server. A press while one is under way
    * does nothing, an answer that comes after selection ended is dropped, and a failure shows in the notice.
@@ -189,9 +187,11 @@ export interface Library {
    */
   toggleSelectionMenu(): Promise<void>;
   /**
-   * A right-click on a tile with a mouse: opens a menu at `point` that acts on the selection when the tile is selected,
-   * and otherwise on that tile alone, which shows a ring while the menu is open, so a right-click never changes a
-   * selection. It closes when its tile leaves the grid, the tab hides, or a selection it acts on ends.
+   * A right-click or a long press on a tile: opens a menu at `point` that acts on the selection when the tile is
+   * selected, and otherwise on that tile alone, which shows a ring while the menu is open, so opening it never changes a
+   * selection. On a tile alone it starts with Select, which picks the tile, starting selection when none is on, and on
+   * a touch screen, where a tile's check shows only while selecting, is how selection starts. It closes when its tile
+   * leaves the grid, the tab hides, or a selection it acts on ends.
    */
   openTileMenu(itemId: string, point: WindowPoint): Promise<void>;
 }
@@ -763,7 +763,7 @@ export function createLibrary(options: LibraryOptions): Library {
     const shown = { itemId, target };
     contextMenu.open({
       point,
-      groups,
+      groups: target.kind === "item" ? [[selectItem(itemId)], ...groups] : groups,
       onClose() {
         if (tileMenu === shown) {
           tileMenu = null;
@@ -773,6 +773,19 @@ export function createLibrary(options: LibraryOptions): Library {
     });
     tileMenu = shown;
     grid?.setMenuItemId(ringedItemId());
+  }
+
+  /** Select, first in a tile's menu that acts on the tile alone: it picks the tile, starting selection if it is off. */
+  function selectItem(itemId: string): MenuItem {
+    return {
+      label: "Select",
+      icon: "check_circle",
+      onPick() {
+        if (!selection.has(itemId)) {
+          selection.toggle(itemId);
+        }
+      }
+    };
   }
 
   /** A tile's menu closes when its tile leaves the grid: its item leaves the loaded window, or a message replaces it. */
@@ -1028,7 +1041,6 @@ export function createLibrary(options: LibraryOptions): Library {
     },
 
     clickTile,
-    longPressTile: (itemId) => selection.toggle(itemId),
     selectAll,
     toggleSelectionMenu,
     openTileMenu

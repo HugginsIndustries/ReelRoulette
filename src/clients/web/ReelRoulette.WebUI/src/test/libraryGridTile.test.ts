@@ -84,8 +84,8 @@ describe("grid tile", () => {
     const playing = createGridTile("item-1", view, true);
     const other = createGridTile("item-2", view, false);
 
-    expect(playing.element.className).toBe("library-grid-tile is-playing");
-    expect(other.element.className).toBe("library-grid-tile");
+    expect(playing.element.className).toBe("library-grid-tile menu-surface is-playing");
+    expect(other.element.className).toBe("library-grid-tile menu-surface");
     for (const { element } of [playing, other]) {
       expect(element.querySelector(".library-grid-tile-playing > .material-symbol-icon.is-filled")?.textContent).toBe(
         "play_circle"
@@ -93,8 +93,8 @@ describe("grid tile", () => {
     }
     playing.setPlaying(false);
     other.setPlaying(true);
-    expect(playing.element.className).toBe("library-grid-tile");
-    expect(other.element.className).toBe("library-grid-tile is-playing");
+    expect(playing.element.className).toBe("library-grid-tile menu-surface");
+    expect(other.element.className).toBe("library-grid-tile menu-surface is-playing");
   });
 
   it("gives every tile a filled check icon beside its thumbnail, whose tooltip says what a click does, which marks it selected", () => {
@@ -103,17 +103,17 @@ describe("grid tile", () => {
 
     expect(check.querySelector(".material-symbol-icon.is-filled")?.textContent).toBe("check_circle");
     expect(check.parentElement).toBe(tile.element);
-    expect(tile.element.className).toBe("library-grid-tile");
+    expect(tile.element.className).toBe("library-grid-tile menu-surface");
 
     tile.setSelected(true);
     expect(within(tile.element).getByTitle("Deselect")).toBe(check);
-    expect(tile.element.className).toBe("library-grid-tile is-selected");
+    expect(tile.element.className).toBe("library-grid-tile menu-surface is-selected");
     tile.setSelected(false);
     expect(within(tile.element).getByTitle("Select")).toBe(check);
-    expect(tile.element.className).toBe("library-grid-tile");
+    expect(tile.element.className).toBe("library-grid-tile menu-surface");
 
     const selected = createGridTile("item-2", view, true, true);
-    expect(selected.element.className).toBe("library-grid-tile is-playing is-selected");
+    expect(selected.element.className).toBe("library-grid-tile menu-surface is-playing is-selected");
   });
 
   it("makes the file name the whole tile's tooltip and the name bar's text, as text", () => {

@@ -695,6 +695,16 @@ describe("page structure", () => {
     expect(video?.isConnected).toBe(true);
     expect(seek.value).toBe("40");
   });
+
+  it("shows the browser's own right-click menu only in text fields, such as the library search", async () => {
+    const page = mountPage();
+    await pageReady(page.server);
+    await settle();
+    // `fireEvent` answers whether nothing stopped the browser's menu.
+    expect(fireEvent.contextMenu(page.root.querySelector("video")!)).toBe(false);
+    expect(fireEvent.contextMenu(document.getElementById("now-playing")!)).toBe(false);
+    expect(fireEvent.contextMenu(document.getElementById("library-search-input")!)).toBe(true);
+  });
 });
 
 describe("startup error", () => {

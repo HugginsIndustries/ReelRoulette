@@ -1,3 +1,5 @@
+import { MENU_TARGET_CLASS } from "../ui/menuModel";
+
 export function buildThumbnailUrl(apiBaseUrl: string, itemId: string, version: string | null = null): string {
   const normalizedBase = apiBaseUrl.replace(/\/+$/, "");
   const encodedId = encodeURIComponent(itemId);
@@ -13,8 +15,6 @@ export function buildThumbnailUrl(apiBaseUrl: string, itemId: string, version: s
 const PLAYING_TILE_CLASS = "is-playing";
 /** The class that marks a selected item's tile. */
 const SELECTED_TILE_CLASS = "is-selected";
-/** The class that marks the tile a menu acts on alone, which the stylesheet rings. */
-const MENU_TILE_CLASS = "is-menu-target";
 /** The class of a tile's check icon, which selects it. */
 export const TILE_CHECK_CLASS = "library-grid-tile-check";
 
@@ -36,7 +36,7 @@ export interface GridTile {
   update(view: GridTileView): void;
   setPlaying(playing: boolean): void;
   setSelected(selected: boolean): void;
-  /** Marks the tile as the one its menu acts on alone. */
+  /** Marks the tile as the one its menu acts on alone, which the stylesheet rings in place of the menu's tint. */
   setMenuTarget(target: boolean): void;
 }
 
@@ -57,7 +57,7 @@ function thumbnailImage(url: string): HTMLImageElement {
   const image = document.createElement("img");
   image.className = "library-grid-tile-image";
   image.alt = "";
-  // A thumbnail can't be dragged in any browser, so a long press selects its tile; the stylesheet's
+  // A thumbnail can't be dragged in any browser, so a long press opens its tile's menu; the stylesheet's
   // `-webkit-user-drag: none` covers Safari's own image drag too.
   image.setAttribute("draggable", "false");
   // Set before the source, so the browser waits to load it until it nears the view.
@@ -75,7 +75,7 @@ function thumbnailImage(url: string): HTMLImageElement {
  * tile.
  */
 export function createGridTile(itemId: string, view: GridTileView, playing: boolean, selected = false): GridTile {
-  const element = block("library-grid-tile");
+  const element = block("library-grid-tile menu-surface");
   element.dataset.itemId = itemId;
   const media = block("library-grid-tile-media");
   const scrim = block("library-grid-tile-scrim");
@@ -161,7 +161,7 @@ export function createGridTile(itemId: string, view: GridTileView, playing: bool
   }
 
   function setMenuTarget(target: boolean): void {
-    element.classList.toggle(MENU_TILE_CLASS, target);
+    element.classList.toggle(MENU_TARGET_CLASS, target);
   }
 
   update(view);

@@ -642,7 +642,9 @@ Last milestone completed: M12n1
 - The browser's own right-click menu is off across the app, except in text fields, the inputs that take text and textareas, which keep it for copy, paste, and spell check.
 - Every menu is the shared context menu WebUI Multi-Select and Bulk Actions builds, with its look and item list.
 - A right-click opens a surface's menu anywhere on it, its buttons included, and a right-click where no menu exists opens nothing.
-- On a touch screen or with a pen, a long press opens a surface's menu wherever it has one, except on buttons, library tiles, which a long press selects, drag handles, the rating stars, and the panel's resize handle, so buttons stay free for WebUI Tooltips' long press.
+- On a touch screen or with a pen, a long press opens a surface's menu wherever it has one, except on buttons, drag handles, the rating stars, and the panel's resize handle, so buttons stay free for WebUI Tooltips' long press.
+- A long press on a library tile opens its menu, as everywhere else, while selecting or not, in place of WebUI Multi-Select and Bulk Actions' long press, which selected the tile.
+- A library tile's menu starts with Select, in a group of its own, on every device while the tile isn't selected. It starts selecting with that tile, or adds it to the selection while selecting, and on a touch screen, where a tile's check shows only while selecting, it is how selecting starts.
 - A long press uses up the click it ends with, so it never also presses, toggles, or plays what it opened on.
 - Copy items stand in for the browser's Copy on selected text, which goes with its menu: Copy name and Copy path for files, Copy text for notifications, and Copy for the Settings tab's diagnostics IDs.
 - Show in File Manager sits wherever Copy path does, shown while the version check lists `api.showInFileManager`, as the Stats tab's button is.
@@ -658,7 +660,7 @@ Last milestone completed: M12n1
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | Every menu, its items, wording, and order, and the long press, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
-| Foundation | ⏳ Planned | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, and menus closing on scroll, resize, and the browser tab hiding. |
+| Foundation | ✅ Complete | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, whose long press opens their menu, with Select in it, and menus closing on scroll, resize, and the browser tab hiding. |
 | Player | ⏳ Planned | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
 | Tags tab | ⏳ Planned | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
 | Filter tab | ⏳ Planned | Menus on the Filter tab's preset rows and sources. |
@@ -677,6 +679,7 @@ Last milestone completed: M12n1
   - Auto Tag's file rows and the Settings tab's diagnostics IDs.
 - The Stats tab's Copy Path or Show in File Manager button beside the file path goes, since the path's menu holds both, and the path takes its room.
 - It shows a long press opening them on a touch screen, and a right-click where no menu exists opening nothing.
+- A long press on a library tile opens its menu, which starts with Select while the tile isn't selected, in place of selecting the tile.
 - The review settles each menu's wording and order, and:
   - what the player's menu does with nothing playing;
   - what the player shows after Delete file removes the playing item;
@@ -713,6 +716,9 @@ Last milestone completed: M12n1
 - The mockup's shared code holds one context menu, its long press, and the block on the browser's menu, which the main page and the admin view use; the tile's own menu and long press moved onto them.
 - The icon font gains `new_label`, and the mockup's index page and README describe the menus.
 - `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- A later round, which the user approved on their devices, made a long press on a library tile open its menu in place of selecting the tile, with Select first in the menu, in a group of its own, while the tile isn't selected, reading Select while selecting too, and no Deselect on a selected tile's menu.
+- That round also fixed the grid's two-finger pinch, which stopped with an error because it still cleared the tile's old long-press timer after the long press moved into the shared code.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages after that round, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 
 #### Foundation slice
 
@@ -720,7 +726,9 @@ Last milestone completed: M12n1
 
 - A document-level `contextmenu` listener blocks the browser's own menu everywhere but in text fields: `input` elements that take text, and `textarea`.
 - The library tiles' long press (`src/library/libraryTilePress.ts`) becomes a shared long-press helper in `src/ui/`, with the same rules: it fires after 500 ms, moving 8 px, a second finger, a scroll the browser takes over, or lifting first cancels it, and the click it ends with is used up.
-- The tiles' selection and every menu's long press use that helper.
+- Every menu's long press uses that helper, a library tile's included, which opens the tile's menu in place of selecting it.
+- A library tile's menu starts with Select, in a group of its own, while the tile isn't selected, on every device. It starts selecting with that tile, or adds it to the selection while selecting. The Selection actions menu doesn't show it.
+- The `[Unreleased]` changelog bullet on selecting several library items says a long press opens a tile's menu, whose Select starts selecting, in place of a long press starting it.
 - A surface with a menu sets `-webkit-touch-callout: none`, so Safari on iOS shows no callout of its own on a long press.
 - On a touch screen, a surface with a menu selects no text, so a long press doesn't select the word under the finger; with a mouse, its text still selects.
 - The shared context menu tints the element it acts on while it is open.
@@ -731,6 +739,10 @@ Last milestone completed: M12n1
 - `takesKeys` in `src/keyboard/shortcuts.ts` is the app's check for a field that takes keys, but it counts `<select>`, so it isn't the text-field test as it is.
 - The app's text fields are `type="text"` and `type="search"` inputs, its only `<textarea>` is Copy Path's short-lived fallback field, and it has no `contenteditable`.
 - The tiles' long press is tile-specific: it takes a `tileItemId` option, blocks the browser's menu on every tile, and reports a mouse's right-click on a tile through its `onMenu` option, which opens the tile's menu, and none after a finger's or a pen's press (`src/library/libraryTilePress.ts`).
+- A tile's long press toggles the tile's selection (`longPressTile` in `src/library/library.ts`), which `library.test.ts` tests.
+- A tile's menu and the Selection actions menu take their items from one builder, `menuGroups` in `src/library/bulkActions.ts`, after reading what they act on, and a tile's menu acts on that tile alone unless it is selected (`openTileMenu` in `src/library/library.ts`).
+- A tile's check shows only with a pointer over the tile or while selecting (`.library-grid-tile-check` in `src/styles.css`), so on a touch screen a tile's menu is the only way to start selecting.
+- The `[Unreleased]` changelog bullet "Select several library items" says a long press on a touch screen starts selecting, and selecting hasn't been released yet.
 - Safari on iOS sends no `contextmenu` on a long press and shows its own callout, so a long press is timed from pointer events, as the tiles' is (inferred).
 - Chrome on Android sends `contextmenu` on a long press, so blocking it also stops its image menu and its long-press text selection (inferred).
 - Firefox opens its own menu on Shift+right-click whatever the page does (inferred).
@@ -740,11 +752,22 @@ Last milestone completed: M12n1
 **Acceptance**
 
 - A right-click outside a text field opens no menu of the browser's own, and one in a text or search field leaves the browser's menu, in WebUI tests of the block.
-- The library tiles' long press selects as before through the shared helper, in `libraryTilePress.test.ts`'s tests moved to the shared helper.
+- A long press on a library tile opens its menu, selecting or not, and selects nothing, in library screen tests with touch pointers.
+- A tile's menu shows Select while the tile isn't selected, which starts selecting with it or adds it to the selection, and the Selection actions menu doesn't show it, in library screen tests.
 - The shared helper fires at 500 ms, is cancelled by moving 8 px, a second finger, or lifting first, and uses up the click it ends with, in tests of the shared long-press helper.
 - A menu closes on scroll, resize, and the browser tab hiding, in WebUI tests of the context menu.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- The tiles' long press moved to `src/ui/longPress.ts`, which listens on the document, and `src/ui/menuOpener.ts`, started by the app's root, blocks the browser's menu outside text fields and opens the menus of the surfaces registered with the context menu (`addSurface` in `src/ui/menuModel.ts`). The grid's host is the tiles' surface, and tiles carry the shared `menu-surface` class, which took over their own callout rule.
+- Text fields are textareas and text, search, url, tel, email, password, and number inputs, so the Filter tab's date fields block the browser's menu too; the mockup's rule was changed to match.
+- `longPress.test.ts` holds the moved helper tests, `menuOpener.test.ts` the block, the innermost surface, the long press's skips, and the used-up click, `menu.test.tsx` the menu's closing and tint, and library and foundation screen tests the tile's long press, Select, closing on the grid's scroll, and the block on the page.
+- Breaking the block, the click stopper, closing on scroll, Select, and the tint, each from a copy under `artifacts/scratch/`, failed 4, 4, 2, 3, and 1 tests (measured).
+- The library screen snapshot's tiles gained `menu-surface`, updated once with `npx vitest run -u` with the user's approval, and nothing else in it changed.
+- `npm run verify` passes, with 2,419 tests in 97 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the long press, Select, and the block, and the testing checklist's Release Specific check on a tile's long press expects its menu.
 
 #### Player slice
 
@@ -779,6 +802,8 @@ Last milestone completed: M12n1
 - `POST /api/playback/clear-stats` takes `itemIds`.
 - Library tiles carry their file's full path (`fullPath` in `src/library/libraryProjectionModel.ts`).
 - The now-playing name shortens with "..." (`src/playback/nowPlaying.ts`).
+- The opener stops the click a long press ends with in the document's capture phase, before the player hears it, but the player's gestures still see the press's pointer events (`src/ui/menuOpener.ts`).
+- The menu's tint is a class the menu's host adds to the element its view names (`target` in `src/ui/menuModel.ts`), so a Preact-rendered surface whose `class` changes while its menu is open loses it (inferred).
 
 **Acceptance**
 
@@ -818,6 +843,8 @@ Last milestone completed: M12n1
 - A new tag's category is picked in the footer's dropdown (`src/ui/TagEditor.tsx`).
 - A category's drag handle starts a drag only after moving 5 px (`src/reorder/reorder.ts`), and its header notes where a press began without timing a hold (`src/ui/TagCategory.tsx`).
 - The Stats tab's tags are plain text (`src/ui/StatsTab.tsx`).
+- The opener skips a long press on any button inside a surface (`LONG_PRESS_SKIPS` in `src/ui/menuOpener.ts`) and has no exception for a surface's own buttons yet, which a category's name, its header's button, needs.
+- `.tag-chip.state-all`'s own `box-shadow` comes after the menu's tint rule in `src/styles.css`, with the same specificity, so it wins: a green chip, on every selected item, shows no tint while its menu is open until that's handled. In the mockup the tint rule comes later and wins (`build/common.css`).
 
 **Acceptance**
 
@@ -896,7 +923,7 @@ Last milestone completed: M12n1
 #### Release checks
 
 - Manual: In Firefox on the desktop, right-clicking the player, a tag, a preset, and a notification opens the app's menu, and right-clicking in the library search opens Firefox's own.
-- Manual: On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own, and a long press on a library tile still selects it.
+- Manual: On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own, and a long press on a library tile opens its menu, whose Select starts selecting.
 
 #### Not included
 
@@ -3497,7 +3524,7 @@ Last milestone completed: M12n1
 - On a touch screen, long-pressing any element with a tooltip shows it as a tip beside the element, icon names and disabled buttons' reasons alike.
 - The tip shows while the press is held and for about 1.5 seconds after release.
 - A long press never also presses the button.
-- Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, the player's taps, selecting library tiles, and opening context menus.
+- Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, the player's taps, and opening context menus.
 - The blocked Apply keeps its press-to-show notice.
 - The mockup comes first, and the user reviews it in Firefox on the desktop, on the iPad, and on an Android phone before the app is built.
 
@@ -3512,14 +3539,14 @@ Last milestone completed: M12n1
 - Safari on iOS and Chrome on Android show their own callout, menu, or text selection on a long press (inferred).
 - Reordering presets and tag categories starts a drag on pointer down on a row's handle (`src/ui/Reorder.tsx`).
 - The player's taps and swipes are handled in `src/playback/mediaGestures.ts`, which ignores the click the browser sends after a swipe or a handled tap.
-- WebUI Multi-Select and Bulk Actions starts a selection with a long press on a tile.
-- WebUI Context Menus opens a surface's menu on a long press wherever it has one but on buttons, a tag category's name excepted, so some elements with a tooltip, such as the header's now-playing name, Auto Tag's file rows, and a tag category's name, open a menu instead.
+- WebUI Context Menus opens a surface's menu on a long press wherever it has one but on buttons, a tag category's name excepted, so some elements with a tooltip, such as a library tile, the header's now-playing name, Auto Tag's file rows, and a tag category's name, open a menu instead.
+- The click a long press ends with is stopped by the context menus' opener, in the document's capture phase (`src/ui/menuOpener.ts`), while the long-press helper only reports it (`takeClick` in `src/ui/longPress.ts`), so a second long press would have to copy that stop; it should move into `listenForLongPress` when this milestone adds its own long press.
 
 #### Acceptance
 
 - On a touch screen, a long press on an element with a tooltip shows its tip beside it while held and for about 1.5 seconds after release, without pressing it, in WebUI tests of long-press tips with touch pointers.
 - A long press on a disabled button shows its reason, in WebUI tests of long-press tips on disabled buttons.
-- Dragging presets and tag categories, the player's taps, selecting library tiles, opening context menus, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
+- Dragging presets and tag categories, the player's taps, opening context menus, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
 - A mouse shows no tip on a long press, in WebUI tests with a mouse pointer.
 - On a desktop, hovering an element with a tooltip shows the app's tip in the app's theme, and the browser shows none of its own, in WebUI tests of hover tips.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.

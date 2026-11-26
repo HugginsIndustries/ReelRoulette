@@ -3636,7 +3636,7 @@ $("lib-grid").addEventListener("wheel", (event) => {
   }, ZOOM_SETTLE_MS);
 }, { passive: false });
 
-// Two fingers on the grid pinch it. The second finger ends a long press that would start selection.
+// Two fingers on the grid pinch it. The second finger ends a long press that would open a tile's menu.
 let pinch = null;
 const pinchOf = (touches) => ({
   spread: Math.hypot(touches[1].clientX - touches[0].clientX, touches[1].clientY - touches[0].clientY),
@@ -3645,7 +3645,6 @@ const pinchOf = (touches) => ({
 });
 $("lib-grid").addEventListener("touchstart", (event) => {
   if (event.touches.length !== 2) return;
-  clearTimeout(pressTimer);
   const zoom = beginZoom();
   if (!zoom) return;
   pinch = pinchOf(event.touches);
@@ -5826,15 +5825,17 @@ document.addEventListener("pointerdown", (event) => {
   if (!$("bulk-menu").hidden && !event.target.closest("#bulk-menu, #bulk-actions")) closeBulkMenu();
 }, true);
 
-// A tile's menu, at the pointer, for a right-click with a mouse; a finger's or a pen's long press on a tile selects it
-// instead, which starts selection. The menu acts on the selection when the tile is selected, and otherwise on that tile
-// alone, which shows an orange ring, leaving any selection as it is, so a right-click never changes a selection.
+// A tile's menu, at the pointer, for a right-click with a mouse or a long press with a finger or a pen, while selecting
+// or not. The menu acts on the selection when the tile is selected, and otherwise on that tile alone, which shows an
+// orange ring, leaving any selection as it is, so opening it never changes a selection. While the tile isn't selected,
+// it starts with Select, which starts selecting with that tile, or adds it to the selection, the only way to start
+// selecting on a touch screen, where the tile's check shows only while selecting.
 contextMenu.add("#lib-grid .lib-tile:not(.is-placeholder)", (tile) => {
   const id = Number(tile.dataset.id);
   const onSelection = selecting && selected.has(id);
-  return itemGroups(onSelection ? selectedItems() : [ITEMS[id]], onSelection);
+  if (onSelection) return itemGroups(selectedItems(), true);
+  return [[menuItem("check_circle", "Select", () => selectTile(id, false))], ...itemGroups([ITEMS[id]], false)];
 }, {
-  press: (tile) => selectTile(Number(tile.dataset.id), false),
   mark: false,
   onOpen: (tile) => {
     const id = Number(tile.dataset.id);

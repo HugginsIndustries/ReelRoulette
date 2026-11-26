@@ -2,7 +2,7 @@ import { Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
-import type { MenuGroups } from "./menuModel";
+import { MENU_TARGET_CLASS, type MenuGroups } from "./menuModel";
 import { placeAtPoint } from "./placement";
 
 export interface MenuProps {
@@ -52,7 +52,8 @@ export function Menu({ id, class: extraClass, hidden, groups, onClose }: MenuPro
 /**
  * The context menu that shows, at its point, below and to the right of it, or on its other side where it would cross
  * the window's edge, kept inside the window. It closes on a press outside it, which still does what it does, on
- * Escape, and on a pick, before the item's action. A right-click on it opens nothing more. It renders in the
+ * Escape, on a pick, before the item's action, and on a scroll outside it, a resize, and the browser tab hiding, so it
+ * never stays where its element no longer is. The element it acts on is tinted while it is open. It renders in the
  * fullscreen stage, so it shows in fullscreen and nothing it opens over clips it.
  */
 export function ContextMenuHost() {
@@ -66,6 +67,34 @@ export function ContextMenuHost() {
     onPressOutside: contextMenu.close,
     onEscape: contextMenu.close
   });
+
+  const open = view !== null;
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+    const close = contextMenu.close;
+    const onScroll = (event: Event) => {
+      if (!(event.target instanceof Node && host.current?.contains(event.target))) close();
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) close();
+    };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    const target = view?.target;
+    target?.classList.add(MENU_TARGET_CLASS);
+    return () => target?.classList.remove(MENU_TARGET_CLASS);
+  }, [view]);
 
   // Placed once it has rendered, by its own size, before it paints.
   useLayoutEffect(() => {
@@ -86,7 +115,7 @@ export function ContextMenuHost() {
     return null;
   }
   return (
-    <div id="context-menu" class="context-menu" ref={host} onContextMenu={(event) => event.preventDefault()}>
+    <div id="context-menu" class="context-menu" ref={host}>
       <Menu groups={view.groups} onClose={contextMenu.close} />
     </div>
   );

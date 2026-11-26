@@ -5,7 +5,6 @@ import { ALL_SELECTED_REASON } from "../library/library";
 import { formatSelectionCount, getSortLabel, LIBRARY_SORT_MODES } from "../library/libraryBrowseModel";
 import { TILE_CHECK_CLASS } from "../library/libraryGridTile";
 import type { LibraryOverlayMessage } from "../library/libraryOverlayModel";
-import { listenForTilePress, type TilePress } from "../library/libraryTilePress";
 import { RANDOM_LINE_LABEL } from "../random/randomOptions";
 import { ratingText } from "../rating/rating";
 import { countText } from "../text/countText";
@@ -302,34 +301,27 @@ function PresetSelect() {
 
 /**
  * The body while tiles show. The grid controller renders into it, so it has no children here, and it stays the
- * same element while the tiles change, so the scroll position stays. A click on a tile plays it or selects it, a
- * long press with a finger or a pen selects it, without the click it ends with doing either again, and a mouse's
- * right-click opens its menu.
+ * same element while the tiles change, so the scroll position stays. A click on a tile plays it or selects it, and a
+ * right-click or a long press opens its menu.
  */
 function LibraryGrid() {
-  const { library } = useApp();
+  const { library, contextMenu } = useApp();
   const host = useRef<HTMLDivElement>(null);
-  const press = useRef<TilePress | null>(null);
 
   useLayoutEffect(() => {
     const destroyGrid = library.attachGrid(host.current!);
-    const tilePress = listenForTilePress(host.current!, {
-      tileItemId,
-      onLongPress: (itemId) => library.longPressTile(itemId),
-      onMenu: (itemId, point) => void library.openTileMenu(itemId, point)
+    const removeMenu = contextMenu.addSurface({
+      element: host.current!,
+      menuAt: tileItemId,
+      open: (itemId, point) => void library.openTileMenu(itemId, point)
     });
-    press.current = tilePress;
     return () => {
-      tilePress.dispose();
-      press.current = null;
+      removeMenu();
       destroyGrid();
     };
   }, []);
 
   function chooseTile(event: MouseEvent): void {
-    if (press.current?.takeClick()) {
-      return;
-    }
     const itemId = tileItemId(event.target);
     if (!itemId) {
       return;

@@ -1186,7 +1186,7 @@ describe("selection", () => {
     expect(t.library.selection.active.peek()).toBe(false);
   });
 
-  it("while selecting, a click, a Ctrl or Cmd+click, or a long press adds or removes a tile without playing it", async () => {
+  it("while selecting, a click or a Ctrl or Cmd+click adds or removes a tile without playing it", async () => {
     const t = await shown();
     t.library.clickTile("item-1", { ...PLAIN, onCheck: true });
 
@@ -1194,10 +1194,7 @@ describe("selection", () => {
     t.library.clickTile("item-3", { ...PLAIN, ctrlKey: true });
     expect(t.library.selection.ids()).toEqual(["item-1", "item-2", "item-3"]);
     t.library.clickTile("item-2", { ...PLAIN, metaKey: true });
-    t.library.longPressTile("item-3");
-    expect(t.library.selection.ids()).toEqual(["item-1"]);
-    t.library.longPressTile("item-2");
-    expect(t.library.selection.ids()).toEqual(["item-1", "item-2"]);
+    expect(t.library.selection.ids()).toEqual(["item-1", "item-3"]);
     await settle();
     expect(t.requests("/api/play/item-2")).toHaveLength(0);
   });
@@ -1453,7 +1450,7 @@ describe("menus", () => {
 
     await t.library.openTileMenu("item-3", POINT);
     expect(t.contextMenu.view.peek()!.point).toEqual(POINT);
-    expect(tileMenuItems(t)).toEqual(["Remove from favorites", "Add to blacklist", "Rate…", "Edit tags…", "Clear playback stats…", "Delete file…"]);
+    expect(tileMenuItems(t)).toEqual(["Select", "Remove from favorites", "Add to blacklist", "Rate…", "Edit tags…", "Clear playback stats…", "Delete file…"]);
     expect(t.grid.ringed.at(-1)).toBe("item-3");
     expect(t.requests("/api/library/item-summary")).toEqual([]);
 
@@ -1463,7 +1460,24 @@ describe("menus", () => {
 
     // A tile never played has no stats to clear.
     await t.library.openTileMenu("item-1", POINT);
-    expect(tileMenuItems(t)).toEqual(["Add to favorites", "Add to blacklist", "Rate…", "Edit tags…", "Clear playback stats… (No playback stats to clear)", "Delete file…"]);
+    expect(tileMenuItems(t)).toEqual(["Select", "Add to favorites", "Add to blacklist", "Rate…", "Edit tags…", "Clear playback stats… (No playback stats to clear)", "Delete file…"]);
+  });
+
+  it("Select on a tile alone picks it, starting selection or adding to it, and a menu on a selected tile has none", async () => {
+    const t = await shown();
+    await t.library.openTileMenu("item-2", POINT);
+    await pick(t, "Select");
+    expect([t.library.selection.active.peek(), t.library.selection.ids()]).toEqual([true, ["item-2"]]);
+
+    await t.library.openTileMenu("item-3", POINT);
+    await pick(t, "Select");
+    expect(t.library.selection.ids()).toEqual(["item-2", "item-3"]);
+    // Shift+click adds the range from the tile Select picked.
+    t.library.clickTile("item-1", { ...PLAIN, shiftKey: true });
+    expect(t.library.selection.ids().sort()).toEqual(["item-1", "item-2", "item-3"]);
+
+    await t.library.openTileMenu("item-3", POINT);
+    expect(tileMenuItems(t)).not.toContain("Select");
   });
 
   it("on a selected tile acts on the selection, without a ring, and on a tile outside it acts on that tile alone, leaving the selection", async () => {

@@ -1,16 +1,18 @@
 // @vitest-environment happy-dom
 import { fireEvent } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LONG_PRESS_MOVE_PX, LONG_PRESS_MS, listenForTilePress, type TilePress } from "../library/libraryTilePress";
+import { LONG_PRESS_MOVE_PX, LONG_PRESS_MS, listenForLongPress, type LongPress } from "../ui/longPress";
 
-let host: HTMLElement;
-let press: TilePress;
+let press: LongPress;
+/** Each long press that counted: what it was on, and where it began. */
 let pressed: string[];
-/** Each menu a right-click opened: its tile's item id and the point. */
-let menus: string[];
 
 function tile(itemId: string): HTMLElement {
-  return host.querySelector<HTMLElement>(`[data-item-id="${itemId}"] img`)!;
+  return document.querySelector<HTMLElement>(`[data-item-id="${itemId}"] img`)!;
+}
+
+function gap(): HTMLElement {
+  return document.querySelector<HTMLElement>(".gap")!;
 }
 
 /** A pointer landing on `target`: the first finger down, which the browser calls primary, unless `isPrimary` is false. */
@@ -32,25 +34,16 @@ function move(target: Element, x: number, y: number, pointerId = 1): void {
   fireEvent.pointerMove(target, { pointerType: "touch", pointerId, clientX: x, clientY: y });
 }
 
-/** Whether a page would show its own menu for this press: true when nothing stopped it. */
-function browserMenuOpens(target: Element): boolean {
-  return fireEvent.contextMenu(target);
-}
-
 beforeEach(() => {
   vi.useFakeTimers();
-  host = document.createElement("div");
-  host.innerHTML = `
+  document.body.innerHTML = `
     <div class="tile" data-item-id="item-1"><img alt=""></div>
     <div class="tile" data-item-id="item-2"><img alt=""></div>
     <p class="gap"></p>`;
-  document.body.append(host);
   pressed = [];
-  menus = [];
-  press = listenForTilePress(host, {
-    tileItemId: (target) => (target instanceof Element ? target.closest("[data-item-id]")?.getAttribute("data-item-id") ?? null : null),
-    onLongPress: (itemId) => pressed.push(itemId),
-    onMenu: (itemId, point) => menus.push(`${itemId} at ${point.x},${point.y}`)
+  press = listenForLongPress(document, {
+    pressAt: (target) => target.closest("[data-item-id]")?.getAttribute("data-item-id") ?? null,
+    onLongPress: (itemId, point) => pressed.push(`${itemId} at ${point.x},${point.y}`)
   });
 });
 
@@ -60,13 +53,14 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe("tile long press", () => {
-  it("counts a finger resting on a tile for half a second, and uses up the click it ends with", () => {
-    down(tile("item-1"));
+describe("long press", () => {
+  it("counts a finger resting for half a second where it began, and uses up the click it ends with", () => {
+    down(tile("item-1"), { x: 30, y: 40 });
     vi.advanceTimersByTime(LONG_PRESS_MS - 1);
     expect(pressed).toEqual([]);
+    move(tile("item-1"), 32, 41);
     vi.advanceTimersByTime(1);
-    expect(pressed).toEqual(["item-1"]);
+    expect(pressed).toEqual(["item-1 at 30,40"]);
 
     fireEvent.pointerUp(tile("item-1"), { pointerType: "touch", pointerId: 1 });
     expect(press.takeClick()).toBe(true);
@@ -83,42 +77,31 @@ describe("tile long press", () => {
     expect(press.takeClick()).toBe(false);
   });
 
-  it("counts a pen, but not a mouse, whose right-click opens the tile's menu at the pointer in place of the browser's", () => {
+  it("counts a pen, but not a mouse or a pen's other button, and says whether the last press was a mouse's", () => {
+    expect(press.byMouse()).toBe(true);
+    down(tile("item-1"), { pointerType: "pen" });
+    expect(press.byMouse()).toBe(false);
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    expect(pressed).toEqual(["item-1 at 10,10"]);
+
     down(tile("item-1"), { pointerType: "mouse" });
+    expect(press.byMouse()).toBe(true);
     vi.advanceTimersByTime(LONG_PRESS_MS);
-    expect(pressed).toEqual([]);
-    down(tile("item-1"), { pointerType: "mouse", button: 2 });
-    expect(fireEvent.contextMenu(tile("item-1"), { clientX: 40, clientY: 50 })).toBe(false);
-    expect(menus).toEqual(["item-1 at 40,50"]);
-    // Off a tile, the browser's menu stays.
-    down(host.querySelector(".gap")!, { pointerType: "mouse", button: 2 });
-    expect(browserMenuOpens(host.querySelector(".gap")!)).toBe(true);
-    expect(menus).toHaveLength(1);
-
-    down(tile("item-2"), { pointerType: "pen" });
+    down(tile("item-2"), { pointerType: "pen", button: 2 });
     vi.advanceTimersByTime(LONG_PRESS_MS);
-    expect(pressed).toEqual(["item-2"]);
-  });
-
-  it("keeps the browser's menu off a tile pressed with a finger, before and after the press counts, and opens none of its own", () => {
-    down(tile("item-1"));
-    expect(browserMenuOpens(tile("item-1"))).toBe(false);
-    vi.advanceTimersByTime(LONG_PRESS_MS);
-    expect(browserMenuOpens(tile("item-1"))).toBe(false);
-    expect(browserMenuOpens(host.querySelector(".gap")!)).toBe(true);
-    expect(menus).toEqual([]);
+    expect(pressed).toEqual(["item-1 at 10,10"]);
   });
 
   it("is cancelled by moving as far as a scroll or drag, but not by a finger's tremor", () => {
     down(tile("item-1"), { x: 10, y: 10 });
     move(tile("item-1"), 10 + LONG_PRESS_MOVE_PX - 1, 10);
     vi.advanceTimersByTime(LONG_PRESS_MS);
-    expect(pressed).toEqual(["item-1"]);
+    expect(pressed).toEqual(["item-1 at 10,10"]);
 
     down(tile("item-2"), { x: 10, y: 10 });
     move(tile("item-2"), 10, 10 + LONG_PRESS_MOVE_PX);
     vi.advanceTimersByTime(LONG_PRESS_MS);
-    expect(pressed).toEqual(["item-1"]);
+    expect(pressed).toEqual(["item-1 at 10,10"]);
   });
 
   it("is cancelled by a second finger landing, as for a pinch", () => {
@@ -130,13 +113,13 @@ describe("tile long press", () => {
   });
 
   it("never starts from a second finger, as in a pinch whose first finger started no press", () => {
-    // The first finger landed off a tile.
-    down(host.querySelector(".gap")!, { pointerId: 1 });
+    // The first finger landed where a long press does nothing.
+    down(gap(), { pointerId: 1 });
     down(tile("item-1"), { pointerId: 2, isPrimary: false });
     vi.advanceTimersByTime(LONG_PRESS_MS);
     expect(pressed).toEqual([]);
     fireEvent.pointerUp(tile("item-1"), { pointerType: "touch", pointerId: 2 });
-    fireEvent.pointerUp(host.querySelector(".gap")!, { pointerType: "touch", pointerId: 1 });
+    fireEvent.pointerUp(gap(), { pointerType: "touch", pointerId: 1 });
 
     // The first finger's press was cancelled by moving.
     down(tile("item-1"), { pointerId: 3, x: 10, y: 10 });
@@ -155,10 +138,17 @@ describe("tile long press", () => {
     expect(pressed).toEqual([]);
   });
 
-  it("starts nowhere but on a tile", () => {
-    down(host.querySelector(".gap")!);
+  it("starts only where it does something", () => {
+    down(gap());
     vi.advanceTimersByTime(LONG_PRESS_MS);
     expect(pressed).toEqual([]);
+  });
+
+  it("hears a press whose events the page stops", () => {
+    tile("item-1").addEventListener("pointerdown", (event) => event.stopPropagation());
+    down(tile("item-1"));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    expect(pressed).toEqual(["item-1 at 10,10"]);
   });
 
   it("forgets a long press that ended without a click, so the next tap's click goes through", () => {
