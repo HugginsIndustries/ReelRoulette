@@ -222,9 +222,14 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         logText: `Library refresh finished: ${summary}`
       });
     } else if (outcome.result === "failed") {
-      // The server's refresh error text can name a file or folder, so it goes only in the second line, which the log
-      // leaves out.
-      notifications.notify({ kind: "refresh", text: "Library refresh failed", detail: outcome.error, key: "refresh", warning: true });
+      // The server writes the failure to last.log itself, with its error, so the relay sends only the first line.
+      notifications.notify({
+        kind: "refresh",
+        text: "Library refresh failed",
+        detail: `${outcome.stage} failed.`,
+        key: "refresh",
+        warning: true
+      });
     } else {
       store.relayStatus("Core refresh idle.");
     }

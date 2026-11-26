@@ -37,16 +37,17 @@ describe("event helpers", () => {
     expect(envelope.payload.value).toBe(5);
   });
 
-  it("tells a failed refresh, with its error, from a run that ended without finishing", () => {
+  it("tells a failed refresh, by the stage it stopped in, from a run that ended without finishing", () => {
     const failed = refreshOutcome({
       isRunning: false,
       trigger: "manual",
-      lastError: "boom",
+      currentStage: "durationScan",
+      lastError: "The library refresh failed.",
       completedUtc: "2026-03-29T12:00:00Z",
       stages: []
     });
 
-    expect(failed).toEqual({ result: "failed", error: "boom" });
+    expect(failed).toEqual({ result: "failed", stage: "Scanning durations" });
     expect(refreshOutcome({ isRunning: false, trigger: "manual", stages: [] })).toEqual({ result: "idle" });
   });
 

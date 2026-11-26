@@ -276,8 +276,9 @@ export interface RefreshProgress {
 }
 
 /**
- * Each refresh stage's label on the player's indicator, in place of the server's stage message, which runs long with
- * counts. A run before its first stage reads "Starting", and a stage without a label its id.
+ * Each refresh stage's label on the player's indicator and in a failed refresh's line, in place of the server's stage
+ * message, which runs long with counts. A run before its first stage reads "Starting", and a stage without a label
+ * its id.
  */
 export const REFRESH_STAGE_LABELS: Readonly<Record<string, string>> = {
   sourcerefresh: "Refreshing sources",
@@ -288,6 +289,10 @@ export const REFRESH_STAGE_LABELS: Readonly<Record<string, string>> = {
   thumbnailgeneration: "Generating thumbnails"
 };
 
+function refreshStageLabel(stage: string): string {
+  return stage ? (REFRESH_STAGE_LABELS[stage.toLowerCase()] ?? stage) : "Starting";
+}
+
 /** The progress of a refresh that is running, or null when none is. */
 export function refreshProgress(snapshotInput: RefreshSnapshotInput): RefreshProgress | null {
   const snapshot = normalizeSnapshot(snapshotInput);
@@ -295,28 +300,26 @@ export function refreshProgress(snapshotInput: RefreshSnapshotInput): RefreshPro
     return null;
   }
   const stage = snapshot.currentStage?.trim() || "";
-  if (!stage) {
-    return { stage: "Starting", percent: 0 };
-  }
-  const active = snapshot.stages.find((s) => s.stage.toLowerCase() === stage.toLowerCase());
-  return { stage: REFRESH_STAGE_LABELS[stage.toLowerCase()] ?? stage, percent: active?.percent ?? 0 };
+  const active = stage ? snapshot.stages.find((s) => s.stage.toLowerCase() === stage.toLowerCase()) : undefined;
+  return { stage: refreshStageLabel(stage), percent: active?.percent ?? 0 };
 }
 
 /**
- * How a refresh that isn't running ended: it failed, with the server's error, or finished, with its summary's segments,
- * or neither, as after a cancelled run. A running refresh shows on the player's indicator instead, from
- * `refreshProgress`.
+ * How a refresh that isn't running ended: it failed, in the stage it stopped in, by its label, or finished, with its
+ * summary's segments, or neither, as after a cancelled run. A running refresh shows on the player's indicator instead,
+ * from `refreshProgress`.
  */
 export type RefreshOutcome =
-  | { result: "failed"; error: string }
+  | { result: "failed"; stage: string }
   | { result: "finished"; segments: string[] }
   | { result: "idle" };
 
 export function refreshOutcome(snapshotInput: RefreshSnapshotInput): RefreshOutcome {
   const snapshot = normalizeSnapshot(snapshotInput);
 
+  // The server keeps a failed run's current stage, and its error goes only to last.log.
   if (snapshot.lastError) {
-    return { result: "failed", error: snapshot.lastError };
+    return { result: "failed", stage: refreshStageLabel(snapshot.currentStage?.trim() || "") };
   }
 
   if (snapshot.completedUtc) {

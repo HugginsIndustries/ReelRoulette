@@ -34,6 +34,9 @@ public sealed class RefreshPipelineService : BackgroundService
         @"(?:^|\s)(?:Peak|True peak):\s*(?<value>-?\d+(?:\.\d+)?)\s*dBFS\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    /// <summary>A failed run's <c>lastError</c>, whatever failed, since its exception goes only to <c>last.log</c>.</summary>
+    internal const string FailedRunError = "The library refresh failed.";
+
     /// <summary>The integrated loudness ffmpeg's <c>ebur128</c> reports for digital silence, its floor.</summary>
     private const double DigitalSilenceLufs = -70.0;
 
@@ -205,7 +208,7 @@ public sealed class RefreshPipelineService : BackgroundService
     internal Task FfmpegCheckEntered => _ffmpegCheckEntered.Task;
 
     /// <summary>
-    /// The clock the duration and loudness progress throttles read.
+    /// The clock every stage's progress throttle reads.
     /// </summary>
     internal void SetProgressClock(Func<DateTimeOffset> clock)
     {
@@ -385,10 +388,20 @@ public sealed class RefreshPipelineService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Refresh pipeline failed");
+            string? stage;
             lock (_runLock)
             {
+                stage = _status.CurrentStage;
+            }
+
+            // The exception's message can name a file, and the status goes to every client, so it goes only here,
+            // before the failed status, so last.log has it before any client relays the failure.
+            _serverLog.Append("error", $"Library refresh failed stage={stage}: {ex}");
+            lock (_runLock)
+            {
+                // CurrentStage stays the stage the run stopped in, which clients name in their failed line.
                 _status.IsRunning = false;
-                _status.LastError = ex.Message;
+                _status.LastError = FailedRunError;
                 _status.CompletedUtc = DateTimeOffset.UtcNow;
                 PublishStatusLocked();
             }
@@ -723,6 +736,7 @@ public sealed class RefreshPipelineService : BackgroundService
     /// </summary>
     internal void RunNameSortKeyStage(CancellationToken cancellationToken)
     {
+        StartStage("nameSortKeys");
         var work = _catalog.Session.ReadNameSortKeyWork();
         var total = work.Items.Count;
         var processed = 0;
@@ -755,12 +769,11 @@ public sealed class RefreshPipelineService : BackgroundService
         var workList = new List<CatalogRefreshItem>();
         var skipped = 0;
         var checkedCount = 0;
-        var nextCheckStatusUtc = DateTimeOffset.MinValue;
+        var checkThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
         void PublishCheckProgress(bool force)
         {
-            var now = DateTimeOffset.UtcNow;
-            if (!force && now < nextCheckStatusUtc)
+            if (!checkThrottle.TryEnter(force))
             {
                 return;
             }
@@ -772,7 +785,6 @@ public sealed class RefreshPipelineService : BackgroundService
                 "fingerprintScan",
                 percent,
                 $"Checking files {checkedCount}/{itemCount} ({workList.Count} to hash)");
-            nextCheckStatusUtc = now.AddMilliseconds(400);
         }
 
         PublishCheckProgress(force: true);
@@ -843,14 +855,13 @@ public sealed class RefreshPipelineService : BackgroundService
         var ready = 0;
         var failed = 0;
         var progressLock = new object();
-        var nextStatusUtc = DateTimeOffset.MinValue;
+        var hashThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
         void TryPublishFingerprintProgress(bool force)
         {
-            var now = DateTimeOffset.UtcNow;
             lock (progressLock)
             {
-                if (!force && now < nextStatusUtc)
+                if (!hashThrottle.TryEnter(force))
                 {
                     return;
                 }
@@ -860,7 +871,6 @@ public sealed class RefreshPipelineService : BackgroundService
                 var failedCount = Volatile.Read(ref failed);
                 var pct = Math.Clamp((int)Math.Round((hashed / (double)Math.Max(1, total)) * 100.0), 0, 100);
                 UpdateStage("fingerprintScan", pct, $"Fingerprint scan ({hashed} hashed, {readyCount} ready, {failedCount} failed)");
-                nextStatusUtc = now.AddMilliseconds(400);
             }
         }
 
@@ -975,6 +985,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private async Task RunDurationStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
+        StartStage("durationScan");
         var videos = DistinctRefreshItemsByPath(_catalog.Session.ReadRefreshItems().Where(item => item.MediaType == 0));
         var filesToScan = forceFullRescan
             ? videos
@@ -1062,6 +1073,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private async Task RunLoudnessStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
+        StartStage("loudnessScan");
         var ffmpegPath = ResolveFfmpegPath();
         if (!await VerifyFfmpegAsync(ffmpegPath, cancellationToken))
         {
@@ -1149,6 +1161,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
     internal async Task RunThumbnailStageAsync(CancellationToken cancellationToken)
     {
+        StartStage("thumbnailGeneration");
         Directory.CreateDirectory(_thumbnailDir);
         var items = _catalog.Session.ReadRefreshItems();
         var catalogIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1163,7 +1176,7 @@ public sealed class RefreshPipelineService : BackgroundService
         var ffmpegPath = ResolveFfmpegPath();
         bool ffmpegChecked = false;
         bool ffmpegAvailable = false;
-        var nextStatusUtc = DateTimeOffset.UtcNow;
+        var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
         for (int i = 0; i < items.Count; i++)
         {
@@ -1251,7 +1264,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 reused,
                 failed,
                 skippedMissing,
-                ref nextStatusUtc,
+                progressThrottle,
                 force: i == items.Count - 1);
         }
 
@@ -1289,6 +1302,11 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Deletes each thumbnail whose item isn't in the catalog. Its progress counts only those thumbnails and goes out
+    /// at most once per <see cref="ScanProgressInterval"/>, with the last always sent, so a cleanup of thousands
+    /// publishes a few status events rather than one for each.
+    /// </summary>
     private int RemoveThumbnailsOutsideCatalog(HashSet<string> catalogIds, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(_thumbnailDir))
@@ -1296,20 +1314,21 @@ public sealed class RefreshPipelineService : BackgroundService
             return 0;
         }
 
-        var files = Directory.EnumerateFiles(_thumbnailDir, "*.jpg").ToList();
+        var files = Directory.EnumerateFiles(_thumbnailDir, "*.jpg")
+            .Where(file => !catalogIds.Contains(Path.GetFileNameWithoutExtension(file)))
+            .ToList();
+        var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
         var removed = 0;
         for (var i = 0; i < files.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var file = files[i];
-            var itemId = Path.GetFileNameWithoutExtension(file);
-            if (catalogIds.Contains(itemId))
+            if (progressThrottle.TryEnter(force: i == files.Count - 1))
             {
-                continue;
+                var percent = (int)Math.Round(((i + 1) / (double)files.Count) * 100.0);
+                UpdateStage("thumbnailGeneration", percent, $"Thumbnail cleanup {i + 1}/{files.Count}");
             }
 
-            var percent = (int)Math.Round(((i + 1) / (double)files.Count) * 100.0);
-            UpdateStage("thumbnailGeneration", percent, $"Thumbnail cleanup {i + 1}/{files.Count}");
             var hold = Interlocked.Exchange(ref _thumbnailCleanupHold, null);
             if (hold != null)
             {
@@ -1758,18 +1777,16 @@ public sealed class RefreshPipelineService : BackgroundService
         int reused,
         int failed,
         int skippedMissing,
-        ref DateTimeOffset nextStatusUtc,
+        RefreshProgressThrottle throttle,
         bool force)
     {
-        var now = DateTimeOffset.UtcNow;
-        if (!force && now < nextStatusUtc)
+        if (!throttle.TryEnter(force))
         {
             return;
         }
 
         var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
         UpdateStage("thumbnailGeneration", pct, BuildThumbnailProgressMessage(processed, total, generated, regenerated, reused, failed, skippedMissing));
-        nextStatusUtc = now.AddMilliseconds(500);
     }
 
 
@@ -2030,18 +2047,41 @@ public sealed class RefreshPipelineService : BackgroundService
         };
     }
 
+    /// <summary>
+    /// The run's progress for <paramref name="stage"/>, added when the status doesn't list it yet, and made the run's
+    /// current stage.
+    /// </summary>
+    private RefreshStageProgress EnterStageLocked(string stage)
+    {
+        var current = _status.Stages.FirstOrDefault(s => string.Equals(s.Stage, stage, StringComparison.OrdinalIgnoreCase));
+        if (current == null)
+        {
+            current = NewStage(stage);
+            _status.Stages.Add(current);
+        }
+
+        _status.CurrentStage = stage;
+        return current;
+    }
+
+    /// <summary>
+    /// Publishes <paramref name="stage"/> as the run's current stage before its first progress, so clients show the
+    /// stage the run is in, and a failure on its first file names it.
+    /// </summary>
+    private void StartStage(string stage)
+    {
+        lock (_runLock)
+        {
+            EnterStageLocked(stage);
+            PublishStatusLocked();
+        }
+    }
+
     private void UpdateStage(string stage, int percent, string message)
     {
         lock (_runLock)
         {
-            var current = _status.Stages.FirstOrDefault(s => string.Equals(s.Stage, stage, StringComparison.OrdinalIgnoreCase));
-            if (current == null)
-            {
-                current = NewStage(stage);
-                _status.Stages.Add(current);
-            }
-
-            _status.CurrentStage = stage;
+            var current = EnterStageLocked(stage);
             current.Percent = Math.Clamp(percent, 0, 100);
             current.Message = message;
             PublishStatusLocked();
@@ -2065,17 +2105,10 @@ public sealed class RefreshPipelineService : BackgroundService
     {
         lock (_runLock)
         {
-            var current = _status.Stages.FirstOrDefault(s => string.Equals(s.Stage, stage, StringComparison.OrdinalIgnoreCase));
-            if (current == null)
-            {
-                current = NewStage(stage);
-                _status.Stages.Add(current);
-            }
-
+            var current = EnterStageLocked(stage);
             current.IsComplete = true;
             current.Percent = 100;
             current.Message = message;
-            _status.CurrentStage = stage;
             PublishStatusLocked();
         }
     }

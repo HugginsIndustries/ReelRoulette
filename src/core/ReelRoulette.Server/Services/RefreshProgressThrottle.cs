@@ -1,7 +1,8 @@
 namespace ReelRoulette.Server.Services;
 
 /// <summary>
-/// Lets one stage progress update through per interval. The first update always goes through.
+/// Lets one stage progress update through per interval. The first update always goes through, and so does a forced
+/// one, such as a phase's first or last, which starts the interval again.
 /// Safe to call from the parallel scan tasks of one stage.
 /// </summary>
 internal sealed class RefreshProgressThrottle
@@ -17,12 +18,12 @@ internal sealed class RefreshProgressThrottle
         _now = now;
     }
 
-    public bool TryEnter()
+    public bool TryEnter(bool force = false)
     {
         lock (_lock)
         {
             var now = _now();
-            if (now < _nextUtc)
+            if (!force && now < _nextUtc)
             {
                 return false;
             }

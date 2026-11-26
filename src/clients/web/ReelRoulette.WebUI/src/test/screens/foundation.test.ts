@@ -251,7 +251,7 @@ describe("startup and connection", () => {
     expect(streams.slice(0, 4).every((stream) => stream.closed)).toBe(true);
   });
 
-  it("shows refresh progress on the indicator, pops up how it ended with a failed refresh's error out of the log, and reloads the library once per finished run", async () => {
+  it("shows refresh progress on the indicator, pops up how it ended with the stage a failed refresh stopped in, and reloads the library once per finished run", async () => {
     const page = mountPage();
     await pageReady(page.server);
     const stream = page.stream();
@@ -271,10 +271,13 @@ describe("startup and connection", () => {
     expect(page.server.logLines().some((line) => line.includes("Core refresh: "))).toBe(false);
 
     stream.emit("refreshStatusChanged", 3, {
-      snapshot: { isRunning: false, lastError: "Cannot read C:\\secret\\folder", stages: [] }
+      snapshot: { isRunning: false, currentStage: "thumbnailGeneration", lastError: "The library refresh failed.", stages: [] }
     });
     await waitFor(() => expect(page.server.logLines()).toContain(statusLogLine("Library refresh failed", null, 0)));
-    expect(page.server.logLines().some((line) => line.includes("secret"))).toBe(false);
+    const failedToast = Array.from(document.querySelectorAll("#toasts .toast-text")).find((text) =>
+      text.textContent?.includes("Library refresh failed")
+    );
+    expect(failedToast?.textContent).toContain("Generating thumbnails failed.");
 
     await waitFor(() => expect(page.server.requests("POST", "/api/library/query")).toHaveLength(1));
     const finished = { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] };

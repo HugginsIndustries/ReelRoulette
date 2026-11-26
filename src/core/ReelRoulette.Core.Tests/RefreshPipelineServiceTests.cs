@@ -129,6 +129,39 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public async Task FailedRun_KeepsItsStageAndAPlainError_AndWritesTheExceptionToLastLog()
+    {
+        using var scope = new DataFolderScope();
+        var videoPath = Path.Combine(scope.RootPath, "clip.mp4");
+        await File.WriteAllBytesAsync(videoPath, [1, 2, 3]);
+        CatalogSeed.Write(scope.RootPath, items: [new SeedItem("clip", videoPath)]);
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        service.SetDurationProbe((_, _) => throw new IOException("Cannot read /media/private/clip.mp4"));
+
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+
+        Assert.Equal("The library refresh failed.", final.LastError);
+        Assert.Equal("durationScan", final.CurrentStage);
+        var published = state.GetReplayAfter(0).Events
+            .Select(e => e.Payload)
+            .OfType<RefreshStatusChangedPayload>()
+            .Last()
+            .Snapshot;
+        Assert.Equal("The library refresh failed.", published.LastError);
+        Assert.Equal("durationScan", published.CurrentStage);
+
+        var errorLine = Assert.Single(
+            File.ReadAllLines(Path.Combine(scope.RootPath, "last.log")),
+            line => line.Contains("[error]", StringComparison.Ordinal));
+        Assert.Contains(
+            "Library refresh failed stage=durationScan: System.IO.IOException: Cannot read /media/private/clip.mp4",
+            errorLine,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SourceRefresh_ShouldPersistRemovalOfMissingItem_AndKeepProjectionParity()
     {
         using var scope = new DataFolderScope();
@@ -862,7 +895,7 @@ public sealed class RefreshPipelineServiceTests
     [Theory]
     [InlineData("RunDurationStageAsync", "durationScan", "Duration scan complete (200 files, 0 updated)")]
     [InlineData("RunLoudnessStageAsync", "loudnessScan", "Loudness scan complete (200 files, 0 updated)")]
-    public async Task ScanStage_PublishesOneProgressEventPerIntervalAndItsCompletion(
+    public async Task ScanStage_PublishesItsStart_OneProgressEventPerInterval_AndItsCompletion(
         string methodName,
         string stage,
         string completionMessage)
@@ -895,14 +928,16 @@ public sealed class RefreshPipelineServiceTests
             }
         }
 
-        Assert.Equal(2, stageEvents.Count);
+        Assert.Equal(3, stageEvents.Count);
+        Assert.Equal(0, stageEvents[0].Percent);
         Assert.False(stageEvents[0].IsComplete);
-        Assert.True(stageEvents[1].IsComplete);
-        Assert.Equal(completionMessage, stageEvents[1].Message);
+        Assert.False(stageEvents[1].IsComplete);
+        Assert.True(stageEvents[2].IsComplete);
+        Assert.Equal(completionMessage, stageEvents[2].Message);
     }
 
     [Fact]
-    public void NameSortKeyStage_FillsMissingKeys_AndRecomputesEveryKeyAfterAKeyVersionChange()
+    public void NameSortKeyStage_PublishesItsStartFirst_FillsMissingKeys_AndRecomputesEveryKeyAfterAKeyVersionChange()
     {
         using var scope = new DataFolderScope();
         CatalogSeed.Write(
@@ -917,9 +952,12 @@ public sealed class RefreshPipelineServiceTests
         ExecuteSql(databasePath, "UPDATE items SET file_name_sort_key = NULL WHERE id = 'b';");
         var state = new ServerStateService();
         var service = CreateService(state, scope.RootPath);
+        using var subscription = new CancellationTokenSource();
+        var reader = state.Subscribe(subscription.Token);
 
         service.RunNameSortKeyStage(CancellationToken.None);
 
+        AssertFirstStatusStarts(reader, "nameSortKeys");
         Assert.Equal("Name sort keys complete (1 updated)", service.GetStatus().Stages.Single(s => s.Stage == "nameSortKeys").Message);
         Assert.Equal(LibraryCatalogNameSortKey.Compute("beta.mp4"), ReadSortKey(databasePath, "b"));
 
@@ -932,6 +970,21 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal(LibraryCatalogNameSortKey.Compute("Alpha.mp4"), ReadSortKey(databasePath, "a"));
         Assert.Equal(LibraryCatalogNameSortKey.Compute("\u017Figma.mp4"), ReadSortKey(databasePath, "c"));
         Assert.Empty(CatalogOpen.Host(scope.RootPath).Session.ReadNameSortKeyWork().Items);
+    }
+
+    /// <summary>
+    /// Reads the first status <paramref name="reader"/> got, which must make <paramref name="stage"/> the current stage
+    /// at 0% before any progress of it.
+    /// </summary>
+    private static void AssertFirstStatusStarts(System.Threading.Channels.ChannelReader<ServerEventEnvelope> reader, string stage)
+    {
+        Assert.True(reader.TryRead(out var envelope));
+        var snapshot = Assert.IsType<RefreshStatusChangedPayload>(envelope!.Payload).Snapshot;
+        Assert.Equal(stage, snapshot.CurrentStage);
+        var started = snapshot.Stages.Single(s => s.Stage == stage);
+        Assert.Equal(0, started.Percent);
+        Assert.Equal("pending", started.Message);
+        Assert.False(started.IsComplete);
     }
 
     private static void ExecuteSql(string databasePath, string sql)
@@ -954,7 +1007,7 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
-    public void ProgressThrottle_LetsOneUpdateThroughPerInterval()
+    public void ProgressThrottle_LetsOneUpdateThroughPerInterval_AndAForcedOneStartsItAgain()
     {
         var now = DateTimeOffset.UtcNow;
         var throttle = new RefreshProgressThrottle(TimeSpan.FromMilliseconds(500), () => now);
@@ -966,6 +1019,13 @@ public sealed class RefreshPipelineServiceTests
         now = now.AddMilliseconds(1);
         Assert.True(throttle.TryEnter());
         Assert.False(throttle.TryEnter());
+
+        now = now.AddMilliseconds(300);
+        Assert.True(throttle.TryEnter(force: true));
+        now = now.AddMilliseconds(300);
+        Assert.False(throttle.TryEnter());
+        now = now.AddMilliseconds(200);
+        Assert.True(throttle.TryEnter());
     }
 
     [Theory]
@@ -1621,6 +1681,54 @@ public sealed class RefreshPipelineServiceTests
 
         await service.RunThumbnailStageAsync(CancellationToken.None);
         Assert.False(File.Exists(orphan));
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_PublishesItsStartFirst_AndItsCleanupCountsOnlyTheThumbnailsItRemoves_WithItsFirstAndLastWithinOneInterval()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("kept-a", Path.Combine(scope.RootPath, "kept-a.png")) { MediaType = 1 },
+                new SeedItem("kept-b", Path.Combine(scope.RootPath, "kept-b.png")) { MediaType = 1 }
+            ]);
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        var kept = new[] { service.GetThumbnailPath("kept-a"), service.GetThumbnailPath("kept-b") };
+        var orphans = Enumerable.Range(0, 200).Select(i => service.GetThumbnailPath($"orphan-{i}")).ToArray();
+        Directory.CreateDirectory(Path.GetDirectoryName(kept[0])!);
+        foreach (var path in kept.Concat(orphans))
+        {
+            await File.WriteAllBytesAsync(path, TinyPngBytes);
+        }
+
+        var frozen = DateTimeOffset.UtcNow;
+        service.SetProgressClock(() => frozen);
+        using var subscription = new CancellationTokenSource();
+        var reader = state.Subscribe(subscription.Token);
+
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+
+        AssertFirstStatusStarts(reader, "thumbnailGeneration");
+        var cleanup = new List<RefreshStageProgress>();
+        while (reader.TryRead(out var envelope))
+        {
+            if (envelope.Payload is RefreshStatusChangedPayload payload)
+            {
+                var stage = payload.Snapshot.Stages.Single(s => s.Stage == "thumbnailGeneration");
+                if (stage.Message.StartsWith("Thumbnail cleanup", StringComparison.Ordinal))
+                {
+                    cleanup.Add(stage);
+                }
+            }
+        }
+
+        Assert.Equal(["Thumbnail cleanup 1/200", "Thumbnail cleanup 200/200"], cleanup.Select(s => s.Message));
+        Assert.Equal(100, cleanup[^1].Percent);
+        Assert.All(orphans, path => Assert.False(File.Exists(path)));
+        Assert.All(kept, path => Assert.True(File.Exists(path)));
     }
 
     private static void AssertStoredMediaColumns(LibraryCatalogItem item)

@@ -960,7 +960,9 @@ describe("createServerConnection", () => {
     const finished = { ...running, isRunning: false, completedUtc: "2026-10-07T00:00:00Z" };
     stream.emit("refreshStatusChanged", 2, { snapshot: finished });
     expect(store.refreshProgress.value).toBeNull();
-    stream.emit("refreshStatusChanged", 3, { snapshot: { ...finished, runId: "run-2", lastError: "Disk full" } });
+    stream.emit("refreshStatusChanged", 3, {
+      snapshot: { ...finished, runId: "run-2", lastError: "The library refresh failed." }
+    });
     stream.emit("refreshStatusChanged", 4, { snapshot: { isRunning: false, stages: [] } });
     const summary = "Source: added 12, removed 3 · Fingerprint: no data · Duration: no data · Loudness: no data · Thumbnails: no data";
     expect(notified).toEqual([
@@ -971,8 +973,8 @@ describe("createServerConnection", () => {
         key: "refresh",
         logText: `Library refresh finished: ${summary}`
       },
-      // The server's error can name a file or folder, so it goes only in the second line, which the log leaves out.
-      { kind: "refresh", text: "Library refresh failed", detail: "Disk full", key: "refresh", warning: true }
+      // A failed run names the stage it stopped in, which the server keeps as its current stage.
+      { kind: "refresh", text: "Library refresh failed", detail: "Refreshing sources failed.", key: "refresh", warning: true }
     ]);
     // A cancelled run shows nothing.
     expect(statuses).toEqual(["Core refresh idle."]);

@@ -490,14 +490,14 @@ Last milestone completed: M12n1
 - A failure that happens again on every refresh, such as a video whose loudness can't be measured, shows in every summary.
 - While ffmpeg or ffprobe isn't found, the stages that need it count no failures for it, and the summary names the missing tool once.
 - An automatic refresh that changes nothing adds its entry to the bell's list without a popup, and the bell doesn't count it as unread, while a refresh the user starts pops up "No changes".
-- A failed refresh's second line names the stage it stopped in, such as "Refreshing sources failed.", and the exception's own message goes only to `last.log`.
+- A failed refresh's second line names the stage it stopped in, such as "Refreshing sources failed.", worded by the WebUI from `currentStage` with the labels the player's indicator uses, so the stage labels live only in the WebUI, and the exception's own message goes only to `last.log`.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The progress line of each stage, the finished summary of each kind of run, a failed refresh's wording, which refreshes pop up, and the admin view's Library refresh card text, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
-| Server | ⏳ Planned | The thumbnail cleanup's progress counted over the thumbnails it removes and sent at most every 500 ms, and a failed refresh worded in plain words with its exception in `last.log`. |
+| Server | ✅ Complete | The thumbnail cleanup's progress counted over the thumbnails it removes and sent at most every 500 ms, each stage published as the current stage when it starts, and a failed refresh worded in plain words with its exception in `last.log`. |
 | Contract | ⏳ Planned | One typed object per stage in the refresh status, with the counts the progress line and the summary need, in place of the stages array and its messages, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`, and the WebUI's finished summary built from them. |
 | Progress line and popups | ⏳ Planned | The Now entry's second line while a refresh runs, and an automatic refresh that changes nothing going to the bell's list without a popup. |
 
@@ -569,7 +569,7 @@ Last milestone completed: M12n1
 **Scope**
 
 - Fixes "Thumbnail cleanup sends a refresh message per removed thumbnail": the cleanup lists the thumbnails outside the catalog first, counts its progress over those, and sends it at most every 500 ms, as the stage's other progress is sent, with its last always sent.
-- A failed refresh's `lastError` names the stage it stopped in, "{Stage} failed.", with the stage's label as the player's indicator shows it, such as "Refreshing sources failed.", in place of the exception's message.
+- A failed refresh's `lastError` is a plain sentence, "The library refresh failed.", in place of the exception's message, and the WebUI words the failed popup's second line from `currentStage`, "{Stage} failed.", with the stage's label as the player's indicator shows it, such as "Refreshing sources failed." (`refreshOutcome` in `src/events/refreshStatusProjection.ts` and `showRefreshOutcome` in `src/state/serverConnection.ts`).
 - A failed refresh writes the exception to `last.log` as an error line.
 - Server Instrumentation's Trap that refresh failures reach `last.log` only as `status=` lines relayed by connected WebUI clients is corrected once this slice writes them.
 
@@ -591,6 +591,19 @@ Last milestone completed: M12n1
 - Server Instrumentation's Trap no longer says that failures reach `last.log` only through the WebUI, checked by reading it.
 - `dotnet test ReelRoulette.sln` passes.
 
+**Evidence**
+
+- The cleanup lists the thumbnails outside the catalog before it deletes any, and sends its progress, "Thumbnail cleanup {n}/{to delete}", through a `RefreshProgressThrottle` of its own, the first at once and the last always (`RemoveThumbnailsOutsideCatalog`).
+- The thumbnail stage's other progress and both phases of the fingerprint stage use `RefreshProgressThrottle` in place of their own copies of it, so every throttled stage reads the clock tests set, and the fingerprint stage sends its progress every 500 ms in place of 400 ms. A forced update, a phase's first or last, starts the interval again, as those copies did (`TryEnter(force)`).
+- Planning settled that the WebUI words the failed line from `currentStage` with `REFRESH_STAGE_LABELS`, in place of a second copy of the labels in the server, and that `lastError`, which the WebUI now reads only as the sign of a failure, becomes `failed` in the Contract slice.
+- Deviation: the name sort, duration, loudness, and thumbnail stages became the current stage only at their first progress, so a failure on their first file named the stage before, and meanwhile the player's indicator showed the stage before at 100%, which the Trap on `CurrentStage` missed. Each stage now publishes itself as the current stage, at 0%, when it starts (`StartStage`), chosen over setting it without publishing so the indicator moves on at once, and the duration and loudness scan test counts one more status for it.
+- A failure writes `Library refresh failed stage={stage}: {exception}` to `last.log` as an error line, with the exception's type, message, and stack trace, outside the run lock and before it publishes the failed status, so the line is there before any client relays the failure, and the `ILogger` call stays for the console.
+- The WebUI's failed popup reads "{Stage} failed.", and its log relay stays "Library refresh failed", since the server writes the failure itself.
+- `ThumbnailStage_PublishesItsStartFirst_AndItsCleanupCountsOnlyTheThumbnailsItRemoves_WithItsFirstAndLastWithinOneInterval`, `FailedRun_KeepsItsStageAndAPlainError_AndWritesTheExceptionToLastLog`, the throttle test's forced update, the start of the name sort, duration, and loudness stages in their tests, and the WebUI's failed line in `serverConnection.test.ts`, `foundation.test.ts`, and `eventsHelpers.test.ts` each fail with their fix broken (measured). The failed run's test fails when the status is published 300 ms before the `last.log` line and passes when the line is written 300 ms before the status (measured).
+- Server Instrumentation's Trap says refresh writes a failed run's error line itself, checked by reading it.
+- "Thumbnail cleanup sends a refresh message per removed thumbnail" is deleted from `ISSUES.md`, `CONTEXT.md` describes the failed popup, and `docs/api.md` the failed run, the start of each stage, and the 500 ms progress.
+- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass (measured).
+
 #### Contract slice
 
 **Scope**
@@ -610,6 +623,8 @@ Last milestone completed: M12n1
 - The duration and loudness stages count a value that changed apart from a first measurement, so a new file's first scan isn't a change.
 - The source stage's `updated` count goes, since it can't rise.
 - Each stage's `message`, and the text the server built for it, go.
+- `lastError` becomes `failed`, true for a run that failed, since the WebUI words the failed line from `currentStage` and reads no text from `lastError`.
+- One helper works out a stage's percent, in place of the formula each progress helper repeats.
 - `CloneStatus` copies the new members.
 - OpenAPI, the generated WebUI types, and `docs/api.md`'s refresh section describe the status.
 - The WebUI reads the new status in `coerceRefreshSnapshot`, `refreshProgress`, `settledKeptSources`, and `newRefreshCompletionRunId` (`src/events/refreshStatusProjection.ts`).
@@ -632,6 +647,7 @@ Last milestone completed: M12n1
 - Linux AppImages don't bundle ffmpeg (`docs/dev-setup.md`), so a missing ffmpeg happens in normal use.
 - In the user's catalog, no video lacks a duration, none has a loudness error, none lacks a thumbnail, and every fingerprint is ready (measured), so a refresh that changes nothing has nothing else to report.
 - `TryReserveRun` creates all six stages when a run starts (`RefreshPipelineService.cs`).
+- The name sort, duration, loudness, and thumbnail stages publish themselves as the current stage, at 0%, when they start and before they have counted their work (`StartStage` in `RefreshPipelineService.cs`), so the duration and loudness stages' percent jumps from 0 to the share already scanned at their first progress until this slice counts only the videos they scan. The source stage's first status is "Loading sources..." at 5%, and the fingerprint stage's first already carries its total.
 - `CloneStatus` copies each field by hand (`RefreshPipelineService.cs`).
 - `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, and a refresh pipeline test checks a published status against `RefreshStatusSnapshot`.
 - About 27 assertions in `RefreshPipelineServiceTests.cs` check stage messages.
@@ -673,6 +689,7 @@ Last milestone completed: M12n1
 - The Now entry renders a lasting state's `detail` under its text (`EntryRow` in `src/ui/Notifications.tsx`), and the refresh's state sets it to null (`src/state/lastingStates.ts`).
 - The indicator relays its text to `last.log` once per state and title (`createPlayerIndicator` in `src/state/lastingStates.ts`), so a changing second line adds no log lines while it stays out of that key.
 - The player's indicator shows the title and percent and never `detail` (`src/ui/Player.tsx`).
+- The name sort, duration, loudness, and thumbnail stages publish themselves as the current stage when they start, before they have counted their work (`StartStage` in `RefreshPipelineService.cs`), so their first status has no counts. The source stage's first status is "Loading sources..." at 5%, and the fingerprint stage's first already carries its total.
 - `notify` pops up unless the popup settings, the open list, fullscreen, or the popup cap stop it, and an entry that doesn't pop up while the list is closed counts as unread (`src/notifications/notifications.ts`).
 - The status's `trigger` is "manual" for a refresh started through `POST /api/refresh/start` or the tray, and "auto" for a scheduled one (`RefreshPipelineService.cs`).
 - The Settings tab's Library refresh popup kind turns every refresh popup off (`src/ui/SettingsTab.tsx`).
@@ -2885,7 +2902,7 @@ Last milestone completed: M12n1
 
 #### Traps
 
-- Refresh writes only its warning for a source whose folder lists no media files to `last.log`; its progress and failures reach the log only as `status=` lines relayed by connected WebUI clients, once per client, and not at all when none is connected (measured).
+- Refresh writes to `last.log` only its warning for a source whose folder lists no media files and an error line with the exception of a run that fails; its progress, and how a run ended, reach the log otherwise only as `status=` lines relayed by connected WebUI clients, once per client, and not at all when none is connected.
 - On a 49,100-item library, a refresh run takes 3.5–6.5 min, the largest source's walk 8.5–15 s, and the file checks 3.4–4.6 min (measured).
 - Kestrel answers `408` only when a request's headers don't finish within 30 s (`RequestHeadersTimeout`) or its body arrives slower than 240 bytes a second after a 5 s grace (`MinRequestBodyDataRate`), in ASP.NET Core 10.0.12's source.
 - A body timeout makes a minimal API answer `408` without running its handler, so the request writes no line of its own, in ASP.NET Core 10.0.12's source.
@@ -2895,6 +2912,7 @@ Last milestone completed: M12n1
 - The refresh warning for a source whose folder lists no media files names the folder in `last.log`.
 - Source import writes the source's root path to `last.log`.
 - A written catalog backup writes the backup's path to `last.log`.
+- A failed refresh's error line carries the exception, whose message can name a file (`ExecuteReservedRunAsync` in `RefreshPipelineService.cs`).
 - A request the pairing middleware rejects writes no line today, and the WebUI's relay of its 401 line is refused too, since `/api/logs/client` needs pairing as every route but `/api/pair` does (`ServerPairingAuthMiddleware.cs`).
 
 #### Acceptance
