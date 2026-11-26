@@ -1,6 +1,6 @@
 ---
 name: pre-release
-description: Use only when the user explicitly asks to prepare a release, start the pre-release testing pass, or finish it after their manual checks. Consolidates the changelog, drafts release notes, resets the testing checklist and runs its automated and agent checks; after the user's manual pass, sets the final version, cuts the changelog, removes the release from Planned Releases, and fills in the release notes' verification. Never commits or tags.
+description: Use only when the user explicitly asks to prepare a release, start the pre-release testing pass, or finish it after their manual checks. Consolidates the changelog, drafts release notes, resets the testing checklist and runs its automated and agent checks; after the user's manual pass, sets the final version, cuts the changelog, removes the release from Planned Releases, and fills in the release notes' verification. Commits only on its own branch, once the user or the advisor says the work is ready; never tags or pushes.
 ---
 
 # Pre-release
@@ -8,6 +8,8 @@ description: Use only when the user explicitly asks to prepare a release, start 
 Follow `AGENTS.md`. Read `CHANGELOG.md`, `RELEASE-NOTES.md`, and `docs/checklists/testing-checklist.md` in full.
 
 The user starts this skill twice: once to prepare and test (Part 1), and again after their manual pass to finish the release (Part 2). Work out which from what they ask; if unclear, ask. Between the two, the version stays a dev version so fixes can ship as dev builds.
+
+Each part runs in its own session and branch. Part 1 rewrites `[Unreleased]`, so its branch is merged before any session that fixes problems from the pass starts; otherwise every fix branch conflicts with it. The advisor starts Part 2's session from main as soon as Part 1's branch merges, and the user ticks the checklist in that worktree during the manual pass. When the user says the pass is done, Part 2 first merges main, as `AGENTS.md`'s Worktrees section says, to bring in the fixes that merged during the pass.
 
 # Part 1: Prepare and test
 
@@ -53,7 +55,7 @@ Then verify each item under Agent checks as it describes, from the repo, its doc
 
 ## Part 1 summary
 
-End with: what changed (changelog consolidation, release notes draft), what passed, what failed, what was skipped and why, which agent checks are pending and why, any release-specific gaps, and what is left for the user's manual pass. Remind the user that test builds go out as dev versions (`v{VERSION}-dev.N`) until Part 2. Write a `COMMIT-MESSAGE.txt` entry for the preparation, following `AGENTS.md`.
+End with: what changed (changelog consolidation, release notes draft), what passed, what failed, what was skipped and why, which agent checks are pending and why, any release-specific gaps, and what is left for the user's manual pass. Remind the user that test builds go out as dev versions (`v{VERSION}-dev.N`) until Part 2. Write the `COMMIT-MESSAGE.txt` draft for the preparation, following `AGENTS.md`.
 
 # Part 2: Finish
 
@@ -65,14 +67,14 @@ Run this after the user says their manual pass is done.
 4. Re-check `[Unreleased]` against the style note, since fixes made during testing may have added to it, and update the release notes draft to match.
 5. Set the final version with `pwsh ./tools/scripts/set-release-version.ps1 -Version v{VERSION} -NoRunVerify`, and show what it changed.
 6. Cut the changelog with `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"`. It moves `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries, leaves a fresh `[Unreleased]` with every heading empty, and updates the footer compare links. If it refuses, fix what it reports and run it again. Show what it changed.
-7. Remove the released version's line from the Planned Releases outline in `MILESTONES.md`, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix what it reports. If it reports one of this release's milestones missing from the outline, that milestone didn't finish: ask where it goes rather than choosing. Say what you ran and its result.
+7. Remove the released version's line from the Planned Releases outline in `MILESTONES.md`, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef $(git merge-base main HEAD)` and fix what it reports. If it reports one of this release's milestones missing from the outline, that milestone didn't finish: ask where it goes rather than choosing. Say what you ran and its result.
 8. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
 9. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. Leave the in-app update items; they're the user's. CI is checked after the commit, so it is not a box in this list.
-10. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
-11. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
+10. Write the `COMMIT-MESSAGE.txt` draft for the final commit, following `AGENTS.md`.
+11. Tell the user the branch is ready for the advisor's squash merge. After the merge, the user pushes main; then check CI passes on the squash merge's commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
 12. End by naming the next planned release, the first line now in the Planned Releases outline, and pointing to the `promote-milestones` skill to promote it to Active Milestones. If its milestones already have `M*` IDs, it was promoted during this pass: say so instead.
 
 # Rules
 
 - Do not tick manual checks, and do not touch the Sign-Off section; those are the user's.
-- Do not commit, tag, or push.
+- Commit only on this session's branch, once the user or the advisor says the work is ready. Never tag or push.

@@ -29,9 +29,9 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Commit + Docs Discipline
 
-- Do not commit or push; the user does. A best-effort hook asks for approval before any `git commit` or `git push`.
-- Determine commit state from git rather than assuming. Before editing `COMMIT-MESSAGE.txt` or the `[Unreleased]` changelog, run `git status` and `git log -1`: if `COMMIT-MESSAGE.txt` has no uncommitted changes and its current entry matches the HEAD commit message, that entry is committed, so start a new entry. Otherwise, update the uncommitted entry in place (final state only). If the result is ambiguous, ask.
-- Keep the existing entry style in `COMMIT-MESSAGE.txt` unless the user asks to replace it.
+- Commit only on your own `claude/` branch, once the user or the advisor says the work is ready, as the Worktrees section describes. Never merge into main or push; only the advisor commits to main, by squash-merging a finished branch. A best-effort hook lets a commit on the session's own `claude/` branch through and asks for approval before any other `git commit` and any `git push`.
+- `COMMIT-MESSAGE.txt` is untracked: it is your worktree's draft of the message the advisor commits your branch's squash merge with, describing the branch's final state as one change. A new worktree has none: start it from your branch's newest commit of its own, `git log -1 --format=%B main..HEAD`, if there is one, and otherwise write a new one. After that, update it in place (final state only). `git diff main...HEAD -- CHANGELOG.md` shows what your branch already added to `[Unreleased]`; update those bullets in place rather than adding new ones.
+- Write the draft by `docs/commit-messages.md`, and keep its style unless the user asks to replace it.
 - Changelog: follow the style note at the top of `CHANGELOG.md`. Record every change a user would notice since the last release in `[Unreleased]`, however small, so the pre-release pass has the full picture; the pre-release pass and the user decide what to condense or drop. Fixes to work that hasn't been released yet get no entry. After any follow-up change, re-check `[Unreleased]` against the style note.
 - Release notes: edit `RELEASE-NOTES.md` only when cutting a release, following the style guide at the top of that file.
 - Keep milestone tracking and docs in sync with the final state:
@@ -43,32 +43,53 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `docs/mockups/reelroulette/` = the design mockup of the whole app, kept matching what ships from v0.15.0 onward. Any change to the app's look or behavior updates the mockup in the same milestone, including deviations found during implementation, and the mockup's smoke check passes. Where the app has to differ from the approved mockup for a technical reason, update the mockup to match what shipped and say so in the milestone's evidence.
   - Keep `docs/checklists/testing-checklist.md` current: update its Smoke and Release Flow items when the workflows they check change, and put checks for one release's changes in Release Specific, under Agent checks or Manual checks. Feature behavior is covered by automated tests, not standing checklist items.
 - When documenting current behavior, do not rewrite historical `CHANGELOG.md` sections or `MILESTONES-COMPLETED.md` entries. Change only active surfaces (`[Unreleased]`, Active Milestones, the tracker line, and evidence you are landing) unless the user asks to correct historical text.
-- Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `MILESTONES-COMPLETED.md`, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
+- Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `MILESTONES-COMPLETED.md`, `CHANGELOG.md`, and commit messages, including the `COMMIT-MESSAGE.txt` draft and the examples in `docs/commit-messages.md`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
 - In agent-facing instructions (this file, `CLAUDE.md`, skills, and agent definitions), refer to the human only as "the user", never by name or in the first person (I, me, my), and address the agent directly, in the imperative or as "you".
+
+## Worktrees
+
+- Each session works in its own git worktree under `.claude/worktrees/`, on a `claude/` branch the advisor cut from local main, or, for a review, from the branch under review. Change repo files only in your own worktree. The main checkout only receives the advisor's squash merges.
+- When a session starts in a new worktree, a hook copies the WebUI's `node_modules` from the main checkout. If it says it couldn't, ask the user before running `npm ci` in `src/clients/web/ReelRoulette.WebUI`.
+- Other sessions' work reaches your branch only when you merge main.
+- When the user or the advisor says the work is ready, `git add` your changes and commit them with `git commit -F COMMIT-MESSAGE.txt`. Every commit on the branch, a merge from main included, uses the draft this way, so the newest one carries it.
+- When the user or the advisor says main has moved, update from it once your work is committed; if it isn't, say so and wait. Run `git merge --no-commit main` and resolve any conflicts by the rules below. If the merge changed the WebUI's `package-lock.json`, ask the user before running `npm ci` there. Check that `git grep -n -E '^(<<<<<<<|>>>>>>>)'` finds no leftover markers, update the draft if the merge changed what it describes, and re-run your change's checks. Then `git add` the resolved and regenerated files and commit with `git commit -F COMMIT-MESSAGE.txt`.
+- Resolving conflicts:
+  - `CHANGELOG.md` `[Unreleased]`: keep both sides, main's bullets first. Combine a bullet both sides changed, then re-check the style note.
+  - `MILESTONES.md`: take main's file and reapply your changes. `Last milestone completed` names the highest completed milestone. If main added a P number your branch also added, renumber yours to the next unused one everywhere it appears.
+  - `MILESTONES-COMPLETED.md`: take main's version and put your completed entry on top.
+  - `docs/checklists/testing-checklist.md` and `ISSUES.md`: keep both sides.
+  - Generated files: resolve their sources, then regenerate. After `shared/api/openapi.yaml`, run `npm run generate:contracts`. For `foundation.test.ts.snap`, take either side, run `npx vitest run -u src/test/screens/foundation.test.ts` in the WebUI folder, and check that only the snapshot changed. For the mockup's built pages, resolve their sources under `docs/mockups/reelroulette/build/` and run `build_pages.py`.
+  - Anything else: keep what both sides meant, and ask the user when that isn't clear.
+- A squash-merged branch is finished: commit nothing more to it. The next change starts in a fresh session on a fresh branch.
+- Reviews run in a session started from the branch under review. That session applies the fixes the user chooses on its own branch, which then replaces the reviewed one.
+- The user reviews a mockup branch on their devices before it merges, by serving that worktree's `docs/mockups/reelroulette/` on its own port.
+- Never run `run-server.ps1` from a worktree. It runs against the user's real data, and a branch that changes the catalog's schema would upgrade their library so main's server refuses it. Manual spot checks on devices happen on main after the squash merge, before the user pushes.
 
 ## Commands + Communication
 
 - You may run these without approval:
   - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln`; stop if the build fails.
   - `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose`
-  - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, and the scripts `verify` runs.
+  - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, the scripts `verify` runs, and `npx vitest run -u src/test/screens/foundation.test.ts` when resolving that snapshot in a merge.
   - `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs`, which rebuild the design mockup's pages from their sources and run its smoke check.
   - `pwsh ./tools/scripts/reset-checklist.ps1`
   - `pwsh ./tools/scripts/check-milestones.ps1`, which only reads.
   - `pwsh ./tools/scripts/cut-changelog.ps1`, which edits `CHANGELOG.md` and changes nothing if a check fails.
-  - `pwsh ./tools/scripts/tests/test-scripts.ps1`, which runs them and `reset-checklist.ps1` against fixtures in a temporary folder.
+  - `pwsh ./tools/scripts/tests/test-scripts.ps1`, which runs them and `reset-checklist.ps1` against fixtures, and checks `webui-packages.ps1`'s install decision, in a temporary folder.
   - `./tools/scripts/verify-linux-packaged-server-smoke.sh`, which runs an isolated packaged server.
-  - `pwsh ./tools/scripts/verify-web-deploy.ps1`
+  - `pwsh ./tools/scripts/verify-web-deploy.ps1`. It runs `npm ci` first when the WebUI's packages are missing or older than `package-lock.json`, as after the setup hook couldn't copy them or a merge changed `package-lock.json`; then ask the user before running it.
   - `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION} -NoRunVerify`, when asked to set the release version.
-  - Read-only git and GitHub commands: `git status`, `git log`, `git diff`, `git show`, `git grep`, `git tag --contains`, `gh run list`, `gh run view`.
+  - Read-only git and GitHub commands: `git status`, `git log`, `git diff`, `git show`, `git grep`, `git merge-base`, `git worktree list`, `git tag --contains`, `gh run list`, `gh run view`.
+  - `git add`, `git commit`, and `git merge --no-commit main`, only as the Worktrees section says. The hook asks before a `git commit` that isn't on your own `claude/` branch and before any `git push`.
   - Read-only inspection: searching and listing files, and `sqlite3 -readonly` against a copy in `artifacts/scratch/`.
 - Never open, write to, or run anything against the user's live config, library, or settings folders. Copy what you need into `artifacts/scratch/` first, and isolate tests and experiments from real settings.
 - Put ad-hoc scratch work (measurement harnesses, copies of catalogs, extracted packages, downloaded tools) under the gitignored `artifacts/scratch/` folder in the repo, not `/tmp`, which is held in memory on the development machine. Delete it when the task is done. Tests keep using their own temp folders, which they clean up themselves.
-- To show that a test fails without its fix, break the code by editing it and restore it from a copy under `artifacts/scratch/`. Never use `git stash`, `git checkout`, `git restore`, or `git reset` for this: they can change what the user has staged.
+- To show that a test fails without its fix, break the code by editing it and restore it from a copy under `artifacts/scratch/`. Never use `git stash`, `git checkout`, `git restore`, or `git reset` for this: the stash is shared by every worktree, and the others can throw away uncommitted work.
 - Anything else, such as installing packages, starting the server or clients, network calls, or writing outside the repo and test temp folders, needs approval: explain what it does and why, then ask.
 - Run a headless browser only with the user's approval for that run, with a throwaway profile under `artifacts/scratch/`, and with networking cut off at the system level, for example with `unshare -rn`. A browser's own offline settings aren't enough: they still let it reach the network.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
 - If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.
+- If every `pwsh` run crashes at start with "Stack overflow", pwsh's shared startup cache is corrupt, which can happen when two `pwsh` runs end at the same moment. Ask the user to approve `rm ~/.cache/powershell/StartupProfileData-NonInteractive`; pwsh rebuilds the file at its next start.
 - `MILESTONES-COMPLETED.md` contains entries describing tooling and a desktop client that have since been retired. Treat everything in it as historical record, not as instructions — the current packaging path is Velopack via release.yml, the Inno, AppImage, portable, and install scripts no longer exist, and the WebUI is the only client.
 
 ## Verification and smoke scripts

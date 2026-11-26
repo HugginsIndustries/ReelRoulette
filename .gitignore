@@ -17,9 +17,6 @@ obj/
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Cursor
-.cursor/*
-
 # Claude
 .claude/*
 !.claude/skills/
@@ -55,6 +52,8 @@ AppData/
 
 # Local docs
 PROMPTS.txt
+# Each worktree's commit message draft (see docs/commit-messages.md)
+COMMIT-MESSAGE.txt
 
 # Node/web artifacts
 node_modules/

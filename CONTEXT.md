@@ -102,7 +102,7 @@ ReelRoulette is a thin-client, API-first system:
 - `src/clients/`:
   - `web/ReelRoulette.WebUI`: the only client.
 - `shared/api/openapi.yaml`: API contract source of truth.
-- `tools/scripts/`: runtime/verify/release scripts (`run-server.ps1`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `cut-changelog.ps1`, with fixture tests under `tests/`).
+- `tools/scripts/`: runtime/verify/release scripts (`run-server.ps1`, `verify-web-deploy*`, `webui-packages.ps1`, which those two share to install the WebUI's packages, `verify-linux-packaged-server-smoke.sh`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `cut-changelog.ps1`, with fixture tests under `tests/`).
 
 ## Working Commands (Canonical Set)
 

@@ -4,7 +4,6 @@
 #   -Path <file>               check another file instead of the repo's MILESTONES.md
 #   -CompletedPath <file>      the completed history to check with it; defaults to the repo's
 #                              MILESTONES-COMPLETED.md only when -Path is not given
-#   -Staged                    check the staged MILESTONES.md and MILESTONES-COMPLETED.md
 #   -BaseRef <ref>             also check that the completed history only grew by newly moved entries since <ref>
 #   -BasePath <file>           same as -BaseRef, with the base MILESTONES.md read from a file
 #   -BaseCompletedPath <file>  with -BasePath, the base completed history (required)
@@ -15,7 +14,6 @@
 param(
     [string]$Path,
     [string]$CompletedPath,
-    [switch]$Staged,
     [string]$BaseRef,
     [string]$BasePath,
     [string]$BaseCompletedPath,
@@ -39,9 +37,6 @@ $sectionNames = @("Decisions", "Slices", $sliceSectionName, "Scope", "Traps", "A
 $partNames = @("Scope", "Traps", "Acceptance", "Evidence")
 $bannedPhrases = @("at this edit", "(decided in", "(decided while")
 
-if (($Path -or $CompletedPath) -and $Staged.IsPresent) {
-    throw "Use either -Path and -CompletedPath or -Staged, not both."
-}
 if ($CompletedPath -and -not $Path) {
     throw "-CompletedPath needs -Path."
 }
@@ -596,23 +591,15 @@ function Get-CompletedMilestones {
 
 # Load the documents and the optional base.
 $completedText = $null
-if ($Staged.IsPresent) {
-    $label = "MILESTONES.md (staged)"
-    $completedLabel = "MILESTONES-COMPLETED.md (staged)"
-    $text = Get-GitFileText ":MILESTONES.md"
-    $completedText = Get-GitFileText ":MILESTONES-COMPLETED.md"
+if (-not $Path) {
+    $Path = Join-Path $repoRoot "MILESTONES.md"
+    $CompletedPath = Join-Path $repoRoot "MILESTONES-COMPLETED.md"
 }
-else {
-    if (-not $Path) {
-        $Path = Join-Path $repoRoot "MILESTONES.md"
-        $CompletedPath = Join-Path $repoRoot "MILESTONES-COMPLETED.md"
-    }
-    $label = Split-Path $Path -Leaf
-    $text = Read-File $Path "File"
-    if ($CompletedPath) {
-        $completedLabel = Split-Path $CompletedPath -Leaf
-        $completedText = Read-File $CompletedPath "File"
-    }
+$label = Split-Path $Path -Leaf
+$text = Read-File $Path "File"
+if ($CompletedPath) {
+    $completedLabel = Split-Path $CompletedPath -Leaf
+    $completedText = Read-File $CompletedPath "File"
 }
 
 $base = $null

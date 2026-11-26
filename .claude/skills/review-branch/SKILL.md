@@ -1,17 +1,19 @@
 ---
-name: review-staged
-description: Use when the user asks for a review of their staged changes, asks whether staged work is ready to commit, or wants a commit message for what is staged. Reports findings only, makes no changes.
+name: review-branch
+description: Use when the user or the advisor asks for a review of a branch's changes, asks whether a branch is ready to merge, or wants its commit message checked. Reviews everything the branch changed since it left main. Reports findings only, makes no changes.
 ---
 
-# Review staged changes
+# Review a branch
 
-Follow `AGENTS.md`. Read any other repo docs relevant to the staged change.
+Follow `AGENTS.md`. Read any other repo docs relevant to the change.
 
-Review the staged changes. Report only — make no changes.
+Review everything this branch changed since it left main: `git diff $(git merge-base main HEAD)`, which covers the branch's commits and anything uncommitted. Report only — make no changes.
 
 Read the diff in full before judging any part of it. A change that looks wrong in isolation is often correct in context, and the opposite is also true.
 
-If `MILESTONES.md` or `MILESTONES-COMPLETED.md` is staged, run `pwsh ./tools/scripts/check-milestones.ps1 -Staged -BaseRef HEAD` and report each problem it prints as a finding.
+If the diff touches `MILESTONES.md` or `MILESTONES-COMPLETED.md`, run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef $(git merge-base main HEAD)` and report each problem it prints as a finding.
+
+The branch's message draft is this worktree's `COMMIT-MESSAGE.txt` when it has one, and otherwise the message of the branch's newest commit of its own, `git log -1 --format=%B main..HEAD`. Check it against the diff and `docs/commit-messages.md`.
 
 ## Look for
 
@@ -22,6 +24,7 @@ If `MILESTONES.md` or `MILESTONES-COMPLETED.md` is staged, run `pwsh ./tools/scr
 - Anything violating a rule in `AGENTS.md` or other project docs
 - A check or message that assumes something it has not verified — an input kind, a flag's source, or a field that may be absent
 - A consumer reading state on a path where that state is not present
+- A message draft that misses part of the change, describes something it doesn't do, or doesn't follow `docs/commit-messages.md`
 
 Also check anything the project's own review or architecture docs say to watch for.
 
@@ -43,8 +46,4 @@ Say plainly if you find nothing. Do not pad the list — a finding you are unsur
 
 ## If there are no findings
 
-Say the commit is good to go, then write a commit message for it in a fenced code block, so it can be copied without picking it out of prose.
-
-Follow the Instructions section of `COMMIT-MESSAGE.txt` for the title and bullets. No hard wrapping — each bullet is one line however long. Skip anything obvious from the diff — "added tests" and "updated the README" are not worth a bullet unless something about them is notable.
-
-Do not describe intermediate states the repo never had. If a behaviour was introduced and revised before committing, only the final state exists as far as the log is concerned.
+Say the branch is ready to merge, then show its message draft in a fenced code block, so it can be read without picking it out of prose.

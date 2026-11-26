@@ -72,3 +72,7 @@ Anything learned along the way that was not part of the task — a bug found in 
 The outcome of verification — what was run, what passed, and the measured result where a claim was proven rather than merely tested.
 
 Which subagents ran and for what, and anything they reported that changed the work.
+
+## When the work is ready
+
+When the user or the advisor says the work is ready, commit it on this session's branch as `AGENTS.md` says. When they say main has moved, update from main as its Worktrees section says, re-run the checks, and commit.

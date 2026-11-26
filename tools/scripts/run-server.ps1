@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "webui-packages.ps1")
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Error "dotnet SDK not found in PATH."
@@ -29,16 +30,7 @@ $webUiProjectDir = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI
 $webUiDist = Join-Path $webUiProjectDir "dist"
 $serverAppProject = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj"
 
-# npm writes node_modules/.package-lock.json at the end of every install, after package-lock.json, so
-# package-lock.json is newer only when something, such as a pull, changed it after the last install.
-$lockfile = Join-Path $webUiProjectDir "package-lock.json"
-$installedLockfile = Join-Path $webUiProjectDir "node_modules" ".package-lock.json"
-$installReason = if (-not (Test-Path $installedLockfile)) {
-    "no earlier install found"
-}
-elseif ((Get-Item $lockfile).LastWriteTimeUtc -gt (Get-Item -Force $installedLockfile).LastWriteTimeUtc) {
-    "package-lock.json changed since the last install"
-}
+$installReason = Get-WebUiPackageInstallReason -WebUiPath $webUiProjectDir
 
 $env:CoreServer__ListenUrl = $listenUrl
 $env:CoreServer__RequireAuth = if ($RequireAuth.IsPresent) { "true" } else { "false" }
@@ -50,14 +42,7 @@ $env:ServerApp__WebUiStaticRootPath = $webUiDist
 
 Push-Location $webUiProjectDir
 try {
-    if ($installReason) {
-        Write-Host "Installing WebUI packages..."
-        npm ci
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm ci failed with code $LASTEXITCODE."
-            exit $LASTEXITCODE
-        }
-    }
+    Install-WebUiPackages -WebUiPath $webUiProjectDir
 
     Write-Host "Building WebUI..."
     npm run build

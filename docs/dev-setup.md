@@ -7,7 +7,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 - .NET SDK 10.0.1xx, 10.0.112 or a later patch, as pinned in `global.json` (verify with `dotnet --version` in the repo; a 10.0.4xx SDK alone does not satisfy it)
 - Node.js 24 + npm, matching CI and release (for WebUI build/verify; verify with `node --version` and `npm --version`)
 - PowerShell Core (`pwsh`) for repository scripts under `tools/scripts/` (for example `pwsh ./tools/scripts/run-server.ps1`).
-  - Windows: install PowerShell 7+ with `winget install Microsoft.PowerShell` so `pwsh` is on your PATH. Built-in Windows PowerShell 5.1 is not enough for scripts that rely on PowerShell 7+; use `pwsh` after install (restart the terminal or Cursor if `pwsh` is not found until PATH refreshes).
+  - Windows: install PowerShell 7+ with `winget install Microsoft.PowerShell` so `pwsh` is on your PATH. Built-in Windows PowerShell 5.1 is not enough for scripts that rely on PowerShell 7+; use `pwsh` after install (restart the terminal if `pwsh` is not found until PATH refreshes).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Install from your OS on Linux and for local Windows `dotnet run`. **Velopack** Windows server packages bundle FFmpeg/ffprobe; Linux AppImages don't.
 
@@ -73,7 +73,7 @@ Runtime notes:
 
 From `src/clients/web/ReelRoulette.WebUI`:
 
-- `npm install` (first run)
+- `npm ci` (first run)
 - `npm run verify`
 - `npm run build` auto-syncs shared assets into WebUI `public/`:
   - `assets/logo/favicon.ico` -> `public/favicon.ico`
@@ -84,7 +84,7 @@ From `src/clients/web/ReelRoulette.WebUI`:
 
 Optional helper scripts:
 
-- `pwsh ./tools/scripts/verify-web-deploy.ps1` builds the WebUI and starts the server on port 51312 with `REELROULETTE_DATA_DIR` set to a temporary folder on every OS, plus temporary `XDG_CONFIG_HOME` and `XDG_DATA_HOME` on Linux. It checks that the server wrote its log, catalog, and settings there, then stops the server it started and removes that folder. Your real data folders are not touched.
+- `pwsh ./tools/scripts/verify-web-deploy.ps1` installs the WebUI's packages when needed, as `run-server.ps1` does, builds the WebUI, and starts the server on a free local port with `REELROULETTE_DATA_DIR` set to a temporary folder on every OS, plus temporary `XDG_CONFIG_HOME` and `XDG_DATA_HOME` on Linux. It checks that the server wrote its log, catalog, and settings there, then stops the server it started and removes that folder. Your real data folders are not touched.
 
 ### Optional system checks
 
@@ -238,9 +238,9 @@ Reset testing checklist state, including `Failed:` and `Skipped:` notes, for a f
 Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules:
 
 - `pwsh ./tools/scripts/check-milestones.ps1` checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that every milestone title in a `Depends on` bullet, and every milestone a `Not included` bullet names after "which is", is an existing milestone title; and that active and planned entries follow the structure of the Entry Format in `MILESTONES.md`.
-- `-BaseRef HEAD` also checks that `MILESTONES-COMPLETED.md` only grew by entries moved in from Active or Planned, newest on top. `-Staged` checks the staged files instead of the working tree.
+- `-BaseRef <ref>` also checks that `MILESTONES-COMPLETED.md` only grew by entries moved in from Active or Planned since `<ref>`, newest on top. The skills pass the branch's merge base with main, `$(git merge-base main HEAD)`.
 - `-BaseRef <previous release tag> -Release` does the same across a release, allowing completed entries that were planned after the tag. A base without `MILESTONES-COMPLETED.md` is refused.
-- `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker, changelog cut script, and checklist reset script against the fixtures in `tools/scripts/tests/fixtures/`.
+- `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker, changelog cut script, and checklist reset script against the fixtures in `tools/scripts/tests/fixtures/`, and checks when `webui-packages.ps1`, which `run-server.ps1` and `verify-web-deploy.ps1` share, decides the WebUI's packages need installing.
 
 ## Troubleshooting
 

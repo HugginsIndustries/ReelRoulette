@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Use when the user asks to fix findings from a review of staged changes, usually in the same session as the review. Applies only the findings the user chose, with their decisions, verifies them, and keeps the commit message and records current. Does not commit.
+description: Use when the user asks to fix findings from a review of a branch, usually in the same session as the review. Applies only the findings the user chose, with their decisions, verifies them, and keeps the message draft and records current. Commits on this session's branch only once the user or the advisor says the fixes are ready.
 ---
 
 # Review fix
@@ -21,12 +21,12 @@ If a fix turns out larger than the finding described, needs a decision the user 
 
 ## Keeping records current
 
-- Update the uncommitted `COMMIT-MESSAGE.txt` entry in place if the fixes change what it describes; check commit state from git per `AGENTS.md`.
+- Start this worktree's `COMMIT-MESSAGE.txt` draft from the reviewed branch's newest commit of its own, per `AGENTS.md`, and update it if the fixes change what it describes. The advisor merges this branch with it.
 - Re-check the `[Unreleased]` changelog against the style note at the top of `CHANGELOG.md` if any fix touches it.
 - Update milestone evidence in `MILESTONES.md` if the milestone is part of this change.
 - When the user asks to record a finding, add a bug as an issue in `ISSUES.md`, in that file's format, and an improvement as a backlog item or to the existing milestone that will do it, following the maintenance rules in `MILESTONES.md`.
 - When a fix closes an issue in `ISSUES.md`, delete it there.
-- Leave the fixes unstaged so the user can see them separately from what was already staged.
+- When the user or the advisor says the fixes are ready, commit them on this session's branch per `AGENTS.md`. This branch then replaces the reviewed one.
 
 ## Verification
 
@@ -34,4 +34,4 @@ Re-run the checks the fixes touch: the build and tests for code, `npm run verify
 
 ## Summary
 
-For each finding: what changed, with file links, and how it was verified. Then: anything noticed but not fixed, what the user needs to stage, and whether the existing commit message still fits. If the fixes changed code substantially, suggest running the staged review again.
+For each finding: what changed, with file links, and how it was verified. Then: anything noticed but not fixed, and whether the message draft still fits. If the fixes changed code substantially, suggest another review of this branch.

@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Runs check-milestones.ps1, cut-changelog.ps1, and reset-checklist.ps1 against the fixtures in tests/fixtures.
+# Runs check-milestones.ps1, cut-changelog.ps1, and reset-checklist.ps1 against the fixtures in tests/fixtures, and
+# checks webui-packages.ps1's install decision on WebUI folders it creates.
 # Each case works on a copy in a temporary folder that is removed afterward.
 $ErrorActionPreference = "Stop"
 
@@ -8,6 +9,7 @@ $fixturesDir = Join-Path $PSScriptRoot "fixtures"
 $checker = Join-Path $scriptsDir "check-milestones.ps1"
 $cutter = Join-Path $scriptsDir "cut-changelog.ps1"
 $resetter = Join-Path $scriptsDir "reset-checklist.ps1"
+. (Join-Path $scriptsDir "webui-packages.ps1")
 $validMilestones = Join-Path $fixturesDir "milestones" "valid.md"
 $movedMilestones = Join-Path $fixturesDir "milestones" "moved.md"
 $validCompleted = Join-Path $fixturesDir "milestones" "valid-completed.md"
@@ -552,6 +554,44 @@ try {
         $reason = Assert-Check (Invoke-Tool $resetter @{ Path = $path; VersionPath = $versionPath; Bogus = $true }) 1 @("A parameter cannot be found that matches parameter name 'Bogus'.")
         if ($reason) { return $reason }
         if ((Get-Content -Path $path -Raw) -cne $before) { return "the checklist was modified" }
+    }
+
+    Write-Host ""
+    Write-Host "webui-packages.ps1"
+
+    # Creates a WebUI folder with package-lock.json and, unless -NoInstall, node_modules/.package-lock.json,
+    # with package-lock.json written $LockfileAgeSeconds before the installed copy (negative: after it).
+    function New-WebUiFolder {
+        param([string]$Name, [int]$LockfileAgeSeconds = 0, [switch]$NoInstall)
+
+        $path = Join-Path $workDir $Name
+        New-Item -ItemType Directory -Path $path | Out-Null
+        $lockfile = Join-Path $path "package-lock.json"
+        Set-Content -Path $lockfile -Value "{}"
+        if (-not $NoInstall.IsPresent) {
+            $installedLockfile = Join-Path $path "node_modules" ".package-lock.json"
+            New-Item -ItemType Directory -Path (Split-Path $installedLockfile) | Out-Null
+            Set-Content -Path $installedLockfile -Value "{}"
+            $installedAt = [datetime]::UtcNow
+            (Get-Item -Force $installedLockfile).LastWriteTimeUtc = $installedAt
+            (Get-Item $lockfile).LastWriteTimeUtc = $installedAt.AddSeconds(-$LockfileAgeSeconds)
+        }
+        return $path
+    }
+
+    Test-Case "a WebUI folder without node_modules needs an install" {
+        $reason = Get-WebUiPackageInstallReason -WebUiPath (New-WebUiFolder "webui-no-install" -NoInstall)
+        if ($reason -cne "no earlier install found") { return "got '$reason'" }
+    }
+
+    Test-Case "a package-lock.json newer than the last install needs an install" {
+        $reason = Get-WebUiPackageInstallReason -WebUiPath (New-WebUiFolder "webui-changed-lockfile" -LockfileAgeSeconds -60)
+        if ($reason -cne "package-lock.json changed since the last install") { return "got '$reason'" }
+    }
+
+    Test-Case "an install newer than package-lock.json needs none" {
+        $reason = Get-WebUiPackageInstallReason -WebUiPath (New-WebUiFolder "webui-current-install" -LockfileAgeSeconds 60)
+        if ($null -ne $reason) { return "got '$reason'" }
     }
 }
 finally {

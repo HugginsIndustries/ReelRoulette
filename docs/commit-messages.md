@@ -1,4 +1,10 @@
-Instructions:
+# Commit Messages
+
+Each worktree keeps the message for its branch in `COMMIT-MESSAGE.txt`, an untracked draft that the advisor commits the branch's squash merge with. `AGENTS.md` says when to start and update it. The file holds only the message: the title, a blank line, and the bullets.
+
+Change these rules only when the user asks.
+
+## Title
 
 - Keep title format as `*: {concise summary}`.
 - Use one of these title prefixes based on scope:
@@ -12,16 +18,11 @@ Instructions:
   - `Test: {concise summary}` for test-only additions/updates.
   - `Chore: {concise summary}` for tooling/maintenance updates.
 - Keep the summary concise and outcome-focused.
+
+## Body
+
 - Use 1-8 bullet points max in the message body.
 - Keep bullets high-level; avoid excessive implementation detail.
-- Update only the `Commit Message` section for each new commit.
-- Do not modify this `Instructions` section unless explicitly requested.
-
-
-Commit Message:
-
-Docs: Record the iOS audio drift with Enhanced audio as a known issue
-
-- ISSUES.md records that on the iPad, with Enhanced audio on, a video's sound drifts out of sync with its picture, most of all once it loops, and that Pause then Play doesn't reliably resync it; turning Enhanced audio off stops it, at the cost of the in-app volume, loudness normalization, and compression there.
-- It names the likely cause in WebKit's Web Audio path for media, its open WebKit bugs, and what was ruled out, with no intended fix yet.
-- WebUI Loop Range's Traps note that its repeats by seek hit the same issue on iOS.
+- No hard wrapping: each bullet is one line however long.
+- Skip anything obvious from the diff. "Added tests" and "updated the README" are not worth a bullet unless something about them is notable.
+- Describe only the final state. If a behaviour was introduced and revised on the branch, only the final state exists as far as the log is concerned.
