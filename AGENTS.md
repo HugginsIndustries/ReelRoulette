@@ -58,7 +58,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `CHANGELOG.md` `[Unreleased]`: keep both sides, main's bullets first. Combine a bullet both sides changed, then re-check the style note.
   - `MILESTONES.md`: take main's file and reapply your changes. If main added a P number your branch also added, renumber yours to the next unused one everywhere it appears.
   - `docs/checklists/testing-checklist.md` and `ISSUES.md`: keep both sides.
-  - Generated files: resolve their sources, then regenerate. After `shared/api/openapi.yaml`, run `npm run generate:contracts`. For `foundation.test.ts.snap`, take either side, run `npx vitest run -u src/test/screens/foundation.test.ts` in the WebUI folder, and check that only the snapshot changed. For the mockup's built pages, resolve their sources under `docs/mockups/reelroulette/build/` and run `build_pages.py`.
+  - Generated files: resolve their sources, then regenerate. After `shared/api/openapi.yaml`, run `npm run generate:contracts`. For `foundation.test.ts.snap`, take either side, run `npx vitest run src/test/screens/foundation.test.ts -u` in the WebUI folder, and check that only the snapshot changed. For the mockup's built pages, resolve their sources under `docs/mockups/reelroulette/build/` and run `build_pages.py`.
   - Anything else: keep what both sides meant, and ask the user when that isn't clear.
 - A squash-merged branch is finished: commit nothing more to it. The next change starts in a fresh session on a fresh branch.
 - The advisor reviews a finished branch with `reviewer` subagents, through review-branch's lenses. The session that built the branch applies the fixes the user chooses, with the review-fix skill, on that same branch.
@@ -70,7 +70,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - You may run these without approval:
   - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln`; stop if the build fails.
   - `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose`
-  - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, the scripts `verify` runs, and `npx vitest run -u src/test/screens/foundation.test.ts` when resolving that snapshot in a merge.
+  - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, the scripts `verify` runs, and `npx vitest run src/test/screens/foundation.test.ts -u` when resolving that snapshot in a merge.
   - `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs`, which rebuild the design mockup's pages from their sources and run its smoke check.
   - `pwsh ./tools/scripts/reset-checklist.ps1`
   - `pwsh ./tools/scripts/check-milestones.ps1`, which only reads.
