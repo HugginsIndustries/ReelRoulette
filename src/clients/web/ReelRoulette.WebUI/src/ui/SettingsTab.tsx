@@ -801,7 +801,8 @@ function Diagnostics() {
 
 /**
  * The Developer section, for testing on a device: Don't record plays on this device, which the store keeps and every
- * play reads, and Reset this device's settings, which keeps the Developer settings.
+ * play reads, Show layout measurements, which the stage shows over the page, and Reset this device's settings, which
+ * keeps the Developer settings.
  */
 function DeveloperSettings() {
   const { store, settings } = useApp();
@@ -813,6 +814,13 @@ function DeveloperSettings() {
         hint="Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on."
         checked={store.dontRecordPlays.value}
         onChange={store.setDontRecordPlays}
+      />
+      <Checkbox
+        id="settings-layout-measurements"
+        label="Show layout measurements"
+        hint="Shows the layout's sizes and details over the page, as they change."
+        checked={settings.layoutMeasurements.value}
+        onChange={settings.setLayoutMeasurements}
       />
       <div class="setting">
         <button class="btn" type="button" id="settings-reset-device" onClick={() => void settings.resetDevice()}>

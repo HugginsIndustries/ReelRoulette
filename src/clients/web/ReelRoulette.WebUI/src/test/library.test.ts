@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import type { BulkTarget } from "../library/bulkActions";
-import { createLibrary } from "../library/library";
+import { createLibrary, GRID_ZOOM_FIGURES_STAY_MS } from "../library/library";
 import { LIBRARY_LOAD_TIMEOUT_MESSAGE } from "../library/libraryOverlayModel";
 import type { LibraryGridController, LibraryGridCoverage, LibraryGridOptions } from "../library/libraryGridController";
 import type { NotifyRequest } from "../notifications/notifications";
@@ -56,6 +56,8 @@ function fakeGrid(options: Required<LibraryGridOptions>, page: FakePage) {
     rowHeight: options.rowHeight,
     /** As a zoom over the grid settling at a new row height does. */
     zoomTo: options.onRowHeightChange,
+    /** As a zoom over the grid showing a scale, or settling, does. */
+    zoom: options.onZoom,
     contents: [] as Array<{ ids: string[]; resetScroll: boolean | undefined }>,
     /** Each playing item id the library marked, the first when the grid was created. */
     playing: [] as Array<string | null>,
@@ -538,6 +540,63 @@ describe("row height", () => {
       expect((await shownGrid(setup({ storage }))).rowHeight).toBe(160);
     });
   }
+});
+
+describe("zoom figures", () => {
+  async function shownGrid(t: ReturnType<typeof setup>) {
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    return t.mountGrid();
+  }
+
+  it("shows a zoom's row height and gap while it lasts, and for 3 seconds after it settles", async () => {
+    const t = setup();
+    const grid = await shownGrid(t);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    expect(t.library.gridZoom.value).toBeNull();
+
+    grid.zoom({ rowHeight: 170, gap: 2 }, false);
+    vi.advanceTimersByTime(10_000);
+    expect(t.library.gridZoom.value).toEqual({ rowHeight: 170, gap: 2 });
+    grid.zoom({ rowHeight: 194, gap: 3 }, true);
+    vi.advanceTimersByTime(GRID_ZOOM_FIGURES_STAY_MS - 1);
+    expect(t.library.gridZoom.value).toEqual({ rowHeight: 194, gap: 3 });
+    vi.advanceTimersByTime(1);
+    expect(t.library.gridZoom.value).toBeNull();
+  });
+
+  it("shows a zoom that starts while the last one's figures stay, and keeps its own figures 3 seconds once it settles", async () => {
+    const t = setup();
+    const grid = await shownGrid(t);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    grid.zoom({ rowHeight: 194, gap: 3 }, true);
+    vi.advanceTimersByTime(2000);
+    grid.zoom({ rowHeight: 200, gap: 3 }, false);
+    vi.advanceTimersByTime(2000);
+    expect(t.library.gridZoom.value).toEqual({ rowHeight: 200, gap: 3 });
+    grid.zoom({ rowHeight: 213, gap: 3 }, true);
+    vi.advanceTimersByTime(GRID_ZOOM_FIGURES_STAY_MS - 1);
+    expect(t.library.gridZoom.value).toEqual({ rowHeight: 213, gap: 3 });
+    vi.advanceTimersByTime(1);
+    expect(t.library.gridZoom.value).toBeNull();
+  });
+
+  it("drops the figures when the grid goes", async () => {
+    const t = setup();
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    const destroy = t.library.attachGrid({} as HTMLElement);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    t.grids[0]!.zoom({ rowHeight: 194, gap: 3 }, true);
+
+    destroy();
+
+    expect(t.library.gridZoom.value).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 describe("fill", () => {

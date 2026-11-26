@@ -17,7 +17,7 @@ import {
 import { TILE_MOVE_EASING, TILE_MOVE_MS } from "../library/libraryGridZoom";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 import { LIBRARY_QUERY_WINDOW_SIZE } from "../library/libraryQuerySession";
-import { stubMatchingMediaQuery, stubProperty, type Restores } from "./stubs";
+import { stubMatchingMediaQuery, stubProperty, stubResizeObserver, type FakeResizeObservers, type Restores } from "./stubs";
 
 const VIEWPORT_HEIGHT = 600;
 const RESIZE_DEBOUNCE_MS = 90;
@@ -33,9 +33,10 @@ let viewportHeight = VIEWPORT_HEIGHT;
  * one drawn over the content.
  */
 let scrollbarWidth = 0;
-const resizeCallbacks: Array<() => void> = [];
 /** Undoes what the tests stubbed on shared prototypes and the window, newest first. */
 const restores: Restores = [];
+/** The grid's resize observer, which happy-dom's never calls back, so `resizeTo` does. */
+let resizeObservers: FakeResizeObservers;
 
 function hasBox(element: HTMLElement): boolean {
   if (!element.isConnected || panelWidth < 1) {
@@ -63,7 +64,7 @@ function boxWidth(element: HTMLElement): number {
 /**
  * Gives shown elements the panel's width, with the grid's scroller reaching past its negative right margin and its
  * `clientWidth` less the scrollbar's, and the viewport's height, as happy-dom lays nothing out, and makes an element
- * without a box ignore scrolling, as a browser does. happy-dom's ResizeObserver never calls back, so `resize` does.
+ * without a box ignore scrolling, as a browser does. happy-dom's ResizeObserver never calls back, so `resizeTo` does.
  */
 function stubLayout(): void {
   stubProperty(restores, HTMLElement.prototype, "offsetWidth", {
@@ -93,15 +94,7 @@ function stubLayout(): void {
       }
     }
   });
-  stubProperty(restores, window, "ResizeObserver", {
-    value: class {
-      constructor(callback: () => void) {
-        resizeCallbacks.push(callback);
-      }
-      observe(): void {}
-      disconnect(): void {}
-    }
-  });
+  resizeObservers = stubResizeObserver(restores);
 }
 
 function item(id: string, overrides: Partial<LibraryProjectionItem> = {}): LibraryProjectionItem {
@@ -169,9 +162,7 @@ function scrollTo(container: HTMLElement, top: number): void {
 /** Changes the panel's width, as a side panel resize does, once the grid's resize wait has passed. */
 function resizeTo(width: number): void {
   panelWidth = width;
-  for (const callback of resizeCallbacks) {
-    callback();
-  }
+  resizeObservers.resize();
   vi.advanceTimersByTime(RESIZE_DEBOUNCE_MS);
 }
 
@@ -209,7 +200,6 @@ beforeEach(() => {
   panelWidth = 800;
   viewportHeight = VIEWPORT_HEIGHT;
   scrollbarWidth = 0;
-  resizeCallbacks.length = 0;
   stubLayout();
 });
 
@@ -596,7 +586,7 @@ describe("grid zoom", () => {
     vi.advanceTimersByTime(150);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(layerView(container).scale).toBeGreaterThan(1.1);
+    expect(layerView(container).scale).toBeGreaterThan(1.05);
     const [layerX, layerY] = layerPoint(container, 300, 200);
     expect(layerX).toBeCloseTo(x, 6);
     expect(layerY).toBeCloseTo(y, 6);
@@ -616,12 +606,13 @@ describe("grid zoom", () => {
     grid.setBrowseContent({ visibleItems: items });
 
     zoomBy(container, 3, 300, 200);
-    expect(onRowHeightChange.mock.calls).toEqual([[243]]);
+    expect(onRowHeightChange.mock.calls).toEqual([[213]]);
     expect(rowsLayer(container).style.transform).toBe("");
-    expectShownRows(container, items, createVirtualizerState(items, 800, 243, 1));
+    expectShownRows(container, items, createVirtualizerState(items, 800, 213, 1));
+    // Within the shortest and tallest a row can be at 213 px, on whole device pixels.
     for (const row of rows(container)) {
-      expect(Number.parseFloat(row.style.height)).toBeGreaterThanOrEqual(243 * 0.625);
-      expect(Number.parseFloat(row.style.height)).toBeLessThanOrEqual(243 * 1.5);
+      expect(Number.parseFloat(row.style.height)).toBeGreaterThanOrEqual(Math.round(213 * 0.625));
+      expect(Number.parseFloat(row.style.height)).toBeLessThanOrEqual(Math.round(213 * 1.5));
     }
 
     zoomBy(container, -20, 300, 200);
@@ -647,10 +638,39 @@ describe("grid zoom", () => {
     expect(gap()).toBe("2px");
     vi.advanceTimersByTime(1000);
     expect(gap()).toBe("3px");
-    zoomBy(container, 2, 300, 200);
+    zoomBy(container, 3, 300, 200);
     expect(gap()).toBe("4px");
     zoomBy(container, -20, 300, 200);
     expect(gap()).toBe("2px");
+    grid.destroy();
+  });
+
+  it("reports the row height a zoom would settle at and its gap at each scale it shows, then the ones it settles at", () => {
+    vi.useFakeTimers();
+    // The gap reported is the one the rows take, on whole device pixels.
+    stubProperty(restores, window, "devicePixelRatio", { value: 1.25 });
+    const onZoom = vi.fn();
+    const { container, grid } = createGrid({ onZoom });
+    grid.setBrowseContent({ visibleItems: thumbnailItems(400) });
+
+    wheelOver(container, { deltaY: -100, clientX: 300, clientY: 200 });
+    wheelOver(container, { deltaY: -100, clientX: 300, clientY: 200 });
+    vi.advanceTimersByTime(150);
+
+    const shown = onZoom.mock.calls.map(([figures, settled]) => ({ ...figures, settled }));
+    expect(shown.length).toBeGreaterThan(2);
+    for (const figures of shown) {
+      // 2 px on 1.25 device pixels is 2.4, and 3 px is 3.2.
+      expect(figures).toEqual({ rowHeight: figures.rowHeight, gap: figures.rowHeight < 180 ? 2.4 : 3.2, settled: false });
+    }
+    const heights = shown.map((figures) => figures.rowHeight);
+    expect(heights).toEqual([...heights].sort((a, b) => a - b));
+    expect(heights[0]).toBeGreaterThan(160);
+    expect(heights.at(-1)).toBeLessThan(194);
+
+    vi.advanceTimersByTime(1000);
+    expect(onZoom).toHaveBeenLastCalledWith({ rowHeight: 194, gap: 3.2 }, true);
+    expect(onZoom.mock.calls.filter(([, settled]) => settled)).toHaveLength(1);
     grid.destroy();
   });
 
@@ -796,7 +816,7 @@ describe("grid zoom", () => {
 
     vi.advanceTimersByTime(1000);
     expect(badge()).not.toBeNull();
-    expectShownRows(container, patched, createVirtualizerState(patched, 560, 184, 1));
+    expectShownRows(container, patched, createVirtualizerState(patched, 560, 176, 1));
     grid.destroy();
   });
 
@@ -812,7 +832,7 @@ describe("grid zoom", () => {
     vi.advanceTimersByTime(1000);
 
     expect(scroller(container).scrollTop).toBe(0);
-    expectShownRows(container, other, createVirtualizerState(other, 800, 184, 1));
+    expectShownRows(container, other, createVirtualizerState(other, 800, 176, 1));
     grid.destroy();
   });
 
@@ -830,7 +850,7 @@ describe("grid zoom", () => {
 
     zoomBy(container, 3, 5, clientY);
 
-    const after = createVirtualizerState(items, 800, 243, 1);
+    const after = createVirtualizerState(items, 800, 213, 1);
     const afterRow = findRowIndexForItem(after.rows, anchorItem);
     const top = after.offsetIndex.rowTopOffsets[afterRow]! - scroller(container).scrollTop;
     expect(top + after.rows[afterRow]!.rowHeight / 4).toBeCloseTo(clientY, 6);
@@ -848,7 +868,7 @@ describe("grid zoom", () => {
     zoomBy(container, -3, 10, 10);
 
     // In view now: the tiles of the rows that start above the view's bottom.
-    const after = createVirtualizerState(items, 800, 197, 1);
+    const after = createVirtualizerState(items, 800, 225, 1);
     const inView = after.rows
       .filter((row, index) => after.offsetIndex.rowTopOffsets[index]! < VIEWPORT_HEIGHT)
       .flatMap((row) => row.tiles.map((tile) => `item-${tile.itemIndex}`));
@@ -863,7 +883,7 @@ describe("grid zoom", () => {
     expect(kinds).toContain("fade");
 
     // The first tile scaled around the pointer at (10, 10), and keeps the pointer as far down it, a few pixels down.
-    const scale = 1.15 ** -3;
+    const scale = 1.1 ** -3;
     const from = { left: 10 * (1 - scale), top: 10 * (1 - scale), width: before.rows[0]!.tiles[0]!.tileWidth * scale, height: before.rows[0]!.rowHeight * scale };
     const to = { width: after.rows[0]!.tiles[0]!.tileWidth, height: after.rows[0]!.rowHeight };
     expect(scroller(container).scrollTop).toBe(0);
@@ -889,8 +909,8 @@ describe("grid zoom", () => {
 
     zoomBy(container, -2, 10, 10);
 
-    expect(onRowHeightChange.mock.calls).toEqual([[121]]);
-    expectShownRows(container, items, createVirtualizerState(items, 800, 121, 1));
+    expect(onRowHeightChange.mock.calls).toEqual([[132]]);
+    expectShownRows(container, items, createVirtualizerState(items, 800, 132, 1));
     expect(tileMoves(container).size).toBe(0);
     grid.destroy();
   });

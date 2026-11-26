@@ -8,7 +8,7 @@ import { unauthorizedLogText } from "../../api/serverRequest";
 import { statusLogLine, type RelayLogCurrentItem } from "../../logging/relayLogLines";
 import { renderApp } from "../../shell";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
-import { stubMatchingMediaQuery, stubProperty, type Restores } from "../stubs";
+import { stubMatchingMediaQuery, stubProperty, stubResizeObserver, type FakeResizeObservers, type Restores } from "../stubs";
 export { randomAnswer } from "../randomAnswer";
 
 /**
@@ -786,13 +786,25 @@ export function contextMenuPlace(width: number, height: number): { left: number;
 
 /** happy-dom's window size, which each test starts from. */
 export const DEFAULT_VIEWPORT = { width: 1024, height: 768 };
+/** The window's size, as `setViewport` last set it, which `stubPageSize` gives the page. */
+let viewportSize = DEFAULT_VIEWPORT;
 
 /**
  * Resizes the window, which fires `resize` and media query `change` events, as a browser does, and decides the
  * stylesheet's width and height rules.
  */
 export function setViewport(viewport: { width: number; height: number }): void {
+  viewportSize = viewport;
   (window as unknown as HappyDomWindow).happyDOM.setViewport(viewport);
+}
+
+/**
+ * Gives the page the window's size, as `document.documentElement` reports it, which happy-dom keeps at 0. It follows
+ * `setViewport`, and keeps it while `stubVisualViewport`'s change makes `innerWidth` and `innerHeight` report less.
+ */
+export function stubPageSize(): void {
+  stubProperty(restores, document.documentElement, "clientWidth", { get: () => viewportSize.width });
+  stubProperty(restores, document.documentElement, "clientHeight", { get: () => viewportSize.height });
 }
 
 /**
@@ -825,6 +837,77 @@ export function stubColorScheme(dark: boolean): (dark: boolean) => void {
     query.matches = next;
     listeners.forEach((listener) => listener());
   };
+}
+
+/** Makes `(display-mode: standalone)` match, as in the installed app; happy-dom's `matchMedia` never reports it. */
+export function stubInstalledApp(): void {
+  stubMatchingMediaQuery(restores, "display-mode: standalone");
+}
+
+/** Sets the screen's device pixels to a CSS pixel, which happy-dom keeps at 1. */
+export function stubDevicePixelRatio(ratio: number): void {
+  stubProperty(restores, window, "devicePixelRatio", { value: ratio });
+}
+
+/**
+ * Replaces `ResizeObserver`, whose happy-dom version never calls back, with one a test resizes elements through. Stub
+ * it before the page mounts, so the page's observers are the stand-ins.
+ */
+export function stubResizeObservers(): FakeResizeObservers {
+  return stubResizeObserver(restores);
+}
+
+/** The part of the page that shows on screen, as `window.visualViewport` reports it. */
+export interface VisibleArea {
+  width: number;
+  height: number;
+  scale: number;
+  offsetLeft: number;
+  offsetTop: number;
+}
+
+/** A stand-in `visualViewport`, which happy-dom lacks, that a test moves and resizes as a pinch or a keyboard does. */
+export interface FakeVisualViewport extends VisibleArea {
+  /** How many listeners the page has for its `resize` and `scroll`. */
+  listenerCount(): number;
+  /**
+   * Changes what shows, and sends `resize`, as a pinch or the on-screen keyboard does. From then on `innerWidth` and
+   * `innerHeight` report what shows, as Safari and Chrome on Android do.
+   */
+  change(next: Partial<VisibleArea>): void;
+}
+
+/** Gives the window a `visualViewport` showing all of it, at no zoom, which the test changes. */
+export function stubVisualViewport(): FakeVisualViewport {
+  const listeners = new Map<string, Set<() => void>>();
+  let changed = false;
+  const visible: FakeVisualViewport = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    scale: 1,
+    offsetLeft: 0,
+    offsetTop: 0,
+    listenerCount: () => [...listeners.values()].reduce((count, set) => count + set.size, 0),
+    change(next) {
+      Object.assign(visible, next);
+      if (!changed) {
+        changed = true;
+        stubProperty(restores, window, "innerWidth", { get: () => visible.width });
+        stubProperty(restores, window, "innerHeight", { get: () => visible.height });
+      }
+      listeners.get("resize")?.forEach((listener) => listener());
+    }
+  };
+  const target = Object.assign(visible, {
+    addEventListener(type: string, listener: () => void) {
+      listeners.set(type, (listeners.get(type) ?? new Set()).add(listener));
+    },
+    removeEventListener(type: string, listener: () => void) {
+      listeners.get(type)?.delete(listener);
+    }
+  });
+  stubProperty(restores, window, "visualViewport", { value: target });
+  return visible;
 }
 
 /**
@@ -1033,6 +1116,15 @@ export async function settle(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
+}
+
+/**
+ * Waits for the next animation frame, such as the one Show layout measurements' figures follow a change in, and the
+ * render it causes.
+ */
+export async function nextFrame(): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await settle();
 }
 
 /** The in-app notices open now, oldest first: the dialogs whose only button is OK. */

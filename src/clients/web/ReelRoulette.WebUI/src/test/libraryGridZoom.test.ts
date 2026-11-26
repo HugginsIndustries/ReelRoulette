@@ -45,17 +45,17 @@ afterEach(() => {
 });
 
 describe("grid zoom by the wheel", () => {
-  it("zooms a wheel notch 15%, eased over a few frames, around the pointer", () => {
+  it("zooms a wheel notch 10%, eased over a few frames, around the pointer", () => {
     const { zoom, shows, last } = host();
 
     zoom.wheel(notch(-100));
     vi.advanceTimersToNextFrame();
     expect(last().scale).toBeGreaterThan(1);
-    expect(last().scale).toBeLessThan(1.15);
+    expect(last().scale).toBeLessThan(1.1);
     vi.advanceTimersByTime(250);
 
     expect(shows.length).toBeGreaterThan(3);
-    expect(last().scale).toBe(1.15);
+    expect(last().scale).toBe(1.1);
     const [x, y] = layerPoint(last(), 220, 340);
     expect(x).toBeCloseTo(200, 9);
     expect(y).toBeCloseTo(300, 9);
@@ -100,24 +100,23 @@ describe("grid zoom by the wheel", () => {
     vi.advanceTimersByTime(1);
 
     expect(settles).toEqual([{ view: last(), focus: { x: 250, y: 360 } }]);
-    expect(settles[0]!.view.scale).toBeCloseTo(1.15 * 1.15, 9);
+    expect(settles[0]!.view.scale).toBeCloseTo(1.1 * 1.1, 9);
     expect(zoom.isActive()).toBe(false);
   });
 
   it("waits for a notch's ease to arrive before it settles", () => {
     const { zoom, settles, last } = host();
 
-    zoom.wheel(notch(-100));
-    zoom.wheel(notch(-100));
-    zoom.wheel(notch(-100));
-    zoom.wheel(notch(-100));
+    for (let i = 0; i < 6; i++) {
+      zoom.wheel(notch(-100));
+    }
     vi.advanceTimersByTime(ZOOM_SETTLE_MS);
     expect(last().scale).toBeLessThan(START.maxScale);
     expect(settles).toHaveLength(0);
 
     vi.advanceTimersByTime(500);
     expect(settles).toHaveLength(1);
-    expect(settles[0]!.view.scale).toBeCloseTo(1.15 ** 4, 9);
+    expect(settles[0]!.view.scale).toBeCloseTo(1.1 ** 6, 9);
   });
 });
 

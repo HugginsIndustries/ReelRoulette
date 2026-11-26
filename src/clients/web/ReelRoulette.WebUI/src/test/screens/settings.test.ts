@@ -1371,6 +1371,7 @@ describe("Diagnostics", () => {
 
 describe("the Developer section", () => {
   const DONT_RECORD_PLAYS = "Don't record plays on this device";
+  const LAYOUT_MEASUREMENTS = "Show layout measurements";
 
   function resetButton(): HTMLButtonElement {
     return within(settingsPage()).getByRole("button", { name: "Reset this device's settings", hidden: true }) as HTMLButtonElement;
@@ -1390,7 +1391,7 @@ describe("the Developer section", () => {
     return page.server.logLines().filter((line) => line.startsWith("developer="));
   }
 
-  it("comes after Diagnostics, with Don't record plays off by default and Reset this device's settings, each with its hint", async () => {
+  it("comes after Diagnostics, with Don't record plays and Show layout measurements off by default and Reset this device's settings, each with its hint", async () => {
     await mount();
     await openSettings();
     const box = checkbox(DONT_RECORD_PLAYS);
@@ -1399,6 +1400,10 @@ describe("the Developer section", () => {
     expect(section.previousElementSibling!.querySelector("h3")!.textContent).toBe("Diagnostics");
     expect(box.checked).toBe(false);
     expect(hintOf(box)).toBe("Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on.");
+    const measurements = checkbox(LAYOUT_MEASUREMENTS);
+    expect(Array.from(section.querySelectorAll("input, button"))).toEqual([box, measurements, resetButton()]);
+    expect(measurements.checked).toBe(false);
+    expect(hintOf(measurements)).toBe("Shows the layout's sizes and details over the page, as they change.");
     expect(section.contains(resetButton())).toBe(true);
     expect(resetButton().nextElementSibling!.textContent).toBe("Puts every other setting on this device back to its default and reloads. The Developer settings stay.");
   });
@@ -1426,6 +1431,27 @@ describe("the Developer section", () => {
     expect(developerLines(again)).toEqual(["developer=dont-record-plays-on-at-load"]);
     await openSettings();
     expect(checkbox(DONT_RECORD_PLAYS).checked).toBe(true);
+  });
+
+  it("shows the layout measurements while Show layout measurements is on, keeping it on this device, with no last.log line", async () => {
+    const page = await mount();
+    await openSettings();
+    expect(document.getElementById("layout-measurements")).toBeNull();
+
+    await click(checkbox(LAYOUT_MEASUREMENTS));
+    expect(localStorage.getItem("rr_device.developer.layoutMeasurements")).toBe("true");
+    expect(document.getElementById("layout-measurements")).not.toBeNull();
+    await click(checkbox(LAYOUT_MEASUREMENTS));
+    expect(localStorage.getItem("rr_device.developer.layoutMeasurements")).toBe("false");
+    expect(document.getElementById("layout-measurements")).toBeNull();
+    await click(checkbox(LAYOUT_MEASUREMENTS));
+    page.unmount();
+
+    const again = await mount();
+    expect(document.getElementById("layout-measurements")).not.toBeNull();
+    await openSettings();
+    expect(checkbox(LAYOUT_MEASUREMENTS).checked).toBe(true);
+    expect([...page.server.logLines(), ...again.server.logLines()].filter((line) => line.startsWith("developer="))).toEqual([]);
   });
 
   it("writes no line when a page loads with it off", async () => {
@@ -1461,12 +1487,13 @@ describe("the Developer section", () => {
     await click(tileNamesBox());
     await click(radio("Left"));
     await click(checkbox(DONT_RECORD_PLAYS));
-    expect(Object.keys(localStorage).filter((key) => key.startsWith("rr_device.")).length).toBeGreaterThan(4);
+    await click(checkbox(LAYOUT_MEASUREMENTS));
+    expect(Object.keys(localStorage).filter((key) => key.startsWith("rr_device.")).length).toBeGreaterThan(5);
 
     await click(resetButton());
     await click(confirmationButton("Reset"));
 
-    expect(Object.keys(localStorage).sort()).toEqual(["rr_clientId", "rr_device.developer.dontRecordPlays"]);
+    expect(Object.keys(localStorage).sort()).toEqual(["rr_clientId", "rr_device.developer.dontRecordPlays", "rr_device.developer.layoutMeasurements"]);
     expect([page.clientId(), page.sessionId()]).toEqual([clientId, sessionId]);
     expect(page.reloadPage).toHaveBeenCalledTimes(1);
     page.unmount();
@@ -1479,6 +1506,7 @@ describe("the Developer section", () => {
     expect(tileNamesBox().checked).toBe(false);
     expect(radio("Right").checked).toBe(true);
     expect(checkbox(DONT_RECORD_PLAYS).checked).toBe(true);
+    expect(checkbox(LAYOUT_MEASUREMENTS).checked).toBe(true);
   });
 });
 

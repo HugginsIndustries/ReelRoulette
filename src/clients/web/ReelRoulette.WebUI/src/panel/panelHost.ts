@@ -94,8 +94,14 @@ export interface PanelHost {
   readonly mode: ReadonlySignal<PanelMode>;
   /** A phone on its side, where the panel is the overlay and the page shows only the player. */
   readonly shortScreen: ReadonlySignal<boolean>;
+  /** A touch screen, by the `(pointer: coarse)` media query. */
+  readonly coarsePointer: ReadonlySignal<boolean>;
   /** The panel's width beside the player: the remembered width, within what the stage allows now. */
   readonly width: ReadonlySignal<number>;
+  /** The widest the panel can be beside the player, leaving the player its minimum width. */
+  readonly maxWidth: ReadonlySignal<number>;
+  /** The player column's width, or 0 while it isn't laid out. */
+  readonly playerWidth: ReadonlySignal<number>;
   /** The player column is narrower than 600 px, so the player's indicator sits below its corner buttons. */
   readonly playerNarrow: ReadonlySignal<boolean>;
 
@@ -182,14 +188,16 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   const mode = signal(panelModeFor(viewport));
   const shortScreen = signal(isShortScreen(viewport));
   const stageWidth = signal(viewport.width());
-  const coarse = signal(viewport.coarsePointer());
+  const coarsePointer = signal(viewport.coarsePointer());
   /** The handle's width while it shows, or 0 before it has been measured. */
   const handleWidth = signal(0);
-  const playerNarrow = signal(false);
+  const playerWidth = signal(0);
+  // A column not laid out, which measures 0, is not narrow.
+  const playerNarrow = computed(() => playerWidth.value > 0 && playerWidth.value < NARROW_PLAYER_BELOW_WIDTH);
 
   /** The widest the panel can be while leaving the player its minimum width. */
   const maxWidth = computed(() => {
-    const handle = handleWidth.value || (coarse.value ? HANDLE_WIDTH.coarse : HANDLE_WIDTH.fine);
+    const handle = handleWidth.value || (coarsePointer.value ? HANDLE_WIDTH.coarse : HANDLE_WIDTH.fine);
     return Math.max(PANEL_MIN_WIDTH, stageWidth.value - handle - PLAYER_MIN_WIDTH);
   });
   const width = computed(() => Math.round(Math.min(Math.max(remembered.value, PANEL_MIN_WIDTH), maxWidth.value)));
@@ -212,7 +220,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   function measure(): void {
     mode.value = panelModeFor(viewport);
     shortScreen.value = isShortScreen(viewport);
-    coarse.value = viewport.coarsePointer();
+    coarsePointer.value = viewport.coarsePointer();
     stageWidth.value = elements?.stage.clientWidth || viewport.width();
     if (elements?.handle.offsetWidth) {
       handleWidth.value = elements.handle.offsetWidth;
@@ -220,10 +228,9 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     measurePlayer();
   }
 
-  /** Reads the player column's width. A column not laid out, which measures 0, is not narrow. */
+  /** Reads the player column's width. */
   function measurePlayer(): void {
-    const columnWidth = playerColumn?.clientWidth ?? 0;
-    playerNarrow.value = columnWidth > 0 && columnWidth < NARROW_PLAYER_BELOW_WIDTH;
+    playerWidth.value = playerColumn?.clientWidth ?? 0;
   }
 
   function render(): void {
@@ -306,7 +313,10 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     side,
     mode,
     shortScreen,
+    coarsePointer,
     width,
+    maxWidth,
+    playerWidth,
     playerNarrow,
 
     connectTabs(connected) {

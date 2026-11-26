@@ -34,6 +34,7 @@ import {
   status,
   starsShown,
   stubContextMenuSize,
+  stubElementProperty,
   stubLayoutSize,
   stubStarLayout,
   stylesheetText,
@@ -292,6 +293,18 @@ function tileNames(): string[] {
 
 function gridScroll(): HTMLElement {
   return overlay().querySelector(".library-grid-scroll") as HTMLElement;
+}
+
+/**
+ * Turns the wheel a notch with Ctrl held over the grid, zooming in. happy-dom's wheel event drops `ctrlKey` and the
+ * pointer's place from its init, so they are set on the event.
+ */
+function zoomInNotch(): void {
+  const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
+  for (const [name, value] of Object.entries({ ctrlKey: true, clientX: 100, clientY: 100 })) {
+    Object.defineProperty(event, name, { value });
+  }
+  gridScroll().dispatchEvent(event);
 }
 
 async function scrollGridTo(top: number): Promise<void> {
@@ -2918,7 +2931,7 @@ describe("memory", () => {
   });
 
   it("keeps the row height Ctrl+scroll over the grid zooms to after a page refresh", async () => {
-    // Tiles three to a row at 160 px and two at 243, and one more in a last row at the height the rows aim for, all in
+    // Tiles three to a row at 160 px and at 213, and one more in a last row at the height the rows aim for, all in
     // view.
     const { page } = await mountLibrary(libraryItems(7));
     await openLibrary();
@@ -2926,22 +2939,39 @@ describe("memory", () => {
 
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
     for (let notch = 0; notch < 3; notch++) {
-      // happy-dom's wheel event drops `ctrlKey` and the pointer's place from its init, so they are set on the event.
-      const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
-      for (const [name, value] of Object.entries({ ctrlKey: true, clientX: 100, clientY: 100 })) {
-        Object.defineProperty(event, name, { value });
-      }
-      gridScroll().dispatchEvent(event);
+      zoomInNotch();
     }
     await vi.advanceTimersByTimeAsync(1000);
     vi.useRealTimers();
-    expect(rowLayout().at(-1)!.height).toBe(243);
-    expect(localStorage.getItem("rr_device.library.rowHeight")).toBe("243");
+    expect(rowLayout().at(-1)!.height).toBe(213);
+    expect(localStorage.getItem("rr_device.library.rowHeight")).toBe("213");
 
     await refresh(page, libraryItems(7));
     await openLibrary();
-    expect(rowLayout().at(-1)!.height).toBe(243);
+    expect(rowLayout().at(-1)!.height).toBe(213);
     expect(rowLayout()[0]!.width).toBeCloseTo(rowsWidth(800), 6);
+  });
+
+  it("shows the row height and gap a zoom aims the rows at with Show layout measurements, until 3 seconds after it settles", async () => {
+    localStorage.setItem("rr_device.developer.layoutMeasurements", "true");
+    await mountLibrary(libraryItems(7));
+    await openLibrary();
+    stubElementProperty(document.getElementById("library-overlay-body")!, "getBoundingClientRect", () => new DOMRect(600, 100, 400, 500));
+    const figure = () => document.getElementById("layout-grid-zoom");
+    expect(figure()).toBeNull();
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
+    zoomInNotch();
+    // A few frames into the notch's ease, toward 176 px, centered at the grid's top.
+    await vi.advanceTimersByTimeAsync(80);
+    expect(figure()!.textContent).toMatch(/^Rows 1(6[1-9]|7[0-5]) px · gap 2 px$/);
+    expect([figure()!.style.left, figure()!.style.top]).toEqual(["800px", "108px"]);
+    // Settled 200 ms after the wheel stopped, and still shown 3 seconds after.
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(figure()!.textContent).toBe("Rows 176 px · gap 2 px");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(figure()).toBeNull();
+    vi.useRealTimers();
   });
 
   it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {

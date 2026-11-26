@@ -116,6 +116,13 @@ describe("panel host", () => {
       expect(panel.shortScreen.value).toBe(false);
     });
 
+    it("says whether the pointer is a touch screen's, following a change", () => {
+      const { panel, viewport } = setup({ coarse: true });
+      expect(panel.coarsePointer.value).toBe(true);
+      viewport.set({ coarse: false });
+      expect(panel.coarsePointer.value).toBe(false);
+    });
+
     it("moves an open panel between beside the player and the overlay as the window changes, keeping its tab", async () => {
       const { panel, viewport, tabs, shownPages } = setup();
       await panel.showTab("filter");
@@ -159,9 +166,10 @@ describe("panel host", () => {
   });
 
   describe("width", () => {
-    it("starts at 420 px, and stays between 360 px and the width that leaves the player 400 px", () => {
+    it("starts at 420 px, and stays between 360 px and its widest, the width that leaves the player 400 px", () => {
       const { panel } = setup({ width: 1200 });
       expect(panel.width.value).toBe(420);
+      expect(panel.maxWidth.value).toBe(788);
 
       panel.setWidth(200, true);
       expect(panel.width.value).toBe(360);
@@ -194,10 +202,10 @@ describe("panel host", () => {
       panel.setWidth(2000, true);
       stage.width = 1176;
       viewport.set({});
-      expect(panel.width.value).toBe(764);
+      expect([panel.width.value, panel.maxWidth.value]).toEqual([764, 764]);
       stage.width = 772;
       viewport.set({});
-      expect(panel.width.value).toBe(360);
+      expect([panel.width.value, panel.maxWidth.value]).toEqual([360, 360]);
     });
 
     it("remembers the width only when asked, and keeps it while a narrower window holds the panel narrower", () => {
@@ -239,7 +247,7 @@ describe("panel host", () => {
       expect(panel.playerNarrow.value).toBe(false);
     });
 
-    it("measures the column again as the panel beside it opens, closes, and changes width by its handle", async () => {
+    it("measures the column's width again as the panel beside it opens, closes, and changes width by its handle", async () => {
       const { panel, elements } = setup({ width: 1000 });
       // The column is what the stage leaves beside the panel and its 12 px handle.
       panel.attachPlayer({
@@ -247,16 +255,16 @@ describe("panel host", () => {
           return elements.panel.hidden ? 1000 : 1000 - panel.width.peek() - 12;
         }
       });
-      expect(panel.playerNarrow.value).toBe(false);
+      expect([panel.playerWidth.value, panel.playerNarrow.value]).toEqual([1000, false]);
 
       await panel.toggle();
-      expect(panel.playerNarrow.value).toBe(true);
+      expect([panel.playerWidth.value, panel.playerNarrow.value]).toEqual([568, true]);
       panel.setWidth(360, false);
-      expect(panel.playerNarrow.value).toBe(false);
+      expect([panel.playerWidth.value, panel.playerNarrow.value]).toEqual([628, false]);
       panel.setWidth(420, true);
-      expect(panel.playerNarrow.value).toBe(true);
+      expect([panel.playerWidth.value, panel.playerNarrow.value]).toEqual([568, true]);
       await panel.close();
-      expect(panel.playerNarrow.value).toBe(false);
+      expect([panel.playerWidth.value, panel.playerNarrow.value]).toEqual([1000, false]);
     });
   });
 

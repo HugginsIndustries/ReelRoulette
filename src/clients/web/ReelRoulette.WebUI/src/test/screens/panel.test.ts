@@ -10,12 +10,14 @@ import {
   IPHONE_USER_AGENT,
   json,
   mountPage,
+  nextFrame,
   openNotices,
   randomAnswer,
   resetPage,
   setViewport,
   settle,
   stubCoarsePointer,
+  stubElementProperty,
   stubFullscreenApi,
   stubLayoutSize,
   useStylesheet,
@@ -455,6 +457,35 @@ describe("width", () => {
     await release();
 
     expect(localStorage.getItem("rr_device.panel.width")).toBe("360");
+  });
+
+  it("shows its width and the range the handle allows below its tab row with Show layout measurements, and as the overlay its width alone", async () => {
+    localStorage.setItem("rr_device.developer.layoutMeasurements", "true");
+    await mountWideStage();
+    // Beside the player the panel takes the width the stage gives it, on the right; as the overlay it covers the
+    // window.
+    stubElementProperty(panel(), "getBoundingClientRect", () =>
+      stage().dataset.panelMode === "overlay" ? new DOMRect(0, 0, window.innerWidth, window.innerHeight) : new DOMRect(1200 - shownWidth(), 0, shownWidth(), 700)
+    );
+    stubElementProperty(panel().querySelector(".panel-tabs")!, "getBoundingClientRect", () => new DOMRect(panel().getBoundingClientRect().left, 0, shownWidth(), 44));
+    const figure = () => {
+      const element = document.getElementById("layout-panel-width");
+      return element && [element.textContent, element.style.left, element.style.top];
+    };
+    await nextFrame();
+    expect(figure()).toBeNull();
+
+    await click(panelButton());
+    await nextFrame();
+    expect(figure()).toEqual(["420 px (360–788)", "990px", "46px"]);
+    await drag(780, 700);
+    await nextFrame();
+    expect(figure()).toEqual(["500 px (360–788)", "950px", "46px"]);
+    await release();
+
+    setViewport({ width: 700, height: 700 });
+    await nextFrame();
+    expect(figure()).toEqual(["700 px", "350px", "46px"]);
   });
 
   it("keeps a wider remembered width after a click on the handle that doesn't drag", async () => {

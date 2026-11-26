@@ -18,6 +18,9 @@ export const TILE_NAMES_KEY = "appearance.tileNames";
 /** The per-device store's key for the seek step. */
 export const SEEK_STEP_KEY = "player.seekStep";
 
+/** The per-device store's key for Show layout measurements, one of the Developer settings, which a reset keeps. */
+export const LAYOUT_MEASUREMENTS_KEY = `${DEVELOPER_KEY_PREFIX}layoutMeasurements`;
+
 /** What Reset this device's settings asks first. */
 export const RESET_DEVICE_QUESTION =
   "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads.";
@@ -78,12 +81,12 @@ export function boostLimitProblem(text: string): FieldProblem | null {
 }
 
 /**
- * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
- * settings, whether tiles show their file names, and the seek step. Each applies as it changes and is kept on this
- * device. The panel keeps its side, the store Advance after, the autoplay settings, and Don't record plays, the player
- * its buttons' state, the player's controls Hide player controls and its settings, the audio stage Enhanced audio,
- * loudness normalization its own settings, and the notifications service the popup settings. Reset this device's
- * settings puts them all back but the Developer ones.
+ * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and
+ * its settings, whether tiles show their file names, the seek step, and Show layout measurements. Each applies as it
+ * changes and is kept on this device. The panel keeps its side, the store Advance after, the autoplay settings, and
+ * Don't record plays, the player its buttons' state, the player's controls Hide player controls and its settings, the
+ * audio stage Enhanced audio, loudness normalization its own settings, and the notifications service the popup
+ * settings. Reset this device's settings puts them all back but the Developer ones.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
@@ -118,6 +121,9 @@ export interface Settings {
    */
   readonly shortcutsRequest: ReadonlySignal<number>;
   revealShortcuts(): void;
+  /** Show layout measurements, off by default: the layout's sizes and details show over the page, live. */
+  readonly layoutMeasurements: ReadonlySignal<boolean>;
+  setLayoutMeasurements(on: boolean): void;
   /**
    * Reset this device's settings: asks first, then clears every setting on this device except the Developer ones and
    * reloads the page, since each part reads its settings once, as the page starts. Cancel changes nothing.
@@ -144,6 +150,7 @@ export function createSettings(options: SettingsOptions): Settings {
   const popupSettingsRequest = signal(0);
   const seekStep = signal(device.read(SEEK_STEP_KEY, DEFAULT_SEEK_STEP, isSeekStep));
   const shortcutsRequest = signal(0);
+  const layoutMeasurements = signal(device.read(LAYOUT_MEASUREMENTS_KEY, false, isBoolean));
   return {
     autoPauseMode,
     setAutoPauseMode(mode) {
@@ -187,6 +194,11 @@ export function createSettings(options: SettingsOptions): Settings {
     shortcutsRequest,
     revealShortcuts() {
       shortcutsRequest.value += 1;
+    },
+    layoutMeasurements,
+    setLayoutMeasurements(on) {
+      layoutMeasurements.value = on;
+      device.write(LAYOUT_MEASUREMENTS_KEY, on);
     },
     async resetDevice() {
       if (!(await dialogs.confirm({ message: RESET_DEVICE_QUESTION, confirmLabel: "Reset", danger: true }))) {

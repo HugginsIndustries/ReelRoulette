@@ -166,7 +166,7 @@ Last milestone completed: M12m
 | --- | --- | --- |
 | Mockup | ✅ Complete | The Developer section, the reset's confirmation, the Counts disabled pill, the live layout figures, and the new Diagnostics rows, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Developer section | ✅ Complete | The section with Don't record plays, its pill and `last.log` lines, and Reset this device's settings, with Scan full library kept with the other device settings and one storage helper for the WebUI. |
-| Layout measurements | ⏳ Planned | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, the panel's unused size container gone, and a wheel notch zooming the grid 10%. |
+| Layout measurements | ✅ Complete | Show layout measurements and its live figures, with the player's width and the handle's range from the panel host, the zoom's figures from the grid controller, the panel's unused size container gone, and a wheel notch zooming the grid 10%. |
 | Diagnostics | ⏳ Planned | The event stream's state, the last event number, the resync count, the server address, and the WebUI's API version in Diagnostics. |
 
 #### Mockup slice
@@ -358,6 +358,30 @@ Last milestone completed: M12m
 - The panel's figure reads its width beside the player and as the overlay, in panel screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check in Firefox on the desktop that the figures sit at their elements and the panel and a field's tooltip in it look as before.
+
+**Evidence**
+
+- Show layout measurements sits between Don't record plays and Reset, worded as the mockup shows it, and the settings keep it as `developer.layoutMeasurements` (`src/settings/settings.ts`).
+- The figures are `LayoutMeasurements` in `src/ui/LayoutMeasurements.tsx`, last in the stage in their own error boundary, in the mockup's `.dev-figures` classes at z-index 1400, with the mockup's texts and places.
+- An outer component reads the setting and renders nothing while it is off, so turning it on or off renders neither the player nor the panel, and the figures' observers and listeners exist only while it is on.
+- The figures follow once a frame the panel host's signals, the pointer's among them, fullscreen's and the library's signals, resize observers on the panel, the Library controls, and the safe-area probe, the window's resize, `visualViewport`'s resize and scroll, and the installed-app query.
+- The figures take the window's size from the page (`document.documentElement`), which a pinch leaves as it is, since Safari and Chrome on Android report what shows as `innerWidth` and `innerHeight` during a pinch, which the screen tests' `visualViewport` stand-in now does too, and the mockup's figures follow.
+- The panel host gives `playerWidth`, `maxWidth`, and `coarsePointer`, the pointer query it already followed, and derives `playerNarrow` from `playerWidth` (`src/panel/panelHost.ts`).
+- The grid controller reports a zoom's row height and gap through `onZoom` at each scale it shows and at its settle, and the library's `gridZoom` holds them while the zoom lasts and for 3 seconds after it settles, and clears when the grid goes.
+- The grid figure shows the gap the rows draw, on whole device pixels, to two decimals, such as 3.2 px at a 1.25 pixel ratio, and the mockup's figure follows, its unused `tileGap` helper gone.
+- A wheel notch zooms 10% (`ZOOM_NOTCH` in `src/library/libraryGridZoom.ts`), and `.panel`'s `container: panel / inline-size` is gone.
+- Preact 11 adds no `px` to a number in a style object, so the figures' places are given as `px` strings, which the screen tests caught (measured).
+- Eight grid controller zoom tests also assumed the 15% notch and follow the 10% one: the test of a row's shortest and tallest checks them on whole device pixels, since 213 × 0.625 snaps to 133, and the grid zoom test that a notch's ease arrives before the settle zooms six notches to keep its margin.
+- happy-dom has no `visualViewport`, never calls a `ResizeObserver` back, and resolves the probe's padding from the `--safe-area-*` variables that `stubSafeAreaInsets` sets (measured).
+- One ResizeObserver stand-in in `src/test/stubs.ts` replaces the grid controller tests' own, and the screen harness gains it with stand-ins for `visualViewport`, the page's size, the pixel ratio, and the installed app, and a `nextFrame` wait.
+- Layout measurement screen tests cover the window's figures with the safe areas, the player's with a narrow player, a short screen, and the overlay panel, the box on a desktop and a phone, the visible area during a pinch and the on-screen keyboard, and nothing shown or observed while off; a panel screen test covers the panel's figure beside the player, through a drag, and as the overlay, and a Library screen test the grid's figure through a zoom and its 3 seconds.
+- Settings screen tests cover the checkbox, kept with no `last.log` line, and the reset keeping it; library tests cover the 3 seconds, a zoom during them, and the grid going; a grid controller test covers the reports at a 1.25 pixel ratio; and panel host tests cover `playerWidth`, `maxWidth`, and `coarsePointer`.
+- Breaking each of these failed its tests, and each file was restored from a copy: the 15% notch, figures and observers while off, a stay that never ends, no stay, figures kept when the grid goes, an unsnapped gap, the panel's figure from `panel.width`, the player's figure not following its column, no short-screen offset, the safe areas, the Library controls, or the visible area not followed, the window's size taken from `innerWidth` and `innerHeight`, the setting not kept, and `playerWidth` not reported (measured).
+- The foundation screen tests' starting markup snapshot takes the new checkbox and nothing else.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 96 test files and 2407 tests, 15 more than before the slice (measured), and `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- `CONTEXT.md` describes the setting and the 10% notch, and `docs/domain-inventory.md` and `CHANGELOG.md` describe the setting.
+- The quick spot check in Firefox on the desktop waits for main after the squash merge, since a branch doesn't run against the user's data.
 
 #### Diagnostics slice
 

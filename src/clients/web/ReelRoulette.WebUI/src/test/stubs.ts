@@ -30,3 +30,45 @@ export function stubMatchingMediaQuery(restores: Restores, feature: string): voi
     }
   });
 }
+
+/** The `ResizeObserver`s a test stubbed, which call back only when the test says an element they watch resized. */
+export interface FakeResizeObservers {
+  /** Every element an observer watches now. */
+  observed(): Element[];
+  /** Calls back each observer that watches `element`, or each that watches anything, as a resize does. */
+  resize(element?: Element): void;
+}
+
+/**
+ * Replaces `ResizeObserver`, whose happy-dom version never calls back, with one a test resizes elements through,
+ * recording in `restores` how to undo it.
+ */
+export function stubResizeObserver(restores: Restores): FakeResizeObservers {
+  const observers = new Set<FakeResizeObserver>();
+  class FakeResizeObserver {
+    readonly targets = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) {
+      observers.add(this);
+    }
+    observe(target: Element): void {
+      this.targets.add(target);
+    }
+    unobserve(target: Element): void {
+      this.targets.delete(target);
+    }
+    disconnect(): void {
+      this.targets.clear();
+    }
+  }
+  stubProperty(restores, window, "ResizeObserver", { value: FakeResizeObserver });
+  return {
+    observed: () => [...observers].flatMap((observer) => [...observer.targets]),
+    resize(element) {
+      for (const observer of observers) {
+        if (element ? observer.targets.has(element) : observer.targets.size > 0) {
+          observer.callback([], observer as unknown as ResizeObserver);
+        }
+      }
+    }
+  };
+}

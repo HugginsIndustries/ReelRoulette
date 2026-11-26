@@ -3,7 +3,7 @@ import { isWheelNotch, type WheelDelta } from "../ui/wheel";
 import { DEFAULT_GRID_OVERSCAN_PX } from "./libraryGridVirtualizer";
 
 /** A wheel notch zooms the grid by this much, eased over a few frames. */
-const ZOOM_NOTCH = 1.15;
+const ZOOM_NOTCH = 1.1;
 /** A trackpad's small deltas zoom it by about this share per pixel, as they come. */
 const ZOOM_PER_PIXEL = 0.01;
 /** Each frame of a notch's ease covers this share of the scale left to go. */

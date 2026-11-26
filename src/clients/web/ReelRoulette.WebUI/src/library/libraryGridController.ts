@@ -48,6 +48,12 @@ export interface LibraryGridCoverage {
   lastPageHeight: number;
 }
 
+/** The row height a zoom over the grid aims the rows at, and the gap between tiles at that height. */
+export interface GridZoomFigures {
+  rowHeight: number;
+  gap: number;
+}
+
 export interface LibraryGridController {
   setBrowseContent(input: { visibleItems: readonly LibraryProjectionItem[]; resetScroll?: boolean }): void;
   /** Marks the playing item's tile, or none, on the tiles shown and on those shown later. */
@@ -67,6 +73,11 @@ export interface LibraryGridOptions {
   rowHeight?: number;
   /** A zoom over the grid settled at a new row height for the rows to aim for. */
   onRowHeightChange?: (rowHeight: number) => void;
+  /**
+   * A zoom over the grid showed a scale, or settled when `settled` says so: the row height it would settle at there, or
+   * settled at, and the gap at that height, for Show layout measurements.
+   */
+  onZoom?: (zoom: GridZoomFigures, settled: boolean) => void;
 }
 
 type BrowseContent = Parameters<LibraryGridController["setBrowseContent"]>[0];
@@ -400,10 +411,16 @@ export function createLibraryGridController(
     return { left: origin.x, top: origin.y, minScale, maxScale: MAX_TARGET_ROW_HEIGHT / targetRowHeight };
   }
 
+  /** What a zoom reports at `rowHeight`: that row height and the gap the rows take at it, on this screen's pixels. */
+  function zoomFigures(rowHeight: number): GridZoomFigures {
+    return { rowHeight, gap: tileGap(rowHeight, currentDevicePixelRatio()) };
+  }
+
   function showZoom(view: ZoomView): void {
     if (rowsEl) {
       rowsEl.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
     }
+    options?.onZoom?.(zoomFigures(clampTargetRowHeight(targetRowHeight * view.scale)), false);
   }
 
   function settleZoom(view: ZoomView, focus: ZoomPoint): void {
@@ -443,6 +460,7 @@ export function createLibraryGridController(
       targetRowHeight = rowHeight;
       options?.onRowHeightChange?.(rowHeight);
     }
+    options?.onZoom?.(zoomFigures(rowHeight), true);
 
     // Content that came during the gesture shows now, in its one reflow. A new window starts at the top instead, so no
     // tile keeps its place.

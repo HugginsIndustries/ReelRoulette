@@ -1679,15 +1679,14 @@ let rowHeight = ((kept) => (Number.isInteger(kept) && kept >= ROW_HEIGHT.min && 
 // each row's own height, so every gap on screen is the same: 2 px from 120 to 179 px, 3 px from 180 to 239 px, and 4 px
 // from 240 to 300 px.
 const gapFor = (height) => (height < 180 ? 2 : height < 240 ? 3 : 4);
-const tileGap = () => gapFor(rowHeight);
 // How far a selected tile's thumbnail is inset on every side, in CSS pixels, at every zoom.
 const SELECT_INSET = 8;
 // The screen's pixels per CSS pixel, which the grid's sizes snap to.
 const devicePixels = () => window.devicePixelRatio || 1;
 // A size in CSS pixels, rounded to whole device pixels.
 const snapToDevice = (value) => Math.round(value * devicePixels()) / devicePixels();
-// The gap in whole device pixels, at least one, so every gap draws the same width.
-const tileGapPx = () => Math.max(1, Math.round(tileGap() * devicePixels())) / devicePixels();
+// The gap in whole device pixels, at least one, so every gap draws the same width, for the rows' height or another.
+const tileGapPx = (height = rowHeight) => Math.max(1, Math.round(gapFor(height) * devicePixels())) / devicePixels();
 const tileSize = () => ({ target: rowHeight, min: rowHeight * 0.625, max: rowHeight * 1.5 });
 // The zoom gesture under way over the grid, if any.
 let gridZoom = null;
@@ -7175,8 +7174,10 @@ function renderFigures() {
     const name = `padding${edge[0].toUpperCase()}${edge.slice(1)}`;
     return [edge, Math.round(parseFloat(probe[name]) || 0)];
   }));
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  // The window's size from the page, which a pinch leaves as it is, where Safari and Chrome on Android report what
+  // shows as the window's inner size.
+  const w = document.documentElement.clientWidth;
+  const h = document.documentElement.clientHeight;
   // The viewport, along its top and left edges, inside the safe areas. The height reads up along the left ruler, in
   // from the edge so the Mockup tab doesn't cover it.
   placeFigure($("dev-vw-ruler"), { left: inset.left, top: inset.top + 3, width: w - inset.left - inset.right });
@@ -7206,12 +7207,13 @@ function renderFigures() {
       `${Math.round(playerBox.width)} px`);
   }
 
-  // The grid's target row height and gap while a zoom lasts, and for a moment after.
+  // The grid's target row height and gap while a zoom lasts, and for a moment after, the gap as the rows draw it, on
+  // whole device pixels.
   const gridBox = $("lib-grid").getBoundingClientRect();
   if (!gridBox.width || !(gridZoom || Date.now() < figures.gridUntil)) $("dev-grid").hidden = true;
   else {
     const height = gridZoom ? zoomedRowHeight(gridZoom.scale) : rowHeight;
-    placeFigure($("dev-grid"), { left: gridBox.left + gridBox.width / 2, top: gridBox.top + 8 }, `Rows ${height} px · gap ${gapFor(height)} px`);
+    placeFigure($("dev-grid"), { left: gridBox.left + gridBox.width / 2, top: gridBox.top + 8 }, `Rows ${height} px · gap ${Math.round(tileGapPx(height) * 100) / 100} px`);
   }
 
   // The box, at the bottom left of what shows on screen, which a pinch or the on-screen keyboard shrinks.

@@ -32,6 +32,7 @@ import {
 } from "./libraryBrowseModel";
 import {
   createLibraryGridController,
+  type GridZoomFigures,
   type LibraryGridController,
   type LibraryGridCoverage,
   type LibraryGridOptions
@@ -61,6 +62,8 @@ export type LibraryBody =
 const CONTROLS_COLLAPSED_KEY = "library.controlsCollapsed";
 const SORT_KEY = "library.sort";
 const ROW_HEIGHT_KEY = "library.rowHeight";
+/** How long the grid's zoom figures stay after a zoom settles. */
+export const GRID_ZOOM_FIGURES_STAY_MS = 3000;
 
 /** The sort and its direction, as remembered across a page refresh. */
 interface RememberedSort {
@@ -128,6 +131,11 @@ export interface Library {
   readonly bulk: BulkActions;
   /** The Selection actions menu's items, as they were when it last opened. */
   readonly selectionMenuGroups: ReadonlySignal<MenuGroups>;
+  /**
+   * The row height a zoom over the grid aims the rows at and its gap, for Show layout measurements: while the zoom
+   * lasts and for 3 seconds after it settles, and null otherwise.
+   */
+  readonly gridZoom: ReadonlySignal<GridZoomFigures | null>;
 
   /** The tab's view rendered, so the tab can open. */
   attach(): void;
@@ -238,6 +246,9 @@ export function createLibrary(options: LibraryOptions): Library {
   const controlsCollapsed = signal(device.read(CONTROLS_COLLAPSED_KEY, false, isBoolean));
   /** The row height the grid's rows aim for, which a zoom over the grid sets and each grid created starts from. */
   let rowHeight = device.read(ROW_HEIGHT_KEY, DEFAULT_TARGET_ROW_HEIGHT, isTargetRowHeight);
+  const gridZoom = signal<GridZoomFigures | null>(null);
+  /** Ends the zoom figures' stay after a zoom settles. */
+  let gridZoomTimer: ReturnType<typeof setTimeout> | null = null;
   const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
   const randomLine = computed(() => randomLineText(store.randomOptions.value, spreadCategories(tagCatalog.catalog.value)));
   const summary = signal<string | null>(null);
@@ -394,6 +405,21 @@ export function createLibrary(options: LibraryOptions): Library {
       body.value = { kind: "grid" };
     }
     showTiles(scroll);
+  }
+
+  /** A zoom's figures show while it lasts, and stay 3 seconds once it settles. */
+  function showGridZoom(figures: GridZoomFigures | null, settled = false): void {
+    if (gridZoomTimer !== null) {
+      clearTimeout(gridZoomTimer);
+      gridZoomTimer = null;
+    }
+    gridZoom.value = figures;
+    if (settled) {
+      gridZoomTimer = setTimeout(() => {
+        gridZoomTimer = null;
+        gridZoom.value = null;
+      }, GRID_ZOOM_FIGURES_STAY_MS);
+    }
   }
 
   function onCoverage(coverage: LibraryGridCoverage): void {
@@ -877,6 +903,7 @@ export function createLibrary(options: LibraryOptions): Library {
     allSelected,
     bulk,
     selectionMenuGroups,
+    gridZoom,
 
     attach() {
       attached = true;
@@ -897,7 +924,8 @@ export function createLibrary(options: LibraryOptions): Library {
         onRowHeightChange(height) {
           rowHeight = height;
           device.write(ROW_HEIGHT_KEY, height);
-        }
+        },
+        onZoom: showGridZoom
       });
       grid = created;
       created.setPlayingItemId(store.current.peek()?.itemId ?? null);
@@ -913,6 +941,7 @@ export function createLibrary(options: LibraryOptions): Library {
         created.destroy();
         if (grid === created) {
           grid = null;
+          showGridZoom(null);
         }
       };
     },

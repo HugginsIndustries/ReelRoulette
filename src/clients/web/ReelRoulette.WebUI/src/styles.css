@@ -947,6 +947,58 @@ html.theme-light .ambient canvas {
 .media-container:not(.controls-visible) .counts-pill { opacity: 0; }
 .counts-pill .material-symbol-icon { font-size: 18px; color: var(--dev); }
 .player-col.is-narrow .counts-pill { top: 108px; }
+/* Show layout measurements: figures at what they measure, over the panel and the popups but under menus, dialogs, and
+   field tooltips, except tooltips in the overlay panel, which stack with it under the figures, and never in the way of
+   a tap. The figures place themselves in the window's coordinates. */
+.dev-figures {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  pointer-events: none;
+  overflow: hidden;
+}
+.dev-figure {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.dev-figure.is-centered { transform: translateX(-50%); }
+/* The window's height reads up along the left ruler. */
+.dev-figure.is-upward { writing-mode: vertical-rl; padding: 6px 1px; transform: translateY(-50%) rotate(180deg); }
+.dev-ruler { position: absolute; border: 0 dashed var(--dev); }
+.dev-ruler.is-across { height: 0; border-top-width: 1px; }
+.dev-ruler.is-down { width: 0; border-left-width: 1px; }
+.dev-ruler::before, .dev-ruler::after { content: ""; position: absolute; background: var(--dev); }
+.dev-ruler.is-across::before, .dev-ruler.is-across::after { top: -5px; width: 1px; height: 9px; }
+.dev-ruler.is-across::before { left: 0; }
+.dev-ruler.is-across::after { right: 0; }
+.dev-ruler.is-down::before, .dev-ruler.is-down::after { left: -5px; width: 9px; height: 1px; }
+.dev-ruler.is-down::before { top: 0; }
+.dev-ruler.is-down::after { bottom: 0; }
+/* The details, at the bottom left of what shows on screen, scaled back to their size through a pinch. */
+.dev-box {
+  position: absolute;
+  transform-origin: bottom left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+/* Its padding holds the safe-area insets, which only the stylesheet can read. */
+.dev-safe-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
+}
 @keyframes player-indicator-spin {
   to { transform: rotate(360deg); }
 }
@@ -1993,7 +2045,6 @@ body.sorting * {
   border-radius: 8px;
   overflow: hidden;
   position: relative;
-  container: panel / inline-size;
 }
 html.theme-light .panel {
   color-scheme: light;
