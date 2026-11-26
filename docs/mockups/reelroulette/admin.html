@@ -590,6 +590,9 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 .notify-entry > .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); grid-row: span 2; align-self: start; }
 .notify-entry.is-error > .material-symbol-icon, .notify-entry.is-warning > .material-symbol-icon { color: var(--error); }
 .notify-entry.is-unread { background: color-mix(in srgb, var(--huggins-orange) 10%, transparent); }
+/* A Now row that takes a tap, such as the update notice's. */
+.notify-entry.is-action { cursor: pointer; }
+@media (hover: hover) { .notify-entry.is-action:hover { background: rgba(127, 127, 127, 0.12); } }
 .notify-text { min-width: 0; overflow-wrap: anywhere; }
 .notify-time { font-size: 0.78rem; color: var(--muted-fg); white-space: nowrap; align-self: start; padding-top: 2px; }
 .notify-detail { grid-column: 2 / 4; font-size: 0.84rem; color: var(--muted-fg); overflow-wrap: anywhere; }
@@ -1171,12 +1174,12 @@ const store = {
       // As above.
     }
   },
-  // Clears every setting except the Mockup tab's options and the Developer settings, as the app's reset clears every
-  // device setting except the Developer ones.
+  // Clears every setting except the Mockup tab's options, the Developer settings, and the bell's kept messages, which
+  // aren't settings, as the app's reset clears every device setting except the Developer ones and the kept messages.
   clearSettings() {
     try {
       Object.keys(localStorage)
-        .filter((key) => key.startsWith("rr-mockup.") && !/^rr-mockup\.(mock|developer)\./.test(key))
+        .filter((key) => key.startsWith("rr-mockup.") && !/^rr-mockup\.(mock|developer)\./.test(key) && key !== "rr-mockup.notify.recent")
         .forEach((key) => localStorage.removeItem(key));
     } catch {
       // As above.
@@ -1214,10 +1217,22 @@ function parseDuration(text) {
   }
   return /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : "invalid";
 }
+// Times and dates as the app shows them: 24-hour times, and dates as YYYY-MM-DD, or MM-DD where the year isn't shown.
+const two = (n) => String(n).padStart(2, "0");
+// A local day as YYYY-MM-DD, as a date field holds it.
+const dayText = (date) => `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+// A time of day as HH:MM, or HH:MM:SS with `seconds`.
+const clockText = (date, seconds = false) => `${two(date.getHours())}:${two(date.getMinutes())}` + (seconds ? `:${two(date.getSeconds())}` : "");
+// A time as the bell's list and the admin view show it: its time of day for today, with MM-DD before it for another day.
+function whenText(time, seconds = false) {
+  const date = new Date(time);
+  if (dayText(date) === dayText(new Date())) return clockText(date, seconds);
+  return `${two(date.getMonth() + 1)}-${two(date.getDate())} ${clockText(date, seconds)}`;
+}
+
 // A duration as the WebUI's Filter tab shows it: MM:SS under an hour, HH:MM:SS from one hour up, each part two digits.
 function formatDuration(seconds) {
   const s = Math.max(0, Math.floor(seconds));
-  const two = (n) => String(n).padStart(2, "0");
   const [hours, minutes, secs] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60];
   return hours >= 1 ? `${two(hours)}:${two(minutes)}:${two(secs)}` : `${two(minutes)}:${two(secs)}`;
 }
@@ -1984,11 +1999,14 @@ const contextMenu = (() => {
  * Notifications, which replace the status line:
  * - Lasting states, such as Reconnecting…, show as one indicator on the player: the first active one in
  *   `NOTIFY_LASTING_ORDER`. The list shows every active one, with its full text, under Now, on the main page and in
- *   the admin view alike.
+ *   the admin view alike. A state with an `onTap`, such as the update notice, takes a tap on the indicator and on its
+ *   Now row; the indicator's tap doesn't reach the player.
  * - One-off messages pop up briefly, as the Settings tab's Notifications section allows, by kind.
  * - The bell, on the player or at the end of the admin view's bar, opens the list of recent messages: every one-off message,
- *   whether it popped up or not, and every notice the in-app dialog showed. Its badge counts the messages that didn't pop up since the list was last
- *   open. The list keeps the last 50 for the page's life; a page refresh clears it.
+ *   whether it popped up or not, and every notice the in-app dialog showed, each with its time, "HH:MM" today and
+ *   "MM-DD HH:MM" for another day, or with seconds while Show seconds is on. Its badge counts the unread messages: those
+ *   that didn't pop up since the list was last open. The list keeps the last 50 on the device, with their read state,
+ *   across reloads and between the main page and the admin view, and Clear empties it.
  * Errors and anything that needs an answer stay in the in-app dialog, and field problems stay in their fields.
  */
 const NOTIFY_KINDS = {
@@ -2007,7 +2025,7 @@ const NOTIFY_DEFAULTS = {
   seconds: 5
 };
 // The lasting states' precedence order: the indicator shows the first active one.
-const NOTIFY_LASTING_ORDER = ["reconnecting", "incompatible", "nolibrary", "loading", "refresh"];
+const NOTIFY_LASTING_ORDER = ["reconnecting", "update", "incompatible", "nolibrary", "loading", "refresh"];
 const NOTIFY_KEEP = 50;
 const POPUPS_AT_ONCE = 3;
 let activeNotifications = null;
@@ -2017,25 +2035,23 @@ function notifySettings() {
   return { ...NOTIFY_DEFAULTS, ...saved, kinds: { ...NOTIFY_DEFAULTS.kinds, ...(saved.kinds || {}) } };
 }
 
-function notifyAgo(time) {
-  const seconds = Math.round((Date.now() - time) / 1000);
-  if (seconds < 60) return "Just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  return new Date(time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
+// A message as the device keeps it, newest first: without the highlight, which lasts only while the list is open.
+const keptFields = ({ kind, icon, text, detail, level, time, unread }) => ({ kind, icon, text, detail, level, time, unread: !!unread });
 
 // `listHost` holds the list: on the main page the stage, so the list shows in fullscreen. `inFullscreen` tells whether the
 // player is in fullscreen, where popups show only while Show in fullscreen is on. `onClose` runs whenever the list
 // closes, so the player's controls, which stay while it is open, can start their countdown again.
 function initNotifications({ button, host, indicator, listHost = document.body, indicatorHidden = () => false, inFullscreen = () => false, onSettings, onClose, instant = false }) {
   let settings = notifySettings();
-  const entries = [];
+  let showSeconds = store.get("notify.showSeconds", false) === true;
+  const entries = store.get("notify.recent", []).map(keptFields);
   const lasting = new Map();
-  let unread = 0;
   let listOpen = false;
-  let timeTimer = 0;
+  // The lasting state the indicator shows, for its tap.
+  let indicated = null;
   const badge = button.querySelector(".notify-badge");
+  const unreadCount = () => entries.filter((entry) => entry.unread).length;
+  const keep = () => store.set("notify.recent", entries.map(keptFields));
 
   const list = document.createElement("section");
   list.className = "notify-list";
@@ -2059,19 +2075,23 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   // The entry or popup each row shows, for its menu.
   const shownEntry = new WeakMap();
   function entryRow(entry) {
-    const { icon, text, detail, time, kind, level, highlight } = entry;
+    const { icon, text, detail, time, kind, level, highlight, onTap } = entry;
     const row = document.createElement("li");
     shownEntry.set(row, entry);
     row.className = "notify-entry";
     row.classList.toggle("is-error", kind === "error");
     row.classList.toggle("is-warning", level === "warning");
     row.classList.toggle("is-unread", !!highlight);
+    if (onTap) {
+      row.classList.add("is-action");
+      row.addEventListener("click", () => onTap());
+    }
     const label = document.createElement("span");
     label.className = "notify-text";
     label.textContent = text;
     const when = document.createElement("span");
     when.className = "notify-time";
-    when.textContent = time ? notifyAgo(time) : "";
+    when.textContent = time ? whenText(time, showSeconds) : "";
     row.append(iconSpan(icon), label, when);
     if (detail) {
       const more = document.createElement("span");
@@ -2090,7 +2110,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     const now = activeLasting();
     part("now").hidden = now.length === 0;
     part("now").querySelector("ul").replaceChildren(...now.map((info) =>
-      entryRow({ icon: info.icon, text: info.progress ? `${info.title} ${info.progress}` : info.title, detail: info.detail, level: info.warning ? "warning" : "", lasting: true })));
+      entryRow({ icon: info.icon, text: info.progress ? `${info.title} ${info.progress}` : info.title, detail: info.detail, level: info.warning ? "warning" : "", lasting: true, onTap: info.onTap })));
     const recent = part("recent");
     recent.querySelector("ul").replaceChildren(...entries.map(entryRow));
     recent.querySelector(".notify-group-title").hidden = entries.length === 0;
@@ -2099,6 +2119,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   function renderBadge() {
+    const unread = unreadCount();
     badge.hidden = unread === 0;
     badge.textContent = unread > 9 ? "9+" : String(unread);
     button.classList.toggle("has-unread", unread > 0);
@@ -2125,12 +2146,10 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
       entry.highlight = entry.unread;
       entry.unread = false;
     });
-    unread = 0;
+    keep();
     renderBadge();
     renderList();
     placeList();
-    clearInterval(timeTimer);
-    timeTimer = setInterval(renderList, 30000);
   }
 
   // Closing the list, however it closes, leaves focus on the page rather than on a control it hides.
@@ -2141,7 +2160,6 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     list.hidden = true;
     button.classList.remove("is-open");
     entries.forEach((entry) => (entry.highlight = false));
-    clearInterval(timeTimer);
     onClose?.();
   }
 
@@ -2149,7 +2167,15 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   act("close").addEventListener("click", () => closeList());
   act("clear").addEventListener("click", () => {
     entries.length = 0;
+    keep();
     renderList();
+  });
+  // The indicator takes a tap only while it shows a state with an `onTap`, and the tap goes no further, so the player
+  // neither shows nor hides its controls nor starts a pick.
+  indicator?.addEventListener("click", (event) => {
+    if (!indicated?.onTap) return;
+    event.stopPropagation();
+    indicated.onTap();
   });
   act("settings").addEventListener("click", () => {
     closeList();
@@ -2284,6 +2310,8 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
       copyEntry(entry),
       !entry.lasting && menuItem("close", "Dismiss", () => {
         if (entries.includes(entry)) entries.splice(entries.indexOf(entry), 1);
+        keep();
+        renderBadge();
         renderList();
       })
     ]];
@@ -2299,9 +2327,12 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     }
   });
 
+  // In time order, newest first, so a message from an earlier day goes below today's.
   function add(entry) {
-    entries.unshift(entry);
+    const at = entries.findIndex((old) => old.time <= entry.time);
+    entries.splice(at < 0 ? entries.length : at, 0, entry);
     if (entries.length > NOTIFY_KEEP) entries.length = NOTIFY_KEEP;
+    keep();
     renderBadge();
     if (listOpen) renderList();
   }
@@ -2318,10 +2349,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;
     const pops = settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
-    if (!pops && !listOpen) {
-      entry.unread = true;
-      unread += 1;
-    }
+    if (!pops && !listOpen) entry.unread = true;
     add(entry);
     if (pops) showToast(entry, toastKey);
     // While the list is open nothing pops up, so a popup showing with this key would now be out of date: it closes,
@@ -2330,9 +2358,12 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     return entry;
   }
 
-  /** A message the user has already seen elsewhere, such as a notice, kept in the list only. */
-  function record({ kind = "error", text, detail = "" }) {
-    add({ kind, text, detail, level: "", icon: NOTIFY_KINDS[kind], time: Date.now(), unread: false });
+  /**
+   * A message the user has already seen elsewhere, such as a notice, kept in the list only. `time` places one from
+   * earlier, such as the Mockup tab's message from yesterday.
+   */
+  function record({ kind = "error", text, detail = "", time = Date.now() }) {
+    add({ kind, text, detail, level: "", icon: NOTIFY_KINDS[kind], time, unread: false });
   }
 
   function setLasting(id, info) {
@@ -2345,11 +2376,13 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   function renderIndicator() {
     if (!indicator) return;
     const top = indicatorHidden() ? null : activeLasting()[0];
+    indicated = top;
     indicator.hidden = !top;
     if (!top) return;
     indicator.dataset.state = top.id;
     indicator.classList.toggle("follows-controls", !!top.followsControls);
     indicator.classList.toggle("is-warning", !!top.warning);
+    indicator.classList.toggle("takes-tap", !!top.onTap);
     const icon = iconSpan(top.icon, top.spin ? "spins" : "");
     // Its own box, so a long state ends in an ellipsis before the corner buttons.
     const label = document.createElement("span");
@@ -2375,7 +2408,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     /** Closes every popup, such as on entering fullscreen while Show in fullscreen is off. */
     dismissAll: () => shownToasts().forEach((toast) => dismiss(toast, true)),
     entries: () => entries.slice(),
-    unread: () => unread,
+    unread: unreadCount,
     toasts: shownToasts,
     listShown: () => listOpen,
     openList,
@@ -2386,10 +2419,12 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
       store.set("notify", settings);
       applySettings();
     },
-    resetSettings() {
-      store.remove("notify");
-      settings = notifySettings();
-      applySettings();
+    /** Show seconds, kept on the device apart from the popup settings. */
+    showSeconds: () => showSeconds,
+    setShowSeconds(on) {
+      showSeconds = on;
+      store.set("notify.showSeconds", on);
+      if (listOpen) renderList();
     },
     /** Shows where popups appear and for how long, without adding to the list. */
     preview() {
@@ -2407,8 +2442,8 @@ const $ = (id) => document.getElementById(id);
 // the main page's menus.
 contextMenu.mount(document.body);
 // The admin view's acknowledgments pop up as the main page's do, and its refresh shows its progress in its own card.
-// Its list is the main page's, so Now shows every active lasting state; this page's bar sets only running without a library
-// and its own refresh.
+// Its list is the main page's, kept on the device, so Now shows every active lasting state; this page sets only running
+// without a library, its own refresh, and Apply & Restart's Reconnecting… and update notice.
 const notes = initNotifications({ button: $("notify-btn"), host: $("toasts") });
 const status = (text) => notes.notify({ kind: "actions", text });
 const state = {
@@ -2526,10 +2561,22 @@ $("update-download").addEventListener("click", async () => {
   $("update-download").hidden = true;
   $("update-apply").hidden = false;
 });
+// The server restarts on 0.15.1: Reconnecting… while it is away, then "Reconnected." and the update notice, since it now
+// serves a newer build than the page's. A tap on the notice's Now row reloads the page.
+const RECONNECTING = { icon: "sync", spin: true, title: "Reconnecting…", detail: "The connection to the server was lost. ReelRoulette keeps trying." };
+const UPDATE_NOTICE = { icon: "refresh", title: "ReelRoulette updated · Tap to reload", detail: "The server has a newer version. Reloading the page loads it.", onTap: () => location.reload() };
 $("update-apply").addEventListener("click", async () => {
-  if (await confirmDialog({ message: "Apply 0.15.1 and restart the server now? Admin will disconnect while the server restarts.", confirmLabel: "Apply & Restart" })) {
-    status("Applying the update and restarting…");
-  }
+  if (!(await confirmDialog({ message: "Apply 0.15.1 and restart the server now? Admin will disconnect while the server restarts.", confirmLabel: "Apply & Restart" }))) return;
+  status("Applying the update and restarting…");
+  $("update-apply").hidden = true;
+  setTimeout(() => notes.setLasting("reconnecting", RECONNECTING), 1000);
+  setTimeout(() => {
+    notes.setLasting("reconnecting", null);
+    notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+    notes.setLasting("update", UPDATE_NOTICE);
+    $("running-version").textContent = "0.15.1";
+    $("update-state").textContent = "Up to date: 0.15.1.";
+  }, 4000);
 });
 
 // ---- Refresh: its card shows the stage and progress, and its result pops up ----
@@ -2640,14 +2687,19 @@ function importLibrary(fileName) {
 // ---- Backups: restoring is an import of one of the server's own backups. Daily backups, kept by date beyond the
 // count, are listed only while daily retention is on; it starts off, at 0 days, so upgrading keeps today's rotation.
 // Before an import or a restore replaces the library, the server backs up the current one, even with backups off, so
-// a mistake can be undone; that backup is listed first, labeled by what it came before. ----
-const BACKUPS = ["Today 06:00", "Yesterday 18:00", "Yesterday 06:00"];
-const DAILY_BACKUPS = ["3 days ago (daily)", "10 days ago (daily)"];
+// a mistake can be undone; that backup is listed first, labeled by what it came before. Each is labeled by its time,
+// "HH:MM" today and "MM-DD HH:MM" for another day. ----
+const backupLabel = (daysAgo, hour) => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(hour, 0, 0, 0);
+  return whenText(date.getTime());
+};
+const BACKUPS = [backupLabel(0, 6), backupLabel(1, 18), backupLabel(1, 6)];
+const DAILY_BACKUPS = [`${backupLabel(3, 6)} (daily)`, `${backupLabel(10, 6)} (daily)`];
 const SAFETY_BACKUPS = [];
 function addSafetyBackup(reason) {
-  const now = new Date();
-  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  SAFETY_BACKUPS.unshift(`Today ${time} (before ${reason})`);
+  SAFETY_BACKUPS.unshift(`${whenText(Date.now())} (before ${reason})`);
   renderBackups();
 }
 let savedBackupDays = Number($("backup-days").value);
@@ -2660,9 +2712,9 @@ function renderBackups() {
     row.firstChild.textContent = label;
     const restore = dialogButton("Restore…");
     restore.addEventListener("click", async () => {
-      if (await confirmDialog({ message: `Restore the backup from ${label.toLowerCase()}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
+      if (await confirmDialog({ message: `Restore the backup from ${label}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
         addSafetyBackup("restore");
-        status(`Restored the backup from ${label.toLowerCase()}.`);
+        status(`Restored the backup from ${label}.`);
       }
     });
     row.append(restore);
@@ -2896,11 +2948,20 @@ function osFromUserAgent(ua) {
   if (/Linux/.test(ua)) return "Linux";
   return null;
 }
-// Today's client types: web and mobile-web from the WebUI, by user agent.
+// Today's client types: web and mobile-web from the WebUI, by user agent. Each connected a while before the page
+// opened, the first yesterday evening.
+const connectedAt = (minutesAgo, daysAgo = 0) => {
+  const date = new Date(Date.now() - minutesAgo * 60000);
+  if (daysAgo) {
+    date.setDate(date.getDate() - daysAgo);
+    date.setHours(22, 41);
+  }
+  return whenText(date.getTime());
+};
 const CLIENTS = [
-  ["web-3f9c2e81", "web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", "08:02"],
-  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", "09:47"],
-  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", "10:12"]
+  ["web-3f9c2e81", "web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", connectedAt(0, 1)],
+  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", connectedAt(47)],
+  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", connectedAt(12)]
 ];
 [["API sessions", 3], ["Control sessions", 1], ["Event streams", CLIENTS.length]].forEach(([label, count]) => {
   const chip = document.createElement("span");
@@ -2917,23 +2978,35 @@ CLIENTS.forEach(([id, type, ua, address, connected]) => {
   $("client-list").append(row);
 });
 $("clients-copy").addEventListener("click", () => status("Client list copied."));
-// Today's last.log lines, "[timestamp] [source] [level] message", newest first; a row expands to the full line.
+// Today's last.log lines, "[timestamp] [source] [level] message", newest first; a row expands to the full line. The
+// sample lines are timed back from when the page opened: the story's over its last 20 minutes, by seconds ago, and
+// the rest spread back from there over the Log Viewer's Last 24 hours, so the oldest are from the day before, unless
+// the page opens in the last minutes before midnight.
+const logStamp = (time) => {
+  const date = new Date(time);
+  return `${dayText(date)} ${clockText(date, true)}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+};
+const LOG_STORY = [
+  [60, "[server] [error] Media read failed: file not found."],
+  [85, "[webui] [warn] playback=failed reason=format"],
+  [275, "[server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed"],
+  [303, "[server] [warn] Thumbnail failed: unsupported codec while generating the thumbnail for one item in the Videos source, which the next refresh retries."],
+  [325, "[server] [info] Core refresh started"],
+  [536, "[webui] [info] favorite=set source=player"],
+  [934, "[server] [info] Update check: up to date"],
+  [1133, "[server] [info] Catalog opened: 49055 items"],
+  [1134, "[server] [info] Server started on port 45123"],
+  [1147, "[webui] [info] library=panel-updated total=38833 eligible=163"]
+];
+const storyStart = Date.now() - 20 * 60000;
+const oldestLine = Date.now() - (23 * 60 + 50) * 60000;
 const LOG_LINES = [
-  "[2026-10-08 10:20:05.214] [server] [error] Media read failed: file not found.",
-  "[2026-10-08 10:19:40.020] [webui] [warn] playback=failed reason=format",
-  "[2026-10-08 10:16:30.801] [server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed",
-  "[2026-10-08 10:16:02.113] [server] [warn] Thumbnail failed: unsupported codec while generating the thumbnail for one item in the Videos source, which the next refresh retries.",
-  "[2026-10-08 10:15:40.002] [server] [info] Core refresh started",
-  "[2026-10-08 10:12:09.550] [webui] [info] favorite=set source=player",
-  "[2026-10-08 10:05:31.020] [server] [info] Update check: up to date",
-  "[2026-10-08 10:02:12.300] [server] [info] Catalog opened: 49055 items",
-  "[2026-10-08 10:02:11.090] [server] [info] Server started on port 45123",
-  "[2026-10-08 10:01:58.400] [webui] [info] library=panel-updated total=38833 eligible=163",
+  ...LOG_STORY.map(([secondsAgo, rest]) => `[${logStamp(Date.now() - secondsAgo * 1000)}] ${rest}`),
   ...Array.from({ length: 50 }, (_, i) => {
-    const minute = String(59 - i).padStart(2, "0");
+    const stamp = logStamp(storyStart - ((storyStart - oldestLine) * (i + 1)) / 50);
     return i % 7 === 3
-      ? `[2026-10-08 09:${minute}:12.000] [server] [warn] Event stream reconnect from a client after a dropped connection`
-      : `[2026-10-08 09:${minute}:04.000] [server] [info] Library query served: ${120 + i} items`;
+      ? `[${stamp}] [server] [warn] Event stream reconnect from a client after a dropped connection`
+      : `[${stamp}] [server] [info] Library query served: ${120 + i} items`;
   })
 ];
 // The newest matching lines first; older ones load as the list nears its end, up to the route's 5000 lines.
@@ -2988,7 +3061,8 @@ function renderLog() {
     line.type = "button";
     line.className = "log-line";
     line.innerHTML = '<span class="ts"></span><span class="lvl"></span><span class="meta"></span><span class="msg"></span>';
-    line.querySelector(".ts").textContent = entry.ts.slice(11);
+    // The line's time of day, with its MM-DD before it for a line from another day.
+    line.querySelector(".ts").textContent = entry.ts.slice(0, 10) === dayText(new Date()) ? entry.ts.slice(11) : entry.ts.slice(5);
     line.querySelector(".lvl").textContent = entry.lvl;
     line.querySelector(".lvl").classList.add(`lvl-${entry.lvl}`);
     line.querySelector(".meta").textContent = entry.svc;

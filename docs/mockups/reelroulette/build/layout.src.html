@@ -711,6 +711,8 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-indicator-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-block: 0.15em; margin-block: -0.15em; }
 .player-indicator .material-symbol-icon.spins { animation: spin 1.2s linear infinite; }
 .player-indicator.is-warning .material-symbol-icon { color: var(--huggins-orange); }
+/* The update notice takes a tap, which reloads the page. */
+.player-indicator.takes-tap { pointer-events: auto; cursor: pointer; }
 .media-container:not(.controls-visible) .player-indicator.follows-controls { opacity: 0; }
 .stage[data-side="left"] .player-indicator { max-width: calc(100% - 336px); }
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
@@ -1455,6 +1457,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 </fieldset>
               </details>
             </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-notify-seconds"> Show seconds</label></div>
+              <p class="setting-hint">Adds seconds to the times in the bell's list.</p>
+            </div>
           </div>
           <div class="settings-section">
             <h3>Panel</h3>
@@ -1612,11 +1618,12 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       <fieldset id="mock-lasting">
         <legend>Lasting states, on the player</legend>
         <label><input type="checkbox" value="reconnecting"> Reconnecting: the server is stopped</label>
+        <label><input type="checkbox" value="update"> ReelRoulette updated: the server serves a newer build</label>
         <label><input type="checkbox" value="incompatible"> The server fails the compatibility check</label>
         <label><input type="checkbox" value="nolibrary"> The server runs without a library</label>
         <label><input type="checkbox" value="loading"> Loading, held until unchecked</label>
         <label><input type="checkbox" value="refresh"> A library refresh: it finishes by itself, or now when unchecked</label>
-        <p class="mock-small mock-keep">The first three are the Server choices above. The indicator shows one at a time, the first checked in this order; the list under the bell shows them all. Loading shows after half a second, so a quick load shows nothing. The refresh shows only while the player's controls do.</p>
+        <p class="mock-small mock-keep">Reconnecting and the two after ReelRoulette updated are the Server choices above. ReelRoulette updated is apart from them, so it can show beside a server that fails the compatibility check; it is off while Reconnecting shows, and a tap on it reloads the page, so it is gone afterwards, as in the app. The indicator shows one at a time, the first checked in this order; the list under the bell shows them all. Loading shows after half a second, so a quick load shows nothing. The refresh shows only while the player's controls do.</p>
       </fieldset>
       <fieldset>
         <legend>Test notifications</legend>
@@ -1629,8 +1636,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <button type="button" data-test="connection">Reconnected</button>
           <button type="button" data-test="notice">An error, in the dialog</button>
           <button type="button" data-test="burst">Four at once</button>
+          <button type="button" data-test="yesterday">From yesterday</button>
         </div>
-        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it.</p>
+        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it. From yesterday goes only to the list, as one kept from an earlier visit, and shows its date.</p>
       </fieldset>
       <fieldset>
         <legend>Events</legend>
@@ -1755,6 +1763,8 @@ const state = {
   resyncs: 0,
   // Mockup option: the server's situation.
   situation: null,
+  // Mockup option: the server serves a newer build than the page's, apart from its situation.
+  updateServed: false,
   // How the Library tab's load goes: it loads, fails, or times out.
   libraryLoad: "loads",
   // How the Stats tab's first load goes: it loads, fails, or finds the playing file removed from the server.
@@ -1945,7 +1955,6 @@ let nextPresetId = presets.length + 1;
 
 // Whole `seconds` as h:mm:ss with hours, or m:ss, its first part padded to `digits`.
 function timeInShape(seconds, withHours, digits) {
-  const two = (value) => String(value).padStart(2, "0");
   if (withHours) return `${String(Math.floor(seconds / 3600)).padStart(digits, "0")}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`;
   return `${String(Math.floor(seconds / 60)).padStart(digits, "0")}:${two(seconds % 60)}`;
 }
@@ -1997,6 +2006,7 @@ const instant = new URLSearchParams(location.search).has("instant");
 // bell shows them all.
 const LASTING = {
   reconnecting: { icon: "sync", spin: true, title: "Reconnecting…", detail: "The connection to the server was lost. ReelRoulette keeps trying." },
+  update: { icon: "refresh", title: "ReelRoulette updated · Tap to reload", detail: "The server has a newer version. Reloading the page loads it.", onTap: reloadForUpdate },
   incompatible: { icon: "sync_problem", warning: true, title: "Server not compatible", detail: "Unsupported server API version: 2." },
   nolibrary: { icon: "warning", warning: true, title: "Running without a library", detail: NO_LIBRARY_REASON },
   loading: { icon: "progress_activity", spin: true, title: "Loading…" }
@@ -2019,6 +2029,17 @@ const notes = initNotifications({
   instant
 });
 const acknowledge = (text, key, detail = "") => notes.notify({ kind: "actions", text, detail, key });
+// The update notice's tap, on the indicator or its Now row: it reloads the page onto the server's newer build, after
+// asking while the Filter or Tags tab holds unsaved changes, which the reload would lose.
+async function reloadForUpdate() {
+  if ((unsaved.filter || unsaved.tags) && !(await confirmDialog({ message: "Discard changes?", confirmLabel: "Discard", danger: true }))) return;
+  location.reload();
+}
+// The server serves a newer build, from the Mockup tab. The notice is off while Reconnecting… shows, since a reload
+// then would land on the browser's error page.
+function renderUpdateNotice() {
+  notes.setLasting("update", state.updateServed && state.situation !== "reconnecting" ? LASTING.update : null);
+}
 // Loading shows only after half a second, so a quick load shows nothing. A random pick, the media, and the Mockup
 // tab's hold each keep it on. The half second counts once, from the first hold until every hold ends, so a pick and
 // its media load are one loading period.
@@ -2686,7 +2707,7 @@ let tapWindow = 0;
 let singleTapWaits = false;
 media.addEventListener("touchstart", (event) => {
   tapX = null;
-  swipeStart = event.target.closest("#overlay-controls .overlay-btn, .overlay-seek-row, .rating-popover") ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  swipeStart = event.target.closest("#overlay-controls .overlay-btn, .overlay-seek-row, .rating-popover, .player-indicator.takes-tap") ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY };
 }, { passive: true });
 media.addEventListener("touchend", (event) => {
   if (!swipeStart || !event.changedTouches[0]) return;
@@ -3969,9 +3990,8 @@ function syncDateRanges() {
     to.input.disabled = !custom;
   });
 }
-// A date as its field holds it, YYYY-MM-DD, for a local day; and a local day read from one. A date field's
-// `valueAsDate` is midnight UTC, which is the day before west of UTC.
-const dayText = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+// A local day read from a date field's YYYY-MM-DD, which common.js's `dayText` writes. A date field's `valueAsDate` is
+// midnight UTC, which is the day before west of UTC.
 function localDay(text) {
   const [year, month, day] = text.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -5223,7 +5243,8 @@ $("mock-reset").addEventListener("click", () => {
 });
 
 // The server's situation. Being connected needs no message. Reconnecting, a failed compatibility check, and running
-// without a library are lasting states on the player, and the connection coming back is a popup.
+// without a library are lasting states on the player, and the connection coming back is a popup, except when the
+// server comes back failing the compatibility check, which says so in its place.
 const SERVER_STATES = ["reconnecting", "incompatible", "nolibrary"];
 function applySituation(situation) {
   const was = state.situation;
@@ -5231,7 +5252,8 @@ function applySituation(situation) {
   document.body.classList.toggle("held-back", heldBack());
   document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => (radio.checked = radio.value === situation));
   SERVER_STATES.forEach((id) => notes.setLasting(id, situation === id ? LASTING[id] : null));
-  if (was === "reconnecting" && situation !== "reconnecting") {
+  renderUpdateNotice();
+  if (was === "reconnecting" && situation !== "reconnecting" && situation !== "incompatible") {
     notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
     // The server restarted, so it asks for a resync, whose event number starts again.
     state.resyncs += 1;
@@ -5467,17 +5489,21 @@ function finishRefresh() {
   reloadGrid();
 }
 
-// The Mockup tab's lasting states: the server's follow the Server choice, and loading and a refresh run on their own.
+// The Mockup tab's lasting states: the server's follow the Server choice, a newer build stays checked while
+// Reconnecting… holds its notice off, and loading and a refresh run on their own.
 function renderMockLasting() {
   const active = new Set(notes.lasting().map((info) => info.id));
   $("mock-lasting").querySelectorAll("input").forEach((box) => {
-    box.checked = box.value === "loading" ? loadingHolds.has("mock") : active.has(box.value);
+    box.checked = box.value === "loading" ? loadingHolds.has("mock") : box.value === "update" ? state.updateServed : active.has(box.value);
   });
 }
 $("mock-lasting").addEventListener("change", (event) => {
   const box = event.target;
   if (SERVER_STATES.includes(box.value)) applySituation(box.checked ? box.value : "connected");
-  else if (box.value === "loading") setLoading("mock", box.checked);
+  else if (box.value === "update") {
+    state.updateServed = box.checked;
+    renderUpdateNotice();
+  } else if (box.value === "loading") setLoading("mock", box.checked);
   else if (box.value === "refresh") {
     if (box.checked) startRefresh();
     else finishRefresh();
@@ -5499,6 +5525,13 @@ const TESTS = {
     notes.notify({ kind: "devices", text: "Added to favorites on another device", detail: ITEMS[1].name });
     notes.notify({ kind: "skips", text: "Skipped a missing file.", detail: ITEMS[13].name, key: "skip" });
     acknowledge("Path copied.", "path", ITEMS[2].name);
+  },
+  // Kept from an earlier visit: yesterday at 21:14, in the list only.
+  yesterday: () => {
+    const time = new Date();
+    time.setDate(time.getDate() - 1);
+    time.setHours(21, 14, 37, 0);
+    notes.record({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_SUMMARY, time: time.getTime() });
   }
 };
 $("mock-tests").addEventListener("click", (event) => {
@@ -5883,7 +5916,7 @@ contextMenu.add("#media", () => {
     fileGroup(item),
     [menuItem("delete_forever", "Delete file…", () => runBulk("delete", [item], false), { danger: true })]
   ];
-}, { except: `${CONTROL_PARTS}, .rating-popover`, mark: false, onClose: () => controlsActivity() });
+}, { except: `${CONTROL_PARTS}, .rating-popover, .player-indicator.takes-tap`, mark: false, onClose: () => controlsActivity() });
 
 // The header's file name: Show stats, which its click does, and the file's copies.
 contextMenu.add("#np-name", () => playback.item && [[menuItem("bar_chart", "Show stats", openStats)], fileGroup(playback.item)]);
@@ -6050,8 +6083,7 @@ function statTime(time, none) {
 }
 function dateTimeText(time) {
   const date = new Date(time);
-  const two = (n) => String(n).padStart(2, "0");
-  return `${dayText(date)} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
+  return `${dayText(date)} ${clockText(date, true)}`;
 }
 // How long ago a time was: Just now, then minutes, hours, and days, then months once a whole calendar month has passed,
 // and years once a whole year has.
@@ -6840,6 +6872,9 @@ function initSettings() {
       notes.preview();
     });
   });
+  // Show seconds sits outside the popup settings, since the bell's list shows its times with popups off too.
+  $("set-notify-seconds").checked = notes.showSeconds();
+  $("set-notify-seconds").addEventListener("change", () => notes.setShowSeconds($("set-notify-seconds").checked));
   // The client type and device name as the WebUI builds them from the browser, shown in full, as the ids are, since
   // they are for matching last.log lines.
   const userAgent = navigator.userAgent || "";

@@ -4,7 +4,7 @@ An interactive mockup of the app's whole visible UI, approved before the v0.15.0
 
 - `index.html` links the pages and lists the numbers set with them.
 - `layout.html` shows the main page:
-  - the header, the player with its controls, its notifications bell, and its indicator for lasting states, and the popups;
+  - the header, the player with its controls, its notifications bell with the messages it keeps across reloads, and its indicator for lasting states, the update notice among them, and the popups;
   - the side panel on either side of the player, with its resize handle, or as the full-screen overlay at phone widths;
   - the Library, Tags, Stats, Filter, Randomization, and Settings tabs, with multi-select and bulk actions in the Library;
   - the right-click menus across the page, which a long press opens on a touch screen;

@@ -423,8 +423,8 @@ const $ = (id) => document.getElementById(id);
 // the main page's menus.
 contextMenu.mount(document.body);
 // The admin view's acknowledgments pop up as the main page's do, and its refresh shows its progress in its own card.
-// Its list is the main page's, so Now shows every active lasting state; this page's bar sets only running without a library
-// and its own refresh.
+// Its list is the main page's, kept on the device, so Now shows every active lasting state; this page sets only running
+// without a library, its own refresh, and Apply & Restart's Reconnecting… and update notice.
 const notes = initNotifications({ button: $("notify-btn"), host: $("toasts") });
 const status = (text) => notes.notify({ kind: "actions", text });
 const state = {
@@ -542,10 +542,22 @@ $("update-download").addEventListener("click", async () => {
   $("update-download").hidden = true;
   $("update-apply").hidden = false;
 });
+// The server restarts on 0.15.1: Reconnecting… while it is away, then "Reconnected." and the update notice, since it now
+// serves a newer build than the page's. A tap on the notice's Now row reloads the page.
+const RECONNECTING = { icon: "sync", spin: true, title: "Reconnecting…", detail: "The connection to the server was lost. ReelRoulette keeps trying." };
+const UPDATE_NOTICE = { icon: "refresh", title: "ReelRoulette updated · Tap to reload", detail: "The server has a newer version. Reloading the page loads it.", onTap: () => location.reload() };
 $("update-apply").addEventListener("click", async () => {
-  if (await confirmDialog({ message: "Apply 0.15.1 and restart the server now? Admin will disconnect while the server restarts.", confirmLabel: "Apply & Restart" })) {
-    status("Applying the update and restarting…");
-  }
+  if (!(await confirmDialog({ message: "Apply 0.15.1 and restart the server now? Admin will disconnect while the server restarts.", confirmLabel: "Apply & Restart" }))) return;
+  status("Applying the update and restarting…");
+  $("update-apply").hidden = true;
+  setTimeout(() => notes.setLasting("reconnecting", RECONNECTING), 1000);
+  setTimeout(() => {
+    notes.setLasting("reconnecting", null);
+    notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+    notes.setLasting("update", UPDATE_NOTICE);
+    $("running-version").textContent = "0.15.1";
+    $("update-state").textContent = "Up to date: 0.15.1.";
+  }, 4000);
 });
 
 // ---- Refresh: its card shows the stage and progress, and its result pops up ----
@@ -656,14 +668,19 @@ function importLibrary(fileName) {
 // ---- Backups: restoring is an import of one of the server's own backups. Daily backups, kept by date beyond the
 // count, are listed only while daily retention is on; it starts off, at 0 days, so upgrading keeps today's rotation.
 // Before an import or a restore replaces the library, the server backs up the current one, even with backups off, so
-// a mistake can be undone; that backup is listed first, labeled by what it came before. ----
-const BACKUPS = ["Today 06:00", "Yesterday 18:00", "Yesterday 06:00"];
-const DAILY_BACKUPS = ["3 days ago (daily)", "10 days ago (daily)"];
+// a mistake can be undone; that backup is listed first, labeled by what it came before. Each is labeled by its time,
+// "HH:MM" today and "MM-DD HH:MM" for another day. ----
+const backupLabel = (daysAgo, hour) => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(hour, 0, 0, 0);
+  return whenText(date.getTime());
+};
+const BACKUPS = [backupLabel(0, 6), backupLabel(1, 18), backupLabel(1, 6)];
+const DAILY_BACKUPS = [`${backupLabel(3, 6)} (daily)`, `${backupLabel(10, 6)} (daily)`];
 const SAFETY_BACKUPS = [];
 function addSafetyBackup(reason) {
-  const now = new Date();
-  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  SAFETY_BACKUPS.unshift(`Today ${time} (before ${reason})`);
+  SAFETY_BACKUPS.unshift(`${whenText(Date.now())} (before ${reason})`);
   renderBackups();
 }
 let savedBackupDays = Number($("backup-days").value);
@@ -676,9 +693,9 @@ function renderBackups() {
     row.firstChild.textContent = label;
     const restore = dialogButton("Restore…");
     restore.addEventListener("click", async () => {
-      if (await confirmDialog({ message: `Restore the backup from ${label.toLowerCase()}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
+      if (await confirmDialog({ message: `Restore the backup from ${label}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
         addSafetyBackup("restore");
-        status(`Restored the backup from ${label.toLowerCase()}.`);
+        status(`Restored the backup from ${label}.`);
       }
     });
     row.append(restore);
@@ -912,11 +929,20 @@ function osFromUserAgent(ua) {
   if (/Linux/.test(ua)) return "Linux";
   return null;
 }
-// Today's client types: web and mobile-web from the WebUI, by user agent.
+// Today's client types: web and mobile-web from the WebUI, by user agent. Each connected a while before the page
+// opened, the first yesterday evening.
+const connectedAt = (minutesAgo, daysAgo = 0) => {
+  const date = new Date(Date.now() - minutesAgo * 60000);
+  if (daysAgo) {
+    date.setDate(date.getDate() - daysAgo);
+    date.setHours(22, 41);
+  }
+  return whenText(date.getTime());
+};
 const CLIENTS = [
-  ["web-3f9c2e81", "web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", "08:02"],
-  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", "09:47"],
-  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", "10:12"]
+  ["web-3f9c2e81", "web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", connectedAt(0, 1)],
+  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", connectedAt(47)],
+  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", connectedAt(12)]
 ];
 [["API sessions", 3], ["Control sessions", 1], ["Event streams", CLIENTS.length]].forEach(([label, count]) => {
   const chip = document.createElement("span");
@@ -933,23 +959,35 @@ CLIENTS.forEach(([id, type, ua, address, connected]) => {
   $("client-list").append(row);
 });
 $("clients-copy").addEventListener("click", () => status("Client list copied."));
-// Today's last.log lines, "[timestamp] [source] [level] message", newest first; a row expands to the full line.
+// Today's last.log lines, "[timestamp] [source] [level] message", newest first; a row expands to the full line. The
+// sample lines are timed back from when the page opened: the story's over its last 20 minutes, by seconds ago, and
+// the rest spread back from there over the Log Viewer's Last 24 hours, so the oldest are from the day before, unless
+// the page opens in the last minutes before midnight.
+const logStamp = (time) => {
+  const date = new Date(time);
+  return `${dayText(date)} ${clockText(date, true)}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+};
+const LOG_STORY = [
+  [60, "[server] [error] Media read failed: file not found."],
+  [85, "[webui] [warn] playback=failed reason=format"],
+  [275, "[server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed"],
+  [303, "[server] [warn] Thumbnail failed: unsupported codec while generating the thumbnail for one item in the Videos source, which the next refresh retries."],
+  [325, "[server] [info] Core refresh started"],
+  [536, "[webui] [info] favorite=set source=player"],
+  [934, "[server] [info] Update check: up to date"],
+  [1133, "[server] [info] Catalog opened: 49055 items"],
+  [1134, "[server] [info] Server started on port 45123"],
+  [1147, "[webui] [info] library=panel-updated total=38833 eligible=163"]
+];
+const storyStart = Date.now() - 20 * 60000;
+const oldestLine = Date.now() - (23 * 60 + 50) * 60000;
 const LOG_LINES = [
-  "[2026-10-08 10:20:05.214] [server] [error] Media read failed: file not found.",
-  "[2026-10-08 10:19:40.020] [webui] [warn] playback=failed reason=format",
-  "[2026-10-08 10:16:30.801] [server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed",
-  "[2026-10-08 10:16:02.113] [server] [warn] Thumbnail failed: unsupported codec while generating the thumbnail for one item in the Videos source, which the next refresh retries.",
-  "[2026-10-08 10:15:40.002] [server] [info] Core refresh started",
-  "[2026-10-08 10:12:09.550] [webui] [info] favorite=set source=player",
-  "[2026-10-08 10:05:31.020] [server] [info] Update check: up to date",
-  "[2026-10-08 10:02:12.300] [server] [info] Catalog opened: 49055 items",
-  "[2026-10-08 10:02:11.090] [server] [info] Server started on port 45123",
-  "[2026-10-08 10:01:58.400] [webui] [info] library=panel-updated total=38833 eligible=163",
+  ...LOG_STORY.map(([secondsAgo, rest]) => `[${logStamp(Date.now() - secondsAgo * 1000)}] ${rest}`),
   ...Array.from({ length: 50 }, (_, i) => {
-    const minute = String(59 - i).padStart(2, "0");
+    const stamp = logStamp(storyStart - ((storyStart - oldestLine) * (i + 1)) / 50);
     return i % 7 === 3
-      ? `[2026-10-08 09:${minute}:12.000] [server] [warn] Event stream reconnect from a client after a dropped connection`
-      : `[2026-10-08 09:${minute}:04.000] [server] [info] Library query served: ${120 + i} items`;
+      ? `[${stamp}] [server] [warn] Event stream reconnect from a client after a dropped connection`
+      : `[${stamp}] [server] [info] Library query served: ${120 + i} items`;
   })
 ];
 // The newest matching lines first; older ones load as the list nears its end, up to the route's 5000 lines.
@@ -1004,7 +1042,8 @@ function renderLog() {
     line.type = "button";
     line.className = "log-line";
     line.innerHTML = '<span class="ts"></span><span class="lvl"></span><span class="meta"></span><span class="msg"></span>';
-    line.querySelector(".ts").textContent = entry.ts.slice(11);
+    // The line's time of day, with its MM-DD before it for a line from another day.
+    line.querySelector(".ts").textContent = entry.ts.slice(0, 10) === dayText(new Date()) ? entry.ts.slice(11) : entry.ts.slice(5);
     line.querySelector(".lvl").textContent = entry.lvl;
     line.querySelector(".lvl").classList.add(`lvl-${entry.lvl}`);
     line.querySelector(".meta").textContent = entry.svc;

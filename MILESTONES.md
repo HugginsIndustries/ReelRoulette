@@ -141,14 +141,15 @@ Last milestone completed: M12n1
 
 ### M12n2 - WebUI Update Notice
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: When the server serves a newer build of ReelRoulette, the player's indicator and the bell's list say so until a tap reloads the page, the bell's messages survive the reload, and every time and date the app shows reads in 24-hour time and ISO dates.
 - **Depends on**: WebUI Notifications, whose indicator and bell's list this milestone adds to, and WebUI Developer Settings, whose page reload the notice's tap uses and whose reset this milestone keeps the bell's messages through.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
 
-- The notice is a lasting state, "ReelRoulette updated · Tap to reload", worded as the mockup review settles, on the player's indicator and in the bell's Now section.
+- The notice is a lasting state, "ReelRoulette updated · Tap to reload", on the player's indicator and in the bell's Now section.
+- It says "Tap" on every device, as the empty player's "Tap to play" does.
 - It never fades with the controls, as Reconnecting… doesn't.
 - It comes after Reconnecting… and before Server not compatible and the states after it.
 - It is off while Reconnecting… shows, since a reload while the server can't be reached lands on the browser's error page, which an installed iOS app can't leave.
@@ -169,7 +170,7 @@ Last milestone completed: M12n1
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The update notice on the indicator and in the bell's Now section with its tap and the discard question, the notice in the admin view after Apply & Restart, the bell's new times and Show seconds, the bell's messages kept across reloads, and every time and date in the mockup in 24-hour time and ISO dates, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
+| Mockup | ✅ Complete | The update notice on the indicator and in the bell's Now section with its tap and the discard question, the notice in the admin view after Apply & Restart, the bell's new times and Show seconds, the bell's messages kept across reloads, and every time and date in the mockup in 24-hour time and ISO dates, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Dev server | ⏳ Planned | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
 | Build check | ⏳ Planned | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
 | Reload notice | ⏳ Planned | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
@@ -230,6 +231,24 @@ Last milestone completed: M12n1
 **Acceptance**
 
 - The mockup shows the notice, its tap, the bell's times, Show seconds, the kept messages, and the admin page's times as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- The user approved the mockup in one review on their devices, as first built.
+- The review settled the wording "ReelRoulette updated · Tap to reload", with "Tap" on every device, the `refresh` icon, not orange, and the Now row's second line "The server has a newer version. Reloading the page loads it."
+- The mockup's tap reloads the page, so the bell's kept messages show after it and the notice is gone, as in the app.
+- The review settled Show seconds below Popup settings, with the hint "Adds seconds to the times in the bell's list."
+- The review settled the admin page's labels: backups as "06:00", "11-24 18:00", and "11-22 06:00 (daily)", the backup before an import as "14:32 (before import)", a client that connected on another day as "MM-DD HH:MM", and a Log Viewer line from another day with "MM-DD" before its time.
+- A lasting state with an `onTap` takes a tap on the indicator and on its Now row (`initNotifications` in `build/common.js`), and the indicator's tap stops there, so the player's own tap, its swipe, and its menu leave it out (`build/layout.src.html`).
+- The admin page's Apply & Restart shows Reconnecting… in its bell's Now for 3 seconds, then "Reconnected." and the notice, and its update card then shows 0.15.1 running.
+- The bell's Recent list is kept under `rr-mockup.notify.recent` and Show seconds under `rr-mockup.notify.showSeconds`, apart from the popup settings, and the mockup's reset keeps the list (`clearSettings` on `store` in `build/common.js`).
+- The list is written on an entry's Dismiss too, and takes messages in time order, so the Mockup tab's From yesterday message sits below today's.
+- A server that comes back from Reconnecting… failing the compatibility check no longer pops up "Reconnected.", as the Build check slice has the app do.
+- The admin page's backups, clients, and Log Viewer lines are dated from the day the page opens, and the Log Viewer's sample lines reach back 23 hours 50 minutes, inside its Last 24 hours.
+- `two`, `dayText`, `clockText`, and `whenText` in `build/common.js` replace `notifyAgo`, the open list's 30-second refresh, the main page's own day and padding helpers, and the admin page's hand-built time.
+- In a one-off happy-dom run, the notice showed beside Server not compatible and hid while Reconnecting… showed, both taps reloaded without reaching the player, Discard changes? held the reload on Cancel, the times read "HH:MM" and "MM-DD HH:MM" with and without seconds, the kept list survived the reset, a reload, and the move to the admin page, Apply & Restart ended on the notice, and no script errors occurred (measured).
+- The index page, the Lasting states fieldset's note, the list's comment, and the mockup's README describe the notice, the times, and the kept list.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 
 #### Dev server slice
 
@@ -299,8 +318,10 @@ Last milestone completed: M12n1
 
 **Scope**
 
-- The notice is a lasting state (`src/state/lastingStates.ts`), after Reconnecting… in the order, active while the server serves a newer build and Reconnecting… doesn't show, with the wording, icon, and second line the mockup review settles.
-- On the player, the indicator takes taps while it shows the notice, and a tap reloads the page without also showing or hiding the controls, starting a random pick, or seeking (`PlayerIndicator` in `src/ui/Player.tsx`, `.player-indicator` in `src/styles.css`).
+- The notice is a lasting state (`src/state/lastingStates.ts`), after Reconnecting… in the order, active while the server serves a newer build and Reconnecting… doesn't show.
+- It shows the `refresh` icon, not orange, and its Now row's second line reads "The server has a newer version. Reloading the page loads it."
+- On the player, the indicator takes taps while it shows the notice, and a tap reloads the page without also showing or hiding the controls, starting a random pick, seeking, or starting a swipe (`PlayerIndicator` in `src/ui/Player.tsx`, `.player-indicator` in `src/styles.css`).
+- A right-click or a long press on the notice opens no menu, as the mockup leaves it out of the player's menu while it takes taps.
 - In the bell's Now section, the notice's row takes a tap that reloads the page (`EntryRow` in `src/ui/Notifications.tsx`).
 - While the Filter or Tags tab holds unsaved changes, a tap first asks "Discard changes?" through `dialogs.confirm`, with a red Discard, and Cancel leaves the page as it was.
 - The reload goes through the page reload that WebUI Developer Settings passes in for its reset, so tests replace it.
@@ -315,6 +336,7 @@ Last milestone completed: M12n1
 - The indicator fades with the controls only for a state that follows them, as a library refresh does.
 - A tap on the player goes through `onAreaClick` in `src/ui/Player.tsx`: a swipe's click is swallowed, a tap on a seekable video waits 300 ms for a double tap, and the tap then starts a random pick while nothing plays, or shows or hides the controls.
 - The player's touch listeners skip only touches that start in `#overlay-controls`, which stops click and touch events from reaching the player.
+- The player's menu comes with WebUI Context Menus' Player slice, so whichever of the two lands second leaves the notice out of it.
 - A Now row is a plain list item, and the list's only buttons are Clear, Close, and Notification settings.
 - Server not compatible lasts until the page loads again, since the event stream stops while it shows.
 - The Filter and Tags tabs' unsaved changes are `services.unsaved` (`src/state/appServices.ts`), and the Tags tab already asks "Discard changes?" with a red Discard (`DISCARD_ITEM_CHANGES` in `src/tags/tagEditor.ts`).
@@ -331,7 +353,7 @@ Last milestone completed: M12n1
 
 - The notice shows on the indicator and in the bell's Now section while the server serves a newer build, before Server not compatible and the states after it, and not while Reconnecting… shows, in lasting state tests.
 - With the server also incompatible, the Now section lists both and the indicator shows the notice, in lasting state tests.
-- A tap on the indicator reloads the page and neither shows or hides the controls nor starts a random pick, in player screen tests.
+- A tap on the indicator reloads the page and neither shows or hides the controls nor starts a random pick, and a right-click on it opens no menu, in player screen tests.
 - A tap on the notice's Now row reloads the page, in notifications screen tests.
 - With unsaved Filter or Tags changes, a tap asks "Discard changes?" first, Discard reloads, and Cancel doesn't, in player and notifications screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -344,7 +366,8 @@ Last milestone completed: M12n1
 - Shared formatters in `src/time/timeText.ts`, beside `localDayText` and `exactTimeText`, give a time of day as "HH:MM" or "HH:MM:SS", and a message's time as that for today and with "MM-DD" before it for another day.
 - The bell's list shows each message's time through them (`messageTime` in `src/notifications/notifications.ts`), in place of "Just now", "{n} min ago", and the 12-hour time of day.
 - The open list's 30-second refresh of its times goes (`LIST_TIME_REFRESH_MS`), since a message's time changes only when a day ends, which the list follows the next time it renders.
-- Show seconds, off by default, sits in the Settings tab's Notifications section outside the popup settings (`NotificationSettings` in `src/ui/SettingsTab.tsx`), is kept per device as `notifications.showSeconds`, and makes the bell's times "HH:MM:SS" and "MM-DD HH:MM:SS".
+- Show seconds, off by default, sits in the Settings tab's Notifications section below the Popup settings block, outside the fields Show popups disables (`NotificationSettings` in `src/ui/SettingsTab.tsx`), is kept per device as `notifications.showSeconds`, and makes the bell's times "HH:MM:SS" and "MM-DD HH:MM:SS".
+- Its hint reads "Adds seconds to the times in the bell's list."
 - The Stats tab's exact times go through the shared formatters and read as before.
 - The Filters line's dates keep their wording, and the custom range's date pickers follow the device.
 - `CONTEXT.md` and `docs/domain-inventory.md` describe the bell's times, Show seconds, and the formatters.
@@ -375,7 +398,7 @@ Last milestone completed: M12n1
 **Scope**
 
 - The bell's Recent list is kept per device as `notifications.recent` in the device store, up to its 50 messages, each with its kind, icon, text, second line, warning, time, and read state (`src/notifications/notifications.ts`).
-- It is written when a message or a notice joins the list, when the list opens, and when Clear empties it, and it is read when the page starts, with each entry's fields checked as the popup settings' are.
+- It is written when a message or a notice joins the list, when the list opens, when Clear empties it, and when an entry's Dismiss removes one, and it is read when the page starts, with each entry's fields checked as the popup settings' are.
 - Kept messages get new ids when the page starts, and the list's highlight of unread messages while it is open isn't kept.
 - The bell's badge counts the kept messages marked unread, in place of its own counter.
 - Reset this device's settings keeps `notifications.recent`, as it keeps the Developer settings.
@@ -394,6 +417,7 @@ Last milestone completed: M12n1
 - The device store keeps one JSON value per key under `rr_device.` (`src/state/deviceStore.ts`), and the popup settings are read with a check of each field (`readPopupSettings`).
 - WebUI Developer Settings' reset clears every `rr_device.` setting except the `developer.` ones, through the clear it gives the device store.
 - No code listens for another page's storage changes, so two pages on one device each write the whole list and the last one wins, as with every device setting.
+- An entry's Dismiss comes with WebUI Context Menus' Notifications, Auto Tag, and Settings slice, so whichever of the two lands second writes the kept list on Dismiss.
 - The player screen test of which keys a session writes expects an exact list and plays a flow that sends a message, so it fails until it allows `notifications.recent` (`src/test/screens/player.test.ts`) (inferred).
 - The library, Settings, and Randomization screen tests also expect exact key lists, and may need the same (inferred).
 - The screen harness clears `localStorage` and `sessionStorage` before each page (`resetPage` in `src/test/screens/pageHarness.ts`), so a test of the kept list mounts the page again without it.
@@ -1347,7 +1371,7 @@ Last milestone completed: M12n1
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
-- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses, and WebUI Context Menus, whose menus the admin view shows over itself.
+- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses, and WebUI Context Menus, whose menus the admin view shows over itself, and WebUI Update Notice, whose time formatters the connected clients' times use.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -1400,6 +1424,7 @@ Last milestone completed: M12n1
 - Settings fields that can hold a value that is not valid, such as the port, use the field validation pattern, and their Save can't proceed while one is not valid.
 - The values each field accepts are read from the server's checks when this slice starts.
 - Connected clients show each client's id and, where its user agent names one, its operating system, then its type, address, and the time it connected, with counts of API sessions, control sessions, and event streams.
+- A client's connection time reads "HH:MM" for today and "MM-DD HH:MM" for another day, through the shared time formatters.
 - Connected clients leave out the session id, which the Operator page shows today.
 - On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow, its title, and the bell.
 - The admin view has no status line. Its acknowledgments, such as "Control settings saved.", pop up as Your actions popups, and its bell opens the same list as the player's, whose Now shows the lasting states, since the admin view has no player, as WebUI Notifications sets out.
@@ -1426,6 +1451,7 @@ Last milestone completed: M12n1
 - The admin section has the mockup's layout, on the Operator page's 12-column grid, at phone and desktop widths, and matches the rest of the WebUI's styling, checked in the spot check.
 - The admin section offers every action and setting the Operator page offers today, apart from its Server Logs and Enable Web UI, and calls the same routes, in admin section UI tests of loading status and settings, saving settings, and the testing panel.
 - Connected clients show each client's id with its operating system where the user agent names one, its type, address, and connection time, and the three counts, without the session id, in admin section UI tests.
+- A connection time reads "HH:MM" for today and "MM-DD HH:MM" for another day, in admin section UI tests.
 - In the admin section, one Download click and one confirmation start the update download, in admin section UI tests.
 - The admin view has no status line, its bar ends with the bell, which opens the list, and its acknowledgments pop up, in admin section UI tests of its notifications.
 - The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing, in admin section UI tests of the control token's Show, Copy, and change confirmation.
@@ -1501,6 +1527,7 @@ Last milestone completed: M12n1
 - Its filters sit in a panel that starts collapsed, with chips for the active ones.
 - A live indicator pauses while the list is scrolled away from the newest lines, with a resume control.
 - Rows expand to the full line.
+- A row shows its line's time of day, with "MM-DD" before it for a line from another day.
 - The Operator's Tail lines field goes.
 - It reads today's line format, `[timestamp] [source] [level] message`.
 - It filters by time window; by source (the second bracket: `server` and `webui`); by level, with one checkbox per level found (today `info`, `warn`, and `error`); and by contained text.
@@ -1515,6 +1542,7 @@ Last milestone completed: M12n1
 - The interface names the logs section Log Viewer in the admin section, and nowhere Server Logs; the route is still `GET /control/logs/server`, in admin section UI tests.
 - The Log Viewer filters by time window, by several sources and several levels, and by contained text, with its filters in a collapsed panel with chips, a live indicator that pauses away from the newest lines, and rows that expand to the full line, in admin section UI tests for the Log Viewer's filters, chips, and live indicator.
 - The Log Viewer has no Tail lines field: it fetches the newest matching lines once, up to 5000, and shows older ones as the list scrolls without another request, in admin section UI tests for showing older lines.
+- A row shows its line's time of day, with "MM-DD" before it for a line from another day, in admin section UI tests for the Log Viewer.
 - A log row's context menu copies its full line, in admin section UI tests for the Log Viewer.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
