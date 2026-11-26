@@ -111,8 +111,12 @@ async function run() {
   await verifyAppVersion();
 
   const indexHtml = await readFile(indexPath, "utf8");
-  if (!indexHtml.includes("assets/")) {
-    throw new Error("dist/index.html does not reference built asset bundles.");
+  // The page tells its build from the server's by the module script it loads from /assets/, and compares none without it.
+  const loadsModuleScriptFromAssets = [...indexHtml.matchAll(/<script\b[^>]*>/g)].some(
+    ([tag]) => /\btype="module"/.test(tag) && /\bsrc="\/assets\/[^"]+\.js"/.test(tag)
+  );
+  if (!loadsModuleScriptFromAssets) {
+    throw new Error("dist/index.html does not load its module script from /assets/.");
   }
   // The boot script applies the theme kept on this device while the page loads, before the app's own script runs.
   if (!/<script>[\s\S]*rr_device\.appearance\.theme[\s\S]*?<\/script>/.test(indexHtml)) {

@@ -195,6 +195,11 @@ export interface AppStore {
    * while the last check found no library, since the server then refuses the stream.
    */
   readonly reconnecting: Signal<boolean>;
+  /**
+   * The server serves a different WebUI build from the one this page runs, as the build check after a version check
+   * found. It lasts until the page reloads.
+   */
+  readonly differentBuild: Signal<boolean>;
   /** The library state the last version check reported: "ready", or why there is no library. */
   readonly libraryState: Signal<string>;
   /** The server's message for its library state, while it has no library. */
@@ -357,6 +362,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     serverVersion: signal<ServerVersion | null>(null),
     serverCapabilities: signal<readonly string[]>([]),
     reconnecting: signal(false),
+    differentBuild: signal(false),
     libraryState,
     libraryMessage: signal<string | null>(null),
     noLibrary,

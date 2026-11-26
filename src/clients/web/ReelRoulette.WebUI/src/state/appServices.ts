@@ -32,6 +32,7 @@ import { createAppStore, type AppStore } from "./appStore";
 import { browserStorage, createDeviceStore } from "./deviceStore";
 import { createPlayerIndicator, type LastingState } from "./lastingStates";
 import { createServerConnection, type ServerConnection } from "./serverConnection";
+import { webUiBuildOf } from "./webUiBuild";
 
 /** Whether the Filter and Tags tabs hold unsaved changes, which their tab icons and the panel button mark with a dot. */
 export interface UnsavedTabs {
@@ -132,7 +133,8 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     store,
     api,
     dialogs,
-    notifications
+    notifications,
+    pageBuild: webUiBuildOf(document)
   });
   const panel = createPanelHost({ device });
   const relay = (level: string, message: string) => void api.relayLog(level, message);

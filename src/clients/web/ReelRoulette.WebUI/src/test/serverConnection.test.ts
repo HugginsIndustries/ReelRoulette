@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+// happy-dom loads the stylesheets of a page its DOMParser parses, which a browser doesn't, and logs that it can't.
+// @vitest-environment-options {"settings": {"handleDisabledFileLoadingAsSuccess": true}}
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
@@ -5,6 +8,7 @@ import { createAppStore } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { createPlayerIndicator } from "../state/lastingStates";
 import { createServerConnection, VERSION_CHECK_TIMEOUT_MS, VERSION_RECHECK_MS } from "../state/serverConnection";
+import { webUiBuildOfHtml, type WebUiBuild } from "../state/webUiBuild";
 import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { PAIRING_TOKEN_WRONG } from "./serverReasons";
 
@@ -61,7 +65,7 @@ function deferredReply() {
 
 const NO_LIBRARY_MESSAGE = "The library was made by a newer version of ReelRoulette.";
 
-function setup(routes: Record<string, Route> = {}, pairToken?: string) {
+function setup(routes: Record<string, Route> = {}, pairToken?: string, pageBuild?: WebUiBuild | null) {
   const requests: string[] = [];
   const replies: Record<string, Route> = {
     "GET /api/version": () => json(COMPATIBLE_VERSION),
@@ -122,7 +126,8 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
       sources.push(source);
       return source;
     },
-    window: pageWindow as unknown as Window
+    window: pageWindow as unknown as Window,
+    pageBuild
   });
   const count = (request: string) => requests.filter((made) => made === request).length;
   return { store, connection, requests, sources, statuses, notified, notices, relayed, pageWindow, count };
@@ -601,9 +606,9 @@ describe("createServerConnection", () => {
     expect(second.count("GET /api/version")).toBe(secondChecked);
   });
 
-  it("stops saying the event stream is reconnecting when the server fails the compatibility check", async () => {
+  it("stops saying the event stream is reconnecting when the server fails the compatibility check, with no popup", async () => {
     let version: object = COMPATIBLE_VERSION;
-    const { store, connection, sources } = setup({ "GET /api/version": () => json(version) });
+    const { store, connection, sources, notified } = setup({ "GET /api/version": () => json(version) });
     connection.start();
     await settle();
 
@@ -615,6 +620,8 @@ describe("createServerConnection", () => {
 
     expect(store.compatibilityBlocked.value).toBe(true);
     expect(store.reconnecting.value).toBe(false);
+    // Reconnecting… ends without "Reconnected.", since the page turns to Server not compatible.
+    expect(notified).toEqual([]);
   });
 
   it("checks the version again when the event stream opens while a failed check left the server not ready", async () => {
@@ -975,6 +982,174 @@ describe("createServerConnection", () => {
     expect(store.refreshProgress.value).not.toBeNull();
     stream.emit("resyncRequired", 9, { reason: "gap" });
     expect(store.refreshProgress.value).toBeNull();
+  });
+});
+
+describe("build check", () => {
+  /** An `index.html` as Vite builds it, which loads its module script and stylesheet from `/assets/`. */
+  function indexHtml(script: string, stylesheet: string): string {
+    return `<!doctype html>
+<html lang="en">
+  <head>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      (function () {})();
+    </script>
+    <script type="module" crossorigin src="/assets/${script}"></script>
+    <link rel="stylesheet" crossorigin href="/assets/${stylesheet}">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>`;
+  }
+
+  function html(body: string, status = 200): Response {
+    return new Response(body, { status, headers: { "Content-Type": "text/html" } });
+  }
+
+  const PAGE_BUILD = webUiBuildOfHtml(indexHtml("index-A1.js", "index-A1.css"))!;
+  const SAME_BUILD = indexHtml("index-A1.js", "index-A1.css");
+  const OTHER_BUILD = indexHtml("index-B2.js", "index-B2.css");
+  const OTHER_BUILD_LINE = "Server has a different WebUI build: index-B2.js, this page index-A1.js";
+
+  it("finds a different build after the check on start, with one log line naming both script files, and fetches no more", async () => {
+    const { store, connection, sources, statuses, notified, count } = setup({ "GET /index.html": () => html(OTHER_BUILD) }, undefined, PAGE_BUILD);
+    connection.start();
+    expect(store.differentBuild.value).toBe(false);
+    await settle();
+
+    expect(store.differentBuild.value).toBe(true);
+    expect(statuses).toEqual(["Ready", "Ready (API 2)", OTHER_BUILD_LINE]);
+    expect(count("GET /index.html")).toBe(1);
+    expect(notified).toEqual([]);
+
+    // It lasts until the page reloads, so later checks fetch nothing.
+    sources[0]!.onopen?.(new Event("open"));
+    await settle();
+    expect(count("GET /api/version")).toBe(2);
+    expect(count("GET /index.html")).toBe(1);
+    expect(statuses.filter((status) => status === OTHER_BUILD_LINE)).toHaveLength(1);
+  });
+
+  it("finds a different build when only the stylesheet's name differs", async () => {
+    const { store, connection } = setup({ "GET /index.html": () => html(indexHtml("index-A1.js", "index-B2.css")) }, undefined, PAGE_BUILD);
+    connection.start();
+    await settle();
+
+    expect(store.differentBuild.value).toBe(true);
+  });
+
+  it("finds a different build after a reconnect and after a return to the page", async () => {
+    let served = SAME_BUILD;
+    let serverDown = false;
+    const reconnect = setup(
+      {
+        "GET /api/version": () => {
+          if (serverDown) {
+            throw new TypeError("Failed to fetch");
+          }
+          return json(COMPATIBLE_VERSION);
+        },
+        "GET /index.html": () => html(served)
+      },
+      undefined,
+      PAGE_BUILD
+    );
+    reconnect.connection.start();
+    await settle();
+    expect(reconnect.store.differentBuild.value).toBe(false);
+    expect(reconnect.count("GET /index.html")).toBe(1);
+
+    // The server restarts with another build: while it is down, the version check doesn't reach it, so nothing is fetched.
+    serverDown = true;
+    served = OTHER_BUILD;
+    reconnect.sources[0]!.onerror?.(new Event("error"));
+    await settle();
+    expect(reconnect.store.reconnecting.value).toBe(true);
+    expect(reconnect.count("GET /index.html")).toBe(1);
+    expect(reconnect.store.differentBuild.value).toBe(false);
+
+    serverDown = false;
+    reconnect.sources[0]!.onopen?.(new Event("open"));
+    await settle();
+    expect(reconnect.store.differentBuild.value).toBe(true);
+
+    served = SAME_BUILD;
+    const returning = setup({ "GET /index.html": () => html(served) }, undefined, PAGE_BUILD);
+    returning.connection.start();
+    await settle();
+    expect(returning.store.differentBuild.value).toBe(false);
+
+    served = OTHER_BUILD;
+    returning.pageWindow.document.dispatchEvent(new Event("visibilitychange"));
+    returning.sources[1]!.onopen?.(new Event("open"));
+    await settle();
+    expect(returning.store.differentBuild.value).toBe(true);
+  });
+
+  it("finds a different build after a check that fails the compatibility check or is answered with 401", async () => {
+    const incompatible = setup(
+      { "GET /api/version": () => json({ ...COMPATIBLE_VERSION, apiVersion: "7" }), "GET /index.html": () => html(OTHER_BUILD) },
+      undefined,
+      PAGE_BUILD
+    );
+    incompatible.connection.start();
+    await settle();
+    expect(incompatible.store.compatibilityBlocked.value).toBe(true);
+    expect(incompatible.store.differentBuild.value).toBe(true);
+
+    const unpaired = setup({ "GET /api/version": () => json({}, 401), "GET /index.html": () => html(OTHER_BUILD) }, undefined, PAGE_BUILD);
+    unpaired.connection.start();
+    await settle();
+    expect(unpaired.store.pairingRequired.value).toBe(true);
+    expect(unpaired.store.differentBuild.value).toBe(true);
+  });
+
+  it.each<[string, Route]>([
+    ["the same files", () => html(SAME_BUILD)],
+    [
+      "a fetch that fails",
+      () => {
+        throw new TypeError("Failed to fetch");
+      }
+    ],
+    ["an answer other than 200", () => html(OTHER_BUILD, 404)],
+    ["an index.html that loads no module script from /assets/", () => html('<script type="module" src="/src/main.ts"></script>')]
+  ])("leaves the build as it was for %s", async (_name, reply) => {
+    const { store, connection, statuses, count } = setup({ "GET /index.html": reply }, undefined, PAGE_BUILD);
+    connection.start();
+    await settle();
+
+    expect(count("GET /index.html")).toBe(1);
+    expect(store.differentBuild.value).toBe(false);
+    expect(statuses).toEqual(["Ready", "Ready (API 2)"]);
+  });
+
+  it("fetches nothing for a page without a build of its own, or after a check that doesn't reach the server", async () => {
+    const noBuild = setup({ "GET /index.html": () => html(OTHER_BUILD) });
+    noBuild.connection.start();
+    await settle();
+    expect(noBuild.count("GET /index.html")).toBe(0);
+    expect(noBuild.store.differentBuild.value).toBe(false);
+
+    const unreachable = setup(
+      {
+        "GET /api/version": () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "GET /index.html": () => html(OTHER_BUILD)
+      },
+      undefined,
+      PAGE_BUILD
+    );
+    unreachable.connection.start();
+    await settle();
+    expect(unreachable.store.reconnecting.value).toBe(true);
+    expect(unreachable.count("GET /index.html")).toBe(0);
+    expect(unreachable.store.differentBuild.value).toBe(false);
+    unreachable.connection.stop();
   });
 });
 

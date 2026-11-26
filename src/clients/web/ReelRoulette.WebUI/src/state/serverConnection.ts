@@ -24,6 +24,7 @@ import type {
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type ApiPreset, type AppStore } from "./appStore";
 import { serverCapabilitiesOf, serverCompatibilityError, serverVersionOf } from "./serverCompatibility";
+import { sameWebUiBuild, webUiBuildOfHtml, webUiBuildScriptName, type WebUiBuild } from "./webUiBuild";
 
 /** A version check that gets no answer in this time counts as not reaching the server. */
 export const VERSION_CHECK_TIMEOUT_MS = 10_000;
@@ -97,8 +98,9 @@ export interface ServerConnection {
   /**
    * Checks the server version, opens the event stream, and pairs with the config's token, which pops nothing up. The
    * version is checked again each time the event stream opens, or fails while the server doesn't ask for pairing, and
-   * every few seconds while the stream is open and the last check didn't reach the server. The presets load once a
-   * check finds the server ready, and again once for each burst of preset events or resyncs.
+   * every few seconds while the stream is open and the last check didn't reach the server. After each check the server
+   * answers, the page's build is compared with the server's. The presets load once a check finds the server ready, and
+   * again once for each burst of preset events or resyncs.
    */
   start(): void;
   /** Closes the event stream and removes the reconnect listeners. */
@@ -127,6 +129,11 @@ export interface ServerConnectionOptions {
   createEventSource?: (url: string) => EventSourceLike;
   /** The page whose focus, visibility, and network changes reconnect the event stream. */
   window?: Window;
+  /**
+   * The page's own build, as its document named it when the app started, which the check after each version check the
+   * server answers compares with the server's `index.html`. Without one, as on Vite's dev server, nothing is compared.
+   */
+  pageBuild?: WebUiBuild | null;
 }
 
 export function createServerConnection(options: ServerConnectionOptions): ServerConnection {
@@ -192,7 +199,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       !store.compatibilityBlocked.peek() &&
       (lastCheck === "unreachable" ||
         (streamFailed && lastCheck !== "none" && lastCheck !== "unauthorized" && store.libraryState.peek() === "ready"));
-    // Reconnecting… showed, and has ended. `stop()` ends it without reconnecting, so it says nothing.
+    // Reconnecting… showed, and has ended. `stop()` and a server that fails the compatibility check end it without
+    // reconnecting, so they say nothing.
     if (wasReconnecting && !store.reconnecting.peek()) {
       notifications.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
     }
@@ -254,7 +262,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     eventStream?.stop();
     streamState.value = "stopped";
     cancelRecheck();
-    updateReconnecting();
+    // Reconnecting… ends without "Reconnected.", since the page turns to Server not compatible.
+    store.reconnecting.value = false;
     // The player's indicator and the Library tab show it; the log keeps the full message.
     store.relayStatus(message);
   }
@@ -429,9 +438,38 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   }
 
   /**
+   * Compares the page's own build with the one the server's `index.html` names now. Once they differ, the server serves
+   * a different build until the page reloads, so nothing more is fetched. A fetch that fails, an answer other than 200, or
+   * an `index.html` that names no build changes nothing. Checks that overlap do no harm, since each compares with the
+   * page's own build.
+   */
+  async function checkBuild(): Promise<void> {
+    const pageBuild = options.pageBuild;
+    if (!pageBuild || store.differentBuild.peek()) {
+      return;
+    }
+    let served: WebUiBuild | null;
+    try {
+      const response = await api.request(api.url("/index.html"), { cache: "no-store" });
+      if (response.status !== 200) {
+        return;
+      }
+      served = webUiBuildOfHtml(await response.text());
+    } catch {
+      return;
+    }
+    if (!served || sameWebUiBuild(served, pageBuild) || store.differentBuild.peek()) {
+      return;
+    }
+    store.differentBuild.value = true;
+    store.relayStatus(`Server has a different WebUI build: ${webUiBuildScriptName(served)}, this page ${webUiBuildScriptName(pageBuild)}`);
+  }
+
+  /**
    * Checks the server version, one check at a time: asked while one runs, it runs one more after it. Resolves once
    * no more is asked for, having asked for the next one when the last didn't reach the server while the stream is open.
-   * Nothing is checked once the server fails the compatibility check.
+   * Nothing is checked once the server fails the compatibility check. After each check the server answers, beside the
+   * checks rather than inside them, the build check compares the page's build with the server's.
    */
   function checkVersion(): Promise<void> {
     if (store.compatibilityBlocked.peek()) {
@@ -446,6 +484,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         do {
           checkAgain = false;
           await checkVersionOnce();
+          if (lastCheck !== "unreachable") {
+            void checkBuild();
+          }
         } while (checkAgain && !store.compatibilityBlocked.peek());
       } finally {
         versionChecks = null;

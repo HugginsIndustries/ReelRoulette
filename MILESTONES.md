@@ -172,7 +172,7 @@ Last milestone completed: M12n1
 | --- | --- | --- |
 | Mockup | ✅ Complete | The update notice on the indicator and in the bell's Now section with its tap and the discard question, the notice in the admin view after Apply & Restart, the bell's new times and Show seconds, the bell's messages kept across reloads, and every time and date in the mockup in 24-hour time and ISO dates, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Dev server | ✅ Complete | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
-| Build check | ⏳ Planned | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
+| Build check | ✅ Complete | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
 | Reload notice | ⏳ Planned | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
 | Times and dates | ⏳ Planned | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
 | Kept messages | ⏳ Planned | The bell's Recent list kept per device across reloads, up to its 50 messages with their read state, with Clear emptying it and the reset keeping it. |
@@ -290,9 +290,9 @@ Last milestone completed: M12n1
 **Scope**
 
 - After every version check that gets an answer, including one that fails the compatibility check, the page fetches `/index.html` with `cache: "no-store"` and compares the `/assets/` addresses of its module script and stylesheets with its own, which it reads from its document when it starts (`checkVersionOnce` in `src/state/serverConnection.ts`, and a module of its own beside `src/state/serverCompatibility.ts`).
-- A different set sets a store signal that the server serves a newer build, which lasts until the page reloads.
+- A different set sets a store signal that the server serves a different build, which lasts until the page reloads.
 - A fetch that fails, an answer other than 200, an answer with no `/assets/` script, or a page with no `/assets/` script of its own, as in tests, leaves the signal as it was.
-- One `last.log` line, when the page first finds a newer build, names its own script file and the server's.
+- One `last.log` line, when the page first finds a different build, names its own script file and the server's.
 - When a restarted server comes back failing the compatibility check, Reconnecting… ends without "Reconnected." (`blockForCompatibility` and `updateReconnecting` in `src/state/serverConnection.ts`).
 - The server, the API contract, and `docs/api.md` don't change.
 - `CONTEXT.md` describes the check.
@@ -318,17 +318,30 @@ Last milestone completed: M12n1
 
 **Acceptance**
 
-- A page whose script or stylesheet names differ from a fresh `index.html`'s finds the newer build after the check on start, on a reconnect, on a return to the page, and after a check that fails the compatibility check, in server connection tests.
+- A page whose script or stylesheet names differ from a fresh `index.html`'s finds the different build after the check on start, on a reconnect, on a return to the page, and after a check that fails the compatibility check, in server connection tests.
 - The same names, a failed fetch, an answer other than 200, and an answer with no `/assets/` script leave the signal as it was, in server connection tests.
 - The `last.log` line is written once, in server connection tests.
 - A restart that comes back incompatible ends Reconnecting… with no "Reconnected." popup, in server connection tests.
 - `npm run verify` passes.
 
+**Evidence**
+
+- After each version check the server answers (ready, no library, 401, or failing the compatibility check), `checkBuild` in `serverConnection.ts` fetches `/index.html` with `cache: "no-store"`, beside the version checks rather than inside them, and compares the build it names with the page's own, which `appServices.ts` reads from `document` at start (`src/state/webUiBuild.ts`).
+- A different build sets the store's `differentBuild` and relays one line, "Server has a different WebUI build: {server's script}, this page {page's script}", and no fetch follows; the built `index.html` is about 2.3 KB (measured).
+- One reader reads both builds, the page's document and the fetched `index.html` through `DOMParser`, so the two can't disagree on format, and checks that overlap do no harm, since each compares with the page's own build and the flag only turns on.
+- `blockForCompatibility` ends Reconnecting… directly, as `stop()` does, so a restarted server that comes back incompatible pops up no "Reconnected.".
+- `verify-build-output.mjs` checks that the built `index.html` loads its module script from `/assets/`, in place of checking that it mentions "assets/", so a build that changed that fails `npm run verify` instead of leaving the check comparing nothing, and it failed with the built page's script moved to `./assets/` (measured).
+- `serverConnection.test.ts` runs in happy-dom, for `DOMParser`, where its 41 earlier tests passed unchanged (measured), and it and `webUiBuild.test.ts` set happy-dom's `handleDisabledFileLoadingAsSuccess`, since happy-dom loads a parsed page's stylesheets, which a browser doesn't, and logs that it can't.
+- Broken one at a time, each guarded piece failed its tests: the comparison, the stylesheets' part in it, the single fetch, the check after a 401 or a failed compatibility check, no check after one that doesn't reach the server, which the reconnect test catches too, the answer's status check, and the "Reconnected." fix (measured).
+- `npm run verify` passes, with 98 test files and 2480 tests (measured).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the check, the store's flag, the new module, the build output check, and no "Reconnected." for a server that comes back incompatible.
+- The mockup needed no change: nothing shows yet, and it already pops up no "Reconnected." here.
+
 #### Reload notice slice
 
 **Scope**
 
-- The notice is a lasting state (`src/state/lastingStates.ts`), after Reconnecting… in the order, active while the server serves a newer build and Reconnecting… doesn't show.
+- The notice is a lasting state (`src/state/lastingStates.ts`), after Reconnecting… in the order, active while the server serves a different build (the store's `differentBuild`) and Reconnecting… doesn't show.
 - It shows the `refresh` icon, not orange, and its Now row's second line reads "The server has a newer version. Reloading the page loads it."
 - On the player, the indicator takes taps while it shows the notice, and a tap reloads the page without also showing or hiding the controls, starting a random pick, seeking, or starting a swipe (`PlayerIndicator` in `src/ui/Player.tsx`, `.player-indicator` in `src/styles.css`).
 - A right-click or a long press on the notice opens no menu, as the mockup leaves it out of the player's menu while it takes taps.
@@ -361,7 +374,7 @@ Last milestone completed: M12n1
 
 **Acceptance**
 
-- The notice shows on the indicator and in the bell's Now section while the server serves a newer build, before Server not compatible and the states after it, and not while Reconnecting… shows, in lasting state tests.
+- The notice shows on the indicator and in the bell's Now section while the server serves a different build, before Server not compatible and the states after it, and not while Reconnecting… shows, in lasting state tests.
 - With the server also incompatible, the Now section lists both and the indicator shows the notice, in lasting state tests.
 - A tap on the indicator reloads the page and neither shows or hides the controls nor starts a random pick, and a right-click on it opens no menu, in player screen tests.
 - A tap on the notice's Now row reloads the page, in notifications screen tests.
