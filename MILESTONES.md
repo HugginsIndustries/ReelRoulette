@@ -282,7 +282,7 @@ Last milestone completed: M12n1
 - The script's copy lines, run as written against a copy of a build, gave a copy identical to `dist` on a first run with no `artifacts/` folder and on a second run over a copy with a leftover file in it (measured).
 - PowerShell's parser finds no errors in the script (measured).
 - `dist` held 15 files, about 11 MB, so each run copies that much (measured).
-- No session runs `run-server.ps1`, so the spot check runs on main after the merge.
+- The user's spot check on main after the merge: `run-server.ps1` printed `artifacts/run-server/webui` as the WebUI static root, Firefox loaded the app, and with `dist` deleted while the server ran, a reload still loaded it.
 - `docs/dev-setup.md`, `CONTEXT.md`, and `docs/domain-inventory.md` say the script serves a copy, and the troubleshooting note on WebUI changes says the server needs `ServerApp__WebUiStaticRootPath` pointed at a WebUI build, such as `dist` or the script's copy.
 
 #### Build check slice
@@ -865,6 +865,7 @@ Last milestone completed: M12n1
 - Breaking the menu hold, `menuOpened`, the move-on, the Rate dialog's start, the one-item-only file group, Copy name's absence from tile menus, the one-item read, the close on another item, the field's place, the controls' exclusion, the name's tint, and the item's button, each from a copy under `artifacts/scratch/`, failed 1, 2, 3, 1, 4, 4, 6, 1, 1, 1, 2, and 1 tests (measured). Ending the hold as activity on every close failed the autoplay test, dropping the failed read's log line, or opening no menu after it, failed both failed-read tests, and swapping the context menu's own close and the user's for Escape, a press outside, a pick, or its scroll, resize, and tab hiding each failed one menu test (measured).
 - The foundation screen snapshot's media area and now-playing name gained `menu-surface`, updated once with `npx vitest run -u` with the advisor's approval, and nothing else in it changed.
 - `npm run verify` passes, with 2,467 tests in 97 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The user's spot check in Firefox on the desktop, on main after the merge: a right-click on the playing video opened the player's menu, and Copy path copied the file's path.
 - CHANGELOG.md, CONTEXT.md, docs/domain-inventory.md, docs/architecture.md, docs/api.md, and the contract's descriptions of the item and item-summary reads describe the menus, and the testing checklist's Show in File Manager check uses the player's menu.
 
 #### Tags tab slice
