@@ -800,12 +800,16 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - Its zoom: the rows' layer scaled inside a clipping layer during a gesture, with scrolling, content, and width changes held until it settles, then one reflow at the new row height, which it reports for the Library tab to keep per device, reporting too the row height and gap at each scale shown and at the settle, keeping the tile under the pointer at its vertical place and moving the tiles in view from where they showed, computed from the layout, or at once with reduced motion.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - what a refused play says (`playRefusalFailure`), by the item's media type, which the player also uses for a refused history step, recovery, or media recheck: its own words for a missing, unavailable, unsupported, or unreadable file, and otherwise `requestFailure`'s wording for "Playback failed".
+- `src/clients/web/ReelRoulette.WebUI/src/library/tagNameOrder.ts`
+  - the display order of tag and category names, matching the server's comparison and locked to `shared/fixtures/tag-name-order.json`.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/randomPick.ts`
   - the random pick request body, which names the preset dropdown's preset only while its filter still equals the applied filter and sends the Randomization tab's options, built from the store as it is now for a pick and a cycle read, and random pick requests, whose answer's item and cycle numbers it reads, one at a time, cancelled after 10 seconds without an answer; an answer that arrives after that is not used.
 - `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`
   - the playing item's favorite and blacklist from item-state events, and the per-item cache applied when an item plays again, both by item id, which a resync clears.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.tsx`
   - mounts the page (`renderApp`, which returns an unmount function) and the startup error into `#app`, passing on a page reload when one is given, as tests give.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/appContext.ts`
+  - the context that gives components the page's store, API, and server connection (`useApp`).
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint. The theme applies before it runs, from `index.html`'s boot script, and the page follows it from `App.tsx`.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`
@@ -823,12 +827,18 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the WebUI's one event stream: resume with the last event ID after an error, revision tracking, which it reports after each event, and handler dispatch for each event type.
 - `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
   - event envelope parsing/building utilities.
+- `src/clients/web/ReelRoulette.WebUI/src/events/refreshStatusProjection.ts`
+  - reads a refresh status from its event or route (`coerceRefreshSnapshot`), and works out from it the player indicator's progress and stage labels, a finished or failed run's outcome, the kept folders it settled, and whether a run has newly finished.
 - `src/clients/web/ReelRoulette.WebUI/src/config/runtimeConfig.ts`
   - runtime config parsing/validation.
 - `src/clients/web/ReelRoulette.WebUI/src/config/appVersion.ts`
   - the app's version, which the build sets from the repository's `.version` file, without its leading `v`, through `scripts/app-version.mjs`.
+- `src/clients/web/ReelRoulette.WebUI/src/logging/relayLogLines.ts`
+  - the lines the WebUI relays to `last.log`, which never carry item ids, file names, or media URLs, and name an error only by its type.
 - `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`
   - generated TS contracts from OpenAPI.
+- `src/clients/web/ReelRoulette.WebUI/src/types/serverContracts.ts`
+  - short names for the generated contract types the WebUI reads, such as the refresh status and the event payloads.
 
 Boundary:
 
@@ -883,7 +893,7 @@ Runtime scripts:
 - scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
 - `tools/scripts/stage-webui-assets.ps1` (WebUI build + copy into server publish `wwwroot`; used by `release.yml` and packaged-server smoke)
-- `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state, fills Release version from `.version` without its `-dev.N` suffix, and removes `Failed:`, `Skipped:`, and `Pending:` notes; preserves waived checks by default, supports `-RemoveWaived`)
+- `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state, fills Release version from `.version` without its `-dev.N` suffix, and removes `Failed:`, `Skipped:`, and `Pending:` notes)
 
 Web verification:
 

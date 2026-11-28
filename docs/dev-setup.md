@@ -77,14 +77,24 @@ From `src/clients/web/ReelRoulette.WebUI`:
 - `npm run verify`
 - `npm run build` auto-syncs shared assets into WebUI `public/`:
   - `assets/logo/favicon.ico` -> `public/favicon.ico`
-  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are. `scripts/verify-build-output.mjs` checks that each manifest icon's pixel size matches its `sizes`, and checks that the built scripts hold the app's version
-  - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts. Its fetch handler intercepts document navigations only, which satisfies Chromium installability for standalone install on Android Chrome. API calls, the event stream, and media are not intercepted. `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
+  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are.
+  - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts.
+    - Its fetch handler intercepts document navigations only, which satisfies Chromium installability for standalone install on Android Chrome. API calls, the event stream, and media are not intercepted.
+    - `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
   - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 - App version: the build and the tests read the repository's `.version` through `scripts/app-version.mjs`, without its leading `v`, for the Settings tab's Diagnostics; a missing or empty `.version` fails the build
+- `scripts/verify-build-output.mjs` checks the build `npm run verify` makes:
+  - the page, manifest, service worker, favicon, logos, and Apple touch icon are in `dist/`;
+  - each manifest icon's pixel size matches its `sizes`;
+  - the built scripts hold the app's version;
+  - `index.html` loads its module script from `/assets/`, which the page compares with the server's build;
+  - `index.html` keeps the theme boot script.
 
 Optional helper scripts:
 
-- `pwsh ./tools/scripts/verify-web-deploy.ps1` installs the WebUI's packages when needed, as `run-server.ps1` does, builds the WebUI, and starts the server on a free local port with `REELROULETTE_DATA_DIR` set to a temporary folder on every OS, plus temporary `XDG_CONFIG_HOME` and `XDG_DATA_HOME` on Linux. It checks that the server wrote its log, catalog, and settings there, then stops the server it started and removes that folder. Your real data folders are not touched.
+- `pwsh ./tools/scripts/verify-web-deploy.ps1` installs the WebUI's packages when needed, as `run-server.ps1` does, builds the WebUI, and starts the server on a free local port.
+  - It sets `REELROULETTE_DATA_DIR` to a temporary folder on every OS, plus temporary `XDG_CONFIG_HOME` and `XDG_DATA_HOME` on Linux, so your real data folders are not touched.
+  - It checks that the server wrote its log, catalog, and settings there, then stops the server it started and removes that folder.
 
 ### Optional system checks
 
@@ -107,7 +117,11 @@ For the pre-release pass, use `docs/checklists/testing-checklist.md` and `pwsh .
 The server serves only HTTP. For HTTPS, which Android needs to install the WebUI as an app, run a reverse proxy on the server machine; the README covers [Tailscale Serve and Caddy](../README.md#webui-over-https-install-as-an-app).
 
 - **Trusted proxies:** the server applies forwarded headers only from loopback (`127.0.0.0/8` and `::1`), one hop. Point the proxy at `http://127.0.0.1:<port>`. A proxy on another machine, or one that connects to the server's LAN address, is not supported; its forwarded headers are ignored, and the first request from each such address writes a warning to `last.log`.
-- **Headers:** `X-Forwarded-For` gives the client's address, used in logs and connected-client lists. `X-Forwarded-Proto` gives the scheme, which marks pairing and control cookies `Secure` over HTTPS and makes `/runtime-config.json` return `https://` URLs. `X-Forwarded-Host`, or the original `Host` passed through, gives the host those URLs use. Any forwarding header makes the request non-local, so a proxy on the server machine must send `X-Forwarded-For`; without any of them, its requests look like direct ones from the server machine.
+- **Headers:**
+  - `X-Forwarded-For` gives the client's address, used in logs and connected-client lists.
+  - `X-Forwarded-Proto` gives the scheme, which marks pairing and control cookies `Secure` over HTTPS and makes `/runtime-config.json` return `https://` URLs.
+  - `X-Forwarded-Host`, or the original `Host` passed through, gives the host those URLs use.
+  - Any forwarding header makes the request non-local, so a proxy on the server machine must send `X-Forwarded-For`; without any of them, its requests look like direct ones from the server machine.
 - **Allow remote connections** must be on, or every request through the proxy gets `403`. It also opens plain HTTP on the LAN at the server's port.
 - **Host root:** the WebUI's manifest, service worker, icons, and start URL use root paths, and the WebUI rejects an API base URL with a path.
 - **Event stream:** the server sends `X-Accel-Buffering: no` on `/api/events`, so nginx passes events through without buffering. An idle stream that a proxy times out reconnects with its last event ID.
@@ -153,9 +167,23 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 - **Linux** (XDG): config / roaming (`ApplicationData`) → `~/.config/ReelRoulette/` (includes `library.db`). Local cache (`LocalApplicationData`) → `~/.local/share/ReelRoulette/` (thumbnails in `thumbnails/`).
 - **Windows**: config / roaming (`ApplicationData`) → `%APPDATA%/ReelRoulette/`. Local cache (`LocalApplicationData`) → `%LOCALAPPDATA%/ReelRoulette/` (thumbnails in `thumbnails/`).
 
-**Server data folder override:** Set `REELROULETTE_DATA_DIR` to run the server against another folder on any OS. The server then keeps its settings, catalog, backups, `last.log`, and thumbnails (in `thumbnails/`) under that folder and does not use the folders above. A relative path resolves against the working directory. Setting `APPDATA` does not move anything on Windows, because .NET resolves that folder through the OS. Scripts that start a server for verification or smoke testing set this variable to a fresh temporary folder, stop the server they started, and remove that folder afterward, including on failure. On Linux they also set `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Dev-run helpers such as `run-server.ps1` use your real data on purpose.
+### Server data folder override
 
-The server opens `library.db` in that roaming directory at startup (`user_version` 9). A `user_version` 2 or 3 catalog, from v0.14.x or earlier, or 4, 5, 6, 7, or 8, from a development build, is upgraded in place on that start in one transaction, one step per version, and `last.log` records how long it took; an interrupted upgrade leaves the older catalog as it was. The upgrade from version 3 clears every stored peak, so the next refresh scans every video with audio again to measure its true peak, one video at a time, which takes hours for a large library on a network share. After a newer build has opened a data folder, do not run v0.14.0 against it: v0.14.0 moves a catalog it does not recognize aside and then deletes its backups. Presets and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`. `GET /api/library/catalog-checkpoint` writes a standalone copy of `library.db`, with presets and thumbnail metadata; no client exports or imports a library. Server catalog backups are `library.db.backup.*` files in `backups/`.
+- Set `REELROULETTE_DATA_DIR` to run the server against another folder on any OS. The server then keeps its settings, catalog, backups, `last.log`, and thumbnails (in `thumbnails/`) under that folder and does not use the folders above.
+- A relative path resolves against the working directory.
+- Setting `APPDATA` does not move anything on Windows, because .NET resolves that folder through the OS.
+- Scripts that start a server for verification or smoke testing set this variable to a fresh temporary folder, stop the server they started, and remove that folder afterward, including on failure. On Linux they also set `XDG_CONFIG_HOME` and `XDG_DATA_HOME`.
+- Dev-run helpers such as `run-server.ps1` use your real data on purpose.
+
+### Library catalog
+
+- The server opens `library.db` in the roaming directory, or the data folder override, at startup (`user_version` 9).
+- A `user_version` 2 or 3 catalog, from v0.14.x or earlier, or 4, 5, 6, 7, or 8, from a development build, is upgraded in place on that start in one transaction, one step per version, and `last.log` records how long it took; an interrupted upgrade leaves the older catalog as it was.
+- The upgrade from version 3 clears every stored peak, so the next refresh scans every video with audio again to measure its true peak, one video at a time, which takes hours for a large library on a network share.
+- After a newer build has opened a data folder, do not run v0.14.0 against it: v0.14.0 moves a catalog it does not recognize aside and then deletes its backups.
+- Presets and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`.
+- `GET /api/library/catalog-checkpoint` writes a standalone copy of `library.db`, with presets and thumbnail metadata; no client exports or imports a library.
+- Server catalog backups are `library.db.backup.*` files in `backups/`.
 
 When the server cannot use its catalog, it keeps running without a library instead of stopping:
 
@@ -177,7 +205,7 @@ Without a library:
 
 Catalog backup rotation deletes only valid current-version backups beyond the backup count, oldest first. Backups at another schema version, such as backups from before an upgrade, and files it does not recognize stay in `backups/` until you remove them by hand, and they count toward neither the backup count nor the time between backups.
 
-**Restoring a catalog backup by hand:**
+### Restoring a catalog backup by hand
 
 1. Stop the server.
 2. In the data folder, move `library.db`, `library.db.previous`, and `library.db.incoming`, each with any `-wal` and `-shm` file beside it, and any `library.db.refused*` files somewhere outside the data folder. Keep them until the restored library looks right.
@@ -198,9 +226,17 @@ All shipping packages are produced by **`.github/workflows/release.yml`** (tag p
 
 Windows output is a per-user **`Setup.exe`** (no MSI, no portable zip). Linux output is a Velopack **AppImage**-style bundle. Update channels follow `{os}-server` for stable and `{os}-server-dev` for dev builds.
 
-**Linux AppImage menu integration:** When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp reconciles a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag. `dotnet run` and Windows builds skip registration. Dangling entries after deleting an AppImage are not removed automatically.
+### Linux AppImage menu integration
 
-**Installed runtime:** ServerApp calls **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work. **Velopack-installed** builds also check the B2 feed: a background loop is **check-only**; download and apply are confirmed actions in Operator (`/control/update/*`), stable or preview/dev via the dev-channel toggle. Unpackaged `dotnet run` sessions report not-installed and skip apply.
+- When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp reconciles a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag.
+- `dotnet run` and Windows builds skip registration.
+- Dangling entries after deleting an AppImage are not removed automatically.
+
+### Installed runtime
+
+- ServerApp calls **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work.
+- **Velopack-installed** builds also check the B2 feed: a background loop is **check-only**; download and apply are confirmed actions in Operator (`/control/update/*`), stable or preview/dev via the dev-channel toggle.
+- Unpackaged `dotnet run` sessions report not-installed and skip apply.
 
 ### Packaged-server smoke (Linux)
 
@@ -210,7 +246,10 @@ After local changes that affect server packaging, run:
 ./tools/scripts/verify-linux-packaged-server-smoke.sh
 ```
 
-With no argument, the script publishes and `vpk pack`s a server AppImage (matching the workflow shape), using the workflow's `vpk` version, which it installs once under `artifacts/velopack-smoke/tools/` without touching a global `vpk` (override with `VPK_VERSION`). It then runs the AppImage headlessly with `--appimage-extract-and-run` when FUSE is unavailable. It checks `/health`, `/api/version`, `/control/status`, and `/operator`. It isolates **`XDG_CONFIG_HOME`** and **`XDG_DATA_HOME`** so menu registration and settings do not touch your real `~/.config` or `~/.local/share` tree.
+- With no argument, the script publishes and `vpk pack`s a server AppImage (matching the workflow shape), using the workflow's `vpk` version, which it installs once under `artifacts/velopack-smoke/tools/` without touching a global `vpk` (override with `VPK_VERSION`).
+- It always runs the AppImage headlessly with `--appimage-extract-and-run`, which extracts it to a temporary folder, so it needs no FUSE.
+- It checks `/health`, `/api/version`, `/control/status`, and `/operator`.
+- It isolates **`XDG_CONFIG_HOME`** and **`XDG_DATA_HOME`** so menu registration and settings do not touch your real `~/.config` or `~/.local/share` tree.
 
 ## Release Versioning
 
@@ -237,11 +276,10 @@ GitHub / B2 release flow:
 - Create/publish the GitHub release notes for the tag.
 - Push the **`v*`** tag matching `.version`. **`release.yml`** builds all matrix legs and publishes to B2 (stable also uploads to GitHub).
 
-Reset testing checklist state, including `Failed:` and `Skipped:` notes, for a fresh run. Release version is filled from `.version` without its `-dev.N` suffix:
+Reset testing checklist state, including `Failed:`, `Skipped:`, and `Pending:` notes, for a fresh run. Release version is filled from `.version` without its `-dev.N` suffix:
 
 - `pwsh ./tools/scripts/reset-checklist.ps1`
 - `pwsh ./tools/scripts/reset-checklist.ps1 -KeepMetadata`
-- `pwsh ./tools/scripts/reset-checklist.ps1 -RemoveWaived`
 
 Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules:
 

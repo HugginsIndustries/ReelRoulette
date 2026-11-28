@@ -132,7 +132,6 @@ Reconnect/resync behavior:
   - At about 147 bytes an item, a change to all of a 49,466-item catalog would otherwise send each device 7.2 MB and keep it in the replay history.
 - WebUI player: on `resyncRequired`, it forgets the favorite and blacklist it kept for items and reads the playing item again with `POST /api/library/item`, taking its favorite, blacklist, and rating, and each play answer of a history step brings its item's flags and rating.
 - Each refresh stage publishes `refreshStatusChanged` as it starts, as the run's `currentStage`, then its progress at most every 500 ms, except the source stage, which publishes as it reaches each source and every 25 new files it fingerprints; each stage's completion event is always published.
-- WebUI reloads the loaded library list.
 - WebUI Library tab: `resyncRequired` reloads the loaded list-query window whether the tab is shown or hidden. Favorite, blacklist, playback, tag, and rating updates patch that window or reload it the same way, and an event for many items, such as `bulkItemStateChanged`, patches every loaded tile it names or reloads the window once. `itemsRemoved` reloads the window once.
 - WebUI presets: each `presetCatalogChanged`, the page's own changes included, and each `resyncRequired` reload the presets, a burst sharing one reload.
   - The WebUI tells another device's changes from its own by `clientId`, a missing one counting as another device's, and what changed by comparing the reloaded list with each preset as it held it when the event came.
@@ -167,17 +166,20 @@ Reconnect/resync behavior:
   - Both routes open the file to decide, so a `404` for a known token or id means the file is missing, and each writes a warning line to `last.log` naming the error's type, without the path.
   - A stalled share can hold the answer for as long as the open waits.
 - A `GET /api/media/{token}` response still being sent when the server starts stopping is cut off, so a player that has stopped reading does not hold up shutdown.
-- **Running without a library:** when the server cannot use its catalog, every `/api` route answers **503** `ErrorResponse` with the reason in `error` and `code` set to:
+- API/version/capability/disconnect simulation controls are exposed via control-plane testing endpoints.
+- Simulation behavior is intended to exercise real client error-handling paths.
+
+### Running without a library
+
+- When the server cannot use its catalog, every `/api` route answers **503** `ErrorResponse` with the reason in `error` and `code` set to:
   - `library_newer` (a newer version of ReelRoulette saved the catalog, and it was left unchanged).
   - `library_damaged` (the catalog is not a database, is corrupt, or has another schema, and was moved aside to `library.db.refused`, or a refused file from an earlier start is still there).
   - `library_missing` (there is no catalog, but catalog backups exist).
   - `library_unreadable` (a catalog file could not be opened or read at the moment, for example because another program has it locked, and it was left unchanged).
-  - Routes that work without a library stay open: `/api/version`, `/api/capabilities`, `/api/pair`, `/api/web-runtime/settings`, `/api/backup/settings`, `/api/refresh/settings`, and `/api/logs/client`.
-  - Events, sources, and presets are refused too.
-  - A caller that is not paired still gets **401** first.
-  - `GET /api/version` and `GET /control/status` report the same state, and `/control/*` routes, including restart, stop, and update, keep working.
-- API/version/capability/disconnect simulation controls are exposed via control-plane testing endpoints.
-- Simulation behavior is intended to exercise real client error-handling paths.
+- Routes that work without a library stay open: `/api/version`, `/api/capabilities`, `/api/pair`, `/api/web-runtime/settings`, `/api/backup/settings`, `/api/refresh/settings`, and `/api/logs/client`.
+- Events, sources, and presets are refused too.
+- A caller that is not paired still gets **401** first.
+- `GET /api/version` and `GET /control/status` report the same state, and `/control/*` routes, including restart, stop, and update, keep working.
 
 ## Current Endpoint Surface
 
@@ -209,123 +211,144 @@ Reconnect/resync behavior:
 - `POST /api/sources/import`
 - `POST /api/sources/{sourceId}/enabled`
 
-- **Source import:** `POST /api/sources/import` trims trailing directory separators on `rootPath` before persist/match (Windows drive roots such as `D:\` stay a volume root, not `D:`), defaults `displayName` to the last path segment when the request name is blank, and treats slash-variants of the same folder as one source.
-  - The import enumerates the folder before it takes the catalog lock, then inserts new items and updates existing ones in one transaction.
-  - It matches an existing item by path and keeps that item's id, tags, favorite, blacklist, and playback stats.
-  - It does not remove items that are missing on disk.
-  - `GET /api/sources` and `GET /api/library/stats` return that derived folder name when stored `displayName` is empty; they do not write the derived name into the catalog.
-  - `GET /api/sources` and `POST /api/sources/{sourceId}/enabled` read catalog rows, so a newly imported source is listed and can be enabled or disabled without a restart.
-  - Setting the flag a source already has does not publish `sourceStateChanged`.
+#### Source import
 
-- **Random playback filter payload:** `POST /api/random` accepts optional `presetId` (matches a stored preset's **id**, exactly) and optional inline `filterState` (JSON object).
-  - A filter state has the same fields in random requests, library queries, and presets, and OpenAPI's `FilterState` schema names them with their defaults.
-  - Fields the schema doesn't name, such as the retired `tagMatchMode` in old presets, are accepted and ignored by filtering and by the WebUI's preset matching.
-  - The server also ignores the older `favoritesOnly` and `excludeBlacklisted`, which the catalog's upgrade to schema version 5 rewrote into the modes in every stored preset, so each stored preset filters as it did.
-  - `favoritesMode` and `blacklistedMode` are each `off`, `only`, or `excluded`, read in any case.
-  - Any other value, including null or a number, counts as missing: a missing `favoritesMode` is `off`, and a missing `blacklistedMode` is `excluded`.
-  - The upgrade wrote each stored preset's modes by the rule the server read them with before: a known mode wins, and otherwise `favoritesOnly` true is `only` and anything else is `off`, and `excludeBlacklisted` false is `off` and anything else, including a missing field, is `excluded`.
-  - `src/core/ReelRoulette.Core.Tests/Fixtures/filter-mode-resolution.json` locks that rule in the upgrade.
-  - The WebUI reads and writes only the modes, never the older booleans.
-  - `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` are an integer or a name in any case, and the server and the WebUI read them alike: an unknown name or null reads as the default, and a category entry with one is dropped.
-  - `shared/fixtures/filter-enum-values.json` locks that reading, and the server's and the WebUI's reading of the modes.
-  - An item is never both favorite and blacklisted, so `only` for both matches nothing; the server accepts that pairing rather than rejecting it.
-  - When both are supplied, the server resolves eligibility from **`filterState` first** (inline wins).
-  - A `presetId` of `all-media`, which is never a preset's id, picks with the default filter.
-  - Without a `filterState`, any other `presetId` that is no preset's id, a preset's name included, returns **404**.
-  - Eligibility is the library list filter for enabled sources, plus the request's video and photo options.
-  - When nothing is eligible, the answer's `item` is null and its cycle numbers are all 0.
-  - A library with no items returns **503**, as does one the server can't read, each without a `code`.
-  - Clients send a full `filterState` on every random request.
-  - `presetId` is included only when the applied filter still equals that preset's filter.
-  - For `minDuration` / `maxDuration`, a JSON number is seconds and a string is .NET `TimeSpan` text, such as **`HH:MM:SS`** or `d.HH:MM:SS.fffffff`, so the string `"90"` is 90 days, not 90 seconds, and two-part `H:MM` strings are hours and minutes, not minutes and seconds.
-  - The WebUI decides which saved preset the applied filter equals, and Core's `FilterStateComparison` compares filters by the same rule.
-  - It compares the Favorites and Blacklisted modes, treats a missing or `null` `globalMatchMode` as `true` (AND) the same as filtering does, compares included and excluded tags as case-insensitive sets and `includedSourceIds` as sets, compares `categoryLocalMatchModes` by key in any order, treats a missing tag or source list as empty, ignores empty tag and source names, and treats an empty `categoryLocalMatchModes`, or a category's AND entry, as none.
-  - `shared/fixtures/preset-filter-equality.json`, which Core and the WebUI both read, locks that comparison.
-  - Both compare `onlyBrowserPlayable` and `onlyUnrated`, each missing equal to false, and `minRating`, missing equal to null, as is a value that isn't a rating.
-  - Both also compare `addedRange` and `createdRange` by the choice, a preset's name or a custom range's days, so `last30Days` differs from a custom range of the same days, and the WebUI reads them as the server does, locked to `shared/fixtures/filter-date-ranges.json`.
+- `POST /api/sources/import` trims trailing directory separators on `rootPath` before persist/match (Windows drive roots such as `D:\` stay a volume root, not `D:`), defaults `displayName` to the last path segment when the request name is blank, and treats slash-variants of the same folder as one source.
+- The import enumerates the folder before it takes the catalog lock, then inserts new items and updates existing ones in one transaction.
+- It matches an existing item by path and keeps that item's id, tags, favorite, blacklist, and playback stats.
+- It does not remove items that are missing on disk.
+- `GET /api/sources` and `GET /api/library/stats` return that derived folder name when stored `displayName` is empty; they do not write the derived name into the catalog.
+- `GET /api/sources` and `POST /api/sources/{sourceId}/enabled` read catalog rows, so a newly imported source is listed and can be enabled or disabled without a restart.
+- Setting the flag a source already has does not publish `sourceStateChanged`.
 
-- **Random pick options:** `POST /api/random` takes an optional `options` object.
-  - Each option takes its default when it is missing.
-  - `shuffle`, on by default, leaves out the items picked on the device within the window until every eligible item has been, and then starts a new cycle whose first pick is never the last pick.
-  - `rememberPlaysForDays` is that window: 1, 7, 30, or 90 days, 30 by default, or null for until every eligible item has been picked; any other value reads as 30.
-  - `spreadByFolder`, on by default, leaves out the items in the folders of the device's last 16 picks, or of half the eligible set's folder count, rounded down, when that is fewer, unless those folders hold every item left; a folder is the item's immediate parent.
-  - `spreadByTags` is `off` by default, or `allTags` or `byCategory`, read in any case, and null or any other value reads as `off`: it makes items whose tags came up in the device's last 16 eligible picks beyond their share of the eligible set less likely, rarer tags more so, counting every tag, or under `byCategory` only the tags of the categories in `spreadCategoryIds`, where null counts as none and an id no category has is ignored.
-  - Having no tags counts as a tag of its own, and a tag an item holds that isn't in the tag list has no category.
-  - `favorLessPlayed` makes items with fewer plays, and those not played lately, more likely.
-  - `favorNewlyAdded` and `favorNewlyCreated` give the items added, or created, in the last 14 days one 20% share of the picks, newer ones more, and with both on an item counts from the later date.
-  - `favorHigherRated` makes higher-rated items more likely, an unrated item counting as 2.5 stars.
-  - Each is off by default, and with every option off picks are pure random.
-  - Every pick goes into a memory the server keeps for each `clientId`, by item id and pick time, whatever the options; requests without a `clientId` share one.
-  - A change to the filter or the options keeps it, and a server restart clears it.
-  - Each pick drops the memory of every device whose last pick is past the window it was picked with, so a device on null keeps its memory until the server restarts.
-  - The answer's `cycle` holds the device's Shuffle cycle numbers after the pick: `picked`, the eligible items picked within the window, `eligible`, and `remaining`, which with `picked` adds up to `eligible`.
-  - `POST /api/random/cycle` takes the same body and answers those numbers as they stand, without picking or changing the memory, with the same 400, unknown-preset 404, and 503 answers as a pick.
-  - `POST /api/random/reset` (`{ "clientId"? }`) clears the device's Shuffle memory and its last pick and answers **`204`**; the last 16 picks that Spread by folder and Spread by tags look at stay, so the next pick still skips recent folders.
-  - A pick whose item a refresh removes before the server reads it answers **`404`** with "The picked file is no longer in the library."
-  - Each pick writes one `last.log` line naming the options that are on and the window, such as `Random pick options=shuffle,spreadByFolder remember=30d eligible=812 elapsedMs=41.`, without ids or paths.
+#### Random playback filter payload
 
-- **Browser-playable filter:** `onlyBrowserPlayable` true keeps photos and only the videos whose container a browser can play: a file name ending in `.mp4`, `.m4v`, or `.webm`, in any case (`BrowserPlayableContainers` in Core).
-  - Videos in any other container, such as `.mkv`, `.avi`, `.wmv`, or `.mov`, are left out of the library query, its counts, and random selection.
-  - The list goes by container alone and can't see a file's codecs, so `.mkv` is left out: its files didn't play on an iPad and played with broken audio in desktop Firefox.
-  - Missing or false applies no restriction, so a preset saved without the field filters as before.
+- `POST /api/random` accepts optional `presetId` (matches a stored preset's **id**, exactly) and optional inline `filterState` (JSON object).
+- A filter state has the same fields in random requests, library queries, and presets, and OpenAPI's `FilterState` schema names them with their defaults.
+- Fields the schema doesn't name, such as the retired `tagMatchMode` in old presets, are accepted and ignored by filtering and by the WebUI's preset matching.
+- The server also ignores the older `favoritesOnly` and `excludeBlacklisted`, which the catalog's upgrade to schema version 5 rewrote into the modes in every stored preset, so each stored preset filters as it did.
+- `favoritesMode` and `blacklistedMode` are each `off`, `only`, or `excluded`, read in any case.
+- Any other value, including null or a number, counts as missing: a missing `favoritesMode` is `off`, and a missing `blacklistedMode` is `excluded`.
+- The upgrade wrote each stored preset's modes by the rule the server read them with before: a known mode wins, and otherwise `favoritesOnly` true is `only` and anything else is `off`, and `excludeBlacklisted` false is `off` and anything else, including a missing field, is `excluded`.
+- `src/core/ReelRoulette.Core.Tests/Fixtures/filter-mode-resolution.json` locks that rule in the upgrade.
+- The WebUI reads and writes only the modes, never the older booleans.
+- `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` are an integer or a name in any case, and the server and the WebUI read them alike: an unknown name or null reads as the default, and a category entry with one is dropped.
+- `shared/fixtures/filter-enum-values.json` locks that reading, and the server's and the WebUI's reading of the modes.
+- An item is never both favorite and blacklisted, so `only` for both matches nothing; the server accepts that pairing rather than rejecting it.
+- When both are supplied, the server resolves eligibility from **`filterState` first** (inline wins).
+- A `presetId` of `all-media`, which is never a preset's id, picks with the default filter.
+- Without a `filterState`, any other `presetId` that is no preset's id, a preset's name included, returns **404**.
+- Eligibility is the library list filter for enabled sources, plus the request's video and photo options.
+- When nothing is eligible, the answer's `item` is null and its cycle numbers are all 0.
+- A library with no items returns **503**, as does one the server can't read, each without a `code`.
+- Clients send a full `filterState` on every random request.
+- `presetId` is included only when the applied filter still equals that preset's filter.
+- For `minDuration` / `maxDuration`, a JSON number is seconds and a string is .NET `TimeSpan` text, such as **`HH:MM:SS`** or `d.HH:MM:SS.fffffff`, so the string `"90"` is 90 days, not 90 seconds, and two-part `H:MM` strings are hours and minutes, not minutes and seconds.
+- The WebUI decides which saved preset the applied filter equals, and Core's `FilterStateComparison` compares filters by the same rule.
+- It compares the Favorites and Blacklisted modes, treats a missing or `null` `globalMatchMode` as `true` (AND) the same as filtering does, compares included and excluded tags as case-insensitive sets and `includedSourceIds` as sets, compares `categoryLocalMatchModes` by key in any order, treats a missing tag or source list as empty, ignores empty tag and source names, and treats an empty `categoryLocalMatchModes`, or a category's AND entry, as none.
+- `shared/fixtures/preset-filter-equality.json`, which Core and the WebUI both read, locks that comparison.
+- Both compare `onlyBrowserPlayable` and `onlyUnrated`, each missing equal to false, and `minRating`, missing equal to null, as is a value that isn't a rating.
+- Both also compare `addedRange` and `createdRange` by the choice, a preset's name or a custom range's days, so `last30Days` differs from a custom range of the same days, and the WebUI reads them as the server does, locked to `shared/fixtures/filter-date-ranges.json`.
 
-- **Rating filter:** `onlyUnrated` true keeps only items with no rating.
-  - `minRating`, in stars from 0.5 to 5 in half-star steps, keeps items rated at or above it, so it leaves unrated items out, and with `onlyUnrated` true nothing matches; the server applies that pairing as sent rather than rejecting it.
-  - The library query, its counts, and random selection apply both.
-  - A `minRating` that isn't a rating, such as a string, 3.2, or 0, reads as no minimum, as `ItemRating` reads a rating, and `shared/fixtures/filter-min-rating.json` locks that reading.
-  - A missing or false `onlyUnrated` and a missing or null `minRating` apply no restriction, so a preset saved without the fields filters as before.
+#### Random pick options
 
-- **Date filter:** `addedRange` keeps items whose date added falls in a range, and `createdRange` items whose date created, the file's modified time, does; the two can be used together.
-  - An item's date added is when the source stage of the refresh that found its file started, or its modified time for a file the library held before the catalog recorded dates added.
-  - Items `POST /api/sources/import` inserts have none.
-  - Each field is a preset, `last7Days`, `last30Days`, `last90Days`, or `thisYear`, read in any case, or a custom range, `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }`.
-  - A filter holds the choice, never resolved dates, so a preset holding `last30Days` always means the last 30 days.
-  - The server resolves a range each time it filters, in its own time zone and to whole days: `last7Days` is today and the 6 days before it, `last30Days` and `last90Days` likewise, `thisYear` is 1 January to 31 December, and a custom range covers its first and last days.
-  - The library query, its counts, and random selection apply both, and an item without that date is left out.
-  - An unknown preset, a date that isn't one, a custom range without both dates, and one that ends before it starts read as no limit, and `shared/fixtures/filter-date-ranges.json` locks that reading.
-  - A missing or null field applies no restriction, so a preset saved without the fields filters as before.
+- `POST /api/random` takes an optional `options` object.
+- Each option takes its default when it is missing.
+- `shuffle`, on by default, leaves out the items picked on the device within the window until every eligible item has been, and then starts a new cycle whose first pick is never the last pick.
+- `rememberPlaysForDays` is that window: 1, 7, 30, or 90 days, 30 by default, or null for until every eligible item has been picked; any other value reads as 30.
+- `spreadByFolder`, on by default, leaves out the items in the folders of the device's last 16 picks, or of half the eligible set's folder count, rounded down, when that is fewer, unless those folders hold every item left; a folder is the item's immediate parent.
+- `spreadByTags` is `off` by default, or `allTags` or `byCategory`, read in any case, and null or any other value reads as `off`: it makes items whose tags came up in the device's last 16 eligible picks beyond their share of the eligible set less likely, rarer tags more so, counting every tag, or under `byCategory` only the tags of the categories in `spreadCategoryIds`, where null counts as none and an id no category has is ignored.
+- Having no tags counts as a tag of its own, and a tag an item holds that isn't in the tag list has no category.
+- `favorLessPlayed` makes items with fewer plays, and those not played lately, more likely.
+- `favorNewlyAdded` and `favorNewlyCreated` give the items added, or created, in the last 14 days one 20% share of the picks, newer ones more, and with both on an item counts from the later date.
+- `favorHigherRated` makes higher-rated items more likely, an unrated item counting as 2.5 stars.
+- Each is off by default, and with every option off picks are pure random.
+- Every pick goes into a memory the server keeps for each `clientId`, by item id and pick time, whatever the options; requests without a `clientId` share one.
+- A change to the filter or the options keeps it, and a server restart clears it.
+- Each pick drops the memory of every device whose last pick is past the window it was picked with, so a device on null keeps its memory until the server restarts.
+- The answer's `cycle` holds the device's Shuffle cycle numbers after the pick: `picked`, the eligible items picked within the window, `eligible`, and `remaining`, which with `picked` adds up to `eligible`.
+- `POST /api/random/cycle` takes the same body and answers those numbers as they stand, without picking or changing the memory, with the same 400, unknown-preset 404, and 503 answers as a pick.
+- `POST /api/random/reset` (`{ "clientId"? }`) clears the device's Shuffle memory and its last pick and answers **`204`**; the last 16 picks that Spread by folder and Spread by tags look at stay, so the next pick still skips recent folders.
+- A pick whose item a refresh removes before the server reads it answers **`404`** with "The picked file is no longer in the library."
+- Each pick writes one `last.log` line naming the options that are on and the window, such as `Random pick options=shuffle,spreadByFolder remember=30d eligible=812 elapsedMs=41.`, without ids or paths.
 
-- **Presets:** Each preset has an id of its own, kept across renames, which `GET /api/presets` returns, the per-preset routes take in their path, and `presetCatalogChanged` carries.
-  - `POST /api/presets/create` (`{ name, filterState, clientId? }`) adds a preset after every other one, with a new id, `POST /api/presets/{presetId}/update` (`{ filterState, clientId? }`) replaces its filter, and `POST /api/presets/{presetId}/rename` (`{ name, clientId? }`) renames it, each answering with the preset as written (`PresetResponse`).
-  - `POST /api/presets/reorder` (`{ presetIds, clientId? }`) takes every preset's id once, in the new order, and changes nothing else, and `POST /api/presets/{presetId}/delete` (an optional `{ clientId? }`) deletes one; both answer 200 with no body.
-  - Names are trimmed.
-  - No preset may hold the default filter (**400**), another preset's filter by the comparison above (**409**, with `error` naming that preset), or another preset's name, ignoring case (**409**); a preset keeps its own filter and may take its own name in another case.
-  - An empty name or a filter state that isn't an object is **400**, an id no preset has is **404**, and an order that doesn't name every preset once is **409**.
-  - A write the catalog doesn't take, because it throws, as when another write holds the catalog past its busy timeout, or changes no row, as when the catalog lacks a preset the server holds after an earlier failed write, answers **500** with the server's reason, changes and publishes nothing, and writes a `last.log` warning.
-  - Each write publishes `presetCatalogChanged` with the preset's id, or a null `presetId` for a reorder, and the request's `clientId`, so a client can tell its own change from another device's.
-  - The WebUI's Filter tab saves each preset it changed with these routes, one at a time: deletes, then renames, then filter updates, then new presets, then one reorder, with each rename after the one that frees its name and each update after the one that frees its filter, so none is refused for a name or filter another of its own changes gives up.
-  - Changes that would have presets take each other's names or filters, in a loop, can't be sent in any order, so the tab doesn't send them.
-  - Tag rename and delete update the presets that hold the tag, keeping their ids, are never refused for the filters they leave, and publish no `presetCatalogChanged`, so clients see the presets they change through `tagCatalogChanged`.
-  - When their preset write fails, the presets the server holds still change, and `last.log` gets a warning.
-  - Presets live in a catalog table, and core settings stay in `core-settings.json`.
+#### Browser-playable filter
 
-- **Direct item play:** `POST /api/play/{itemId}` requests playback by persisted library **`id`** (the path segment is **not** `fullPath`).
-  - The server reads that item and whether its source is enabled, and does not load the rest of the catalog.
-  - Optional JSON body `{ "clientId"?, "sessionId"?, "recordPlayback"? }`:
-    - the identity fields match identity propagation on other playback endpoints.
-    - `recordPlayback: false` answers the same without updating play count or last played or publishing `playbackRecorded`, which the WebUI sends to get a fresh media URL for the item playing now, whose play has already counted, as when a server restart dropped its media token, and for a history step's or a library play while the device's Don't record plays is on.
-  - Without it, or with `true`, the play counts.
-  - Success returns `PlaybackItemResponse`, the item a random pick's `item` carries (`id` is the full path, `itemId` the catalog item id, and `integratedLoudness` and `peakDb` the loudness scan's integrated loudness in LUFS and true peak in dBTP, or null where it hasn't measured them, which the WebUI's loudness normalization reads, and `rating` the item's rating in stars, from 0.5 to 5 in half-star steps, or null for none, which the WebUI's player shows, also from a history step's answer) and updates play count / last-played server-side with a `playbackRecorded` SSE event—do **not** call `POST /api/record-playback` for the same play start.
-  - Blacklist does **not** block this endpoint.
-  - Errors use `ErrorResponse` with optional machine-readable `code` (for example `play_item_not_found`, `play_media_missing`, `play_source_disabled`, `play_unsupported_media`, `play_item_id_invalid`, `play_media_unreadable`) and HTTP statuses:
-    - **`404`** (unknown id or missing file, or, with `play_item_not_found`, an item a refresh removed before its play was counted).
-    - **`409`** (disabled source).
-    - **`415`** (extension not in the server's supported list, `SupportedMediaExtensions`).
-    - **`503`** (the file is there but can't be read, with `play_media_unreadable`, or the server has no library).
-  - WebUI library tile activation and every step through the WebUI's history, by Next, Previous, autoplay, or a skip, use this endpoint.
+- `onlyBrowserPlayable` true keeps photos and only the videos whose container a browser can play: a file name ending in `.mp4`, `.m4v`, or `.webm`, in any case (`BrowserPlayableContainers` in Core).
+- Videos in any other container, such as `.mkv`, `.avi`, `.wmv`, or `.mov`, are left out of the library query, its counts, and random selection.
+- The list goes by container alone and can't see a file's codecs, so `.mkv` is left out: its files didn't play on an iPad and played with broken audio in desktop Firefox.
+- Missing or false applies no restriction, so a preset saved without the field filters as before.
 
-- **Show in File Manager:** `POST /api/show-in-file-manager/{itemId}` opens the server machine's file manager with the item's file selected, by persisted library **`id`**, never a path, and answers **`204`**.
-  - It is accepted only from localhost, as Auth and Pairing defines it, so a request through a reverse proxy is refused even on the server machine.
-  - On Windows the server starts Explorer with `/select,"<path>"`.
-  - On Linux it calls `org.freedesktop.FileManager1.ShowItems` on the session bus, which selects the file in Dolphin, Nautilus, and other file managers that implement it, and when that call fails, or there is no session bus, it opens the file's folder with `xdg-open`.
-  - Neither goes through a shell.
-  - Errors use `ErrorResponse` with `code`:
-    - **`403`** `file_manager_not_local` for any other caller.
-    - **`409`** `file_manager_unavailable` when the server has no desktop session (on Linux, neither `DISPLAY` nor `WAYLAND_DISPLAY` is set) or runs on another system.
-    - **`404`** `file_manager_item_not_found` for an unknown id and `file_manager_file_missing` when the file isn't on disk.
-    - **`500`** `file_manager_failed` when the file manager couldn't be started.
-  - Each request writes one `Show in file manager` line to `last.log` with the item id and the outcome, without the path.
-  - The WebUI's menus on a file offer it beside Copy path while `api.showInFileManager` is listed.
+#### Rating filter
+
+- `onlyUnrated` true keeps only items with no rating.
+- `minRating`, in stars from 0.5 to 5 in half-star steps, keeps items rated at or above it, so it leaves unrated items out, and with `onlyUnrated` true nothing matches; the server applies that pairing as sent rather than rejecting it.
+- The library query, its counts, and random selection apply both.
+- A `minRating` that isn't a rating, such as a string, 3.2, or 0, reads as no minimum, as `ItemRating` reads a rating, and `shared/fixtures/filter-min-rating.json` locks that reading.
+- A missing or false `onlyUnrated` and a missing or null `minRating` apply no restriction, so a preset saved without the fields filters as before.
+
+#### Date filter
+
+- `addedRange` keeps items whose date added falls in a range, and `createdRange` items whose date created, the file's modified time, does; the two can be used together.
+- An item's date added is when the source stage of the refresh that found its file started, or its modified time for a file the library held before the catalog recorded dates added.
+- Items `POST /api/sources/import` inserts have none.
+- Each field is a preset, `last7Days`, `last30Days`, `last90Days`, or `thisYear`, read in any case, or a custom range, `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }`.
+- A filter holds the choice, never resolved dates, so a preset holding `last30Days` always means the last 30 days.
+- The server resolves a range each time it filters, in its own time zone and to whole days: `last7Days` is today and the 6 days before it, `last30Days` and `last90Days` likewise, `thisYear` is 1 January to 31 December, and a custom range covers its first and last days.
+- The library query, its counts, and random selection apply both, and an item without that date is left out.
+- An unknown preset, a date that isn't one, a custom range without both dates, and one that ends before it starts read as no limit, and `shared/fixtures/filter-date-ranges.json` locks that reading.
+- A missing or null field applies no restriction, so a preset saved without the fields filters as before.
+
+#### Presets
+
+- Each preset has an id of its own, kept across renames, which `GET /api/presets` returns, the per-preset routes take in their path, and `presetCatalogChanged` carries.
+- `POST /api/presets/create` (`{ name, filterState, clientId? }`) adds a preset after every other one, with a new id, `POST /api/presets/{presetId}/update` (`{ filterState, clientId? }`) replaces its filter, and `POST /api/presets/{presetId}/rename` (`{ name, clientId? }`) renames it, each answering with the preset as written (`PresetResponse`).
+- `POST /api/presets/reorder` (`{ presetIds, clientId? }`) takes every preset's id once, in the new order, and changes nothing else, and `POST /api/presets/{presetId}/delete` (an optional `{ clientId? }`) deletes one; both answer 200 with no body.
+- Names are trimmed.
+- No preset may hold the default filter (**400**), another preset's filter by the comparison above (**409**, with `error` naming that preset), or another preset's name, ignoring case (**409**); a preset keeps its own filter and may take its own name in another case.
+- An empty name or a filter state that isn't an object is **400**, an id no preset has is **404**, and an order that doesn't name every preset once is **409**.
+- A write the catalog doesn't take, because it throws, as when another write holds the catalog past its busy timeout, or changes no row, as when the catalog lacks a preset the server holds after an earlier failed write, answers **500** with the server's reason, changes and publishes nothing, and writes a `last.log` warning.
+- Each write publishes `presetCatalogChanged` with the preset's id, or a null `presetId` for a reorder, and the request's `clientId`, so a client can tell its own change from another device's.
+- The WebUI's Filter tab saves each preset it changed with these routes, one at a time: deletes, then renames, then filter updates, then new presets, then one reorder, with each rename after the one that frees its name and each update after the one that frees its filter, so none is refused for a name or filter another of its own changes gives up.
+- Changes that would have presets take each other's names or filters, in a loop, can't be sent in any order, so the tab doesn't send them.
+- Tag rename and delete update the presets that hold the tag, keeping their ids, are never refused for the filters they leave, and publish no `presetCatalogChanged`, so clients see the presets they change through `tagCatalogChanged`.
+- When their preset write fails, the presets the server holds still change, and `last.log` gets a warning.
+- Presets live in a catalog table, and core settings stay in `core-settings.json`.
+
+#### Direct item play
+
+- `POST /api/play/{itemId}` requests playback by persisted library **`id`** (the path segment is **not** `fullPath`).
+- The server reads that item and whether its source is enabled, and does not load the rest of the catalog.
+- Optional JSON body `{ "clientId"?, "sessionId"?, "recordPlayback"? }`:
+  - the identity fields match identity propagation on other playback endpoints.
+  - `recordPlayback: false` answers the same without updating play count or last played or publishing `playbackRecorded`, which the WebUI sends to get a fresh media URL for the item playing now, whose play has already counted, as when a server restart dropped its media token, and for a history step's or a library play while the device's Don't record plays is on.
+- Without it, or with `true`, the play counts.
+- Success returns `PlaybackItemResponse`, the item a random pick's `item` carries (`id` is the full path, `itemId` the catalog item id, and `integratedLoudness` and `peakDb` the loudness scan's integrated loudness in LUFS and true peak in dBTP, or null where it hasn't measured them, which the WebUI's loudness normalization reads, and `rating` the item's rating in stars, from 0.5 to 5 in half-star steps, or null for none, which the WebUI's player shows, also from a history step's answer) and updates play count / last-played server-side with a `playbackRecorded` SSE event—do **not** call `POST /api/record-playback` for the same play start.
+- Blacklist does **not** block this endpoint.
+- Errors use `ErrorResponse` with optional machine-readable `code` (for example `play_item_not_found`, `play_media_missing`, `play_source_disabled`, `play_unsupported_media`, `play_item_id_invalid`, `play_media_unreadable`) and HTTP statuses:
+  - **`404`** (unknown id or missing file, or, with `play_item_not_found`, an item a refresh removed before its play was counted).
+  - **`409`** (disabled source).
+  - **`415`** (extension not in the server's supported list, `SupportedMediaExtensions`).
+  - **`503`** (the file is there but can't be read, with `play_media_unreadable`, or the server has no library).
+- WebUI library tile activation and every step through the WebUI's history, by Next, Previous, autoplay, or a skip, use this endpoint.
+
+#### Show in File Manager
+
+- `POST /api/show-in-file-manager/{itemId}` opens the server machine's file manager with the item's file selected, by persisted library **`id`**, never a path, and answers **`204`**.
+- It is accepted only from localhost, as Auth and Pairing defines it, so a request through a reverse proxy is refused even on the server machine.
+- On Windows the server starts Explorer with `/select,"<path>"`.
+- On Linux it calls `org.freedesktop.FileManager1.ShowItems` on the session bus, which selects the file in Dolphin, Nautilus, and other file managers that implement it, and when that call fails, or there is no session bus, it opens the file's folder with `xdg-open`.
+- Neither goes through a shell.
+- Errors use `ErrorResponse` with `code`:
+  - **`403`** `file_manager_not_local` for any other caller.
+  - **`409`** `file_manager_unavailable` when the server has no desktop session (on Linux, neither `DISPLAY` nor `WAYLAND_DISPLAY` is set) or runs on another system.
+  - **`404`** `file_manager_item_not_found` for an unknown id and `file_manager_file_missing` when the file isn't on disk.
+  - **`500`** `file_manager_failed` when the file manager couldn't be started.
+- Each request writes one `Show in file manager` line to `last.log` with the item id and the outcome, without the path.
+- The WebUI's menus on a file offer it beside Copy path while `api.showInFileManager` is listed.
+
+#### Library queries, items, and ratings
+
 - `POST /api/library/query` — browse path for filter, search, sort, and paging.
   - Order is enabled sources, then a filename or relative-path substring search, then `filterState`, then sort.
   - The body accepts:

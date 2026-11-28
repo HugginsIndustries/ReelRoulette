@@ -13,7 +13,6 @@
 - [ ] A failed check.
   - Failed: it broke, tracked by P1.
 
-- [x] A waived check. (waived)
 - [ ] A skipped check.
   - Skipped: not this time, tracked by P2.
 

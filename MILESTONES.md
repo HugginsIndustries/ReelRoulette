@@ -9,12 +9,12 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a Developer section in Settings for testing on devices, a notice to reload onto a newer build, the bell's messages kept across reloads, 24-hour times and ISO dates, a library refresh's progress in the bell's list and a plain summary of what it changed, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12n6, M12n7, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, multi-select, and right-click menus across the app. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Randomization tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, a Developer section in Settings for testing on devices, a notice to reload onto a newer build, the bell's messages kept across reloads, 24-hour times and ISO dates, a library refresh's progress in the bell's list and a plain summary of what it changed, profiles, chosen from the header, that each show only the sources, tags, and presets picked for them, start and end markers that loop a stretch of a video, a Log Viewer that filters the log, settings saves that can't lose the server's settings, and a testing suite whose results match the WebUI's connection and status handling. It removes the desktop client, its packaging, and its tests, moves preset writes to per-preset routes, always serves the WebUI, and keeps a minimal recovery page for when the WebUI's files are broken. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12n6, M12n7, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
 - **v0.18.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
-- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54, P55, P56, P57, P58, P59.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54, P55, P56, P57, P58, P59, P60, P61, P62, P63, P64, P65, P66.
 
 ## Document Purpose
 
@@ -52,7 +52,7 @@ Do not use this file for detailed architecture explanation or current capability
 - Finished milestones live in `MILESTONES-COMPLETED.md` under `## Completed Milestones`, newest completions first. These rules apply there too, except that completed entries keep the format they were completed in, including any `Deferrals / Follow-ups` sections, as historical record.
 - Keep `## Active Milestones` updated with `Last milestone completed: Mx` so the next `M*` assignment is unambiguous.
 - When promoting planned work to active work, assign the next `M*` ID at promotion time and keep planned `P*` IDs stable until then. Promote a planned release as a new `M*` series, with lettered milestones in its outline order.
-- When a milestone is completed, move it to the top of `MILESTONES-COMPLETED.md` as-is: keep its body unchanged except final-state corrections, and preserve newest completions first.
+- When a branch completes a milestone, mark it ✅ Complete with its evidence and leave it in `## Active Milestones`. After the branch's squash merge and the user's spot check on main, the advisor records the check's result and moves the entry to the top of `MILESTONES-COMPLETED.md` as-is: its body unchanged except final-state corrections, newest completions first.
 - In an entry's body, do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
 - ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
 - A planned milestone never names the schema version number of a step that hasn't landed. It says the catalog moves to the next schema version, with its upgrade step from the version before, so reordering milestones doesn't make it wrong. Versions already in the code, such as the shipped 2→3 step, may be named.
@@ -359,7 +359,7 @@ Last milestone completed: M12n1
 - The indicator fades with the controls only for a state that follows them, as a library refresh does.
 - A tap on the player goes through `onAreaClick` in `src/ui/Player.tsx`: a swipe's click is swallowed, a tap on a seekable video waits 300 ms for a double tap, and the tap then starts a random pick while nothing plays, or shows or hides the controls.
 - The player's touch listeners skip only touches that start in `#overlay-controls`, which stops click and touch events from reaching the player.
-- The player's menu comes with WebUI Context Menus' Player slice, so whichever of the two lands second leaves the notice out of it.
+- WebUI Context Menus' Player slice gave the player its menu, which opens on a right-click or long press anywhere on the picture except the parts in `NO_MENU_PARTS` (`src/ui/Player.tsx`), so this slice adds the indicator to those parts while it shows the notice.
 - A Now row is a plain list item, and the list's only buttons are Clear, Close, and Notification settings.
 - Server not compatible lasts until the page loads again, since the event stream stops while it shows.
 - The Filter and Tags tabs' unsaved changes are `services.unsaved` (`src/state/appServices.ts`), and the Tags tab already asks "Discard changes?" with a red Discard (`DISCARD_ITEM_CHANGES` in `src/tags/tagEditor.ts`).
@@ -628,6 +628,7 @@ Last milestone completed: M12n1
 - `CloneStatus` copies the new members.
 - OpenAPI, the generated WebUI types, and `docs/api.md`'s refresh section describe the status.
 - The WebUI reads the new status in `coerceRefreshSnapshot`, `refreshProgress`, `settledKeptSources`, and `newRefreshCompletionRunId` (`src/events/refreshStatusProjection.ts`).
+- Those reads use the generated types of the status and its stages, so the compiler checks them against the contract, without changing how the rest of the WebUI reads responses and events.
 - The WebUI builds the finished summary from the counts, in the mockup's wording (`REFRESH_RUNS` in `build/common.js`), in place of its message parsers, whose unused "evicted" count goes with them.
 - `CONTEXT.md` describes the finished summary.
 
@@ -665,6 +666,7 @@ Last milestone completed: M12n1
 - A failed duration probe counts as failed, a changed value counts apart from a first measurement, and a file changed on disk apart from a new one, in refresh pipeline tests.
 - A missing ffmpeg or ffprobe is reported once, with no failures counted for it, in refresh pipeline tests with the tools missing.
 - The status matches its OpenAPI schema, in contract tests, and `npm run verify:contracts` passes.
+- The WebUI's reads of the status use its generated types, checked by the typecheck `npm run verify` runs.
 - The finished summary reads "No changes" for a run that changed nothing, and otherwise names only the nonzero changes and problems, in WebUI tests of the summary.
 - `docs/api.md` describes the status, checked by reading it.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -715,6 +717,7 @@ Last milestone completed: M12n1
 - Counting files missing on disk.
 - Naming the files that failed.
 - Scanning a replaced file's duration and loudness again.
+- Typing the WebUI's other responses and events from the generated contract, which is WebUI Typed Contract Reads.
 
 ### M12n4 - WebUI Context Menus
 
@@ -798,7 +801,7 @@ Last milestone completed: M12n1
   - Duplicate left the preset row's menu, since no preset may hold another preset's filter.
   - Apply on a preset row is disabled with its reason while the Filter tab holds unsaved changes.
   - A tag's buttons read "Add to item" and "Remove from item".
-- The bell entry's menu holds only Copy text and Dismiss, since Clear all and Notification settings don't act on the entry.
+- The bell entry's menu holds only Copy text and Dismiss, since Clear and Notification settings don't act on the entry.
 - The mockup's shared code holds one context menu, its long press, and the block on the browser's menu, which the main page and the admin view use; the tile's own menu and long press moved onto them.
 - The icon font gains `new_label`, and the mockup's index page and README describe the menus.
 - `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -1023,13 +1026,14 @@ Last milestone completed: M12n1
 
 **Traps**
 
-- The bell's list has Clear all, Close, and Notification settings, and no action on one entry (`src/ui/Notifications.tsx`).
+- The bell's list has Clear, Close, and Notification settings, and no action on one entry (`src/ui/Notifications.tsx`).
 - The bell's list closes on a press outside it through `useLightDismiss` (`src/ui/LightDismiss.ts`), so a press in a menu rendered outside the list would close it (inferred).
 - Popups close with their Dismiss or a swipe on a touch screen (`touch-action: pan-y`), and hovering pauses their timer (`src/ui/Notifications.tsx`).
 - Auto Tag is a modal dialog opened with `showModal()` (`src/ui/Dialog.tsx`), so the rest of the page is inert and a menu for its rows has to render inside it (inferred).
 - `useLightDismiss` skips Escape while a dialog is open, and a dialog closes on its own Escape (`src/ui/Dialog.tsx`), so a menu inside one needs its own place before the dialog's.
 - Auto Tag's file rows are labels around their checkbox, with the full path as their tooltip (`src/ui/AutoTag.tsx`).
 - `toggleList` has no caller, and `dismissAll` is called only from `src/test/screens/notifications.test.ts` (measured).
+- WebUI Update Notice's Kept messages slice keeps the bell's list across reloads, so whichever of the two lands second writes the kept list on Dismiss.
 - The Settings tab's diagnostics IDs are plain text (`src/ui/SettingsTab.tsx`).
 - `menuItems` in `src/library/fileLocation.ts` builds Copy path and Show in File Manager, without Copy name when asked, and a copy's fallback field goes into the fullscreen stage, so a menu rendered inside Auto Tag's modal dialog, where the page outside it is inert, needs its field placed inside the dialog (inferred).
 - `useMenuSurface` in `src/ui/Menu.tsx` gives a component's element a menu from the groups it gives at the press, tinting the element, and `pressOn` names buttons a long press still opens it on (`src/ui/menuModel.ts`).
@@ -1047,7 +1051,7 @@ Last milestone completed: M12n1
 #### Release checks
 
 - Manual: In Firefox on the desktop, right-clicking the player, a tag, a preset, and a notification opens the app's menu, and right-clicking in the library search opens Firefox's own.
-- Manual: On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own, and a long press on a library tile opens its menu, whose Select starts selecting.
+- Manual: On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own.
 
 #### Not included
 
@@ -1069,7 +1073,7 @@ Last milestone completed: M12n1
 - Opening a menu from the keyboard.
 - Duplicating a preset from its row's menu, since no preset may hold another preset's filter.
 - Add to item and Remove from item in a tag's menu, since the tag's own buttons do it in one tap.
-- Clear all and Notification settings in a bell entry's menu, since they don't act on the entry.
+- Clear and Notification settings in a bell entry's menu, since they don't act on the entry.
 
 ### M12n5 - WebUI Loop Range
 
@@ -1115,7 +1119,7 @@ Last milestone completed: M12n1
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
-- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile, and WebUI Context Menus, whose menu and long press a picker row's menu uses.
+- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, Random Pick Options, whose cycle route the profile's sources apply to, WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile, and WebUI Context Menus, whose menu and long press a picker row's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1126,7 +1130,7 @@ Last milestone completed: M12n1
 - The default profile always shows everything and can't be deleted. It is listed first, starts as "Main" in the brand orange (`#ef7f22`), takes the name and color the user sets, and its Edit Profile dialog has only the General tab.
 - Profiles are stored in `library.db`, since they refer to source ids, tag names, and preset ids that mean something only in one catalog, so they travel with catalog export, import, and backups.
 - Each request that lists, counts, or picks items names the active profile in an optional `profileId`. Without one, or with an id the catalog doesn't have, the server uses the default profile, so a device that was offline when its profile was deleted keeps working.
-- The server applies the active profile's sources to the library query and its counts, its ids-only option, random picks and their cycle numbers, library stats, and Auto Tag's scan, together with enabled sources and any filter or preset. A filter or preset naming a source the profile hides just leaves it out, and when nothing remains the library shows its usual empty message.
+- The server applies the active profile's sources to the library query and its counts, the ids-only query (`POST /api/library/query-ids`), random picks and their cycle numbers, library stats, and Auto Tag's scan, together with enabled sources and any filter or preset. A filter or preset naming a source the profile hides just leaves it out, and when nothing remains the library shows its usual empty message.
 - Item reads, library play, media, and thumbnails name no profile: the playing item, history, and queue carry on across a switch, and only the next random pick uses the new profile.
 - The event stream names no profile, and the WebUI applies its profile to the events it receives, since every event goes to every subscriber through one shared history and a stream per profile would have to reconnect on every switch.
 - Other devices popups, and the refresh's notice of kept folders, leave out items and folders in sources the active profile hides. The item events carry each item's `sourceId` for this.
@@ -1174,7 +1178,7 @@ Last milestone completed: M12n1
 - The mockup's bell list is `initNotifications` in `common.js`, and its `.notify-list` styles in `common.css` can style the picker too.
 - No tabbed dialog exists in the app or the mockup; the Filter tab's section strip (`role="tablist"`) is the nearest model.
 - Add tag and Add Preset are inline fields, not dialogs, so the creation question is a new dialog with two choices.
-- The mockup's dialogs (`openDialog`, `confirmDialog`, and `nameDialog` in `common.js`) offer Cancel and one action, and `nameDialog` takes extra fields through its `extra(form)` hook.
+- The mockup's dialogs (`openDialog`, `confirmDialog`, and `nameDialog` in `common.js`) offer Cancel and one action, and `nameDialog` takes extra fields through its `extra(body)` hook.
 - New icons go in `ICONS` in `build_font.py`; one missing from the subset shows as the `error` glyph.
 - `check.mjs` runs the pages in happy-dom with no layout, so the button's size and the picker's place at each width can only be judged on the devices.
 
@@ -1194,7 +1198,7 @@ Last milestone completed: M12n1
   - Deleting a profile deletes its source rows in the same transaction.
 - A profile that follows all sources includes a source added later, and a chosen list doesn't.
 - Each profile's own default filter is stored with it in `profiles`, and the profile store reads and writes it, as the Decisions describe.
-- The server resolves the request's profile to its sources, and `BuildWhere` adds them as a condition outside the filter, so the library query's page, `totalCount`, `searchBaselineCount`, its ids-only option, random picks, and Random Pick Options' cycle numbers keep only the profile's sources.
+- The server resolves the request's profile to its sources, and `BuildWhere` adds them as a condition outside the filter, so the library query's page, `totalCount`, `searchBaselineCount`, the ids-only query, random picks, and Random Pick Options' cycle numbers keep only the profile's sources.
 - Auto Tag's scan keeps only the profile's sources: a full-library scan reads every item in them, and a scan with no path list their enabled ones.
 - Library stats count only enabled sources, as lists, counts, and random picks do: the totals and the baseline loudness leave disabled sources out, while each source's own row in the per-source list still counts its items, which Admin Source Management shows.
 - With a profile, the stats' totals count only its sources. The baseline loudness stays library-wide, since it is loudness normalization's target and isn't a count.
@@ -1208,7 +1212,7 @@ Last milestone completed: M12n1
 - `ItemColumnsBySchemaVersion` needs an entry for the new version even though `items` doesn't change, since both schema checks look the version up there.
 - `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version, and `CatalogSeedTests.DescribeSchema` compares an upgraded catalog with a new one table by table.
 - The catalog has no foreign keys.
-- `QueryList` calls `BuildWhere` three times and `QueryRandomCandidates` once (`LibraryCatalogListQuery.cs`, `LibraryCatalogSession.cs`), and `searchBaselineCount` is built without the filter, so a source condition inside `AppendFilter` would leave that count covering the whole library.
+- `QueryList` calls `BuildWhere` three times, and `QueryListIds`, which serves `POST /api/library/query-ids`, and `QueryRandomCandidates` once each (`LibraryCatalogListQuery.cs`, `LibraryCatalogSession.cs`), and `searchBaselineCount` is built without the filter, so a source condition inside `AppendFilter` would leave that count covering the whole library.
 - `FromClause` joins only enabled sources, and the filter's source list is an OR group inside `AppendFilter`, so a filter limited to a disabled source finds nothing (measured).
 - The list counts are cached by the WHERE text and its values until the next catalog write, 64 entries at most, all dropped when full, so each profile's counts are cached apart.
 - `ReadStatsGroups` is one `GROUP BY source_id, media_type` pass with no enabled condition, so the totals count a disabled source's items (measured), and `ReadBaselineLoudness` reads every item.
@@ -1224,7 +1228,7 @@ Last milestone completed: M12n1
 - A catalog at each older version opens upgraded and imports upgraded with the profile tables and the default profile, matches a new catalog's schema, and isn't moved aside, in the catalog upgrade tests.
 - Profiles are listed, created, updated, and deleted, a taken name is refused ignoring case, and the default profile can't be deleted or limited, in profile store tests.
 - A profile that follows all sources includes a newly imported source, and a chosen list doesn't, in profile store tests.
-- The library query's page, both counts, its ids-only option, random picks, and the random cycle numbers keep only the profile's sources, a filter naming only sources it hides finds nothing, and a request without a profile or with an unknown one sees every source, in server tests of the profile's sources.
+- The library query's page, both counts, the ids-only query, random picks, and the random cycle numbers keep only the profile's sources, a filter naming only sources it hides finds nothing, and a request without a profile or with an unknown one sees every source, in server tests of the profile's sources.
 - Auto Tag's scan keeps only the profile's sources, in server tests of the scan.
 - Library stats' totals and baseline leave disabled sources out while each source's row keeps its own counts, and with a profile the totals count only its sources, in server tests of library stats.
 - Each profile write publishes `profilesChanged`, in server tests of each write.
@@ -1235,7 +1239,7 @@ Last milestone completed: M12n1
 **Scope**
 
 - `GET /api/profiles` lists the profiles, and POST routes, like the other write routes, create, update, and delete one.
-- An optional `profileId` on `POST /api/library/query`, its ids-only option included, `POST /api/random`, Random Pick Options' cycle route, and `POST /api/autotag/scan`, and as a query parameter on `GET /api/library/stats`.
+- An optional `profileId` on `POST /api/library/query`, `POST /api/library/query-ids`, `POST /api/random`, Random Pick Options' cycle route, and `POST /api/autotag/scan`, and as a query parameter on `GET /api/library/stats`.
 - `profilesChanged` with the whole profile list and `clientId`.
 - `sourceId` on `itemStateChanged` and `itemRatingChanged`, and each item's source id on the bulk favorite and blacklist event and the bulk rating event.
 - OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the routes, the field, and the events.
@@ -1260,6 +1264,8 @@ Last milestone completed: M12n1
 **Scope**
 
 - The header's profile button and its picker, as the Decisions and the approved mockup describe, first in a right-hand group that the admin icon later joins.
+- The header takes the mockup's layout: the now-playing name follows the logo and fills the space before the right-hand group, with the mockup's spacing (`src/styles.css`).
+- The now-playing name is cut only by the CSS ellipsis, as the mockup cuts it, and the 45-character cut in code goes (`NOW_PLAYING_MAX_CHARS` in `src/playback/nowPlaying.ts`).
 - A picker row has a context menu with Edit…, which opens Edit Profile, and Delete…, which asks first as Edit Profile's Delete does and is disabled on the default profile with its reason.
 - Escape closes a picker row's context menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen.
 - Add Profile and Edit Profile with their General and Sources tabs, and Delete. Profile Tag and Preset Visibility adds the Tags and Presets tabs.
@@ -1279,8 +1285,10 @@ Last milestone completed: M12n1
 **Traps**
 
 - The header renders only the logo, the pairing prompt, and now playing (`src/ui/Header.tsx`), with no right-hand group; the admin icon comes with WebUI Admin Section.
+- The app's `.now-playing` has `margin-left: auto`, which puts the name at the header's right, from when the header held the preset and randomization dropdowns, while the mockup's has `flex: 1 1 0` (`build/layout.src.html`).
+- The app's header has `gap: 16px; margin-bottom: 16px`, and the mockup's `gap: 6px 16px; margin-bottom: 12px`; phones look the same in both (inferred).
 - The header sits outside the fullscreen stage, and `body.short-screen .top-bar:not(.is-pairing)` hides it on a phone on its side (`src/styles.css`).
-- The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement under the bell and its focus handling written for the bell alone, and closes on an outside press and Escape through `useLightDismiss` (`src/ui/LightDismiss.ts`), which the rating's popover and WebUI Multi-Select and Bulk Actions' Selection actions menu use too.
+- The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement under the bell and its focus handling written for the bell alone, and closes on an outside press and Escape through `useLightDismiss` (`src/ui/LightDismiss.ts`), which the rating's popover, WebUI Multi-Select and Bulk Actions' Selection actions menu, and the shared context menu (`src/ui/Menu.tsx`) use too.
 - The panel opening closes the bell's list in every mode (`src/state/appServices.ts`), while the picker closes only when the panel covers the screen, which is `panel.mode` `"overlay"` (`src/panel/panelHost.ts`).
 - WebUI Context Menus keeps the bell's list open while a menu opened from it is used, which the picker needs too, since a press in a row's menu is outside the picker.
 - `filter.applied` holds the filter and its preset, and an effect writes it only once presets have loaded and the record has changed (`src/state/appStore.ts`). A switch that doesn't set the applied filter and the preset in one batch, as `pickHeaderPreset` does, writes the old profile's record under the new profile's key (inferred).
@@ -1293,6 +1301,7 @@ Last milestone completed: M12n1
 **Acceptance**
 
 - The button shows the active profile's circle and first letter in a readable color, the picker lists the default profile first and the others alphabetically, and it closes as the Decisions describe, in Header screen tests.
+- A now-playing name longer than 45 characters is shown whole, for the CSS ellipsis to cut, in Header screen tests, and the header's layout matches the mockup's, checked in the spot check.
 - Escape closes a picker row's context menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen, in keyboard tests.
 - A picker row's context menu opens Edit Profile and deletes the profile after asking, and its Delete is disabled with its reason on the default profile, in Header screen tests.
 - Add Profile and Edit Profile create, change, and delete a profile, a taken name is flagged with the field validation pattern, and the default profile's dialog has only the General tab, in profile dialog tests.
@@ -1420,7 +1429,7 @@ Last milestone completed: M12n1
 **Scope**
 
 - Add and Edit Profile's Tags tab, with categories and their tags as checkboxes and a category's tags greyed while it is off, and its Presets tab, with a checkbox for each preset. Add Profile starts with the "All profiles" ones checked.
-- The creation question, a dialog with two choices, after Add tag, New Category, Add Preset, and the context menus' New tag in this category and Duplicate, once a second profile exists.
+- The creation question, a dialog with two choices, after Add tag, New Category, Add Preset, and a category's menu's New tag in this category, once a second profile exists.
 - Show in in Edit Tag, Edit Category, and Edit Preset.
 - In a profile, hidden tags, categories, and presets don't show:
   - in the Filter tab's tags and presets, where conditions on hidden tags stay out of its block of tags the catalog doesn't have;
@@ -1447,7 +1456,7 @@ Last milestone completed: M12n1
 **Acceptance**
 
 - The Tags and Presets tabs show and change which tags, categories, and presets a profile shows, with a category's tags greyed while it is off, and Add Profile starts with the "All profiles" ones checked, in profile dialog tests.
-- The creation question shows only once a second profile exists, after every way of creating a tag, category, or preset, the context menus' included, and each answer creates the tag, category, or preset as it says, in Tags and Filter screen tests.
+- The creation question shows only once a second profile exists, after every way of creating a tag, category, or preset, a category's menu's New tag in this category included, and each answer creates the tag, category, or preset as it says, in Tags and Filter screen tests.
 - Show in changes a tag's, category's, or preset's profiles with the dialog's Save or Apply, in Tags and Filter screen tests.
 - Hidden tags, categories, and presets show in no tab, a filter's conditions on hidden tags stay out of the Filter tab, and a remembered preset the profile hides shows **None\***, in Filter, Tags, Library, Random, and Stats screen tests.
 - Applying a filter or preset leaves out conditions on hidden tags as the shared fixture says, in WebUI tests of the fixture.
@@ -1540,7 +1549,8 @@ Last milestone completed: M12n1
 - The Operator page's responsive layout is a 12-column grid that changes at 620 and 980 px wide.
 - The Operator page shows the control token as plain text and saves a change without asking (`adminSharedToken` in `Program.cs`).
 - The server keeps each event stream's client id, user agent, and connection time (`ConnectedClientTracker`), so connected clients need no contract change.
-- WebUI Context Menus renders its menus inside the fullscreen stage, which a full-page admin view may cover or replace (inferred).
+- WebUI Context Menus renders its menus inside the fullscreen stage (`ContextMenuHost` in `src/ui/Stage.tsx`).
+- A full-page admin view may cover or replace the fullscreen stage, and the menus with it (inferred).
 - The admin mockup's jump links and back arrow are links (`build/admin.src.html`), which lose the browser's Open in new tab with its menu off.
 
 **Acceptance**
@@ -1581,7 +1591,7 @@ Last milestone completed: M12n1
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section's Log Viewer filters today's log by time, source, level, and text, in the design Admin Log Viewer later moves to structured entries.
-- **Depends on**: WebUI Admin Section and WebUI Context Menus, whose menu and long press a log row's menu uses.
+- **Depends on**: WebUI Admin Section, WebUI Context Menus, whose menu and long press a log row's menu uses, and WebUI Update Notice, whose time formatters a log row's time uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1703,14 +1713,17 @@ Last milestone completed: M12n1
 - The tray's Open Operator UI item becomes **Open ReelRoulette** and opens the WebUI's main page.
 - `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`.
 - The testing checklist's Smoke item checks the admin section instead of the Operator page.
+- `README.md` names the admin section and the tray's Open ReelRoulette wherever it names the Operator: What This Repo Runs, Quick Start's introduction, the Windows Quick Start's start and upgrade steps, the Linux Quick Start's upgrade step, the HTTPS proxy steps, the Windows and Linux runtime notes, the packaging section's update flow, and the packaged server smoke's checks.
 
 **Traps**
 
 - The tray's Open Operator UI item is in `AvaloniaTrayHostUi.cs`.
+- `README.md` names the Operator in What This Repo Runs (among the served surfaces, and where the control token shows), Quick Start's introduction (updates from the Operator, and the Operator among what the server hosts), the Windows Quick Start's start and upgrade steps, the Linux Quick Start's upgrade step only, the HTTPS proxy section's remote connection and token steps, the Windows and Linux runtime notes on the tray and Launch Server on Startup, the packaging section's Check → Download → Apply, and the packaged server smoke's list of what it checks.
 
 **Acceptance**
 
 - The tray's Open ReelRoulette opens the WebUI's main page, checked by reading `AvaloniaTrayHostUi.cs`.
+- `README.md` no longer names the Operator, in a search of it for "operator" ignoring case.
 - `/operator` reaches the admin section, in server tests that `/operator` redirects to the admin section, and the packaged Linux server smoke passes against the recovery page.
 - `dotnet test ReelRoulette.sln` and `./tools/scripts/verify-linux-packaged-server-smoke.sh` pass.
 
@@ -1803,7 +1816,7 @@ Last milestone completed: M12n1
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so each works from any device.
-- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares, and WebUI Context Menus, whose menu and long press a file card's menu uses, and Library Refresh Progress and Summary, whose progress line and summary the Library refresh card shows.
+- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares, and WebUI Context Menus, whose menu and long press a file card's menu uses, and Library Refresh Progress and Summary, whose progress line and summary the Library refresh card shows, and WebUI Update Notice, whose time formatters the Library refresh card's time uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1841,6 +1854,7 @@ Last milestone completed: M12n1
 - The server keeps the refresh status only in memory (`RefreshPipelineService.cs`), so after a restart it has no last refresh until one runs.
 - The interval and parallelism ranges are the ones the server already clamps to.
 - Before WebUI Multi-Select and Bulk Actions, which clears a selection's playback stats by ids, the WebUI never called `POST /api/playback/clear-stats` (measured).
+- `POST /api/refresh/start` answers a refresh that is already running with 409 and the reason "already running" (`ServerHostComposition.cs`, `RefreshPipelineService.cs`), which isn't a sentence written for users, so it needs one once Refresh Now can meet it.
 
 **Acceptance**
 
@@ -1922,9 +1936,14 @@ Last milestone completed: M12n1
 - Afterwards the card says "Deleted {n} files." and a Your actions popup "Deleted {n} duplicate files.".
 - A count of one is singular, such as "Delete 1 File".
 - A file card's context menu holds Keep this one, Copy path, and Show in File Manager while the version check lists `api.showInFileManager`.
+- Duplicate apply skips any file to delete whose path is the kept file's, and skips a whole group whose kept file isn't on disk and readable (`MediaFileProbe`), so it never deletes the kept file or every copy.
 
 **Traps**
 
+- `ApplyDuplicateSelection` (`LibraryOperationsService.cs`) deletes every selected item except `keepItemId`, without comparing their paths with the kept item's, checking that the kept file is still on disk, or checking their fingerprints again.
+- Overlapping sources can give one file two rows, since refresh compares files only with their own source's items (`RefreshPipelineService.cs`, where `DistinctRefreshItemsByPath` exists for that reason), and those two rows form a duplicate group whose apply would delete the kept file (inferred).
+- A kept file moved or deleted since the scan leaves apply deleting every other copy, so no copy is left (inferred).
+- Duplicate apply gives a file it couldn't delete the reason `failure.Error?.Message ?? "File not found"` (`LibraryOperationsService.cs`), which isn't a sentence written for users, so it needs one once the admin section shows it.
 - Desktop Client Removal leaves `/api/duplicates/scan` and `/api/duplicates/apply` with no caller. The routes exist, so this slice needs no contract change beyond the Duplicate contract slice's rating (measured before promotion).
 - `POST /api/duplicates/apply` takes the `/control` routes' check, as delete files does: from another machine without a control session it answers 403 with `control_token_required`, not 401. It publishes `itemsRemoved` for the items it removed.
 - The scan request's `scope` already takes `CurrentSource`, `AllEnabledSources`, and `AllSources` (`DuplicateScanRequest`) (measured).
@@ -1939,8 +1958,9 @@ Last milestone completed: M12n1
 - The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh, in admin section UI tests.
 - Each file's card shows its rating, and Select Best keeps the highest-rated file, then the most played, then the newest, with an unrated file below any rating, in admin section UI tests.
 - A file card's context menu keeps that file, copies its path, and shows it in the file manager while the server lists it, in admin section UI tests.
+- Duplicate apply never deletes the kept file's path and deletes nothing in a group whose kept file is missing, in server tests of duplicate apply with two items on one path and with a kept file that is gone.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check of a duplicate scan.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check of a duplicate scan.
 
 #### Release checks
 
@@ -1997,13 +2017,14 @@ Last milestone completed: M12n1
 - The only way to stop a refresh is the service-wide `_shutdown` cancellation (`RefreshPipelineService.cs`), and canceling it stops every later run, so a cancel per run is new.
 - A manual run starts as a task nobody keeps, an automatic run is awaited inside the background loop, and `TryReserveRun` refuses a new run until the old run's `finally` clears `_isRunLoopActive`, so starting after a cancel needs the old run's task or a pending restart.
 - A canceled run's catch writes `IsRunning = false` onto whatever status is current, so a new run reserved before it runs would show as stopped (inferred).
-- A run notices a cancel between files and stages, not during a source's folder walk or one file's hash, so on a large NAS source a cancel can lag by a whole walk (inferred).
+- A run notices a cancel between files and stages, not during a source's folder walk or one file's hash, so on a large NAS source a cancel can lag by a whole walk (inferred), which `ISSUES.md` records as "Stopping mid-refresh waits for a file's hash".
 - A run reads the source list once, at its start, so it never sees a source added while it runs.
 - A canceled run already ends with neither `completedUtc` nor `lastError`, which the WebUI shows as idle, with no notice and no `refreshCompleted` reload (`ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure`), so the rows it saved show once the new run finishes.
 - Every refresh write commits on its own, per item, or per 1,000 name sort keys, so a canceled run keeps what it wrote.
 - The refresh compares a new path only with its own source's items, and `items.full_path_fold` has no unique index, so a source inside another, or holding one, would get a second row for each shared file (inferred).
 - The refresh skips a disabled source, or one whose folder is missing, with no status entry.
 - The refresh writes no `last.log` line for its start, end, failure, or cancel; failure and cancel go only to `ILogger`.
+- `POST /api/sources/{sourceId}/enabled` answers "sourceId is required" and "source not found" (`ServerHostComposition.cs`), and import answers "rootPath is required." and "Directory not found: {path}" (`LibraryOperationsService.cs`), none of them sentences written for users, so the routes the admin section calls need such sentences.
 
 **Acceptance**
 
@@ -2065,7 +2086,8 @@ Last milestone completed: M12n1
 - The server already applies source state: the list query, random selection, and item play only use enabled sources.
 - The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
 - Browser-Playable Filter has the Filter tab reload on `sourceStateChanged` as opening it does, keeping its unsaved changes, and the rest of the WebUI ignores the event.
-- `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order.
+- Each WebUI module that keeps server state registers its own `resyncRequired` handler with the server connection (`src/state/serverConnection.ts`), nine in all, from the library and the Filter and Tags tabs to the Stats tab and the player.
+- Each handler starts its own reload, so a source event's reload could overlap another and finish out of order (inferred).
 - Each reload of the library window while selection lasts checks the selected ids against the results (`checkSelection` in `src/library/library.ts`), so a source event's reload needs nothing more to drop a disabled or removed source's items from the selection.
 
 **Acceptance**
@@ -2140,6 +2162,8 @@ Last milestone completed: M12n1
 
 - Export is already a server operation: `GET /api/library/catalog-checkpoint` writes a standalone checkpoint while the server has `library.db` open, and the desktop's Library Export saved that file.
 - `GET /api/library/catalog-checkpoint` passes `library.db` to `Results.Stream` (`ServerHostComposition.cs`).
+- A checkpoint that fails answers with `Results.Problem(ex.Message)`, the exception's own text, which isn't a sentence written for users, so it needs one once Export Library can meet it.
+- The route writes its checkpoint under `Path.GetTempPath()`, which is held in memory on the user's machine.
 - A browser doesn't report when a download finishes (inferred).
 
 **Acceptance**
@@ -2175,6 +2199,7 @@ Last milestone completed: M12n1
 - That is larger than ASP.NET Core's default request body limit of about 30 MB, the framework default (inferred).
 - The server raises the multipart form limit (`FormOptions.MultipartBodyLengthLimit`) to 512 MB, left from earlier library import work, but no route reads a form now and the request body limit itself is not raised.
 - The limit is Kestrel's, and the server tests call handlers without an HTTP host, so the packaged server smoke script covers it.
+- `RemapSources` fails with developer text, such as "Item references unknown sourceId '{sourceId}'." (`LibraryCatalogStore.cs`), which isn't written for users, so an import failure the admin section shows needs a sentence of its own.
 
 **Acceptance**
 
@@ -2266,7 +2291,7 @@ Last milestone completed: M12n1
 **Traps**
 
 - Server Shutdown Fixes changed how event streams close.
-- Neither client calls the testing routes under `/control`, and the Operator page is retired by then, so the admin section, which ships in the same build, is their only caller.
+- The WebUI doesn't call the testing routes under `/control`, and the Operator page is retired by then, so the admin section, which ships in the same build, is their only caller.
 
 **Acceptance**
 
@@ -2299,6 +2324,8 @@ Last milestone completed: M12n1
   - A user manual covering playback, library browse, tags, presets, filters, WebUI access, the admin section and the recovery page, account setup and login, reverse proxy access, catalog transfer from the admin section, Launch Server on Startup, and tray versus headless behavior.
   - Troubleshooting: native dependencies, permissions, display and audio, missing tray, autostart conflicts.
   - The Documentation Map and Third-Party Components sections stay.
+  - Text for end users says ReelRoulette, never WebUI, as `AGENTS.md`'s naming rule asks.
+  - The v0.11.0 notes on replacing Inno, portable, and older AppImage installs go.
 - `docs/dev-setup.md`, for contributors:
   - Any developer content moves here out of the README.
   - All development prerequisites (.NET SDK, Node, PowerShell) with Debian/Ubuntu, Fedora, and Arch-based install commands.
@@ -2314,6 +2341,7 @@ Last milestone completed: M12n1
 - `README.md` alone covers installing and running the server on Windows and on each listed Linux family, and reaching the WebUI and its admin section, checked by reading it.
 - A contributor can rely on `docs/dev-setup.md` for setup, build, test, and release workflows, checked by reading it, and its script list matches `tools/scripts/`, in a check that every script in `tools/scripts/` is listed in it.
 - No current-state doc names retired packaging (Inno Setup, portable archives, install scripts, `appimagetool`), in a search of the current-state docs.
+- `README.md`'s sections for end users never say WebUI, in a search of those sections.
 
 #### Release checks
 
@@ -2669,7 +2697,7 @@ Last milestone completed: M12n1
 
 #### Traps
 
-- Windows enumeration casing has not been measured. The v0.15.0 release pass measures it on the Windows VM, as a Manual check in the testing checklist, so promotion starts from the result.
+- Windows enumeration casing hasn't been measured, so promotion measures it on the Windows VM first: add a source typed in a casing that differs from its folder on disk, rename a file by case only, and refresh.
 - An ordinal compare on Windows may treat an operating-system casing difference as a removed file plus a new file (inferred).
 - Path identity is built into the catalog: source and item paths are matched on lowercase `root_path_fold`, `full_path_fold`, and `relative_path_fold` columns, and only those columns are indexed.
 - Source roots have the same case problem: `/Media` and `/media` can be different directories on Linux and are still compared ignoring case.
@@ -3156,6 +3184,10 @@ Last milestone completed: M12n1
 - Session secrets that replace the pairing token must not be passed to a restarted server as an environment variable.
 - Remove `/runtime-config.json`, which without `pairToken` returns only the page's own address: the WebUI calls the API and the event stream on its own origin. The server's endpoint and `WebRuntimeConfig`, the WebUI's `src/config/runtimeConfig.ts`, the startup error screen that reports a config that didn't load, and their tests, docs, mockup screen, the WebUI `README.md`'s example, and `verify-web-deploy.ps1`'s check of the route go with it.
 - The login flow that replaces the WebUI's pairing request returns a typed result on every failure.
+- Localhost trust holds only for a request whose `Host` is `localhost`, a loopback or literal IP address, the mDNS name, or the machine's name. The check applies only to that trust, so a Tailscale or proxy name still reaches the server as another device.
+- A request that changes state is refused when its `Origin` names another site.
+- Every page is sent with `frame-ancestors 'none'`, so no other site can frame it.
+- `/control/status` stops sending each session's cookie value: `MapSessionSnapshot` drops `SessionId`, since nothing reads the session lists: the WebUI never reads `apiSessions` or `controlSessions`, and the Operator shows only their counts.
 
 #### Traps
 
@@ -3167,6 +3199,10 @@ Last milestone completed: M12n1
 - `OperatorTestingService` mutations are protected only by middleware policy.
 - `/runtime-config.json` builds `apiBaseUrl` and `sseUrl` from the scheme and host the caller used, which are always the page's own origin, directly or through a proxy, and adds `pairToken` only for a caller that pairing already accepts.
 - Auth and secret fields in settings DTOs encourage credential leakage; `GET /control/settings` returns the admin token.
+- `LocalRequest.IsLocal` (`Hosting/LocalRequest.cs`) trusts any direct loopback connection with no check of `Origin`, `Sec-Fetch-Site`, or `Host`, `AllowedHosts` isn't set, and no CORS, CSP, or `X-Frame-Options` header is sent (measured).
+- So a hostile page open in the server PC's browser can send body-less `no-cors` POSTs to `/control/stop`, `/control/restart`, `/control/update/*`, `/control/testing/reset`, and `/api/show-in-file-manager/{id}`, while routes that need a JSON body answer it 415 (inferred).
+- Through DNS rebinding, such a page could read `/control/settings`, token included, and post to `/api/library/delete-files`, and it could frame the admin section (inferred).
+- `MapSessionSnapshot` (`ServerHostComposition.cs`) copies each API and control session's `SessionId`, which is its `rr_paired` or `rr_admin` cookie value (`ServerSessionStore.cs`), into `/control/status` (measured), and those cookies stay valid for 720 hours.
 - Pairing and control-token problems that go with those flows:
   - Two pairing secrets drift apart: `/api/pair` checks `ServerRuntimeOptions.PairingToken`, while the Operator page, and later the admin section, saves `WebRuntimeSettings.SharedToken`, and `src/core/ReelRoulette.ServerApp/Program.cs` starts with `SharedToken ?? PairingToken` and passes that to a restarted server. Editing the shared token has no effect until a restart, then silently changes the pairing token.
   - `WebRuntimeSettings.AuthMode` is saved by `CoreSettingsService.UpdateWebRuntimeSettings`, but `ServerPairingAuthMiddleware` reads only `RequireAuth`, which the server sets from `AuthMode` only at startup, so setting it to `Off` changes nothing until a restart.
@@ -3180,7 +3216,9 @@ Last milestone completed: M12n1
 - The admin section and the recovery page use account sessions, and no control token is accepted anywhere, in the authorization tests for admin routes.
 - User-level accounts are refused on admin-only operations, in the authorization tests for user sessions.
 - LAN and remote requests to web runtime settings without an admin session are refused, in the authorization tests.
-- No settings response contains a secret, in server tests.
+- No settings response contains a secret, and `/control/status` carries no session's cookie value, in server tests.
+- Localhost trust holds only for the local Host names, a Tailscale or proxy name still reaches the server as another device, and a state-changing request from another site's `Origin` is refused, in authorization tests of the Host and Origin checks.
+- Every page carries `frame-ancestors 'none'`, in server tests of the response headers.
 - Active docs no longer describe pairing or control tokens, checked by reading them.
 - The WebUI loads and reaches the API and the event stream on its own origin, and the server no longer serves `/runtime-config.json`, in WebUI tests and a server test for the route.
 
@@ -3491,13 +3529,15 @@ Last milestone completed: M12n1
 ### P35 - Server Robustness Findings
 
 - **Status**: ⏳ Planned
-- **Goal**: Close the server robustness findings that no other milestone owns, so a stalled drive or share cannot stall a refresh and the server does no needless work.
+- **Goal**: Close the server robustness findings that no other milestone owns, so a stalled or unreadable drive or share cannot stall or fail a refresh, deleted and system files never become items, and the server does no needless work.
 
 #### Scope
 
 - Storage:
   - Stalled source: the refresh stops working on a source whose storage stops responding, keeps that source's items as they are, and logs a warning, instead of crawling on. Decides the threshold and whether the rest of the run continues.
   - Two stats per file: the fingerprint stage's check loop stats each file once, or takes each file's size and write time from the walk.
+  - Unreadable folder: a subfolder the server can't read no longer fails the refresh. The walk goes folder by folder, keeps the items under a folder it can't read as they are, and logs a warning.
+  - Hidden and recycled files: the walk and source import skip hidden files and folders, AppleDouble `._` files, and the NAS recycle and index folders `#recycle`, `@eaDir`, and `.Trash-*`, so files deleted to a recycle bin and system files never become items.
 - Needless work:
   - Telemetry reads: `ApiTelemetryService` keeps a ring buffer that reads newest first.
   - Session list under lock: `ServerSessionStore.GetActiveSessions` copies the records under the lock and sorts outside it.
@@ -3513,6 +3553,15 @@ Last milestone completed: M12n1
   - On a CIFS mount with a 1 s attribute cache (`actimeo=1`), the second stat is answered from the client's cache, so the share sees about one request per item, about 49,500 a run at 4.2–5.6 ms each (inferred, from the kernel's CIFS operation counters).
   - So statting each file once saves few share requests on such a mount, while reading size and write time in the walk, right after each folder is listed, is answered from the attribute cache the listing fills and spares about one share request per item (inferred).
   - The walk (`EnumerateMediaFiles`) returns only paths and reads no size or write time.
+  - Unreadable folder: a subfolder with permissions `000` makes the walk throw `UnauthorizedAccessException` (measured), and nothing catches it, so every refresh fails at "Refreshing sources failed." and no later stage runs for any source.
+  - Setting `IgnoreInaccessible = true` alone would make the unreadable folder's items look missing, so refresh would remove them.
+  - The tests also run on Windows in CI, where a folder can't be made unreadable with Unix permissions (inferred).
+  - Hidden and recycled files: the walk and source import (`Directory.GetFiles` in `LibraryOperationsService.cs`) skip no folders. A walk returned `._d.mp4`, `.hidden/b.mp4`, `#recycle/c.mp4`, and `a.mp4` (measured).
+  - A file deleted through the app, or on a NAS whose recycle bin is on, can come back from `#recycle` as a new or moved item, and an AppleDouble `._` file becomes a video that can't play (inferred).
+  - On Linux, .NET reports a name starting with a dot as hidden, and `EnumerationOptions` skips hidden and system entries by default, while the `SearchOption` overload the walk uses skips nothing (inferred).
+  - On Windows, an AppleDouble `._` file written over SMB isn't marked hidden, so skipping it takes a name rule (inferred).
+  - Admin Source Management replaces source import with adding a source that starts a refresh, so once it lands only the walk lists a source's files.
+  - No item in the user's catalog sits in `#recycle`, `.Trash-*`, `@eaDir`, a dot-folder, or a `._` file: 0 of 49,778 (measured), so skipping them removes nothing today.
 - Needless work:
   - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll.
   - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock.
@@ -3521,6 +3570,8 @@ Last milestone completed: M12n1
 
 - A refresh stops working on a source whose storage stops responding, keeps that source's items, and logs a warning, in its finding's tests with a source whose walk stalls and one whose file checks stall.
 - The refresh stats each file once, in the walk or in the check loop, in its finding's test.
+- A refresh with an unreadable subfolder refreshes the rest of the source, keeps that folder's items, and logs a warning, in refresh pipeline tests with an unreadable folder.
+- The walk skips hidden entries, `._` files, and `#recycle`, `@eaDir`, and `.Trash-*` folders, in refresh pipeline tests of each, and so does source import while it exists, in its tests.
 - Each finding above is fixed or explicitly declined with a reason in this entry.
 - Each fixed finding has a test.
 - `dotnet test ReelRoulette.sln` passes.
@@ -3661,7 +3712,7 @@ Last milestone completed: M12n1
 
 - Tooltips are `title` attributes, which a phone or tablet doesn't show, so the blocked Apply shows its reason in a notice when pressed instead (`blockedReason` on `HeldButton` in `src/ui/FieldValidation.tsx`).
 - `HeldButton` gives a disabled or held action's reason as its `title`.
-- The app's tooltips are 71 `title` attributes in 14 components under `src/ui/`, and two the library grid sets itself: a tile's file name and its check icon's "Select" or "Deselect" (`libraryGridTile.ts`) (measured).
+- The app's tooltips are 71 `title` attributes in 16 components under `src/ui/`, and two the library grid sets itself: a tile's file name and its check icon's "Select" or "Deselect" (`libraryGridTile.ts`) (measured).
 - A `title` is also an element's accessible name when it has no other, and AGENTS.md keeps controls' accessible names, so an element named only by its `title` needs its name kept another way.
 - Tests read tooltips through `title`, with Testing Library's `getByTitle`, `getAttribute("title")`, and `.title`, 71 times in 10 test files, most in `screens/filter.test.ts` (28) and `screens/tags.test.ts` (12), and the filter, foundation, library, and tags screen snapshots hold `title` attributes (measured).
 - A disabled button gets no pointer or click events in some browsers, so its long press has to be caught around it (inferred).
@@ -4088,3 +4139,397 @@ Last milestone completed: M12n1
 - Another device retargets its applied filter for a rename and a delete of a tag more than 1,000 items hold, and of a tag no file has, in WebUI tests of the tag events.
 - A rename or delete of a tag more than 1,000 items hold publishes `resyncRequired` in place of its `itemTagsChanged`, in server tests of the routes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+### P60 - Catalog Write Speed
+
+- **Status**: ⏳ Planned
+- **Goal**: A catalog write no longer pays a flush to disk each, so bulk changes such as adding thousands of files, renaming a folder, or a metadata backfill spend seconds on writes rather than minutes.
+- **Depends on**: Admin Library Catalog Transfer, whose running-server import and backup restore the keeper connection is released for.
+
+#### Decisions
+
+- The catalog session holds one connection open for its life, a keeper connection, rather than turning on connection pooling, since a running-server import or restore has to release every connection before it renames files, and the global pool is harder to release on Windows.
+- Each refresh stage writes an item's changes in one commit.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Keeper connection | ⏳ Planned | One connection the catalog session holds open, so closing a call's own connection no longer flushes the log to disk. |
+| One commit per item | ⏳ Planned | Each refresh stage's writes for an item in one commit. |
+| Position index | ⏳ Planned | An index on `items.position` in a new catalog schema step, so adding an item no longer reads every row. |
+
+#### Keeper connection slice
+
+**Scope**
+
+- `LibraryCatalogSession` opens one connection when it starts and holds it until it is disposed, so no call's own connection is ever the last one open.
+- A running-server library import or backup restore releases the keeper before it renames the database files and opens it again afterwards.
+
+**Traps**
+
+- `ConnectionString` sets `Pooling = false` (`LibraryCatalogStore.cs`), every session call opens and closes its own connection, and nothing holds the database open between calls.
+- Closing the last connection makes SQLite checkpoint the log into the database, flush it to disk, and delete `-wal` and `-shm`.
+- Pooling has been off since the catalog's first commit (f7e0028), with no recorded reason, likely so Windows tests can delete their temp folders (inferred).
+- On a 49,001-item catalog, 300 `SetFileSize` calls took 25.8–26.2 ms each with no other connection open, and 0.18 ms each with one read-only connection held open (measured).
+- 200 `InsertItem` calls took 28.9–29.3 ms each with no other connection open, and 3.7–5.2 ms each with one held open (measured).
+- A user's single clicks each pay the 26 ms, which nobody notices.
+- Admin Library Catalog Transfer's Report slice lists the catalog session and its SQLite connections among the holders its running-server import stops before a replace, including how the connections close before the rename on Windows.
+
+**Acceptance**
+
+- The session keeps one connection open between calls, so the log file stays after a write, in catalog session tests.
+- Import or restore releases the keeper before it renames files and opens it again afterwards, in server tests of running-server import and restore.
+- Each test still deletes its temp folder, in the Core tests on the Windows CI run.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### One commit per item slice
+
+**Scope**
+
+- Each refresh stage writes an item's changes in one commit: a hashed fingerprint's, a moved item's, a new or removed file's, and each later stage's result.
+- Each commit still bumps the catalog's revision once, and each stage still writes only its own columns.
+
+**Traps**
+
+- `PersistHashedFingerprint` makes 3 commits per item, and `PersistMovedItem` up to 4 (`RefreshPipelineService.cs`).
+- Each new file, removed file, thumbnail, duration, and loudness result is its own commit.
+- At 26 ms a commit, adding files costs about 1.5 min of commits per 1,000 files on top of hashing, renaming a folder of 1,000 files up to 100 s, and a metadata backfill of every item about 21 min at 49,000 items (inferred, from the measured cost).
+- A normal refresh changes few items, and Server Robustness Findings measured normal runs at 3.5–6.5 min, mostly the walk and the file checks on the share.
+- Stage writes touch only their own columns, so a user's favorite, tag, or rating made mid-stage stays, which refresh pipeline tests check.
+- Every write bumps `catalog_meta.revision` in its own transaction, which keeps the list counts' cache correct.
+- Admin Source Management relies on a canceled run keeping what it wrote, since every refresh write commits per item or per 1,000 name sort keys.
+
+**Acceptance**
+
+- The catalog revision rises once per item in each stage that changes it, since the thumbnail, duration, and loudness stages each still write their own commit, in refresh pipeline tests of a hashed, a moved, a new, and a removed file.
+- A user's favorite, tag, or rating made mid-stage still stays, in the existing refresh pipeline tests.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Position index slice
+
+**Scope**
+
+- The catalog moves to the next schema version, with its upgrade step from the version before, adding `idx_items_position` on `items(position)`.
+- `WriteEmptyDatabase` creates the same index.
+
+**Traps**
+
+- `InsertItem` calls `NextPosition`, which runs `SELECT MAX(position) FROM items` (`LibraryCatalogSession.cs`), and `items.position` has no index.
+- That query took 2.3–3.3 ms on 49,000 items, reading the table with no index, and is most of an insert's 3.7–5.2 ms with a connection held open (measured).
+- The schema-equality test compares an upgraded catalog's indexes and their SQL with a new one's (`Open_OlderCatalog_UpgradesToTheCurrentSchemaAndKeepsItsItems`).
+
+**Acceptance**
+
+- An upgraded catalog and a new one both have `idx_items_position`, in the schema-equality test.
+- `NextPosition`'s query uses the index, in a catalog test of its query plan.
+- `dotnet test ReelRoulette.sln` passes.
+
+### P61 - Event Stream Heartbeat
+
+- **Status**: ⏳ Planned
+- **Goal**: The server notices a device whose event stream died without closing, and a device notices when its stream has gone quiet, so neither waits for the next event or a visibility change to find out.
+
+#### Decisions
+
+- The server sends a ping on each event stream every 20 seconds.
+- The ping is a named event with no `id` and no revision, so it moves no client's last event ID and stays out of the replay history.
+- The WebUI reconnects its stream when nothing, event or ping, has arrived for 45 seconds.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Contract | ⏳ Planned | The ping in OpenAPI's event stream description and `docs/api.md`. |
+| Server | ⏳ Planned | A ping on each stream every 20 seconds, and a stream whose ping fails to write ended. |
+| WebUI | ⏳ Planned | A reconnect after 45 seconds with nothing on the stream. |
+
+#### Contract slice
+
+**Scope**
+
+- OpenAPI's `/api/events` description and `docs/api.md`'s eventing section describe the ping, its interval, and that it carries no `id`.
+
+**Traps**
+
+- OpenAPI describes the event stream's reconnect and resync rules in `/api/events`' description, and `docs/api.md` lists every event.
+
+**Acceptance**
+
+- OpenAPI and `docs/api.md` describe the ping, checked by reading them, and `npm run verify:contracts` passes.
+
+#### Server slice
+
+**Scope**
+
+- The event stream loop writes a ping every 20 seconds while no event arrives (`ServerHostComposition.cs`).
+- A ping that fails to write ends the stream, which unsubscribes it and drops it from Connected clients.
+- `CONTEXT.md` describes the ping.
+
+**Traps**
+
+- The stream loop writes only when an event arrives (`ServerHostComposition.cs`).
+- Each stream's channel is unbounded (`ServerStateService.cs`), so a stream whose device went away keeps its events until the socket's buffer fills (inferred).
+- An iPad that sleeps without closing its socket stays subscribed, and listed under Connected clients, until a write to it fails (inferred).
+- `GET /api/events` sends `X-Accel-Buffering: no`, so nginx passes events through without buffering.
+
+**Acceptance**
+
+- A stream with no events gets a ping every 20 seconds, and one whose write fails is unsubscribed, in server tests of the event stream.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### WebUI slice
+
+**Scope**
+
+- The WebUI listens for the ping and reopens its stream after 45 seconds with nothing on it, as a visibility change does (`src/state/serverConnection.ts`, `src/events/sseClient.ts`).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the reconnect.
+
+**Traps**
+
+- The WebUI reads the stream through the browser's `EventSource`, which never passes comment lines to the page and fires only the named events it listens for (`src/events/sseClient.ts`), so a `: ping` comment would reach no WebUI code.
+- The WebUI reopens its stream on focus, visibility, and network changes (`src/state/serverConnection.ts`).
+- A phone that stays visible through a Wi-Fi drop can't tell its stream died until it next changes visibility or focus (inferred).
+
+**Acceptance**
+
+- With no event or ping for 45 seconds, the WebUI reopens its stream, and each ping restarts the wait, in server connection tests with fake timers.
+- `npm run verify` passes.
+
+### P62 - Failed Thumbnail Memory
+
+- **Status**: ⏳ Planned
+- **Goal**: A thumbnail that fails isn't made again on every refresh until its file changes, so a file that can't be thumbnailed isn't read from the share again at each refresh.
+- **Depends on**: Library Refresh Progress and Summary, whose finished summary counts failed thumbnails.
+
+#### Scope
+
+- The catalog remembers a failed thumbnail with its file's size and write time, and the refresh tries it again only once either changes.
+- A thumbnail remembered as failed still counts as failed in each refresh's summary, as Library Refresh Progress and Summary shows a failure that happens again on every refresh in every summary.
+- `CONTEXT.md` describes when a failed thumbnail is tried again.
+
+#### Traps
+
+- A failed thumbnail stores no revision, so the next refresh tries it again (`RefreshPipelineService.cs`).
+- A photo SkiaSharp can't decode is read whole from the share each time, and a video that fails runs ffmpeg up to six times, with up to 30 s each (inferred).
+- Remembering a failure takes columns the items table doesn't have, so the catalog moves to the next schema version, with its upgrade step from the version before (inferred).
+
+#### Acceptance
+
+- A failed thumbnail isn't tried again until its file's size or write time changes, in refresh pipeline tests.
+- A thumbnail remembered as failed still counts as failed in the refresh's counts, in refresh pipeline tests.
+- `dotnet test ReelRoulette.sln` passes.
+
+### P63 - Release Workflow Cleanup
+
+- **Status**: ⏳ Planned
+- **Goal**: `release.yml`'s matrix step builds the server's legs without the loops and flags left from the desktop client. Low priority.
+
+#### Scope
+
+- The matrix step sets the server's pack values once, without the loop over `components=(server)` and its `case` of one branch.
+- `tiers` starts as the result of the `if` that sets it.
+- `stage_webui`, which is always true, goes from the matrix and the steps that read it.
+- `native_component`, which means the leg is Windows, gives way to the platform.
+
+#### Traps
+
+- Since Desktop Client Removal, `release.yml` builds and publishes only the server.
+- The matrix step loops over `components=(server)` with a `case` of one branch, sets `tiers=(stable)` before an `if` whose two branches both overwrite it, sets `stage_webui` to false and then always to true, and sets `native_component` to "server" only on Windows.
+- Only a release run shows that a change to the workflow still builds and publishes.
+
+#### Acceptance
+
+- The matrix step's JSON for a dev and a stable version holds the same legs and values as before, apart from the dropped fields, checked by running the step's script for both versions.
+
+#### Release checks
+
+- Agent: The first dev release run after this change builds and publishes the Windows and Linux servers to their dev feeds, as the run before it did.
+
+### P64 - WebUI Module Split
+
+- **Status**: ⏳ Planned
+- **Goal**: `tagEditor.ts` and `player.ts` each keep one job, with filter retargeting, Auto Tag, favorite and blacklist handling, and failure recovery in modules of their own. Low priority.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Tags tab services | ⏳ Planned | Filter retargeting and Auto Tag in services of their own, out of `tagEditor.ts`. |
+| Player modules | ⏳ Planned | Favorite and blacklist handling and failure recovery in modules of their own, out of `player.ts`. |
+
+#### Tags tab services slice
+
+**Scope**
+
+- Filter retargeting (`retargetFilters`), which rewrites renamed or deleted tags in the presets, the applied filter, the library's stored filter, and the Filter tab's working copy, moves into a service of its own wired in `src/state/appServices.ts`.
+- Retargeting sets the presets signal instead of changing presets in place.
+- Auto Tag's dialog and scan state move into a service of their own wired in `appServices.ts`.
+- `src/tags/tagEditor.ts` keeps the tag editor's state, its background saves, and their echoes.
+- `docs/domain-inventory.md` lists the new modules.
+
+**Traps**
+
+- `tagEditor.ts` is 1,303 lines (measured) and mixes four jobs: the tag editor's state, background saves and their echoes, Auto Tag's dialog and scan state, and `retargetFilters`.
+- `retargetFilters` changes `store.presets` objects in place without setting the signal, so `rememberedFilterOf` (`src/state/appStore.ts`), which reads `store.presets.value`, can keep a stale "unchanged" flag when only a preset changed (inferred).
+- Services are factories wired in `src/state/appServices.ts`, with state in signals and models kept apart from components.
+
+**Acceptance**
+
+- A tag rename retargets a preset through the presets signal, so a filter that matched the preset still reads as unchanged, in WebUI tests of retargeting.
+- The Tags, Filter, and Auto Tag screen tests and the tag save tests pass unchanged, in `npm run verify`.
+
+#### Player modules slice
+
+**Scope**
+
+- Favorite and blacklist handling, the toggles, the server's answers, the item-state event handlers, and the bulk popup's text, move into an item-flags model beside `src/rating/itemRatings.ts`.
+- Failure recovery moves out of `src/playback/player.ts` into a module of its own, apart from the player's timer and loop state.
+- `docs/domain-inventory.md` lists the new modules.
+
+**Traps**
+
+- `player.ts` is 1,738 lines (measured), with about 130 lines of favorite and blacklist handling (`toggleFlag`, `takeItemState`, the item-state event handlers, `bulkItemStateText`) and about 280 lines of failure recovery tangled into its timer and loop state.
+- `src/rating/itemRatings.ts` keeps ratings as a model of its own, which the flags can follow.
+
+**Acceptance**
+
+- The item-flags model and the recovery module each have tests of their own, in new WebUI tests of each.
+- The player tests and the player screen tests pass unchanged, in `npm run verify`.
+
+### P65 - Server and WebUI Cleanup
+
+- **Status**: ⏳ Planned
+- **Goal**: The tag retarget rule is one rule in C# and the WebUI, locked to a shared fixture, the random route loses the preset id no client uses, and the helpers the server and the WebUI each repeat become one each.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Tag retarget fixture | ⏳ Planned | One tag retarget rule in C# and the WebUI, locked to `shared/fixtures/filter-tag-retarget.json`, which leaves no name twice after a merge. |
+| Random preset id | ⏳ Planned | `presetId` gone from the random and cycle requests, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| Server helpers | ⏳ Planned | One copy of each helper the server repeats. |
+| WebUI helpers | ⏳ Planned | One copy of each request and helper the WebUI repeats. |
+
+#### Tag retarget fixture slice
+
+**Scope**
+
+- The tag retarget rule, which renames or removes a tag in a filter's tag arrays, compares names trimmed and folded as the catalog folds them (`LibraryCatalogStore.Fold`), in `ServerStateService` and in the WebUI's `retargetTagFilter` (`src/library/tagSave.ts`).
+- The tag rename and delete routes pass trimmed names.
+- A rename removes a name the array then holds twice, ignoring case, in both, which fixes the duplicate names in "A tag delete or rename can leave a preset that shows as None or as another preset", and that part leaves the issue.
+- `shared/fixtures/filter-tag-retarget.json`, read by a C# test and a WebUI test, locks the rule.
+
+**Traps**
+
+- `RenameTagInFilterArray` and `RemoveTagFromFilterArray` (`ServerStateService.cs`) compare untrimmed entries with `OrdinalIgnoreCase`, while the WebUI trims each entry and compares with `toLowerCase`.
+- The rename and delete routes pass untrimmed names (`ServerHostComposition.cs`), while the catalog trims.
+- Every other shared fixture under `shared/fixtures/` is read by both C# and the WebUI (measured).
+
+**Acceptance**
+
+- C# and the WebUI retarget every case in the fixture alike, in a Core test and a WebUI test reading `filter-tag-retarget.json`.
+- A rename that merges two tags leaves the name once in a preset, in server tests of the rename route and WebUI tests of retargeting.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Random preset id slice
+
+**Scope**
+
+- `presetId` leaves `POST /api/random` and `POST /api/random/cycle`: the server's preset lookup (`ResolvePreset`), the `all-media` id, and the preset 404 go, and a request without `filterState` picks with the default filter.
+- The WebUI's pick body stops sending it.
+- A pick no longer clones the preset list under `_filterSessionLock`, so it no longer waits on a preset write.
+- `LibraryPlaybackService.GetPresets` no longer removes duplicate preset names a second time.
+- OpenAPI, the generated WebUI types, and `docs/api.md` drop it.
+
+**Traps**
+
+- The WebUI always sends `filterState`, which wins over `presetId`, so `ResolvePreset`, the `all-media` id, and the preset 404 never run for the only client.
+- Every pick still clones the preset list under `_filterSessionLock`, which preset writes also hold.
+- `LibraryPlaybackService.GetPresets` removes duplicate preset names again, which `ServerStateService` already makes impossible.
+
+**Acceptance**
+
+- A random pick and the cycle route take no `presetId`, and one without `filterState` picks with the default filter, in server tests of both routes.
+- The random request in OpenAPI and the generated types has no `presetId`, in contract tests, and `npm run verify:contracts` passes.
+- A pick doesn't wait on a preset write that holds `_filterSessionLock`, in server tests of a pick during a held preset write.
+- `GetPresets` passes the presets on as `ServerStateService` holds them, checked by reading it, and the preset tests still pass.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Server helpers slice
+
+**Scope**
+
+- `ResolveFfmpegPath` and `ResolveFfprobePath` become one `ResolveTool(name)` (`RefreshPipelineService.cs`).
+- The `playbackRecorded` payload is built once, for `PlayItem` and `RecordPlayback` (`ServerHostComposition.cs`).
+- The ForceCapabilityMismatch filter is written once.
+- Pair and control session creation share one helper taking the scope and the cookie name.
+- `SetFavorite` and `SetBlacklist` share one handler.
+- The testing mode's exemption list uses `LibraryRouteGate`'s routes with `StartsWithSegments`, so `/api/versionX` no longer matches it.
+- Catalog backups read their settings through `CoreSettingsService`, instead of parsing `core-settings.json` again with their own defaults and limits (`LibraryCatalogBackup.ReadSettings`).
+- The tray and Show in File Manager share one desktop check, so a headless run under a user bus no longer writes "Tray UI ended…" on every start.
+- Each event stream subscriber cleans up on cancel through `token.Register`, in place of a `Task.Run` waiting on `Task.Delay(Infinite, token)` (`ServerStateService.cs`).
+
+**Traps**
+
+- The testing mode's exemption list repeats `LibraryRouteGate`'s routes with string `StartsWith`, while the rest of the pipeline matches with `StartsWithSegments`.
+- The backup settings' defaults of 360 minutes and 8 backups and their limits of 1–10,080 and 1–100 appear in `LibraryCatalogBackup`, `CoreSettingsService`, `ServerRuntimeOptions`, and `ApiContracts`.
+- `SupportsTrayHostUi` (`Program.cs`) counts a session bus alone as a desktop, while `DesktopFileManagerLauncher.IsAvailable` doesn't, since an SSH login has one too.
+
+**Acceptance**
+
+- The testing mode's exemption doesn't match `/api/versionX`, in a server test of the exemption.
+- Backups follow the settings `CoreSettingsService` reads, in backup tests.
+- A headless run under a user bus writes no tray warning, in a ServerApp test of the desktop check.
+- `dotnet test ReelRoulette.sln` passes, with the other helpers changing no behavior.
+
+#### WebUI helpers slice
+
+**Scope**
+
+- `requestPlayItem` (`src/api/coreApi.ts`) takes `AppApi` instead of `api.request` and a URL of its own, so a play goes through `sendRequest` once.
+- One read of `POST /api/library/item`, with its 404 and 401 handling, serves the player, the Stats tab, and the library.
+- One loader of `GET /api/library/stats` feeds the Stats tab and the library baseline, so the stats load once per event while the Stats tab is open.
+- The Filter tab loads `/api/sources` through the library's loader, and loads sources, the tag model, and presets together.
+- One helper builds preset rows from the server's presets, in place of `presetRowsFromApi`, `presetRowsFromHeaderPresets`, and `filterStateForHeaderPresetSelection`'s own copy.
+- The Uncategorized check lives once, in `tagEditorModel.ts`.
+- One `trace` helper serves the player and the library.
+- `absolutizeMediaUrl` uses the API's URL building.
+- `requestVersion` uses `withTimeout` from `api/serverRequest.ts`.
+
+**Traps**
+
+- `statsTab.ts` and `libraryBaseline.ts` both load `/api/library/stats` on `serverReady`, `refreshCompleted`, `itemsRemoved`, and `resyncRequired`, and `src/test/screens/stats.test.ts` expects both loads.
+- `library.ts` shares a sources load already under way, while `filterDialog.ts` loads sources on its own, and its `loadRemote` loads sources, the tag model, and presets one after another.
+- The player, `statsTab.ts`, and `library.ts` each read `/api/library/item` with the same 404 and 401 handling.
+
+**Acceptance**
+
+- The stats load once per event while the Stats tab is open, in Stats screen tests.
+- A play goes through `sendRequest` once, in WebUI tests of the play request.
+- `npm run verify` passes, with the other helpers changing no behavior.
+
+### P66 - WebUI Typed Contract Reads
+
+- **Status**: ⏳ Planned
+- **Goal**: The compiler checks every response and event the WebUI reads against the generated contract, so a contract change that drops or renames a field fails the typecheck where the WebUI reads it.
+
+#### Scope
+
+- `getJson` and `postJson` (`src/state/appApi.ts`) are generic over the generated `paths` type, by route and method, and return the route's response type.
+- The events in `ServerConnectionEvents` (`src/state/serverConnection.ts`) are typed from the generated schemas.
+- The hand-written `ItemStateChangedPayload` and `PlaybackRecordedPayload` (`src/library/libraryProjectionSync.ts`) and `FilterSource` and `FilterTagModel` (`src/filter/filterDialogModel.ts`) become aliases of the generated types.
+- The casts and hand-written parsers that read response bodies give way to the typed reads.
+
+#### Traps
+
+- `getJson` and `postJson` return `any`, and of about 25 places that read a response body, none is tied to its route's schema: about 9 cast with `as`, about 8 go through hand-written parsers, and about 6 stay `any` (measured).
+- 7 of the 13 event types are typed `any` in `ServerConnectionEvents`, although generated payload types exist (measured).
+- `verify:contracts` only checks that the generated file is fresh.
+- The server writes camelCase everywhere, and the WebUI has 27 PascalCase fallback reads in 5 files that typed reads won't allow (measured).
+- Library Refresh Progress and Summary's Contract slice types its own reads of the refresh status with the generated types.
+
+#### Acceptance
+
+- Every response read and event handler takes its route's or event's generated type, checked by the typecheck `npm run verify` runs.
+- `npm run verify` passes.

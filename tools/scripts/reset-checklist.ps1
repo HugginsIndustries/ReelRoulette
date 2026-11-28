@@ -6,7 +6,6 @@
 [CmdletBinding()]
 param(
     [switch]$KeepMetadata,
-    [switch]$RemoveWaived,
     [string]$Path,
     [string]$VersionPath
 )
@@ -80,16 +79,7 @@ foreach ($line in $lines) {
     }
 
     if ($nextLine -match '^\s*-\s*\[(x|X| )\]\s') {
-        $isWaived = $nextLine -match '\(waived\)'
-        if ($isWaived -and -not $RemoveWaived.IsPresent) {
-            $nextLine = [regex]::Replace($nextLine, '\[(x|X| )\]', '[x]', 1)
-        }
-        else {
-            $nextLine = [regex]::Replace($nextLine, '\[(x|X| )\]', '[ ]', 1)
-            if ($RemoveWaived.IsPresent) {
-                $nextLine = [regex]::Replace($nextLine, '\s*\(waived\)', '')
-            }
-        }
+        $nextLine = [regex]::Replace($nextLine, '\[(x|X| )\]', '[ ]', 1)
     }
 
     $updatedLines.Add($nextLine)

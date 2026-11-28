@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Headless HTTP smoke for the Velopack Linux server AppImage.
-# When FUSE is unavailable (typical CI), --appimage-extract-and-run extracts to a temp dir and runs the payload.
+# It always runs the AppImage with --appimage-extract-and-run, which extracts it to a temp dir and runs the payload, so FUSE isn't needed.
 
 usage() {
   echo "Usage: $0 [path/to/ReelRoulette.Server-*.AppImage]" >&2

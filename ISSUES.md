@@ -21,11 +21,13 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 ### Deleting a tag or category added since the last save fails Save
 
 - **What goes wrong**: Save sends a delete for a tag or category the server never had. The server refuses it with 409, and the save stops there with 'Tag delete failed: There's no tag named "{name}".' or "Category delete failed: That category doesn't exist.": changes sent before it land, and the ones sent after it don't (inferred). A category's delete goes before new tags, renames, tag deletes, and the item's adds and removes, and a tag's delete before the item's adds and removes.
-- **How to make it happen**: In the Tags tab, add a new tag and delete it in Edit Tag, or add a new category and delete it in Edit Category, and press Save, alone or with other changes. Save stays enabled with only the add and delete, and posts `delete-tag` or `delete-category` for the new one (measured).
+- **How to make it happen**: In the Tags tab, add a new tag and delete it in Edit Tag or with Delete… in its menu, or add a new category and delete it in Edit Category or with Delete… in its menu, and press Save, alone or with other changes. Save stays enabled with only the add and delete, and posts `delete-tag` or `delete-category` for the new one (measured).
 - **How much it matters**: Moderate. It takes adding and deleting a tag or category before one Save, but then the rest of that save's changes after the delete are dropped, with an error that says only that the tag or category doesn't exist.
 - **Since**: v0.11.0, when the server began refusing a delete that changes nothing. The WebUI has sent the tag's delete since v0.9.0, and the category's since at least v0.11.0 (inferred).
 - **Where**:
   - `deleteTag` and `deleteCategory` in `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditor.ts` drop the tag's or category's held add and queue a delete for it.
+  - Edit Tag's and Edit Category's Delete and the Delete… item in a tag's or category's menu (`src/clients/web/ReelRoulette.WebUI/src/tags/tagMenus.ts`) call them.
+  - A tag chip's `saved` tells a new tag from a saved one, and the menu's Filter by this tag is already disabled on a new tag with `SAVE_TAG_FIRST_REASON` (`tagMenus.ts`).
   - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends category changes, category deletes, new tags, renames, tag deletes, and then the item's adds and removes, and `runTagEditorSave` stops at the first step the server refuses.
   - `/api/tag-editor/delete-tag` and `/api/tag-editor/delete-category` in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs` answer 409 when `LibraryCatalogSession.DeleteTag` or `DeleteCategory` changes nothing.
 - **Intended fix**: The Tags tab blocks deleting a tag or category that isn't saved yet, with a clear reason, such as a disabled Delete with a tooltip, rather than sending the delete. The server's refusal stays.
@@ -70,17 +72,21 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 
 ### A tag delete or rename can leave a preset that shows as None or as another preset
 
-- **What goes wrong**: Deleting a tag removes it from every preset, and renaming a tag onto another tag's name merges the two in every preset, so a preset can be left holding the default filter, or the same filter as another preset:
-  - The WebUI names the default filter None, so choosing a preset that holds it shows None in the preset dropdown and the Filter tab's heading.
-  - The WebUI names the first preset whose filter matches, so choosing the later of two presets with one filter shows the earlier one's name there.
-  - The retired desktop's Add Preset, and the WebUI's before v0.15.0, could save either kind of preset too, so the catalog can still hold them.
+- **What goes wrong**:
+  - Deleting a tag removes it from every preset, and renaming a tag onto another tag's name merges the two in every preset, so a preset can be left holding the default filter, or the same filter as another preset:
+    - The WebUI names the default filter None, so choosing a preset that holds it shows None in the preset dropdown and the Filter tab's heading.
+    - The WebUI names the first preset whose filter matches, so choosing the later of two presets with one filter shows the earlier one's name there.
+    - The retired desktop's Add Preset, and the WebUI's before v0.15.0, could save either kind of preset too, so the catalog can still hold them.
+  - A merge also leaves a preset that held both tags with the new name twice, such as `["Robert","Robert"]`, so its filter counts 2 tags, and turning the tag's chip off once leaves the tag on (inferred).
 - **How to make it happen**:
   - Save a preset whose only condition is one tag, delete that tag in the Tags tab or on another client, then choose the preset (measured, in Library and Tags screen tests).
   - Save one preset including Bob and another including Robert, otherwise the same, rename Bob to Robert in Edit Tag and save, then choose the second preset (inferred). Deleting a tag does the same when that tag was all that set one preset apart from another (inferred).
+  - Save a preset including both Bob and Robert, rename Bob to Robert in Edit Tag and save, then choose the preset (inferred).
 - **How much it matters**: Low. Each preset applies what it now holds and keeps its name in the Filter tab's preset list, where it can be renamed or deleted (inferred).
 - **Since**: v0.15.0, not yet released, for a preset that shows as None, where WebUI Tweaks names the default filter None. A preset that shows as another one is in v0.12.0 at least, whose WebUI also named the first preset whose filter matches. A tag delete has left presets with no conditions since v0.9.0.
 - **Where**:
   - `RemoveTagFromPresetCatalogOnly` and `RenameTagInPresetCatalogOnly` in `src/core/ReelRoulette.Server/Services/ServerStateService.cs`, which `/api/tag-editor/delete-tag` and `/api/tag-editor/rename-tag` call, remove or rename the tag in each preset's included and excluded tags.
+  - `RenameTagInFilterArray` in `ServerStateService.cs` replaces each match with the new name and never removes a name the array already holds, and so does `retargetTagFilter` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` for the device's own filters.
   - `resolvePresetAnchor` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts` names the default filter None, and otherwise the first preset whose filter matches.
   - The server keeps such presets. Per-Preset Preset Writes makes the preset routes refuse a preset holding the default filter or another preset's, which tag deletes and renames don't go through.
 
@@ -115,16 +121,6 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 
 ## Player
 
-### A favorite changed while disconnected shows its old state on a later play
-
-- **What goes wrong**: The WebUI remembers the favorite and blacklist it last saw for each item and puts them over the ones a random pick, a library play, or a history step brings from the server. A resync doesn't clear what it remembers, so after this device misses a favorite or blacklist change made on another device, playing that file again shows the old heart and thumb (inferred). A rating doesn't have this problem on a later play, since a resync drops the ratings this device kept.
-- **How to make it happen**: Play a file on one device, let that device lose its connection, such as while the iPad sleeps or the server restarts, favorite or blacklist the same file on another device, reconnect the first device, and play that file there again by a random pick, from the library, or with Previous (inferred).
-- **How much it matters**: Low. It takes a change on another device while this one is disconnected, to a file this one has already played. The server keeps the right state, and the heart and thumb show it again after the next change to that file or a page reload (inferred).
-- **Since**: v0.9.0, whose WebUI first remembered each item's favorite and blacklist.
-- **Where**:
-  - `createItemStateCache` in `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts` keeps the states, and its `applyTo` overwrites an item's favorite and blacklist with them.
-  - `pushHistory` and `appendHistory` in `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts` and the play's start in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` call `applyTo`, and no `resyncRequired` handler clears the cache.
-
 ### A video that fails at the same point mid-file may recover without end
 
 - **What goes wrong**: A video that fails after it has played gets a fresh media URL and plays on from where it failed. The flag that allows one recovery clears on every `playing` event, so when the video plays again from there and fails at the same point, it recovers again, without end, and never reaches the range request that shows a message or skips the file (inferred).
@@ -150,22 +146,6 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 
 ## Server
 
-### The ffmpeg check can hang on its own output
-
-- **What goes wrong**: The check that ffmpeg runs redirects its standard output and error, reads neither, and waits for it to exit, so output that fills a pipe would hang the check and the refresh waiting on it.
-- **How to make it happen**: Point the server at an ffmpeg whose `-version` output is larger than a pipe's buffer.
-- **How much it matters**: Low. `ffmpeg -version` prints a few kilobytes, less than a pipe holds (inferred).
-- **Since**: v0.9.0.
-- **Where**: `RefreshPipelineService.VerifyFfmpegAsync` in `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`. The other ffmpeg and ffprobe calls already read stderr.
-
-### Restarting a dev server goes through a shell
-
-- **What goes wrong**: On Linux, a restart of a server running under the `dotnet` host launches its replacement through one `/bin/bash -lc` script with the process path, assembly path, host, and port written into it, so a path containing `"` or `\` breaks the restart.
-- **How to make it happen**: Run the server with `dotnet` from a folder whose path contains `"` or `\`, then restart it.
-- **How much it matters**: Low. Packaged servers start their replacement directly, without a shell.
-- **Since**: v0.11.0.
-- **Where**: `RestartCoordinator.TryLaunchReplacementProcess` in `src/core/ReelRoulette.ServerApp/Program.cs`.
-
 ### A failed stop leaves restart and stop stuck
 
 - **What goes wrong**: Restart and stop set a flag that is cleared only when the request is refused. If the scheduled stop fails or the process doesn't exit, every later restart or stop answers "already in progress".
@@ -173,14 +153,6 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **How much it matters**: Low. It's rare, but getting out of it takes stopping the process by hand (inferred).
 - **Since**: v0.9.0.
 - **Where**: `_restartInProgress` in `RestartCoordinator.TryRestartAsync` and `TryStopAsync`, in `src/core/ReelRoulette.ServerApp/Program.cs`.
-
-### The autostart entry doesn't escape its path
-
-- **What goes wrong**: The Linux autostart entry writes `Exec="<path>"` without escaping, while the Desktop Entry spec requires `"`, `` ` ``, `$`, and `\` inside a quoted argument to be backslash-escaped and `%` to be written `%%`, so a path holding one of them doesn't start.
-- **How to make it happen**: Install the server under a path containing one of those characters and turn on Launch Server on Startup.
-- **How much it matters**: Low. Install paths rarely hold those characters.
-- **Since**: v0.11.0.
-- **Where**: `LinuxXdgStartupLaunchService.BuildDesktopEntryContent` in `src/core/ReelRoulette.ServerApp/Hosting/LinuxXdgStartupLaunchService.cs`.
 
 ### Autostart status misses other ways it is off
 
@@ -192,11 +164,14 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 
 ### Stopping mid-refresh waits for a file's hash
 
-- **What goes wrong**: The refresh's fingerprint stage hashes each whole file synchronously, with no cancellation, so stopping the server during a large file waits for its hash to finish.
-- **How to make it happen**: Stop or restart the server while a refresh fingerprints a large file, more so on a slow share.
-- **How much it matters**: Low. A stop or restart is late by as long as reading the rest of that file takes (inferred).
+- **What goes wrong**: The refresh's fingerprint stage hashes each whole file synchronously, with no cancellation, so stopping the server during a large file waits for its hash to finish. The source stage's hashing of the files that might be a missing item, and its walk of a source's folders, can't be stopped either.
+- **How to make it happen**: Stop or restart the server while a refresh fingerprints a large file, or walks a large source, more so on a slow share.
+- **How much it matters**: Low. A stop or restart is late by as long as reading the rest of that file, or the rest of that walk, takes (inferred).
 - **Since**: v0.9.0.
-- **Where**: `FileFingerprintService.ComputeFingerprint` in `src/core/ReelRoulette.Core/Fingerprints/FileFingerprintService.cs`, called from the fingerprint stage in `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`.
+- **Where**:
+  - `FileFingerprintService.ComputeFingerprint` in `src/core/ReelRoulette.Core/Fingerprints/FileFingerprintService.cs`, called from the fingerprint stage in `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`.
+  - The source stage's move matching in `RefreshPipelineService.cs` hashes its candidates with the same call.
+  - `EnumerateMediaFiles` in `RefreshPipelineService.cs` walks a source with `Directory.EnumerateFiles`, which takes no cancellation.
 
 ### A restarted server can replay events without a resync
 
@@ -205,6 +180,18 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **How much it matters**: Low. The client keeps stale state until it reloads, and only within that window of revisions (inferred).
 - **Since**: v0.9.0.
 - **Where**: The revision counter in `ServerStateService`, in `src/core/ReelRoulette.Server/Services/ServerStateService.cs`.
+
+### Devices reload everything on each wake after a server restart
+
+- **What goes wrong**: The `resyncRequired` the server sends a stream that reconnects with a gap takes a new event revision that never enters the replay history, so the revisions it hands out leave holes, and the gap check counts those holes as missed events. After a restart, each device that wakes holding an older such revision gets another full resync, reloading the library, tags, stats, and presets, until real events fill the history (inferred). No state is lost.
+- **How to make it happen**: Restart the server, then let two devices, such as the iPad and a phone, each reconnect, sleep, and wake in turn before anything publishes an event. Each wake gets a `resyncRequired` (inferred).
+- **How much it matters**: Low. It costs reload traffic and a flicker of each tab after a restart, until real events arrive, and once more for the device holding the older hole (inferred).
+- **Since**: v0.9.0 (inferred).
+- **Where**:
+  - The event stream route in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs` builds a reconnecting stream's own `resyncRequired` with `ServerStateService.CreateEnvelope`.
+  - `CreateEnvelope` in `src/core/ReelRoulette.Server/Services/ServerStateService.cs` takes a new global revision and doesn't add the event to the replay history.
+  - `GetReplayAfter` reports a gap whenever an empty history's current revision differs from the client's, and otherwise whenever the client's revision is more than one below the oldest kept one. After two per-stream resyncs take revisions 1 and 2, `GetReplayAfter(1)` reports a gap (measured, in a harness of the real `ServerStateService`).
+  - The WebUI reopens its stream on each visibility or focus change (`src/clients/web/ReelRoulette.WebUI/src/state/serverConnection.ts`) and takes the revision of the `resyncRequired` it gets.
 
 ### Unscanned videos match neither audio filter
 
@@ -217,11 +204,30 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 ### A video replaced at the same path keeps its old duration and loudness
 
 - **What goes wrong**: When a video's file is replaced by a different one at the same path, refresh hashes the new file but keeps the old file's duration and loudness. The Filter tab's duration limits, the Stats tab, and the frame the thumbnail stage picks use the old length, and Loudness normalization sets the new file's volume from the old file's loudness (inferred).
-- **How to make it happen**: Replace a video in a source folder with a different video under the same name, such as a re-encoded or trimmed copy, then refresh. A forced duration or loudness rescan corrects it, but no ReelRoulette screen offers one yet: it is set through `POST /api/refresh/settings` or in `core-settings.json`.
-- **How much it matters**: Low. Replacing a file in place is rare, and the thumbnail still gets made when the old length is wrong (inferred), but the wrong values stay until a forced rescan, with nothing to show they're stale.
+- **How to make it happen**:
+  - Replace a video in a source folder with a different video under the same name, such as a re-encoded or trimmed copy, then refresh. A forced duration or loudness rescan corrects it, but no ReelRoulette screen offers one yet: it is set through `POST /api/refresh/settings` or in `core-settings.json`.
+  - Copy a video into a source folder on the NAS while a refresh runs. The refresh adds the partly copied file, the fingerprint stage marks it unstable, and the loudness stage still scans it, since whether it has audio isn't known yet. Once the copy ends, its size changes and it is hashed again, but its loudness is never scanned again (inferred).
+- **How much it matters**: Low. Replacing a file in place is rare, a copy has to overlap a refresh's loudness stage, and the thumbnail still gets made when the old length is wrong (inferred), but the wrong values stay until a forced rescan, with nothing to show they're stale.
 - **Since**: v0.9.0 for the duration and loudness, when the server took over refresh: that release's duration stage already scanned only videos without a duration. The thumbnail's frame since v0.15.0, not yet released, whose thumbnail stage picks frames from the stored duration instead of probing the video again.
 - **Where**: In `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`:
   - The fingerprint stage marks a changed file's fingerprint stale (`FingerprintStatus = 3`) and clears neither its duration nor its loudness.
   - `RunDurationStageAsync` scans only videos without a stored duration, unless the rescan is forced.
   - `NeedsLoudness` scans again only a video never scanned, scanned under an older analysis version, or with a recorded error.
+  - The loudness stage scans an item whose `HasAudio` is null whatever its fingerprint's state, so it scans a file the fingerprint stage marked unstable (inferred).
   - The thumbnail stage picks its frames from the stored duration.
+
+### Reading the tag model takes the catalog's write lock
+
+- **What goes wrong**: The read behind the Tags and Filter tabs' tags opens a write connection and starts an immediate transaction, so it takes the catalog's write lock. It waits up to the 1 s busy timeout behind a refresh's writes, then fails with "database is locked" as a bare 500, and while it runs it holds off writers (inferred).
+- **How to make it happen**: Open the Tags or Filter tab, or play another item while the Tags tab shows, during a refresh that writes many items, such as one adding thousands of files (inferred).
+- **How much it matters**: Low. A refresh's writes are short, so the read usually gets the lock in time, and when it doesn't, the tab fails to load its tags (inferred).
+- **Since**: v0.13.0.
+- **Where**: `LibraryCatalogSession.ReadTagEditor` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs`, which `/api/tag-editor/model` calls, opens a write connection and calls `BeginTransaction()`, which Microsoft.Data.Sqlite starts as `BEGIN IMMEDIATE` (inferred). Every other read of several statements in that file uses `BeginTransaction(deferred: true)`.
+
+### mDNS advertises a new port before the server listens on it
+
+- **What goes wrong**: Saving the web runtime settings advertises the new port, host name, and LAN setting over mDNS at once, while the server's listen port and LAN binding change only at its next start, so until a restart the `.local` name points at a port nothing listens on (inferred).
+- **How to make it happen**: With Allow remote connections and mDNS on, change the port in the Operator, save, and open the `.local` address from another device before restarting the server.
+- **How much it matters**: Low. The Operator says a restart is required after such a change, and the advertisement is right again once the server restarts.
+- **Since**: v0.9.0.
+- **Where**: `OnWebRuntimeSettingsChanged` in `src/core/ReelRoulette.ServerApp/WebUiMdnsService.cs` reconciles the advertisement with the saved settings rather than the running server's port and binding.

@@ -43,7 +43,7 @@ npm install
 npm run build
 ```
 
-The server serves the build from `dist/`; `pwsh ./tools/scripts/run-server.ps1` from the repository root builds the WebUI and runs the server with it.
+`pwsh ./tools/scripts/run-server.ps1` from the repository root builds the WebUI into `dist/` and runs the server with a copy of that build in `artifacts/run-server/webui/`, so a later build reaches the running server only when the script runs again.
 
 Additional commands:
 

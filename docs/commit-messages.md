@@ -11,6 +11,7 @@ Change these rules only when the user asks.
   - `Docs: {concise summary}` for docs-only updates outside of milestone work.
   - `{milestone id}: {concise summary}` for milestone implementation work (examples: `M8c: ...`, `M9h: ...`, `M16b: ...`).
   - A milestone's own slices use its milestone-id prefix even when they change only docs. Planning edits that record or reorder milestones are not milestone work, so they use `Docs:`.
+  - The advisor's own commits on main use `Docs:` to record a slice's spot check, and the milestone's id to move a completed milestone to `MILESTONES-COMPLETED.md` after its spot check (example: `M12n1: Complete WebUI Developer Settings after the user's spot check`).
   - `Bugfix: {concise summary}` for defect fixes.
   - `Feature: {concise summary}` for net-new feature work outside milestone framing.
   - `Improvement: {concise summary}` for changes users would notice to existing behavior, outside milestone framing, that aren't defect fixes.

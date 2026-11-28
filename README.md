@@ -12,7 +12,10 @@ ReelRoulette is a server-first media randomizer, used in the browser on any devi
   - WebUI static assets
   - Operator UI (`/operator`)
 - Control-plane/admin operations are exposed under `/control/*` (status, settings, pair, restart, stop, testing, logs).
-- The Operator opens directly on the server machine, and the WebUI's Delete files… needs no control token there. From another machine, each first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests through a reverse proxy count as another machine, even when the proxy runs on the server machine.
+- The Operator opens directly on the server machine, and the WebUI's Delete files… needs no control token there.
+  - From another machine, each first asks for the control token, which is shown under Control Settings in the Operator on the server machine.
+  - On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)).
+  - Requests through a reverse proxy count as another machine, even when the proxy runs on the server machine.
 - The WebUI is the only client, over the API and SSE; server/core owns authoritative domain state.
 
 ## Prerequisites
@@ -28,14 +31,20 @@ ReelRoulette is a server-first media randomizer, used in the browser on any devi
 
 These paths are for **people who want to run packaged builds**. If you are changing code, skip to [Developing from source](#developing-from-source).
 
-Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux). The release pipeline also publishes **Velopack update feeds** to Backblaze B2. A **Velopack-installed** server can check, download, and apply updates from Operator (stable or preview/dev channel). The **server** is the only download: it hosts your library, API, WebUI, and Operator, and serves the **WebUI** at the root URL once it is running.
+- Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux).
+- The release pipeline also publishes **Velopack update feeds** to Backblaze B2. A **Velopack-installed** server can check, download, and apply updates from Operator (stable or preview/dev channel).
+- The **server** is the only download: it hosts your library, API, WebUI, and Operator, and serves the **WebUI** at the root URL once it is running.
 
 ### Windows
 
 1. From the latest **stable** GitHub release (or your dev feed URL), download the **server** **`Setup.exe`** installer produced by Velopack.
 2. Run the installer. Installs are **per-user** under `%LocalAppData%` (no elevation, no MSI, no Program Files layout). Desktop and Start Menu shortcuts are created when the installer offers them.
 3. Start the **server**. Open **[http://localhost:45123/operator](http://localhost:45123/operator)** in a browser for the Operator UI, or **[http://localhost:45123](http://localhost:45123)** for the WebUI. The tray icon (when available) can open Operator, refresh the library, and toggle “launch on startup.”
-4. **Upgrades:** On a Velopack-installed server, use **Check for Updates** in Operator. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also install a newer **`Setup.exe`** from GitHub Releases. **v0.11.0** Inno/portable installs use a different layout — replace them with the Velopack **`Setup.exe`** (per-user under `%LocalAppData%`). `dotnet run` / unpackaged sessions are not Velopack-installed and cannot apply feed updates.
+4. **Upgrades:** On a Velopack-installed server, use **Check for Updates** in Operator.
+   - Download and Apply are separate confirmed steps; the app does not restart until you apply.
+   - You can also install a newer **`Setup.exe`** from GitHub Releases.
+   - **v0.11.0** Inno/portable installs use a different layout — replace them with the Velopack **`Setup.exe`** (per-user under `%LocalAppData%`).
+   - `dotnet run` / unpackaged sessions are not Velopack-installed and cannot apply feed updates.
 
 ### Linux
 
@@ -54,7 +63,11 @@ Official **installers** for stable tags are on **[GitHub Releases](https://githu
    **AppImage runtime:** most builds need **FUSE 2** on the host (`libfuse2`, or **`libfuse2t64`** on newer Ubuntu-based releases). If the AppImage will not start, install that package or run with **`--appimage-extract-and-run`**.
 
 3. Install **FFmpeg** (with **`ffprobe`**) from your distribution before relying on library refresh—Linux packages do not bundle it.
-4. **Upgrades:** On a Velopack AppImage, use **Check for Updates** in Operator. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also download a newer **`.AppImage`** from GitHub Releases and run it. **v0.11.0** portable tarballs / legacy AppImages are a different packaging path — replace them with the Velopack **`.AppImage`**. `dotnet run` sessions cannot apply feed updates.
+4. **Upgrades:** On a Velopack AppImage, use **Check for Updates** in Operator.
+   - Download and Apply are separate confirmed steps; the app does not restart until you apply.
+   - You can also download a newer **`.AppImage`** from GitHub Releases and run it.
+   - **v0.11.0** portable tarballs / legacy AppImages are a different packaging path — replace them with the Velopack **`.AppImage`**.
+   - `dotnet run` sessions cannot apply feed updates.
 
 ### Developing from source
 
@@ -89,8 +102,12 @@ It builds the WebUI (`npm run build` in `src/clients/web/ReelRoulette.WebUI`) an
 `npm run build` automatically syncs shared assets into WebUI `public/`, including:
 
 - tab icon: `assets/logo/favicon.ico` -> `public/favicon.ico`
-- logo and PWA / home-screen icons, copied from `assets/logo/` at their sizes into `public/icons/`: `logo-icon.svg`, `logo-lockup.svg`, and `logo-lockup-dark.svg` for the tab icon and the header; `pwa-192.png` and `pwa-512.png` (manifest purpose `any`); `pwa-maskable-192.png` and `pwa-maskable-512.png` (purpose `maskable`); and `apple-touch-icon.png` (**180×180**). `npm run verify` checks that each PNG's pixel size matches `manifest.webmanifest`
-- PWA metadata: `manifest.webmanifest` and `public/sw.js`, a minimal root-scoped service worker registered from the client in secure contexts. Chrome installs from the manifest over HTTPS and does not need the worker (see [WebUI over HTTPS](#webui-over-https-install-as-an-app)). The worker intercepts document navigations only; API calls, the event stream, and media go straight to the server. The server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
+- logo and PWA / home-screen icons, copied from `assets/logo/` at their sizes into `public/icons/`: `logo-icon.svg`, `logo-lockup.svg`, and `logo-lockup-dark.svg` for the tab icon and the header; `pwa-192.png` and `pwa-512.png` (manifest purpose `any`); `pwa-maskable-192.png` and `pwa-maskable-512.png` (purpose `maskable`); and `apple-touch-icon.png` (**180×180**).
+  - `npm run verify` checks that each PNG's pixel size matches `manifest.webmanifest`
+- PWA metadata: `manifest.webmanifest` and `public/sw.js`, a minimal root-scoped service worker registered from the client in secure contexts.
+  - Chrome installs from the manifest over HTTPS and does not need the worker (see [WebUI over HTTPS](#webui-over-https-install-as-an-app)).
+  - The worker intercepts document navigations only; API calls, the event stream, and media go straight to the server.
+  - The server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
 - Material Symbols font: `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 ## WebUI over HTTPS (install as an app)
@@ -151,7 +168,9 @@ Set release-aligned version surfaces in one step (repo-root `.version` is the so
 pwsh ./tools/scripts/set-release-version.ps1 -Version v0.15.0-dev.1
 ```
 
-Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also regenerates WebUI OpenAPI contracts (`npm run generate:contracts`) and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoRegenerateContracts` and/or `-NoRunVerify` to skip either of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
+- Omit `-Version` to read the current value from `.version` and fan out without changing the file.
+- By default this also regenerates WebUI OpenAPI contracts (`npm run generate:contracts`) and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoRegenerateContracts` and/or `-NoRunVerify` to skip either of those.
+- Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
 
 Packaged-server smoke (Linux, Velopack AppImage):
 
@@ -195,7 +214,9 @@ Manual test guide:
 
 ## Packaging and releases
 
-ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** outputs for **Windows** and **Linux**, stages WebUI assets, bundles Windows FFmpeg and its license text in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror **`Setup.exe`** and **`.AppImage`** onto the existing **GitHub release** (not update packages, feed JSON, or portable zips). **Velopack-installed** servers check those feeds (background check-only, plus the operator's **Check → Download → Apply**), and call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
+- ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** outputs for **Windows** and **Linux**, stages WebUI assets, bundles Windows FFmpeg and its license text in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**.
+- Stable tag releases also mirror **`Setup.exe`** and **`.AppImage`** onto the existing **GitHub release** (not update packages, feed JSON, or portable zips).
+- **Velopack-installed** servers check those feeds (background check-only, plus the operator's **Check → Download → Apply**), and call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
 
 ### Maintainer flow
 
@@ -238,4 +259,7 @@ See `docs/dev-setup.md` for channel names, dev vs stable tiers, and troubleshoot
 
 ReelRoulette uses **FFmpeg** (including **ffprobe**) to read media files.
 
-**Windows** release **server** packages bundle **FFmpeg** and **ffprobe** from [BtbN's FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (`win64-gpl`, FFmpeg `n9.0.2-17-g2a571b6068`), which is built with `--enable-gpl --enable-version3` and licensed under the **GNU GPL version 3** or later. Its license text ships beside them as `runtimes/win-x64/native/FFmpeg-LICENSE.txt`, and is `licenses/GPL-3.0.txt` in this repository. FFmpeg's source code is at [https://ffmpeg.org](https://ffmpeg.org), and the build's scripts are in the BtbN repository. **Linux** packages bundle **no** FFmpeg; install **ffmpeg** and **ffprobe** from your distribution.
+- **Windows** release **server** packages bundle **FFmpeg** and **ffprobe** from [BtbN's FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (`win64-gpl`, FFmpeg `n9.0.2-17-g2a571b6068`), which is built with `--enable-gpl --enable-version3` and licensed under the **GNU GPL version 3** or later.
+  - Its license text ships beside them as `runtimes/win-x64/native/FFmpeg-LICENSE.txt`, and is `licenses/GPL-3.0.txt` in this repository.
+  - FFmpeg's source code is at [https://ffmpeg.org](https://ffmpeg.org), and the build's scripts are in the BtbN repository.
+- **Linux** packages bundle **no** FFmpeg; install **ffmpeg** and **ffprobe** from your distribution.
