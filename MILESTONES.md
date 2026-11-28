@@ -4251,6 +4251,7 @@ Last milestone completed: M12n1
 
 - `LibraryCatalogSession` opens one connection when it starts and holds it until it is disposed, so no call's own connection is ever the last one open.
 - A running-server library import or backup restore releases the keeper before it renames the database files and opens it again afterwards.
+- `tools/scripts/copy-live-data.sh` copies the catalog with a read-only `.backup` while the server's `-wal` and `-shm` already exist, through SQLite's own locks, instead of waiting for no `-wal`, keeps its immutable copy for a catalog with no `-wal`, as when the server is stopped, and still creates no file in the data folder.
 
 **Traps**
 
@@ -4261,11 +4262,17 @@ Last milestone completed: M12n1
 - 200 `InsertItem` calls took 28.9–29.3 ms each with no other connection open, and 3.7–5.2 ms each with one held open (measured).
 - A user's single clicks each pay the 26 ms, which nobody notices.
 - Admin Library Catalog Transfer's Report slice lists the catalog session and its SQLite connections among the holders its running-server import stops before a replace, including how the connections close before the rename on Windows.
+- `tools/scripts/copy-live-data.sh` backs up the catalog from an immutable open, which takes no locks, so it copies only while no `-wal` file exists and fails after waiting 30 s.
+- With the keeper holding the catalog open, `-wal` always exists, so every run of that script would wait its 30 s and fail (inferred).
+- It avoids a read-only open because one creates `-wal` and `-shm` beside a catalog that has none and leaves them there (measured).
+- While another connection holds the catalog open, a read-only `.backup` creates no new files and copies that connection's committed writes, and once that connection closes only `library.db` is left (measured).
+- `test-scripts.ps1`'s case "waits while a connection holds the catalog open, and copies what it wrote" expects that wait, so it changes with the script.
 
 **Acceptance**
 
 - The session keeps one connection open between calls, so the log file stays after a write, in catalog session tests.
 - Import or restore releases the keeper before it renames files and opens it again afterwards, in server tests of running-server import and restore.
+- The copy script copies a catalog that a connection holds open without waiting, with that connection's committed writes and no new file beside the catalog, in a `test-scripts.ps1` case run with a held-open connection.
 - Each test still deletes its temp folder, in the Core tests on the Windows CI run.
 - `dotnet test ReelRoulette.sln` passes.
 

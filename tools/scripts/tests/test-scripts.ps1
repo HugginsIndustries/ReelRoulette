@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
-# Runs check-milestones.ps1, cut-changelog.ps1, and reset-checklist.ps1 against the fixtures in tests/fixtures, and
-# checks webui-packages.ps1's install decision on WebUI folders it creates.
+# Runs check-milestones.ps1, cut-changelog.ps1, and reset-checklist.ps1 against the fixtures in tests/fixtures, checks
+# webui-packages.ps1's install decision on WebUI folders it creates, and runs copy-live-data.sh on data folders it creates.
 # Each case works on a copy in a temporary folder that is removed afterward.
 $ErrorActionPreference = "Stop"
 
@@ -9,6 +9,7 @@ $fixturesDir = Join-Path $PSScriptRoot "fixtures"
 $checker = Join-Path $scriptsDir "check-milestones.ps1"
 $cutter = Join-Path $scriptsDir "cut-changelog.ps1"
 $resetter = Join-Path $scriptsDir "reset-checklist.ps1"
+$copier = Join-Path $scriptsDir "copy-live-data.sh"
 . (Join-Path $scriptsDir "webui-packages.ps1")
 $validMilestones = Join-Path $fixturesDir "milestones" "valid.md"
 $movedMilestones = Join-Path $fixturesDir "milestones" "moved.md"
@@ -591,6 +592,248 @@ try {
     Test-Case "an install newer than package-lock.json needs none" {
         $reason = Get-WebUiPackageInstallReason -WebUiPath (New-WebUiFolder "webui-current-install" -LockfileAgeSeconds 60)
         if ($null -ne $reason) { return "got '$reason'" }
+    }
+
+    Write-Host ""
+    Write-Host "copy-live-data.sh"
+
+    # Creates a data folder like the server's: a WAL catalog with items 'a' and 'b', the settings file, last.log, a
+    # settings backup, and a thumbnail in $ThumbnailsPath (its thumbnails/ folder unless given).
+    function New-DataFolder {
+        param([string]$Path, [string]$ThumbnailsPath = (Join-Path $Path "thumbnails"))
+
+        New-Item -ItemType Directory -Path (Join-Path $Path "backups"), $ThumbnailsPath -Force | Out-Null
+        & sqlite3 (Join-Path $Path "library.db") "PRAGMA journal_mode=WAL; CREATE TABLE items(path TEXT); INSERT INTO items VALUES ('a'), ('b');" | Out-Null
+        Set-Content -Path (Join-Path $Path "core-settings.json") -Value '{ "refresh": {} }'
+        Set-Content -Path (Join-Path $Path "last.log") -Value "a log line"
+        Set-Content -Path (Join-Path $Path "backups" "core-settings.json.backup.1") -Value "{}"
+        Set-Content -Path (Join-Path $ThumbnailsPath "item.jpg") -Value "jpg"
+        return $Path
+    }
+
+    # Every file and folder under $Path with its size and write time.
+    function Get-FolderSnapshot {
+        param([string]$Path)
+
+        return Get-ChildItem -Path $Path -Recurse -Force | Sort-Object FullName |
+            ForEach-Object { "$($_.FullName) $($_.Length) $($_.LastWriteTimeUtc.Ticks)" } | Out-String
+    }
+
+    # Runs a copy of copy-live-data.sh in its own repo folder under the work folder, so its copies land there, and
+    # returns its exit code, stdout, stderr, and that repo's scratch folder. HOME and the XDG folders point into the work
+    # folder too, so no lookup can reach real data. $Environment sets more variables.
+    function Invoke-Copier {
+        param([string]$Name, [hashtable]$Environment, [string[]]$Arguments = @())
+
+        $repo = Join-Path $workDir $Name
+        $scriptCopy = Join-Path $repo "tools" "scripts" "copy-live-data.sh"
+        New-Item -ItemType Directory -Path (Split-Path $scriptCopy) | Out-Null
+        Copy-Item -Path $copier -Destination $scriptCopy
+        $variables = @{
+            HOME = Join-Path $workDir "$Name-home"
+            XDG_CONFIG_HOME = Join-Path $workDir "$Name-home" ".config"
+            XDG_DATA_HOME = Join-Path $workDir "$Name-home" ".local" "share"
+            REELROULETTE_DATA_DIR = $null
+        }
+        foreach ($key in $Environment.Keys) { $variables[$key] = $Environment[$key] }
+        $saved = @{}
+        foreach ($key in $variables.Keys) {
+            $saved[$key] = [Environment]::GetEnvironmentVariable($key)
+            [Environment]::SetEnvironmentVariable($key, $variables[$key])
+        }
+        try {
+            $errorsPath = Join-Path $workDir "$Name.stderr"
+            $output = & bash $scriptCopy @Arguments 2>$errorsPath
+            return [pscustomobject]@{
+                Code = $LASTEXITCODE
+                Output = ($output -join "`n").Trim()
+                Errors = (Get-Content -Path $errorsPath -Raw)
+                Scratch = Join-Path $repo "artifacts" "scratch"
+            }
+        }
+        finally {
+            foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key]) }
+        }
+    }
+
+    # The one copy folder a run made, or $null with the reason in $script:copyProblem.
+    function Get-OnlyCopy {
+        param($Result)
+
+        if ($Result.Code -ne 0) { $script:copyProblem = "exit $($Result.Code): $($Result.Errors)"; return $null }
+        $copies = @(Get-ChildItem -Path $Result.Scratch -Directory)
+        if ($copies.Count -ne 1 -or $copies[0].Name -notmatch '^live-copy-\d{4}-\d{2}-\d{2}-\d{6}$') {
+            $script:copyProblem = "expected one live-copy-<timestamp> folder, found: $($copies.Name -join ', ')"
+            return $null
+        }
+        return $copies[0].FullName
+    }
+
+    function Get-CopiedNames {
+        param([string]$Path)
+
+        return (Get-ChildItem -Path $Path -Force | ForEach-Object Name | Sort-Object) -join ", "
+    }
+
+    Test-Case "copies the catalog and the settings file into a new scratch folder, and prints only its path" {
+        $data = New-DataFolder (Join-Path $workDir "copy-basic-data")
+        $result = Invoke-Copier "copy-basic" @{ REELROULETTE_DATA_DIR = $data }
+        $copy = Get-OnlyCopy $result
+        if (-not $copy) { return $script:copyProblem }
+        if ($result.Output -cne $copy) { return "printed '$($result.Output)' instead of the copy's path" }
+        $names = Get-CopiedNames $copy
+        if ($names -cne "core-settings.json, library.db") { return "copied $names" }
+        $items = & sqlite3 (Join-Path $copy "library.db") "SELECT group_concat(path) FROM items;"
+        if ($items -cne "a,b") { return "the copied catalog holds '$items'" }
+        if ((Get-Content (Join-Path $copy "core-settings.json") -Raw) -cne (Get-Content (Join-Path $data "core-settings.json") -Raw)) {
+            return "the copied settings differ"
+        }
+    }
+
+    Test-Case "leaves the data folder as it was, with no -wal or -shm file beside the catalog" {
+        $data = New-DataFolder (Join-Path $workDir "copy-untouched-data")
+        $before = Get-FolderSnapshot $data
+        $result = Invoke-Copier "copy-untouched" @{ REELROULETTE_DATA_DIR = $data } @("--thumbnails", "--logs")
+        if (-not (Get-OnlyCopy $result)) { return $script:copyProblem }
+        $after = Get-FolderSnapshot $data
+        if ($after -cne $before) { return "the data folder changed. Before:`n$before`nAfter:`n$after" }
+    }
+
+    Test-Case "--thumbnails and --logs add the thumbnails folder and last.log" {
+        $data = New-DataFolder (Join-Path $workDir "copy-flags-data")
+        $copy = Get-OnlyCopy (Invoke-Copier "copy-flags" @{ REELROULETTE_DATA_DIR = $data } @("--thumbnails", "--logs"))
+        if (-not $copy) { return $script:copyProblem }
+        $names = Get-CopiedNames $copy
+        if ($names -cne "core-settings.json, last.log, library.db, thumbnails") { return "copied $names" }
+        if (-not (Test-Path (Join-Path $copy "thumbnails" "item.jpg"))) { return "the thumbnail was not copied" }
+    }
+
+    Test-Case "waits while a connection holds the catalog open, and copies what it wrote" {
+        $data = New-DataFolder (Join-Path $workDir "copy-wait-data")
+        $catalog = Join-Path $data "library.db"
+        # A writer adds item 'c' and keeps its connection open for two seconds, as the server does during an operation.
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new("bash")
+        foreach ($argument in @("-c", '{ printf "%s\n" "$2"; sleep 2; } | sqlite3 "$1"', "writer", $catalog, "INSERT INTO items VALUES ('c');")) {
+            $startInfo.ArgumentList.Add($argument)
+        }
+        $writer = [System.Diagnostics.Process]::Start($startInfo)
+        try {
+            $deadline = [datetime]::UtcNow.AddSeconds(5)
+            while (-not (Test-Path "$catalog-wal")) {
+                if ([datetime]::UtcNow -gt $deadline) { return "the writer never opened the catalog" }
+                Start-Sleep -Milliseconds 20
+            }
+            $result = Invoke-Copier "copy-wait" @{ REELROULETTE_DATA_DIR = $data }
+        }
+        finally {
+            $writer.WaitForExit()
+            $writer.Dispose()
+        }
+        $copy = Get-OnlyCopy $result
+        if (-not $copy) { return $script:copyProblem }
+        $items = & sqlite3 (Join-Path $copy "library.db") "SELECT group_concat(path) FROM items;"
+        if ($items -cne "a,b,c") { return "the copied catalog holds '$items'" }
+        if (-not $result.Errors.Contains("Waiting for the server to finish with the catalog.")) { return "it did not say it waited. Errors:`n$($result.Errors)" }
+    }
+
+    # A sqlite3 first on PATH that runs the real one, and after the first .backup adds item 'c' through a normal
+    # connection, as a server write that lands during the copy would.
+    function New-WritingSqliteShim {
+        param([string]$Name)
+
+        $shimDir = Join-Path $workDir "$Name-bin"
+        New-Item -ItemType Directory -Path $shimDir | Out-Null
+        $shim = Join-Path $shimDir "sqlite3"
+        Set-Content -Path $shim -Value @'
+#!/usr/bin/env bash
+"$REAL_SQLITE3" "$@" || exit
+if [[ "$*" == *".backup"* && ! -e "$SHIM_MARKER" ]]; then
+    touch "$SHIM_MARKER"
+    "$REAL_SQLITE3" "$SHIM_CATALOG" "INSERT INTO items VALUES ('c');"
+fi
+'@
+        & chmod +x $shim
+        return $shimDir
+    }
+
+    Test-Case "copies again when the catalog changed during the copy, and keeps the new copy" {
+        $data = New-DataFolder (Join-Path $workDir "copy-changed-data")
+        $shimDir = New-WritingSqliteShim "copy-changed"
+        $result = Invoke-Copier "copy-changed" @{
+            REELROULETTE_DATA_DIR = $data
+            PATH = "$shimDir$([System.IO.Path]::PathSeparator)$env:PATH"
+            REAL_SQLITE3 = (Get-Command sqlite3 -CommandType Application | Select-Object -First 1).Source
+            SHIM_CATALOG = Join-Path $data "library.db"
+            SHIM_MARKER = Join-Path $workDir "copy-changed.wrote"
+        }
+        $copy = Get-OnlyCopy $result
+        if (-not $copy) { return $script:copyProblem }
+        if (-not (Test-Path (Join-Path $workDir "copy-changed.wrote"))) { return "the shim never ran" }
+        $items = & sqlite3 (Join-Path $copy "library.db") "SELECT group_concat(path) FROM items;"
+        if ($items -cne "a,b,c") { return "the copied catalog holds '$items'" }
+    }
+
+    Test-Case "a failure after the copy folder exists removes it" {
+        $data = New-DataFolder (Join-Path $workDir "copy-failed-data")
+        & chmod 000 (Join-Path $data "core-settings.json")
+        $result = Invoke-Copier "copy-failed" @{ REELROULETTE_DATA_DIR = $data }
+        if ($result.Code -eq 0) { return "expected a failure, got exit 0. Errors:`n$($result.Errors)" }
+        if (-not $result.Errors.Contains("Permission denied")) { return "it failed for another reason:`n$($result.Errors)" }
+        $left = @(Get-ChildItem -Path $result.Scratch -Force)
+        if ($left.Count -ne 0) { return "the scratch folder holds: $($left.Name -join ', ')" }
+    }
+
+    Test-Case "copies the contents of a thumbnails folder that is a symlink, not the link" {
+        $data = Join-Path $workDir "copy-symlink-data"
+        $thumbnails = Join-Path $workDir "copy-symlink-thumbnails"
+        New-DataFolder $data -ThumbnailsPath $thumbnails | Out-Null
+        New-Item -ItemType SymbolicLink -Path (Join-Path $data "thumbnails") -Target $thumbnails | Out-Null
+        $copy = Get-OnlyCopy (Invoke-Copier "copy-symlink" @{ REELROULETTE_DATA_DIR = $data } @("--thumbnails"))
+        if (-not $copy) { return $script:copyProblem }
+        $copied = Get-Item -Path (Join-Path $copy "thumbnails") -Force
+        if ($copied.LinkType) { return "thumbnails was copied as a $($copied.LinkType) to $($copied.Target)" }
+        if (-not (Test-Path (Join-Path $copy "thumbnails" "item.jpg"))) { return "the thumbnail was not copied" }
+    }
+
+    Test-Case "copies from a data folder whose path holds '#' and '%', creating nothing beside it" {
+        $parent = Join-Path $workDir "copy-uri"
+        $data = New-DataFolder (Join-Path $parent "data#%41")
+        $before = Get-FolderSnapshot $parent
+        $copy = Get-OnlyCopy (Invoke-Copier "copy-uri-run" @{ REELROULETTE_DATA_DIR = $data })
+        if (-not $copy) { return $script:copyProblem }
+        $after = Get-FolderSnapshot $parent
+        if ($after -cne $before) { return "the folder around the data changed. Before:`n$before`nAfter:`n$after" }
+        $items = & sqlite3 (Join-Path $copy "library.db") "SELECT group_concat(path) FROM items;"
+        if ($items -cne "a,b") { return "the copied catalog holds '$items'" }
+    }
+
+    Test-Case "with REELROULETTE_DATA_DIR blank, it copies from the XDG config folder and the thumbnails from the XDG data folder" {
+        $configHome = Join-Path $workDir "copy-default-config"
+        $dataHome = Join-Path $workDir "copy-default-data"
+        New-DataFolder (Join-Path $configHome "ReelRoulette") -ThumbnailsPath (Join-Path $dataHome "ReelRoulette" "thumbnails") | Out-Null
+        $result = Invoke-Copier "copy-default" @{ REELROULETTE_DATA_DIR = "  "; XDG_CONFIG_HOME = $configHome; XDG_DATA_HOME = $dataHome } @("--thumbnails")
+        $copy = Get-OnlyCopy $result
+        if (-not $copy) { return $script:copyProblem }
+        $names = Get-CopiedNames $copy
+        if ($names -cne "core-settings.json, library.db, thumbnails") { return "copied $names" }
+        if (-not (Test-Path (Join-Path $copy "thumbnails" "item.jpg"))) { return "the thumbnail was not copied" }
+    }
+
+    Test-Case "a destination argument is refused, and nothing is created" {
+        $data = New-DataFolder (Join-Path $workDir "copy-destination-data")
+        $elsewhere = Join-Path $workDir "copy-destination-elsewhere"
+        $result = Invoke-Copier "copy-destination" @{ REELROULETTE_DATA_DIR = $data } @($elsewhere)
+        if ($result.Code -ne 2) { return "expected exit 2, got $($result.Code). Errors:`n$($result.Errors)" }
+        if (-not $result.Errors.Contains("Unknown argument '$elsewhere'")) { return "errors do not name the argument:`n$($result.Errors)" }
+        if ((Test-Path $result.Scratch) -or (Test-Path $elsewhere)) { return "a folder was created" }
+    }
+
+    Test-Case "a missing data folder is refused, and nothing is created" {
+        $missing = Join-Path $workDir "copy-missing-data"
+        $result = Invoke-Copier "copy-missing" @{ REELROULETTE_DATA_DIR = $missing }
+        if ($result.Code -ne 1) { return "expected exit 1, got $($result.Code). Errors:`n$($result.Errors)" }
+        if (-not $result.Errors.Contains("No ReelRoulette data folder at $missing.")) { return "errors do not name the folder:`n$($result.Errors)" }
+        if (Test-Path $result.Scratch) { return "a scratch folder was created" }
     }
 }
 finally {

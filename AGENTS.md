@@ -77,7 +77,8 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `pwsh ./tools/scripts/reset-checklist.ps1`
   - `pwsh ./tools/scripts/check-milestones.ps1`, which only reads.
   - `pwsh ./tools/scripts/cut-changelog.ps1`, which edits `CHANGELOG.md` and changes nothing if a check fails.
-  - `pwsh ./tools/scripts/tests/test-scripts.ps1`, which runs them and `reset-checklist.ps1` against fixtures, and checks `webui-packages.ps1`'s install decision, in a temporary folder.
+  - `pwsh ./tools/scripts/tests/test-scripts.ps1`, which runs them and `reset-checklist.ps1` against fixtures, checks `webui-packages.ps1`'s install decision, and runs `copy-live-data.sh` on fixture data folders, in a temporary folder.
+  - `./tools/scripts/copy-live-data.sh`, with `--thumbnails` or `--logs` when you need those, which copies the user's live data folder into a new `artifacts/scratch/live-copy-<timestamp>/` folder and prints its path.
   - `./tools/scripts/verify-linux-packaged-server-smoke.sh`, which runs an isolated packaged server.
   - `pwsh ./tools/scripts/verify-web-deploy.ps1`. It runs `npm ci` first when the WebUI's packages are missing or older than `package-lock.json`, as after the setup hook couldn't copy them or a merge changed `package-lock.json`; then ask the user before running it.
   - `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION} -NoRunVerify`, when asked to set the release version.
@@ -85,7 +86,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `git add`, `git commit`, and `git merge --no-commit main`, only as the Worktrees section says. The hook asks before a `git commit` that isn't on your own `claude/` branch and before any `git push`.
   - Read-only inspection: searching and listing files, and `sqlite3 -readonly` against a copy in `artifacts/scratch/`.
   - Reading and writing the shared side-session notes folder that the Claude app names when it starts a session. It belongs to the Claude app, not to ReelRoulette's settings, so the next rule about the user's live config doesn't cover it.
-- Never open, write to, or run anything against the user's live config, library, or settings folders. Copy what you need into `artifacts/scratch/` first, and isolate tests and experiments from real settings.
+- Never open, write to, or run anything against the user's live config, library, or settings folders, except `./tools/scripts/copy-live-data.sh`, which only reads them. To measure or inspect the user's data, run it and work on the copy it makes, and isolate tests and experiments from real settings.
 - Put ad-hoc scratch work (measurement harnesses, copies of catalogs, extracted packages, downloaded tools) under the gitignored `artifacts/scratch/` folder in the repo, not `/tmp`, which is held in memory on the development machine. Delete it when the task is done. Tests keep using their own temp folders, which they clean up themselves.
 - To show that a test fails without its fix, break the code by editing it and restore it from a copy under `artifacts/scratch/`. Never use `git stash`, `git checkout`, `git restore`, or `git reset` for this: the stash is shared by every worktree, and the others can throw away uncommitted work.
 - Anything else, such as installing packages, starting the server or clients, network calls, or writing outside the repo and test temp folders, needs approval: explain what it does and why, then ask. In a session the advisor started, ask the advisor, which holds the approvals the user gave for the round and asks the user for the rest.

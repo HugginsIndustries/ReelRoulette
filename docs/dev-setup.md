@@ -175,6 +175,17 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 - Scripts that start a server for verification or smoke testing set this variable to a fresh temporary folder, stop the server they started, and remove that folder afterward, including on failure. On Linux they also set `XDG_CONFIG_HOME` and `XDG_DATA_HOME`.
 - Dev-run helpers such as `run-server.ps1` use your real data on purpose.
 
+### Copy of your data
+
+- `./tools/scripts/copy-live-data.sh` copies the data folder the server uses into a new `artifacts/scratch/live-copy-<timestamp>/` folder in the checkout it runs from, and prints that folder's path. It runs on Linux and needs `sqlite3`.
+- It finds the folder as the server does: `REELROULETTE_DATA_DIR` when set, otherwise `~/.config/ReelRoulette/` (under `XDG_CONFIG_HOME` when that is set), with thumbnails in `~/.local/share/ReelRoulette/thumbnails/` (under `XDG_DATA_HOME` when that is set).
+- It copies `library.db` and the settings file, `core-settings.json`, which holds the server's tokens. `--thumbnails` adds the thumbnails folder and `--logs` adds `last.log`. It never copies `backups/`.
+- It never writes to the data folder:
+  - A read-only SQLite open would leave `-wal` and `-shm` files beside the catalog, so it copies the catalog with SQLite's backup from an immutable open, which writes nothing.
+  - An immutable open takes no locks, so it copies only while no server connection holds the catalog open, and keeps the copy only if the catalog didn't change meanwhile. It waits up to 30 seconds for such a moment, so a copy taken while the server runs is consistent.
+- It takes no destination and refuses any other argument. A run that fails removes its partial copy.
+- Delete the copy when you're done with it.
+
 ### Library catalog
 
 - The server opens `library.db` in the roaming directory, or the data folder override, at startup (`user_version` 9).
