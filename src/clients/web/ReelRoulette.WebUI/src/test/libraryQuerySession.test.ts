@@ -532,11 +532,11 @@ describe("libraryQuerySession", () => {
   it("retries a failed further page after the scroll position changes, having said the browse failed", async () => {
     let failAppend = true;
     const calls: number[] = [];
-    const failures: Array<[string | null, string | undefined]> = [];
+    const failures: Array<[string | null, string | undefined, string | undefined]> = [];
     const session = createLibraryQuerySession(async (request) => {
       calls.push(request.offset);
       if (request.offset > 0 && failAppend) {
-        throw new Error("offline");
+        throw new HttpStatusError(503, "The library is missing.");
       }
       return page(
         Array.from({ length: request.limit }, (_, index) => item(`a-${request.offset + index}`)),
@@ -546,7 +546,7 @@ describe("libraryQuerySession", () => {
     });
     session.setListener((event) => {
       if (event.statusMessage) {
-        failures.push([event.statusMessage, event.failure]);
+        failures.push([event.statusMessage, event.logText, event.failure]);
       }
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
@@ -556,8 +556,15 @@ describe("libraryQuerySession", () => {
     await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     const failedAppends = calls.filter((offset) => offset > 0).length;
     expect(failedAppends).toBe(1);
-    // The tiles already loaded stay, so it isn't the first page's failure, which the body shows.
-    expect(failures).toEqual([["Library browse failed. Showing the tiles already loaded.", "browse"]]);
+    // The tiles already loaded stay, so it isn't the first page's failure, which the body shows. The server's reason can
+    // name a file, so the log names only the status.
+    expect(failures).toEqual([
+      [
+        "Library browse failed: The library is missing. Showing the tiles already loaded.",
+        "Library browse failed (HTTP 503). Showing the tiles already loaded.",
+        "browse"
+      ]
+    ]);
     await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     expect(calls.filter((offset) => offset > 0)).toHaveLength(failedAppends);
 
@@ -627,6 +634,48 @@ describe("libraryQuerySession", () => {
     const reloading = session.reloadLoaded();
     releaseSearch(page([item("stale")], 1, 1));
     await Promise.all([searching, reloading]);
+
+    expect(calls).toEqual([
+      { search: "clip", offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE },
+      { search: "clip", offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE }
+    ]);
+    expect(session.snapshot().items).toHaveLength(LIBRARY_QUERY_WINDOW_SIZE);
+    expect(session.snapshot().scrollTop).toBe(0);
+    expect(scrolls.at(-1)).toBe("top");
+  });
+
+  it("keeps an open new query a read from the top when a tile update arrives while it waits", async () => {
+    let holdSearch = true;
+    let releaseSearch: (page: LibraryQueryPage) => void = () => {};
+    const calls: Array<{ search: string; offset: number; limit: number }> = [];
+    const scrolls: string[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push({ search: request.search, offset: request.offset, limit: request.limit });
+      if (request.search === "clip" && holdSearch) {
+        holdSearch = false;
+        return await new Promise<LibraryQueryPage>((resolve) => {
+          releaseSearch = resolve;
+        });
+      }
+      return page(
+        Array.from({ length: request.limit }, (_, index) => item(`tile-${request.offset + index}`)),
+        8_000,
+        8_000
+      );
+    });
+    session.setListener((event) => scrolls.push(event.scroll));
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    session.setOverlayVisible(true);
+    await session.considerFill(0, 1, LAST_PAGE_HEIGHT);
+    expect(session.snapshot().items.length).toBeGreaterThan(LIBRARY_QUERY_WINDOW_SIZE);
+    session.noteScroll(400);
+    calls.length = 0;
+    scrolls.length = 0;
+
+    const searching = session.resetQuery(createDefaultFilterState(), controls({ searchQuery: "clip" }));
+    const updating = session.applyFavorites([{ itemId: "tile-3", isFavorite: true, isBlacklisted: false }]);
+    releaseSearch(page([item("stale")], 1, 1));
+    await Promise.all([searching, updating]);
 
     expect(calls).toEqual([
       { search: "clip", offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE },

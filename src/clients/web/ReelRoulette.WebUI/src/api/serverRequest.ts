@@ -190,6 +190,14 @@ export function requestFailure(failed: string, error: unknown): RequestFailure {
 }
 
 /**
+ * Words a request the server didn't answer within `timeoutMs`, with `failed` naming what failed as for
+ * `requestFailure`. It reads "{failed}: The server didn't answer in time.", and the log names the limit.
+ */
+export function noAnswerFailure(failed: string, timeoutMs: number): RequestFailure {
+  return { text: `${failed}: The server didn't answer in time.`, logText: `${failed}: no answer within ${timeoutMs} ms.` };
+}
+
+/**
  * Shows a failed request in `dialogs`' notice, worded as `requestFailure` words it, except a 401, which shows only the
  * pairing prompt the request has asked for.
  */
@@ -230,8 +238,8 @@ export async function requestWithNotice(dialogs: NoticeDialogs, failed: string, 
 }
 
 /**
- * How long a playback request may wait for the server before the WebUI cancels it: a random pick, the range request
- * about a file whose media failed, and a play request for a fresh media URL.
+ * How long a playback request may wait for the server before the WebUI cancels it: a random pick, a play request, and
+ * the range request about a file whose media failed.
  */
 export const PLAYBACK_REQUEST_TIMEOUT_MS = 10_000;
 

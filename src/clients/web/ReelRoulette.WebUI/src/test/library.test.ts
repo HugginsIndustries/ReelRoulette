@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { unauthorizedLogText } from "../api/serverRequest";
+import { PLAYBACK_REQUEST_TIMEOUT_MS, unauthorizedLogText } from "../api/serverRequest";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import type { BulkTarget } from "../library/bulkActions";
 import { createFileLocation } from "../library/fileLocation";
@@ -178,6 +178,7 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     playCurrent: vi.fn((options?: { origin?: string }) => {
       playCalls.push(`current=${store.current.peek()?.itemId} closeIfOverlay=${panel.closeIfOverlay.mock.calls.length} origin=${options?.origin}`);
     }),
+    noteUserPlay: vi.fn(),
     next: vi.fn()
   };
   const grids: Array<ReturnType<typeof fakeGrid>> = [];
@@ -400,14 +401,20 @@ describe("library window", () => {
     t.showTab();
     t.mountGrid();
 
-    t.fakeLibrary.failures.push(500);
+    t.replies.set("/api/library/query", () => json({ error: "The library is missing.", code: "library_missing" }, 503));
     t.emit("refreshCompleted");
     await settle();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    // It relays its text when it pops up; the fake here relays nothing.
+    // It relays its log text when it pops up, which leaves the server's reason out; the fake here relays nothing.
     expect(t.statuses).toEqual([]);
     expect(t.notified).toEqual([
-      { kind: "connection", text: "Library browse failed. Showing the tiles already loaded.", icon: "sync_problem", key: "browse" }
+      {
+        kind: "connection",
+        text: "Library browse failed: The library is missing. Showing the tiles already loaded.",
+        logText: "Library browse failed (HTTP 503). Showing the tiles already loaded.",
+        icon: "sync_problem",
+        key: "browse"
+      }
     ]);
   });
 
@@ -807,6 +814,30 @@ describe("play", () => {
       expect(t.store.loading.shown.value).toBe(false);
     }
     expect(t.player.playCurrent).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a play the server doesn't answer within 10 seconds, saying so, and takes the next click", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.replies.set("/api/play/item-1", () => new Promise<Response>(() => {}));
+
+    const play = t.library.clickTile("item-1", PLAIN);
+    await vi.advanceTimersByTimeAsync(PLAYBACK_REQUEST_TIMEOUT_MS - 1);
+    expect(t.store.loading.shown.value).toBe(true);
+    await t.library.clickTile("item-1", PLAIN);
+    expect(t.requests("/api/play/item-1")).toHaveLength(1);
+    expect(t.notices).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    await play;
+    expect(t.notices).toEqual(["Playback failed: The server didn't answer in time."]);
+    expect(t.noticeLogs).toEqual(["Playback failed: no answer within 10000 ms."]);
+    expect(t.relayed).toContain("playback=library-play-timeout attempt=0 hasCurrent=false timeoutMs=10000");
+    expect(t.store.loading.shown.value).toBe(false);
+    expect(t.player.playCurrent).not.toHaveBeenCalled();
+
+    t.replies.set("/api/play/item-1", () => json(PLAYED));
+    await t.library.clickTile("item-1", PLAIN);
+    expect(t.player.playCurrent).toHaveBeenCalledTimes(1);
   });
 
   it("shows a refused, unreachable, or empty play in the notice alone, leaving the panel open", async () => {

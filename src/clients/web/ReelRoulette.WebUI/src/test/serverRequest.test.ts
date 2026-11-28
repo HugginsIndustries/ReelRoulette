@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createServerRequester,
   HttpStatusError,
+  noAnswerFailure,
   noticeRequestFailure,
   readJson,
   readWithNotice,
@@ -161,6 +162,15 @@ describe("requestFailure", () => {
       logText: "Filter load failed: The server sent an unexpected response (text/html)."
     });
     expect(requestFailure("Filter load failed", "Boom")).toEqual({ text: "Filter load failed: Boom", logText: "Filter load failed: Boom" });
+  });
+});
+
+describe("noAnswerFailure", () => {
+  it("says the server didn't answer in time, and names the time limit only in the log", () => {
+    expect(noAnswerFailure("Playback failed", 10_000)).toEqual({
+      text: "Playback failed: The server didn't answer in time.",
+      logText: "Playback failed: no answer within 10000 ms."
+    });
   });
 });
 

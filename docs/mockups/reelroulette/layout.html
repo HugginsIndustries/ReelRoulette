@@ -1754,7 +1754,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <h3>Sources (Client Filter)</h3>
               <p class="filter-hint">Checked sources are included. If all are checked, no source restriction is stored.</p>
               <div class="filter-stack">
-                <label class="filter-source"><input type="checkbox" checked> Videos (/media/videos)</label>
+                <span class="vfield vfield-after"><label class="filter-source"><input type="checkbox" checked> Videos (/media/videos)</label><span class="vfield-icon material-symbol-icon">error</span></span>
                 <label class="filter-source"><input type="checkbox" checked> Phone backup (/media/phone)</label>
                 <label class="filter-source" title="This source is turned off on the server"><input type="checkbox" checked disabled> Archive (/mnt/archive)</label>
                 <span class="filter-hint" id="no-sources" hidden>No sources returned from server.</span>
@@ -2266,7 +2266,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <legend>Server</legend>
         <label><input type="radio" name="mock-situation" value="connected"> Connected</label>
         <label><input type="radio" name="mock-situation" value="reconnecting"> Stopped: the WebUI is reconnecting</label>
-        <label><input type="radio" name="mock-situation" value="noanswer"> Not answering random picks (the WebUI gives up after 10 s; the mockup after 4)</label>
+        <label><input type="radio" name="mock-situation" value="noanswer"> Not answering random picks or library plays (the WebUI gives up after 10 s; the mockup after 4)</label>
         <label><input type="radio" name="mock-situation" value="nolibrary"> Running without a library</label>
         <label><input type="radio" name="mock-situation" value="incompatible"> Fails the compatibility check</label>
         <label><input type="radio" name="mock-situation" value="empty"> An empty library</label>
@@ -2674,6 +2674,39 @@ function ratingPairField(unratedBox, minimum, options) {
   const field = new ValidatedField(unratedBox, check, options);
   unratedBox.addEventListener("change", () => field.update());
   return field;
+}
+
+/**
+ * The Filter tab's Sources: with no source checked the filter matches nothing, so it is flagged. A source turned off on
+ * the server can't be checked or unchecked and its files never match, so only the other sources count. The icon sits
+ * after the first of them, which a held action moves to, and focusing any of them shows the tooltip. A checkbox's
+ * change updates it; call `update()` after setting the checkboxes.
+ */
+const SOURCES_PROBLEM = "Check at least one source.";
+function sourceChecksField(boxes, options) {
+  const usable = boxes.filter((box) => !box.disabled);
+  const check = () => (usable.some((box) => box.checked) ? null : { message: SOURCES_PROBLEM });
+  const field = new ValidatedField(usable[0], check, { ...options, partners: usable.slice(1) });
+  usable.forEach((box) => box.addEventListener("change", () => field.update()));
+  return field;
+}
+
+/**
+ * The Filter tab's Min and Max durations. Each is flagged as it is typed while it isn't a duration, and Max is flagged
+ * too while both are durations and Max is below Min, which matches nothing; the same length in both is allowed. Typing
+ * in Min checks Max again. Returns the two fields.
+ */
+const DURATION_ORDER_PROBLEM = "Use a maximum at or above the minimum.";
+function durationRangeFields(minInput, maxInput, options) {
+  const min = new ValidatedField(minInput, checkDuration, options);
+  const max = new ValidatedField(maxInput, (value) => {
+    const problem = checkDuration(value);
+    if (problem) return problem;
+    const [low, high] = [parseDuration(minInput.value), parseDuration(value)];
+    return typeof low === "number" && typeof high === "number" && high < low ? { message: DURATION_ORDER_PROBLEM } : null;
+  }, options);
+  minInput.addEventListener("input", () => max.update());
+  return { min, max };
 }
 
 /**
@@ -4479,7 +4512,7 @@ function pickRandom(tries = 0, byRandom = false) {
       noticeDialog({ message });
     };
     if (state.situation === "reconnecting") return void fail("Random selection failed: Couldn't reach the server.");
-    if (state.situation === "noanswer") return void fail("No response from the server. Try again.");
+    if (state.situation === "noanswer") return void fail("Random selection failed: The server didn't answer in time.");
     // A server that asks for pairing answers 401, which shows only the pairing prompt.
     if (state.pairing) return void setLoading("pick", false);
     const pool = eligibleItems();
@@ -4533,11 +4566,22 @@ function goPrevious() {
   start(history[index]);
 }
 // A tile chosen from the library: a missing file says so and nothing else changes, as a library play does today.
+// A play the server doesn't answer shows Loading… until it is given up, and a tile chosen meanwhile does nothing.
+let tilePlayWaiting = false;
 function chooseItem(item) {
   playback.autoHold = false;
   if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
   if (state.situation === "nolibrary") return void noticeDialog({ message: NO_LIBRARY_PLAY_NOTICE });
-  if (state.pairing) return;
+  if (state.pairing || tilePlayWaiting) return;
+  if (state.situation === "noanswer") {
+    tilePlayWaiting = true;
+    setLoading("play", true);
+    return void setTimeout(() => {
+      tilePlayWaiting = false;
+      setLoading("play", false);
+      noticeDialog({ message: "Playback failed: The server didn't answer in time." });
+    }, instant ? 0 : 4000);
+  }
   if (item.missing) return void noticeDialog({ message: "Media not found. The file may have moved or been deleted." });
   // The server can't read the file, so the play is refused and nothing else changes.
   if (state.mediaStalled) return void noticeDialog({ message: failureMessage(item, "unreadable") });
@@ -6056,8 +6100,7 @@ function showSub(sub) {
 }
 document.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("click", () => showSub(tab.dataset.sub)));
 
-const minField = new ValidatedField($("filter-min"), checkDuration);
-const maxField = new ValidatedField($("filter-max"), checkDuration);
+const { min: minField, max: maxField } = durationRangeFields($("filter-min"), $("filter-max"));
 // The app reads a duration into its working filter when its field changes, so text still being typed isn't in it yet:
 // the working filter keeps each duration's text as last read, when its field changes or is left, or when the tab sets
 // it.
@@ -6120,6 +6163,7 @@ function dateRangeValue({ choice, from, to }) {
 }
 const nameField = new ValidatedField($("filter-new-preset"), (value) => checkPresetName(value, null));
 const flagModesField = flagPairField($("filter-fav"), $("filter-fav-mode"), $("filter-bl"), $("filter-bl-mode"));
+const sourcesField = sourceChecksField([...generalSection("Sources").querySelectorAll('input[type="checkbox"]')]);
 // An empty duration field means no limit, and its placeholder says so.
 // Each mode dropdown applies only while its checkbox is on.
 function syncModeSelects() {
@@ -6155,7 +6199,7 @@ const unratedField = ratingPairField($("filter-unrated"), minRating);
 // The stars show the minimum the pair was last checked with, however it changed.
 unratedField.onChange(minRatingStars.draw);
 // The General section's checked fields, in their order on screen, which Apply, Add Preset, and Update use.
-const generalFields = [flagModesField, unratedField, minField, maxField, ...dateFields];
+const generalFields = [flagModesField, unratedField, sourcesField, minField, maxField, ...dateFields];
 
 // The tab's filter, as the comparisons read it. A mode dropdown holds no choice while its checkbox is off.
 function generalSection(heading) {
@@ -6219,6 +6263,7 @@ function applyFilterValue(value) {
   filterLocalModes = new Map(Object.entries(value.local));
   syncModeSelects();
   unratedField.update();
+  sourcesField.update();
   renderFilterTags();
 }
 
@@ -6278,6 +6323,7 @@ function renderApply() {
 function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
   if (field === unratedField) return `Clear Only unrated or Min Rating ${ending}.`;
+  if (field === sourcesField) return `Check at least one source ${ending}.`;
   const dates = DATE_FILTERS.find(({ from, to }) => field === from || field === to);
   if (dates) return `Correct the ${dates.label} dates ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
@@ -6507,6 +6553,7 @@ contextMenu.add("#filter-body .filter-source", (row) => {
   return [[menuItem("filter_alt", "Only this source", () => {
     box.checked = true;
     others.forEach((other) => (other.checked = false));
+    sourcesField.update();
     renderApply();
   }, { reason: box.disabled ? SOURCE_OFF : null })]];
 });
@@ -6772,7 +6819,7 @@ function renderFilterTags() {
 function renderFilterEmpty() {
   const empty = state.situation === "empty";
   const stack = $("no-sources").parentElement;
-  stack.querySelectorAll("label").forEach((label) => (label.hidden = empty));
+  stack.querySelectorAll(".filter-source").forEach((label) => ((label.closest(".vfield") || label).hidden = empty));
   $("no-sources").hidden = !empty;
 }
 
@@ -7813,7 +7860,7 @@ function reloadGrid() {
   shownMatch = match;
   if (state.situation === "reconnecting") {
     // A failure, so not the Connection kind's check.
-    notes.notify({ kind: "connection", icon: "sync_problem", text: "Library browse failed. Showing the tiles already loaded.", key: "browse" });
+    notes.notify({ kind: "connection", icon: "sync_problem", text: "Library browse failed: Couldn't reach the server. Showing the tiles already loaded.", key: "browse" });
     return;
   }
   placeholderUntil = Date.now() + (instant ? 0 : 450);

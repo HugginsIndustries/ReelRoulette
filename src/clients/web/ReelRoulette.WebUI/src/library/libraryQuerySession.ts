@@ -86,6 +86,8 @@ export interface LibraryQuerySessionEvent {
    * one, which leaves the tiles already loaded.
    */
   failure?: "load" | "browse";
+  /** A later page's failure's `last.log` line, with its status and without the server's reason, for the popup to relay. */
+  logText?: string;
   /** The HTTP status of the failed request `statusMessage` reports, when it carried one, such as 401. */
   failureStatus?: number | null;
 }
@@ -453,7 +455,6 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
     const windows = kind === "reload" ? libraryQueryReloadWindows(items.length) : kind === "append"
       ? [libraryQueryNextWindow(items.length)]
       : [{ offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE }];
-    const requestedOffset = kind === "append" ? items.length : 0;
     if (!hasResult) {
       notify({ scroll: "keep", statusMessage: null });
     }
@@ -481,13 +482,6 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (gen !== generation || controller.signal.aborted) {
         return;
       }
-      if (kind === "append" && items.length !== requestedOffset) {
-        if (gen === generation) {
-          inFlight = null;
-        }
-        return;
-      }
-
       if (kind === "append") {
         items = items.concat(collected);
       } else {
@@ -532,9 +526,11 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       if (gen === generation) {
         inFlight = null;
+        const failure = requestFailure("Library browse failed", error);
         notify({
           scroll: "keep",
-          statusMessage: "Library browse failed. Showing the tiles already loaded.",
+          statusMessage: `${failure.text} Showing the tiles already loaded.`,
+          logText: `${failure.logText} Showing the tiles already loaded.`,
           failure: "browse",
           failureStatus: errorHttpStatus(error)
         });

@@ -596,12 +596,12 @@ describe("random pick", () => {
     expect(indicatorState()).toBe("loading");
 
     await vi.advanceTimersByTimeAsync(9_500);
-    expect(openNotices()).toEqual(["No response from the server. Try again."]);
+    expect(openNotices()).toEqual(["Random selection failed: The server didn't answer in time."]);
     expect(indicatorState()).toBeNull();
     expect(server.logLines()).toEqual(
       expect.arrayContaining([
         "playback=random-pick-timeout attempt=0 hasCurrent=false timeoutMs=10000",
-        statusLogLine("No response from the server. Try again.", null, 0)
+        statusLogLine("Random selection failed: no answer within 10000 ms.", null, 0)
       ])
     );
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyItemStateToCurrent, createItemStateCache, type CurrentItem } from "../library/currentItemState";
+import { applyItemStateToCurrent, type CurrentItem } from "../library/currentItemState";
 
 function current(itemId: string, id: string): CurrentItem & { id: string } {
   return { id, itemId, isFavorite: false, isBlacklisted: false };
@@ -22,36 +22,5 @@ describe("currentItemState", () => {
     const playing = current("id-upper", "/media/Clip.mp4");
     expect(applyItemStateToCurrent(playing, { itemId: "/media/Clip.mp4", isFavorite: true })).toBe(false);
     expect(applyItemStateToCurrent(null, { itemId: "id-upper", isFavorite: true })).toBe(false);
-  });
-
-  it("keeps cached favorite and blacklist apart for two files whose paths differ only in case", () => {
-    const cache = createItemStateCache();
-    cache.remember("id-lower", { isFavorite: true, isBlacklisted: false });
-
-    const upper = current("id-upper", "/media/Clip.mp4");
-    const lower = current("id-lower", "/media/clip.mp4");
-    cache.applyTo(upper);
-    cache.applyTo(lower);
-
-    expect(upper.isFavorite).toBe(false);
-    expect(lower.isFavorite).toBe(true);
-  });
-
-  it("forgets every item's state once cleared", () => {
-    const cache = createItemStateCache();
-    cache.remember("id-a", { isFavorite: true, isBlacklisted: false });
-    cache.clear();
-
-    const item = current("id-a", "/media/a.mp4");
-    cache.applyTo(item);
-    expect(item.isFavorite).toBe(false);
-  });
-
-  it("ignores an item with no item id", () => {
-    const cache = createItemStateCache();
-    cache.remember("", { isFavorite: true, isBlacklisted: false });
-    const item: CurrentItem = { isFavorite: false, isBlacklisted: false };
-    cache.applyTo(item);
-    expect(item.isFavorite).toBe(false);
   });
 });

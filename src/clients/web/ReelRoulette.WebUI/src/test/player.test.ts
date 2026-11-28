@@ -499,10 +499,157 @@ describe("createPlayer", () => {
     expect(page.store.loading.shown.value).toBe(true);
     await vi.advanceTimersByTimeAsync(9_500);
     await pick;
-    expect(page.notices).toEqual(["No response from the server. Try again."]);
+    expect(page.notices).toEqual(["Random selection failed: The server didn't answer in time."]);
+    expect(page.noticeLogs).toEqual(["Random selection failed: no answer within 10000 ms."]);
+    expect(page.relayed).toContain("playback=random-pick-timeout attempt=0 hasCurrent=false timeoutMs=10000");
     expect(page.store.loading.shown.value).toBe(false);
     expect(page.statuses).toEqual([]);
     expect(page.notified).toEqual([]);
+  });
+
+  it("drops a pick that answers after Previous, keeping the entry Previous played, and lets go of Loading…", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    page.play(SECOND_VIDEO);
+    page.player.videoPlaying();
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    page.player.previous();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.elements.video.src).toContain("item-video");
+
+    answer(randomAnswer(PHOTO));
+    await pick;
+    expect(page.store.current.value?.itemId).toBe("item-video");
+    expect(page.store.history.value.map((entry) => entry.itemId)).toEqual(["item-video", "item-other"]);
+    expect(page.elements.photo.src).toBe("");
+    expect(page.relayed).toContain("playback=random-pick-stale attempt=3 hasCurrent=true");
+    page.player.videoPlaying();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it.each([
+    ["at the oldest entry", true],
+    ["with nothing playing", false]
+  ])("plays a pick that answers after Previous %s, which starts nothing", async (_where, playing) => {
+    vi.useFakeTimers();
+    const page = setup();
+    if (playing) {
+      page.play(VIDEO);
+      page.player.videoPlaying();
+    }
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    page.player.previous();
+
+    answer(randomAnswer(PHOTO));
+    await pick;
+    expect(page.store.current.value?.itemId).toBe("item-photo");
+    expect(page.store.history.value.map((entry) => entry.itemId)).toEqual(playing ? ["item-video", "item-photo"] : ["item-photo"]);
+    expect(page.relayed.some((line) => line.startsWith("playback=random-pick-stale"))).toBe(false);
+  });
+
+  it("plays a pick once it answers, though Random was pressed again while it waited", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    await page.player.pickRandom();
+
+    answer(randomAnswer(PHOTO));
+    await pick;
+    expect(page.store.current.value?.itemId).toBe("item-photo");
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.relayed.some((line) => line.startsWith("playback=random-pick-stale"))).toBe(false);
+  });
+
+  it("drops a pick that answers while the server is asked about the file Previous played, whose media failed", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    page.play(SECOND_VIDEO);
+    page.player.videoPlaying();
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    page.player.previous();
+    await vi.advanceTimersByTimeAsync(0);
+    holdReply(page, "/api/media/item-video");
+    page.player.videoFailed();
+    await vi.advanceTimersByTimeAsync(0);
+
+    answer(randomAnswer(PHOTO));
+    await pick;
+    expect(page.store.current.value?.itemId).toBe("item-video");
+    expect(page.store.history.value.map((entry) => entry.itemId)).toEqual(["item-video", "item-other"]);
+    expect(page.relayed).toContain("playback=random-pick-stale attempt=3 hasCurrent=true");
+  });
+
+  it("drops a pick that answers after a library tile was chosen, before the tile's play answers, which then plays", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    // The library notes the tile as it asks the server to play it.
+    page.player.noteUserPlay();
+
+    answer(randomAnswer(PHOTO));
+    await pick;
+    expect(page.store.current.value).toBeNull();
+    expect(page.elements.photo.src).toBe("");
+    expect(page.relayed).toContain("playback=random-pick-stale attempt=0 hasCurrent=false");
+
+    page.play(SECOND_VIDEO, "library");
+    expect(page.store.history.value.map((entry) => entry.itemId)).toEqual(["item-other"]);
+    expect(page.elements.video.src).toContain("item-other");
+    page.player.videoPlaying();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("plays a pick the user asked for, though autoplay moved on in the history while it waited", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(4);
+    page.play(PHOTO);
+    page.play(SECOND_VIDEO);
+    page.player.previous();
+    await vi.advanceTimersByTimeAsync(0);
+    page.player.photoLoaded();
+    page.player.toggleAutoplay();
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(page.store.current.value?.itemId).toBe("item-other");
+
+    answer(randomAnswer(VIDEO));
+    await pick;
+    expect(page.store.current.value?.itemId).toBe("item-video");
+    expect(page.store.history.value.map((entry) => entry.itemId)).toEqual(["item-photo", "item-other", "item-video"]);
+    expect(page.relayed.some((line) => line.startsWith("playback=random-pick-stale"))).toBe(false);
+  });
+
+  it("gives a pick that answers after a newer item failed to the skip that item's failure waits on", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    page.play(SECOND_VIDEO);
+    page.player.previous();
+    await vi.advanceTimersByTimeAsync(0);
+    const answer = holdReply(page, "/api/random");
+    const pick = page.player.pickRandom();
+    // Next steps to a missing file, whose skip forward joins the pick already waiting.
+    page.replies.set("/api/play/item-other", () => json({ error: "Media not found", code: "play_media_missing" }, 404));
+    page.player.next();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notified).toEqual([expect.objectContaining({ kind: "skips", detail: "other.mp4" })]);
+
+    answer(randomAnswer(PHOTO));
+    await pick;
+    expect(page.store.current.value?.itemId).toBe("item-photo");
+    expect(page.store.history.value.map((entry) => entry.itemId)).toEqual(["item-video", "item-other", "item-photo"]);
+    expect(page.requests("/api/random")).toHaveLength(1);
   });
 
   it("with Autoplay, moves a photo on after Advance after, and with Loop repeats it, keeping it on screen without loading or recording it again", async () => {
@@ -1364,7 +1511,7 @@ describe("createPlayer", () => {
     expect(page.elements.video.plays).toHaveLength(1);
   });
 
-  it("favorites and blacklists the playing item with the device's client id, each clearing the other, and remembers it for history", async () => {
+  it("favorites and blacklists the playing item with the device's client id, each clearing the other", async () => {
     const page = setup();
     page.play(VIDEO);
 
@@ -1375,9 +1522,6 @@ describe("createPlayer", () => {
     await page.player.toggleBlacklist();
     expect(page.requests("/api/blacklist")[0]!.body).toEqual({ itemId: "item-video", isBlacklisted: true, clientId: "client-1" });
     expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, true]);
-
-    page.play(VIDEO);
-    expect(page.player.blacklisted.value).toBe(true);
 
     page.replies.set("/api/favorite", () => json({}, 500));
     await page.player.toggleFavorite();
@@ -1411,7 +1555,7 @@ describe("createPlayer", () => {
     ]);
   });
 
-  it("applies a favorite or blacklist answer that arrives after Next to the item it was for", async () => {
+  it("leaves a favorite or blacklist answer that arrives after Next off the item playing then, and a step back shows the server's state", async () => {
     const page = setup();
     page.play(VIDEO);
     const answer = holdReply(page, "/api/favorite");
@@ -1426,23 +1570,34 @@ describe("createPlayer", () => {
       false,
       false
     ]);
-    const cached: PlayingItem = { ...VIDEO };
-    page.store.itemStates.applyTo(cached);
-    expect(cached.isFavorite).toBe(true);
+    // The step back's play answer brings the item's state as the server has it.
+    page.replies.set("/api/play/item-video", () => json({ ...VIDEO, isFavorite: true }));
     page.player.previous();
-    expect([page.store.current.value?.itemId, page.player.favorite.value]).toEqual(["item-video", true]);
+    await vi.waitFor(() => expect([page.store.current.value?.itemId, page.player.favorite.value]).toEqual(["item-video", true]));
     expect(page.notified).toEqual([{ kind: "actions", text: "Added to favorites", detail: "clip.mp4", key: "flag" }]);
   });
 
-  it("drops the item states it kept on a resync, so an item played again shows its play's state, and reads the playing item", () => {
+  it("reads the playing item again on a resync, and shows the favorite and blacklist the server reads", async () => {
     const page = setup();
     page.play(VIDEO);
-    page.emit("itemStateChanged", { itemId: "item-other", path: "/media/other.mp4", isFavorite: true, isBlacklisted: false });
+    page.replies.set("/api/library/item", () =>
+      json({ id: VIDEO.id, sourceId: "s1", fileName: VIDEO.displayName, mediaType: 0, isFavorite: false, isBlacklisted: true, rating: null, tags: [] })
+    );
     page.emit("resyncRequired", {});
     expect(page.requests("/api/library/item").map((request) => request.body)).toEqual([{ id: "item-video" }]);
+    await vi.waitFor(() => expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, true]));
+  });
 
+  it("shows the favorite and blacklist a play answer gives, over an item-state event from before it", async () => {
+    const page = setup();
     page.play(SECOND_VIDEO);
-    expect(page.player.favorite.value).toBe(false);
+    page.emit("itemStateChanged", { itemId: "item-video", path: VIDEO.id, isFavorite: true, isBlacklisted: false, clientId: "another-client" });
+    // The server's answer is newer than the event, as when this device missed a later change's event.
+    page.answerRandom({ ...VIDEO, isFavorite: false, isBlacklisted: false });
+    await page.player.pickRandom();
+
+    expect(page.store.current.value?.itemId).toBe("item-video");
+    expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, false]);
   });
 
   it("shows a favorite or blacklist that couldn't reach the server in the notice, leaving the buttons as they were", async () => {
@@ -1463,7 +1618,7 @@ describe("createPlayer", () => {
     expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, false]);
   });
 
-  it("applies item-state events to the playing item and its cache, and pops up another device's change", () => {
+  it("applies item-state events to the playing item only, and pops up another device's change", () => {
     const page = setup();
     page.play(VIDEO);
     page.emit("itemStateChanged", { itemId: "item-video", path: "/media/clip.mp4", isFavorite: true, isBlacklisted: false });
@@ -1472,8 +1627,6 @@ describe("createPlayer", () => {
     page.play(SECOND_VIDEO);
     page.emit("itemStateChanged", { itemId: "item-video", path: "/media/clip.mp4", isFavorite: false, isBlacklisted: true });
     expect(page.player.blacklisted.value).toBe(false);
-    page.player.previous();
-    expect(page.player.blacklisted.value).toBe(true);
 
     // An event without an item changes nothing and says nothing.
     page.emit("itemStateChanged", { path: "/media/clip.mp4", isFavorite: true });
@@ -1484,7 +1637,7 @@ describe("createPlayer", () => {
     ]);
   });
 
-  it("applies a batch's item states to the playing item and its cache, and pops up another device's batch once with no second line", () => {
+  it("applies a batch's item states to the playing item, and pops up another device's batch once with no second line", () => {
     const page = setup();
     page.play(VIDEO);
     const batch = (clientId: string | null) => ({
@@ -2107,7 +2260,7 @@ describe("Loading… on the player's indicator", () => {
 
     await vi.advanceTimersByTimeAsync(9_500);
     await pick;
-    expect(page.notices).toEqual(["No response from the server. Try again."]);
+    expect(page.notices).toEqual(["Random selection failed: The server didn't answer in time."]);
     expect(page.store.loading.shown.value).toBe(false);
   });
 

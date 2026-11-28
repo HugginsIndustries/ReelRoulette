@@ -1800,6 +1800,22 @@ describe("Edit Tags", () => {
     ]);
   });
 
+  it("the Edit Tag dialog holds a rename that only changes capitals, and Save sends it", async () => {
+    const { tags } = await mountTags();
+    await openEditor();
+    await editTag("Beach");
+    await typeInto(modalName(), "BEACH");
+    await click(modalButton("Save"));
+    expect(modalOpen()).toBe(false);
+    expect(savePending()).toBe(true);
+    expect(chipNames("Places")).toEqual(["alps", "BEACH"]);
+
+    await save();
+    expect(tags.saves()).toEqual([
+      { path: "/api/tag-editor/rename-tag", body: { oldName: "Beach", newName: "BEACH", newCategoryId: null } }
+    ]);
+  });
+
   it("Delete in Edit Tag asks above it, Cancel goes back to it, and confirming deletes the tag with any change held for it", async () => {
     const { tags } = await mountTags();
     await openEditor();

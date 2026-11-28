@@ -2,11 +2,11 @@ import { signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem, type PlayItemFailure } from "../api/coreApi";
 import {
   HttpStatusError,
+  noAnswerFailure,
   noticeRequestFailure,
   PLAYBACK_REQUEST_TIMEOUT_MS,
   ServerUnreachableError,
-  UnauthorizedError,
-  withTimeout
+  UnauthorizedError
 } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { applyItemStateToCurrent, type ItemFlags } from "../library/currentItemState";
@@ -183,6 +183,11 @@ export interface Player {
   takeOverVideo(video: VideoElement): void;
   /** Plays the current item, a play the user started, so the count of files skipped in a row starts over. */
   playCurrent(options?: PlayOptions): void;
+  /**
+   * Notes a play the user started outside the player, such as a library tile, from the moment it is asked for, so a
+   * random pick waiting since then gives way to it.
+   */
+  noteUserPlay(): void;
   /**
    * Picks a new item, as Next does at the end of history and Random from anywhere in it, and puts it where Random
    * behavior says: at the end with Jump, or right after the playing item with Insert. A press starts the count of files
@@ -373,6 +378,14 @@ export function createPlayer(options: PlayerOptions): Player {
   let stepWaiting = false;
   /** A random pick waits for the server, holding Loading…. */
   let pickWaiting = false;
+  /**
+   * The plays the user has started, each counted as it is asked for: a press of Next, Random, or Play with nothing
+   * playing, a Previous that steps back, or a library tile. Autoplay and a skip on from a file that failed aren't the
+   * user's.
+   */
+  let userPlays = 0;
+  /** The count of the user's plays when a pick was last asked for, by a press or by a skip that joins the pick waiting. */
+  let pickAskedAt = 0;
   /** The video of the attempt playing now has played, so its timer can run. */
   let videoStarted = false;
   /** In Normal mode, a short video's timer has run, so the repeat in progress is its last. */
@@ -758,7 +771,6 @@ export function createPlayer(options: PlayerOptions): Player {
       notifyPlaybackStarted(item);
     }
 
-    store.itemStates.applyTo(item);
     photoTimer.clear();
     videoTimer.clear();
     videoStarted = false;
@@ -884,10 +896,7 @@ export function createPlayer(options: PlayerOptions): Player {
    */
   async function requestPlay(item: PlayingItem, recordPlayback: boolean): Promise<PlayAnswer> {
     const identity = { clientId: store.identity.clientId, sessionId: store.identity.sessionId };
-    const outcome = await withTimeout(
-      (signal) => requestPlayItem({ apiBaseUrl }, item.itemId, identity, api.request, { recordPlayback, signal }),
-      PLAYBACK_REQUEST_TIMEOUT_MS
-    );
+    const outcome = await requestPlayItem(api, item.itemId, identity, { recordPlayback });
     if (outcome.kind === "timedOut") return { kind: "timedOut" };
     if (outcome.kind === "failed") {
       if (outcome.error instanceof UnauthorizedError) return { kind: "unauthorized" };
@@ -1205,9 +1214,17 @@ export function createPlayer(options: PlayerOptions): Player {
     autoPauseHolds = false;
   }
 
+  /** A press that starts a play, counted as the user's from that moment, which then starts as `userStarted` says. */
+  function userPressed(): void {
+    userPlays += 1;
+    userStarted();
+  }
+
   /**
    * Picks with the applied filter and the Randomization tab's options, and puts the pick at the end of the history or,
-   * with `afterCurrent`, right after the playing item. Each answer brings this device's Shuffle cycle numbers.
+   * with `afterCurrent`, right after the playing item. Each answer brings this device's Shuffle cycle numbers. A pick
+   * that answers after the user started another play since it was last asked for, such as with Previous or a library
+   * tile, is dropped, so the user's choice stands.
    */
   async function pick(placement: "end" | "afterCurrent" = "end"): Promise<void> {
     const refusal = playRefusalNotice(store);
@@ -1224,6 +1241,7 @@ export function createPlayer(options: PlayerOptions): Player {
       pickWaiting = true;
       store.loading.hold("pick");
     }
+    pickAskedAt = userPlays;
     const outcome = await randomPicker.pick(body);
     if (outcome.kind === "busy") {
       return;
@@ -1237,10 +1255,12 @@ export function createPlayer(options: PlayerOptions): Player {
         settleFailedMedia();
       }
       switch (outcome.kind) {
-        case "timedOut":
+        case "timedOut": {
           trace("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
-          void dialogs.notice("No response from the server. Try again.");
+          const { text, logText } = noAnswerFailure("Random selection failed", outcome.timeoutMs);
+          void dialogs.notice(text, logText);
           return;
+        }
         case "unauthorized":
           // The request asked for pairing, whose prompt is the only signal, and sent its line.
           return;
@@ -1250,6 +1270,13 @@ export function createPlayer(options: PlayerOptions): Player {
         case "none":
           void dialogs.notice("No eligible media for current filters.");
           return;
+      }
+
+      // The user started another play since the pick was last asked for, such as with Previous or a library tile, so
+      // their choice stands. A skip on from a file that failed asks again, joining this pick, which it then takes.
+      if (userPlays !== pickAskedAt) {
+        trace("info", "random-pick-stale");
+        return;
       }
 
       // The media holds Loading… before the pick lets go of it, so a pick and its media load are one loading period.
@@ -1287,9 +1314,8 @@ export function createPlayer(options: PlayerOptions): Player {
     }
   }
 
-  /** Keeps an item's favorite and blacklist, and shows them while that item plays. */
+  /** Shows an item's favorite and blacklist while that item plays. */
   function takeItemState(itemId: string, flags: ItemFlags): void {
-    store.itemStates.remember(itemId, flags);
     if (applyItemStateToCurrent(store.current.peek(), { itemId, ...flags })) {
       showToggles();
     }
@@ -1378,7 +1404,6 @@ export function createPlayer(options: PlayerOptions): Player {
     const current = store.current.peek();
     let currentChanged = false;
     for (const item of payload.items ?? []) {
-      store.itemStates.remember(item.itemId, { isFavorite: item.isFavorite, isBlacklisted: item.isBlacklisted });
       currentChanged = applyItemStateToCurrent(current, item) || currentChanged;
     }
     if (currentChanged) {
@@ -1391,9 +1416,9 @@ export function createPlayer(options: PlayerOptions): Player {
     notifications.notify({ kind: "devices", text: bulkItemStateText(payload), key: "sync-bulk" });
   });
 
-  // Events may have been missed, so the states they brought may be out of date, and the playing item is read again.
+  // Events may have been missed, so the playing item's favorite, blacklist, and rating may be out of date, and it is read
+  // again.
   connection.on("resyncRequired", () => {
-    store.itemStates.clear();
     void readPlayingItem();
   });
 
@@ -1486,14 +1511,18 @@ export function createPlayer(options: PlayerOptions): Player {
       play(playOptions.origin ?? "forward");
     },
 
+    noteUserPlay() {
+      userPlays += 1;
+    },
+
     pickRandom() {
-      userStarted();
+      userPressed();
       return pick(store.randomBehavior.peek() === "insert" ? "afterCurrent" : "end");
     },
 
     playOrPause() {
       if (!store.current.peek()) {
-        userStarted();
+        userPressed();
         void pick();
         return;
       }
@@ -1524,13 +1553,16 @@ export function createPlayer(options: PlayerOptions): Player {
     },
 
     next() {
-      userStarted();
+      userPressed();
       advance();
     },
 
     previous() {
       userStarted();
-      stepHistory(-1);
+      // At the oldest entry, or with nothing playing, Previous starts nothing, so a pick waiting still plays.
+      if (stepHistory(-1)) {
+        userPlays += 1;
+      }
     },
 
     toggleLoop() {

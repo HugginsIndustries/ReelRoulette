@@ -151,12 +151,12 @@ Reconnect/resync behavior:
   - The Library tab puts the new rating on a loaded tile, and reloads its loaded window only when the change can alter what it shows, its order, or how many items match: under Only unrated or a minimum rating when `rating` takes a loaded tile out, or `rating` and `previousRating` show an item outside it comes in or goes out, and under the Rating sort for any change.
 - `bulkItemStateChanged`, from `POST /api/bulk/item-state`, includes `flag` (`favorite` or `blacklist`) and `value`, what the request set, `count`, how many of the named items are in the library, `items`, the ones whose favorite or blacklist changed, each with `itemId`, `isFavorite`, `isBlacklisted`, `previousIsFavorite`, and `previousIsBlacklisted`, and `clientId`, from the request, or null when it named none.
   - It is published once for the whole request, when `count` is above 0, in place of one `itemStateChanged` per item, and goes to every client.
-  - The WebUI updates its loaded tiles, the playing item, and its item-state cache from `items`, and a client whose `clientId` isn't the event's pops up one message for the batch, such as "Added 3 items to favorites on another device".
+  - The WebUI updates its loaded tiles and the playing item from `items`, and a client whose `clientId` isn't the event's pops up one message for the batch, such as "Added 3 items to favorites on another device".
 - `bulkItemRatingChanged`, from `POST /api/bulk/rating`, includes `rating`, the rating the request set in stars or null for none, `count`, `items`, the ones whose rating changed, each with `itemId`, `rating`, and `previousRating`, and `clientId`, published once for the request when `count` is above 0.
   - The WebUI applies it as it applies `itemRatingChanged` to each item, and another client pops up one message for the batch, such as "Rated 3 items 3.5 stars on another device".
 - `itemsRemoved`, from `POST /api/library/delete-files` and `POST /api/duplicates/apply`, includes `itemIds`, the items removed from the library, and is published only when it removed any. The WebUI reloads its loaded library window, its Stats tab, and the library's loudness baseline once.
 - `itemTagsChanged` includes `resolvedItemIds`, the catalog item ids of the files the change applies to. The WebUI matches tiles and its own saves by them.
-- The WebUI matches every item event to loaded tiles, the playing item, and its item-state cache by item id only, so two files whose paths differ only in case stay apart. It names items by id in favorite, blacklist, rating, record-playback, and tag-editor requests.
+- The WebUI matches every item event to loaded tiles and the playing item by item id only, so two files whose paths differ only in case stay apart. It names items by id in favorite, blacklist, rating, record-playback, and tag-editor requests.
 
 ## Error and Simulation Semantics
 

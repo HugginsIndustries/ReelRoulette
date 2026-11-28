@@ -1,7 +1,13 @@
 import { computed, effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
 import type { ControlAccess } from "../api/controlAccess";
 import { requestPlayItem } from "../api/coreApi";
-import { errorText, noticeRequestFailure, UnauthorizedError } from "../api/serverRequest";
+import {
+  errorText,
+  noAnswerFailure,
+  noticeRequestFailure,
+  PLAYBACK_REQUEST_TIMEOUT_MS,
+  UnauthorizedError
+} from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterSource } from "../filter/filterDialogModel";
 import { filterSummaryParts } from "../filter/filterSummaryModel";
@@ -215,7 +221,7 @@ export interface LibraryOptions {
   api: AppApi;
   connection: ServerConnection;
   /** Plays a chosen tile, and moves on, as Next does, after a delete removes the playing item. */
-  player: Pick<Player, "playCurrent" | "next">;
+  player: Pick<Player, "playCurrent" | "noteUserPlay" | "next">;
   /**
    * The in-app dialogs, for a play that fails, a refresh that kept a source's items, and the bulk actions' confirmations
    * and failures.
@@ -338,7 +344,13 @@ export function createLibrary(options: LibraryOptions): Library {
     // A failed first page shows in place in the body, so it only relays; a later page's failure keeps the tiles
     // already loaded, and pops up.
     if (event.failure === "browse") {
-      notifications.notify({ kind: "connection", text: event.statusMessage, icon: "sync_problem", key: "browse" });
+      notifications.notify({
+        kind: "connection",
+        text: event.statusMessage,
+        logText: event.logText,
+        icon: "sync_problem",
+        key: "browse"
+      });
     } else {
       store.relayStatus(event.statusMessage);
     }
@@ -589,18 +601,30 @@ export function createLibrary(options: LibraryOptions): Library {
 
     playInFlight = true;
     store.loading.hold("play");
+    // The tile is the user's choice from now, so a random pick that answers before this play does gives way to it.
+    player.noteUserPlay();
     trace("info", "library-play-start");
 
     try {
       // The play counts unless Don't record plays is on.
-      const result = await requestPlayItem(
-        { apiBaseUrl },
+      const outcome = await requestPlayItem(
+        api,
         itemId,
         { clientId: store.identity.clientId, sessionId: store.identity.sessionId },
-        api.request,
         { recordPlayback: !store.dontRecordPlays.peek() }
       );
 
+      if (outcome.kind === "timedOut") {
+        trace("warn", "library-play-timeout", { timeoutMs: PLAYBACK_REQUEST_TIMEOUT_MS });
+        const { text, logText } = noAnswerFailure("Playback failed", PLAYBACK_REQUEST_TIMEOUT_MS);
+        void dialogs.notice(text, logText);
+        return;
+      }
+      if (outcome.kind === "failed") {
+        throw outcome.error;
+      }
+
+      const result = outcome.value;
       if (!result.ok) {
         trace("warn", "library-play-failed", {
           statusCode: result.refusal.status,

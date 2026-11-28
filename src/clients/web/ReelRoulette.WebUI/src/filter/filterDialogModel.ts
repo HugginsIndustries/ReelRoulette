@@ -235,6 +235,24 @@ function sourcesChecked(sourceIds: readonly string[], sources: readonly FilterSo
 }
 
 /**
+ * The General fields' source checks for a source list loaded again. A source already shown keeps its check, by id, so
+ * checks the working filter doesn't hold, as while no source is checked, stay; a new source is checked as `filter`
+ * includes it.
+ */
+export function sourceChecksForLoaded(
+  draft: GeneralDraft,
+  shown: readonly FilterSource[],
+  loaded: readonly FilterSource[],
+  filter: FilterState
+): boolean[] {
+  const fromFilter = sourcesChecked(filter.includedSourceIds, loaded);
+  return loaded.map((source, index) => {
+    const before = shown.findIndex((other) => namesEqualIgnoringCase(other.id, source.id));
+    return before >= 0 ? !!draft.sourceChecked[before] : fromFilter[index]!;
+  });
+}
+
+/**
  * A duration as its field reads, empty as no limit, or the working filter's duration while the text is not valid. The
  * preset the dialog is named for follows the working filter, so text that is not valid doesn't change it, and the
  * problem holds the actions that would use the duration.
@@ -273,8 +291,19 @@ export function generalDraftAfterApply(draft: GeneralDraft): GeneralDraft {
 }
 
 /**
+ * Whether no source the user can check is checked while there is one, which matches nothing. A source turned off on
+ * the server can't be checked or unchecked, and the server skips its files, so only the other sources count.
+ */
+function noEnabledSourceChecked(draft: GeneralDraft, sources: readonly FilterSource[]): boolean {
+  const enabled = sources.flatMap((source, index) => (source.isEnabled === false ? [] : [!!draft.sourceChecked[index]]));
+  return enabled.length > 0 && !enabled.includes(true);
+}
+
+/**
  * The working filter with the General tab's fields read into it. Sources checked as they were filled keep the list
- * they were filled from; otherwise, when every source is checked, none is stored.
+ * they were filled from; otherwise, when every source is checked, none is stored. While no enabled source is checked,
+ * the working filter keeps its sources, as it keeps a duration whose text is not valid, and the problem holds the
+ * actions that would use them.
  */
 export function filterWithGeneralDraft(
   filter: FilterState,
@@ -296,6 +325,9 @@ export function filterWithGeneralDraft(
   next.maxDurationSeconds = draftDurationOrKept(draft.maxText, next.maxDurationSeconds);
   next.addedRange = draftDateRangeOrKept(draft.added, next.addedRange);
   next.createdRange = draftDateRangeOrKept(draft.created, next.createdRange);
+  if (noEnabledSourceChecked(draft, sources)) {
+    return next;
+  }
   const startChecked = sourcesChecked(draft.startSourceIds, sources);
   if (startChecked.every((checked, index) => checked === !!draft.sourceChecked[index])) {
     next.includedSourceIds = [...draft.startSourceIds];
@@ -309,14 +341,14 @@ export function filterWithGeneralDraft(
 /**
  * The filter with each duration and date range as its General fields read, so a duration still being typed, which
  * typing doesn't read into the working filter, counts as it shows: empty text is no limit. Null while a duration's
- * text isn't valid or a custom range has a problem, which differs from every filter.
+ * text isn't valid, a custom range has a problem, or no enabled source is checked, which differs from every filter.
  */
-export function filterAsFieldsRead(filter: FilterState, draft: GeneralDraft): FilterState | null {
+export function filterAsFieldsRead(filter: FilterState, draft: GeneralDraft, sources: readonly FilterSource[]): FilterState | null {
   const min = parseTypedDuration(draft.minText);
   const max = parseTypedDuration(draft.maxText);
   const added = draftDateRange(draft.added);
   const created = draftDateRange(draft.created);
-  if (min === "invalid" || max === "invalid" || added === "invalid" || created === "invalid") {
+  if (min === "invalid" || max === "invalid" || added === "invalid" || created === "invalid" || noEnabledSourceChecked(draft, sources)) {
     return null;
   }
   return { ...cloneFilterState(filter), minDurationSeconds: min, maxDurationSeconds: max, addedRange: added, createdRange: created };
@@ -324,12 +356,13 @@ export function filterAsFieldsRead(filter: FilterState, draft: GeneralDraft): Fi
 
 /**
  * The filter dialog's fields that can hold a value that is not valid. The flag modes are the Favorites and Blacklisted
- * filters, and the rating filters are Only unrated and Min Rating, each checked as a pair. The date fields are each
- * date filter's From and To.
+ * filters, and the rating filters are Only unrated and Min Rating, each checked as a pair. The sources are the enabled
+ * sources' checkboxes, checked together. The date fields are each date filter's From and To.
  */
 export type FilterField =
   | "flagModes"
   | "ratingFilters"
+  | "sources"
   | "minDuration"
   | "maxDuration"
   | "addedFrom"
@@ -339,7 +372,7 @@ export type FilterField =
   | "newPresetName";
 
 /** The General fields, in their order on screen. */
-const GENERAL_FIELDS = ["flagModes", "ratingFilters", "minDuration", "maxDuration", "addedFrom", "addedTo", "createdFrom", "createdTo"] as const;
+const GENERAL_FIELDS = ["flagModes", "ratingFilters", "sources", "minDuration", "maxDuration", "addedFrom", "addedTo", "createdFrom", "createdTo"] as const;
 
 /** The filter dialog's actions that use those fields. */
 export type FilterAction = "apply" | "addPreset" | "updatePreset";
@@ -369,6 +402,9 @@ export const FILTER_FIELD_SECTION: Readonly<Record<FilterField, "general" | "pre
 
 export const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
 
+/** A maximum duration below the minimum matches nothing. The same length in both is allowed. */
+export const DURATION_ORDER_PROBLEM = "Use a maximum at or above the minimum.";
+
 /** A custom range needs both dates, from the years the server can resolve, and must not end before it starts. */
 export const DATE_START_PROBLEM = "Choose a start date.";
 export const DATE_END_PROBLEM = "Choose an end date.";
@@ -395,8 +431,21 @@ export const FLAG_MODES_PROBLEM = "Nothing is both a favorite and blacklisted. U
 /** Only unrated with a minimum rating matches nothing, since a minimum leaves unrated files out. */
 export const RATING_FILTERS_PROBLEM = "Nothing unrated has a minimum rating. Clear one of them.";
 
+/** No enabled source checked matches nothing. */
+export const SOURCES_PROBLEM = "Check at least one source.";
+
 function durationProblem(text: string): FieldProblem | null {
   return parseTypedDuration(text) === "invalid" ? { message: DURATION_PROBLEM } : null;
+}
+
+/** The maximum duration's problem: its text's first, then a maximum below the minimum. An empty side is no limit. */
+function maxDurationProblem(minText: string, maxText: string): FieldProblem | null {
+  const problem = durationProblem(maxText);
+  if (problem) {
+    return problem;
+  }
+  const [min, max] = [parseTypedDuration(minText), parseTypedDuration(maxText)];
+  return typeof min === "number" && typeof max === "number" && max < min ? { message: DURATION_ORDER_PROBLEM } : null;
 }
 
 function dayProblem(text: string, emptyMessage: string): FieldProblem | null {
@@ -423,10 +472,11 @@ function dateRangeProblems(range: DateRangeDraft): { from: FieldProblem | null; 
 
 /**
  * Each field's problem, or null while its value is valid. An empty duration is valid: it means no limit. An empty date
- * of a custom range is flagged.
+ * of a custom range is flagged. The sources, which the draft's checkboxes follow, say which sources count.
  */
 export function filterFieldProblems(
   draft: GeneralDraft,
+  sources: readonly FilterSource[],
   newPresetName: string,
   presets: readonly PresetRow[]
 ): Record<FilterField, FieldProblem | null> {
@@ -438,8 +488,9 @@ export function filterFieldProblems(
   return {
     flagModes: bothOnly ? { message: FLAG_MODES_PROBLEM } : null,
     ratingFilters: draft.onlyUnrated && draft.minRating !== null ? { message: RATING_FILTERS_PROBLEM } : null,
+    sources: noEnabledSourceChecked(draft, sources) ? { message: SOURCES_PROBLEM } : null,
     minDuration: durationProblem(draft.minText),
-    maxDuration: durationProblem(draft.maxText),
+    maxDuration: maxDurationProblem(draft.minText, draft.maxText),
     addedFrom: added.from,
     addedTo: added.to,
     createdFrom: created.from,
@@ -495,6 +546,9 @@ export function filterHeldReason(action: FilterAction, field: GeneralField): str
   }
   if (field === "ratingFilters") {
     return `Clear ${ONLY_UNRATED_LABEL} or ${MIN_RATING_LABEL} ${ending}.`;
+  }
+  if (field === "sources") {
+    return `Check at least one source ${ending}.`;
   }
   const date = DATE_FILTERS.find(({ range }) => field === `${range}From` || field === `${range}To`);
   if (date) {

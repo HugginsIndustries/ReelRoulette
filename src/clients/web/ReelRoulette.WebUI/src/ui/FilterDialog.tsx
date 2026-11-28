@@ -199,9 +199,7 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
         <p class="filter-hint">Checked sources are included. If all are checked, no source restriction is stored.</p>
         <div class="filter-stack">
           {view.sources.length > 0 ? (
-            view.sources.map((source, index) => (
-              <label key={index}><input type="checkbox" id={`filter-src-${index}`} data-source-id={source.id} checked={draft.sourceChecked[index]} disabled={source.isEnabled === false} onChange={(event) => filterDialog.checkSource(index, event.currentTarget.checked)} /> {sourceLabel(source)}</label>
-            ))
+            <SourceRows view={view} />
           ) : (
             <span class="filter-hint">No sources returned from server.</span>
           )}
@@ -407,6 +405,40 @@ function RatingFilterRows({ view }: { view: FilterDialogView }) {
         <span>{MIN_RATING_LABEL}</span>
         <RatingStars rating={draft.minRating} onSet={(minRating) => filterDialog.changeGeneral({ minRating })} />
       </div>
+    </>
+  );
+}
+
+/**
+ * The sources, each a checkbox, which a source turned off on the server shows disabled. The enabled ones are checked
+ * together: with none checked the filter matches nothing. The icon sits just after the first enabled source's label,
+ * which a held action moves to, and its tooltip shows while any enabled source has focus.
+ */
+function SourceRows({ view }: { view: FilterDialogView }) {
+  const { filterDialog } = useApp();
+  const pair = useFieldValidation<HTMLInputElement, FilterField>({
+    problem: view.problems.sources,
+    flagged: view.flagged.sources,
+    reveal: { from: filterDialog.reveal, field: "sources", show: () => showSection(filterDialog.tab.peek()) }
+  });
+  const first = view.sources.findIndex((source) => source.isEnabled !== false);
+  return (
+    <>
+      {view.sources.map((source, index) => {
+        const enabled = source.isEnabled !== false;
+        const validation = !enabled ? {} : index === first ? pair.control : pair.partner;
+        const row = (
+          <label key={index}><input {...validation} type="checkbox" id={`filter-src-${index}`} data-source-id={source.id} checked={view.general.sourceChecked[index]} disabled={!enabled} onChange={(event) => filterDialog.checkSource(index, event.currentTarget.checked)} /> {sourceLabel(source)}</label>
+        );
+        return index === first ? (
+          <span key={index} class="vfield vfield-after">
+            {row}
+            {pair.mark}
+          </span>
+        ) : (
+          row
+        );
+      })}
     </>
   );
 }

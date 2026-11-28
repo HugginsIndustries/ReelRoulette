@@ -83,7 +83,8 @@ export type RandomPickOutcome =
 
 /**
  * Sends one `POST /api/random` body; the signal cancels it. A send that couldn't reach the server throws a
- * `ServerUnreachableError`, as `sendRequest` does, so its message reads the same in every browser.
+ * `ServerUnreachableError`, as `sendRequest` does, so its message reads the same in every browser, and a 401 throws an
+ * `UnauthorizedError` once it asks for pairing, as `api.request` does.
  */
 export type RandomPickSend = (body: string, signal: AbortSignal) => Promise<Response>;
 
@@ -126,9 +127,6 @@ export function createRandomPicker(send: RandomPickSend, timeoutMs: number = PLA
 async function request(send: RandomPickSend, body: string, signal: AbortSignal): Promise<RandomPickOutcome> {
   try {
     const response = await send(body, signal);
-    if (response.status === 401) {
-      return { kind: "unauthorized" };
-    }
     if (!response.ok) {
       return { kind: "failed", error: await refusalError(response) };
     }
@@ -141,7 +139,7 @@ async function request(send: RandomPickSend, body: string, signal: AbortSignal):
     }
     return { kind: "picked", item, cycle };
   } catch (error) {
-    // A send that answers 401 itself, as `api.request` does, asks for pairing and throws.
+    // The send answers a 401 itself, as `api.request` does: it asks for pairing and throws.
     if (error instanceof UnauthorizedError) {
       return { kind: "unauthorized" };
     }

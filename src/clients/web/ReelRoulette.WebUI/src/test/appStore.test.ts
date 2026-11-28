@@ -225,7 +225,7 @@ describe("createAppStore", () => {
     expect(store.selectedPresetValue()).toBe("");
   });
 
-  it("adds a played item to history after the playing one, dropping the rest, with its last-seen favorite and blacklist", () => {
+  it("adds a played item to history after the playing one, dropping the rest", () => {
     const { store } = setup();
     const item = (itemId: string): PlayingItem => ({
       id: `/media/${itemId}.mp4`,
@@ -237,7 +237,6 @@ describe("createAppStore", () => {
       isBlacklisted: false,
       rating: null
     });
-    store.itemStates.remember("c", { isFavorite: true, isBlacklisted: false });
 
     store.pushHistory(item("a"));
     store.pushHistory(item("b"));
@@ -249,13 +248,12 @@ describe("createAppStore", () => {
     store.pushHistory(item("c"));
     expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "c"]);
     expect(store.historyIndex.value).toBe(1);
-    expect(store.current.value?.isFavorite).toBe(true);
     expect(store.stepHistory(-1)).toBe(true);
     expect(store.stepHistory(1)).toBe(true);
     expect(store.current.value?.itemId).toBe("c");
   });
 
-  it("adds a random pick at the end of history from anywhere in it, keeping every entry, with its last-seen favorite and blacklist", () => {
+  it("adds a random pick at the end of history from anywhere in it, keeping every entry", () => {
     const { store } = setup();
     const item = (itemId: string): PlayingItem => ({
       id: `/media/${itemId}.mp4`,
@@ -267,7 +265,6 @@ describe("createAppStore", () => {
       isBlacklisted: false,
       rating: null
     });
-    store.itemStates.remember("d", { isFavorite: false, isBlacklisted: true });
 
     store.appendHistory(item("a"));
     store.appendHistory(item("b"));
@@ -280,12 +277,11 @@ describe("createAppStore", () => {
     expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "b", "c", "d"]);
     expect(store.historyIndex.value).toBe(3);
     expect(store.current.value?.itemId).toBe("d");
-    expect(store.current.value?.isBlacklisted).toBe(true);
     expect(store.stepHistory(-1)).toBe(true);
     expect(store.current.value?.itemId).toBe("c");
   });
 
-  it("inserts a random pick right after the playing entry, keeping the entries after it, with its last-seen favorite and blacklist", () => {
+  it("inserts a random pick right after the playing entry, keeping the entries after it", () => {
     const { store } = setup();
     const item = (itemId: string): PlayingItem => ({
       id: `/media/${itemId}.mp4`,
@@ -297,7 +293,6 @@ describe("createAppStore", () => {
       isBlacklisted: false,
       rating: null
     });
-    store.itemStates.remember("d", { isFavorite: true, isBlacklisted: false });
 
     store.insertHistory(item("a"));
     expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a"]);
@@ -311,7 +306,6 @@ describe("createAppStore", () => {
     expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "d", "b", "c"]);
     expect(store.historyIndex.value).toBe(1);
     expect(store.current.value?.itemId).toBe("d");
-    expect(store.current.value?.isFavorite).toBe(true);
     expect(store.stepHistory(1)).toBe(true);
     expect(store.current.value?.itemId).toBe("b");
 

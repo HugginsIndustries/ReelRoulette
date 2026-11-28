@@ -5,11 +5,8 @@ import {
   createTagSaveSession,
   handleIncomingItemTags,
   planTagEditorSave,
-  replaceWithLiveTags,
   retargetTagFilter,
-  rollbackTagSave,
   runTagEditorSave,
-  snapshotTags,
   type IncomingItemTags,
   type TaggedItem,
   type TagSaveStep
@@ -122,7 +119,7 @@ describe("planTagEditorSave", () => {
 });
 
 describe("tag save apply", () => {
-  it("closes over an immediate tile update, rolls a failed tail back, and ignores the save's own echo", () => {
+  it("closes over an immediate tile update and ignores the save's own echo", () => {
     const items = [item("a", ["Day"])];
     const steps: TagSaveStep[] = [
       { kind: "rename-tag", oldName: "Day", newName: "Evening", newCategoryId: null },
@@ -149,13 +146,6 @@ describe("tag save apply", () => {
     expect(landed.reload).toBe(false);
     expect(reloads).toBe(1);
     expect(items[0]?.tags).toEqual(["Evening", "Night"]);
-
-    const failed = [item("a", ["Day"])];
-    const failedSnapshot = snapshotTags(failed);
-    applyTagSaveLocally(failed, steps);
-    rollbackTagSave(failed, failedSnapshot, [steps[0]!]);
-    expect(failed[0]?.tags).toEqual(["Evening"]);
-    expect(failedSnapshot[0]?.tags).toEqual(["Day"]);
   });
 
   it("reloads once when a rename has no item-tag echo and a tag filter can change membership", () => {
@@ -185,12 +175,6 @@ describe("tag save apply", () => {
     expect(result.accepted).toEqual([steps[0]]);
     expect(result.failed).toEqual(steps[1]);
     expect(result.failure).toEqual({ text: "Tag apply failed: network down", logText: "Tag apply failed: network down" });
-
-    const items = [item("a", ["Day"])];
-    const snapshot = snapshotTags(items);
-    applyTagSaveLocally(items, steps);
-    rollbackTagSave(items, snapshot, result.accepted);
-    expect(items[0]?.tags).toEqual(["Evening"]);
   });
 
   it("has no error to show for a step the server answered with 401, whose pairing prompt shows instead", async () => {
@@ -510,12 +494,6 @@ describe("tag save apply", () => {
     expect(session.fail(handle, items, [])).toBe(true);
     expect(items[0]?.tags).toEqual(["Day"]);
   });
-
-  it("copies a live empty tag list over the optimistic tags", () => {
-    const loaded = [item("a", ["Day", "Night"])];
-    replaceWithLiveTags(loaded, [item("a", [])]);
-    expect(loaded[0]?.tags).toEqual([]);
-  });
 });
 
 describe("handleIncomingItemTags", () => {
@@ -592,6 +570,18 @@ describe("retargetTagFilter", () => {
     expect(retargetTagFilter(selected, excluded, remove)).toBe(true);
     expect(selected).toEqual(["Evening"]);
     expect(excluded).toEqual(["Evening"]);
+  });
+
+  it("takes a rename that only changes capitals, in the filter and on tiles", () => {
+    const selected = ["Day"];
+    const excluded: string[] = [];
+    const rename: TagSaveStep = { kind: "rename-tag", oldName: "Day", newName: "DAY", newCategoryId: null };
+    expect(retargetTagFilter(selected, excluded, rename)).toBe(true);
+    expect(selected).toEqual(["DAY"]);
+
+    const items = [item("a", ["Day", "Night"])];
+    applyTagSaveLocally(items, [rename]);
+    expect(items[0]?.tags).toEqual(["Night", "DAY"]);
   });
 });
 

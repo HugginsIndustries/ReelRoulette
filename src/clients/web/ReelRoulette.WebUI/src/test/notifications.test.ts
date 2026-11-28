@@ -57,9 +57,9 @@ describe("notifications", () => {
   it("gives a warning the warning icon, a message its own icon where given, and keeps the newest first", () => {
     const { notes } = setup();
     notes.notify({ kind: "refresh", text: "Library refresh failed", warning: true });
-    notes.notify({ kind: "connection", text: "Library browse failed. Showing the tiles already loaded.", icon: "sync_problem", key: "browse" });
+    notes.notify({ kind: "connection", text: "Library browse failed: Couldn't reach the server. Showing the tiles already loaded.", icon: "sync_problem", key: "browse" });
     expect(notes.entries.value.map((entry) => [entry.text, entry.icon])).toEqual([
-      ["Library browse failed. Showing the tiles already loaded.", "sync_problem"],
+      ["Library browse failed: Couldn't reach the server. Showing the tiles already loaded.", "sync_problem"],
       ["Library refresh failed", "warning"]
     ]);
   });

@@ -1153,7 +1153,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       }
       const name = edit.name.trim();
       const categoryId = edit.categoryId || UNCATEGORIZED_CATEGORY_ID;
-      const nameChanged = normalizeTagKey(name) !== normalizeTagKey(edit.oldName);
+      // A change of capitals alone is a rename too; the held change is still found by the folded name.
+      const nameChanged = name !== edit.oldName.trim();
       const categoryChanged = categoryId !== edit.oldCategoryId;
       if (!nameChanged && !categoryChanged) {
         update({ editing: false });

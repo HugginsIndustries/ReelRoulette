@@ -17,7 +17,6 @@ import {
   type HeaderPresetList,
   type PresetListEntry
 } from "../filter/filterStateModel";
-import { createItemStateCache, type ItemStateCache } from "../library/currentItemState";
 import { statusLogLine } from "../logging/relayLogLines";
 import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds";
 import { isRandomBehavior, readRandomOptions, type RandomBehavior, type RandomOptions } from "../random/randomOptions";
@@ -140,8 +139,6 @@ export interface AppStore {
   readonly loop: ReadonlySignal<boolean>;
   /** The player's Autoplay, kept on this device. Change it with `setAutoplay`. */
   readonly autoplay: ReadonlySignal<boolean>;
-  /** Each item's favorite and blacklist as last seen, applied when an item plays again, until a resync clears them. */
-  readonly itemStates: ItemStateCache;
   readonly presets: Signal<ApiPreset[]>;
   readonly presetMenu: Signal<PresetMenu>;
   /** Assign a new filter to change it, so the Library tab's Filters line and the device's memory follow. */
@@ -252,18 +249,17 @@ export interface AppStore {
   setLoop(on: boolean): void;
   setAutoplay(on: boolean): void;
   /**
-   * Makes `item` the playing item, with its last-seen favorite and blacklist, and the newest history entry. The
-   * entries after the playing one are dropped.
+   * Makes `item` the playing item and the newest history entry. The entries after the playing one are dropped.
    */
   pushHistory(item: PlayingItem): void;
   /**
-   * Makes `item` the playing item, with its last-seen favorite and blacklist, and adds it at the end of the history,
-   * keeping every entry, as a random pick goes there from anywhere in it.
+   * Makes `item` the playing item and adds it at the end of the history, keeping every entry, as a random pick goes
+   * there from anywhere in it.
    */
   appendHistory(item: PlayingItem): void;
   /**
-   * Makes `item` the playing item, with its last-seen favorite and blacklist, and puts it in the history right after
-   * the playing entry, keeping the entries after it, as Insert puts a Random pick.
+   * Makes `item` the playing item and puts it in the history right after the playing entry, keeping the entries after
+   * it, as Insert puts a Random pick.
    */
   insertHistory(item: PlayingItem): void;
   /** Makes the previous or next history entry the playing item. Returns false at either end of history. */
@@ -343,7 +339,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     historyIndex: signal(-1),
     loop,
     autoplay,
-    itemStates: createItemStateCache(),
     presets: signal<ApiPreset[]>([]),
     presetMenu: signal<PresetMenu>({ entries: [{ label: PRESET_MENU_LOADING, value: "" }], selectedValue: "", message: true }),
     appliedFilter: signal(restoredFilter),
@@ -494,7 +489,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     },
 
     pushHistory(item) {
-      store.itemStates.applyTo(item);
       store.current.value = item;
       const history = store.history.peek().slice(0, store.historyIndex.peek() + 1);
       history.push(item);
@@ -503,7 +497,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     },
 
     appendHistory(item) {
-      store.itemStates.applyTo(item);
       store.current.value = item;
       const history = [...store.history.peek(), item];
       store.history.value = history;
@@ -511,7 +504,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     },
 
     insertHistory(item) {
-      store.itemStates.applyTo(item);
       store.current.value = item;
       const index = store.historyIndex.peek() + 1;
       const history = [...store.history.peek()];

@@ -821,7 +821,7 @@ describe("fill on scroll", () => {
     library.failures.push(500);
     await scrollGridTo(1_000_000);
     expect(library.queries()).toHaveLength(3);
-    await expectRelayed(server, "Library browse failed. Showing the tiles already loaded.");
+    await expectRelayed(server, "Library browse failed (HTTP 500). Showing the tiles already loaded.");
 
     await scrollGridTo(1_000_000);
     expect(library.queries()).toHaveLength(3);
@@ -1330,6 +1330,37 @@ describe("playing a tile", () => {
     expect(isOpen()).toBe(false);
     // The video plays, which ends the one loading period.
     await waitFor(() => expect(indicatorState()).toBeNull());
+  });
+
+  it("plays a tile chosen while a random pick waits, though the pick answers before the tile's play", async () => {
+    let answerPick: () => void = () => {};
+    let answerPlay: () => void = () => {};
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("POST", "/api/random", async () => {
+        await new Promise<void>((resolve) => {
+          answerPick = resolve;
+        });
+        return randomAnswer(playResponse(2));
+      });
+      fake.on("POST", "/api/play/item-1", async () => {
+        await new Promise<void>((resolve) => {
+          answerPlay = resolve;
+        });
+        return json(playResponse(1));
+      });
+    });
+    await openLibrary();
+
+    await click(document.getElementById("random-btn")!);
+    await click(tile("item-1")!);
+    expect(server.requests("POST", "/api/play/item-1")).toHaveLength(1);
+
+    answerPick();
+    await flush();
+    expect(video().src).not.toContain("item-2");
+    answerPlay();
+    await flush();
+    expect(video().src).toBe(`${API_BASE_URL}/api/media/item-1?token=t`);
   });
 
   it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(

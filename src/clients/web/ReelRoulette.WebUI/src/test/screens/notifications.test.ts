@@ -241,7 +241,7 @@ describe("popups", () => {
     expect(currentStyle(toast!).touchAction).toBe("pan-y");
 
     // A message the kind's icon would misread has its own, and one with no second line has none.
-    await notify(services, { kind: "connection", icon: "sync_problem", text: "Library browse failed. Showing the tiles already loaded." });
+    await notify(services, { kind: "connection", icon: "sync_problem", text: "Library browse failed: Couldn't reach the server. Showing the tiles already loaded." });
     const browse = toasts().at(-1)!;
     expect(browse.querySelector(".material-symbol-icon")!.textContent).toBe("sync_problem");
     expect(browse.querySelector(".toast-detail")).toBeNull();
@@ -250,7 +250,7 @@ describe("popups", () => {
     fireEvent.click(dismissButton(toast!));
     await flush();
     expect(toast!.classList.contains("is-leaving")).toBe(true);
-    expect(toastTexts()).toEqual(["Library browse failed. Showing the tiles already loaded."]);
+    expect(toastTexts()).toEqual(["Library browse failed: Couldn't reach the server. Showing the tiles already loaded."]);
     await wait(200);
     expect(toast!.isConnected).toBe(false);
   });

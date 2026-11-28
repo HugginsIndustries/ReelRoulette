@@ -1,4 +1,4 @@
-import type { RefreshStatusChangedPayload, ResyncRequiredPayload, ServerEventEnvelope } from "../types/serverContracts";
+import type { ServerEventEnvelope } from "../types/serverContracts";
 
 export function parseEventEnvelope<TPayload>(raw: string): ServerEventEnvelope<TPayload> {
   const parsed = JSON.parse(raw) as ServerEventEnvelope<TPayload>;
@@ -32,14 +32,4 @@ export function buildEventsUrl(
   }
 
   return url.toString();
-}
-
-export function getRefreshPayload(raw: string): RefreshStatusChangedPayload {
-  const envelope = parseEventEnvelope<RefreshStatusChangedPayload>(raw);
-  return envelope.payload;
-}
-
-export function getResyncPayload(raw: string): ResyncRequiredPayload {
-  const envelope = parseEventEnvelope<ResyncRequiredPayload>(raw);
-  return envelope.payload;
 }

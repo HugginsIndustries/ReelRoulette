@@ -460,7 +460,6 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - Advance after, the autoplay mode, Loop stops autoplay, Don't record plays, the media sources as last loaded.
     - compatibility block and its message, pairing prompt, the server's version and capabilities from the last version check it answered, whether the server can't be reached, whether it serves a different WebUI build from the one the page runs.
     - the library state, its message, whether there is no library, and whether either holds the page back, a running refresh's progress, and the loading holds.
-  - the item-state cache.
   - the actions and events that cross screens, among them a file chosen from the library going into history after the playing item, dropping the rest, and a random pick going at its end, or with Insert right after the playing item, keeping every entry.
   - messages' text, and texts that show nothing, relay to `last.log` as `status=` lines, a repeat at most once a second.
   - It remembers the applied filter, its preset, and whether the filter is the preset's own in the per-device store, written only when that changes, and restores them before the connection starts.
@@ -536,7 +535,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the time showing 0:00 / 0:00 while no video or photo timer is active.
     - Auto-Pause's pause and resume, which resume a photo's timer with the time it had left without loading or recording the photo again, and hold playback in between, so an item that starts meanwhile starts paused for the resume to play, while a play, pause, or start the user makes since stands and ends the hold.
     - item-state events, popping up another device's favorite or blacklist change with the file name, but not this device's own, whose change already popped up as Your actions.
-    - `bulkItemStateChanged`, which updates the playing item, its buttons, and the item-state cache for each changed item, and pops up another device's batch as one Other devices message, with no file name, under `sync-bulk`.
+    - `bulkItemStateChanged`, which updates the playing item and its buttons when the batch changed it, and pops up another device's batch as one Other devices message, with no file name, under `sync-bulk`.
   - A play while the server fails the compatibility check or runs without a library shows the in-app notice.
   - Each play records where it came from: a library choice, forward (autoplay, Next, or a random pick), or back (Previous).
   - A step through the history gets a fresh media URL through the play route, which counts its play unless Don't record plays is on, and the rating the route gives becomes the item's read.
@@ -545,7 +544,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - A file this browser can't play, or a missing one, reached forward or back is skipped in the same direction with a Skipped files popup, up to ten in a row, and any other failure stops on its message.
   - It holds Loading… while a pick waits, while a history step waits for its fresh media URL, through Auto-Pause too, and while the media loads, until its `playing` or load, a rejected `play()`, or a pause by the user or Auto-Pause, and after its error until the server's answer has stopped it, skipped it, or given it a fresh URL.
   - Records a play on start unless the server already did or Don't record plays is on, and relays playback steps to `last.log` without file names.
-  - A favorite or blacklist answer goes to the item it was for, by its id, and the buttons only while that item plays; each play answer's favorite, blacklist, and rating go to its item; and on `resyncRequired` it forgets the kept item states and reads the playing item again (`POST /api/library/item`).
+  - A favorite or blacklist answer shows on the buttons only while the item it was for, by its id, still plays; each play answer's favorite, blacklist, and rating decide its item's; and on `resyncRequired` it reads the playing item again (`POST /api/library/item`).
+  - Drops a random pick that answers after the user started another play since it was last asked for, counted as each press that starts one, or a library tile, asks for it, not autoplay or a skip.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/mediaFailure.ts`
   - why a file's media failed, from the server's answer to a `Range: bytes=0-0` request to its media URL (format, missing, or couldn't load), the messages and Skipped files texts for each, and the ten-skip limit.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/frameStep.ts`
@@ -652,7 +652,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the tag catalog for the Random line, loaded once the server is ready while By category has categories chosen and none has loaded.
     - the Filter and Randomization tabs shown from the Filters and Random lines.
     - a later page's failure, which pops up and keeps the tiles already loaded.
-    - tile play through `POST /api/play/{itemId}`, which holds Loading… while it waits, joins history, closes the panel as the overlay, and hands the item to the player, or shows its failure in the notice.
+    - tile play through `POST /api/play/{itemId}`, which holds Loading… while it waits, 10 s at most, joins history, closes the panel as the overlay, and hands the item to the player, or shows its failure in the notice.
   - It holds the selection:
     - a tile click that plays or selects, Select in a tile's menu.
     - Select all through `POST /api/library/query-ids` with the window's search and filter, whose answer a selection ending drops.
@@ -700,7 +700,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the General tab's fields as a draft beside the working filter and their reading into it.
   - the rating filters' labels.
   - the Date Filter's choices and each date filter's fields, whose dates a choice other than Custom range keeps until Apply.
-  - the fields' problems (durations, a custom range's From and To, the new preset name, Edit Preset's name, Favorites only with Blacklisted only, and Only unrated with a minimum rating), the fields each action uses, the one beside Add Preset, and why a General field holds an action.
+  - the fields' problems (durations and a maximum below the minimum, a custom range's From and To, the new preset name, Edit Preset's name, Favorites only with Blacklisted only, Only unrated with a minimum rating, and no source checked), the fields each action uses, the one beside Add Preset, and why a General field holds an action.
   - a filter with the General tab's durations and date ranges as their fields read.
   - the source list the fields were filled from, which checking the same sources again keeps, through loads of the sources.
   - include and exclude toggles.
@@ -805,7 +805,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/playback/randomPick.ts`
   - the random pick request body, which names the preset dropdown's preset only while its filter still equals the applied filter and sends the Randomization tab's options, built from the store as it is now for a pick and a cycle read, and random pick requests, whose answer's item and cycle numbers it reads, one at a time, cancelled after 10 seconds without an answer; an answer that arrives after that is not used.
 - `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`
-  - the playing item's favorite and blacklist from item-state events, and the per-item cache applied when an item plays again, both by item id, which a resync clears.
+  - the playing item's favorite and blacklist from item-state events, by item id; an item played again takes its play answer's.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.tsx`
   - mounts the page (`renderApp`, which returns an unmount function) and the startup error into `#app`, passing on a page reload when one is given, as tests give.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/appContext.ts`
@@ -813,14 +813,15 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint. The theme applies before it runs, from `index.html`'s boot script, and the page follows it from `App.tsx`.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`
-  - client and session ids (`rr_clientId` in `localStorage`, `rr_sessionId` in `sessionStorage`, reached through `browserStorage`), client type and device name, and `requestPlayItem` for library tile play, history steps, and fresh media URLs that count no play.
+  - client and session ids (`rr_clientId` in `localStorage`, `rr_sessionId` in `sessionStorage`, reached through `browserStorage`), client type and device name, and `requestPlayItem`, 10 s at most, for library tile play, history steps, and fresh media URLs that count no play.
 - `src/clients/web/ReelRoulette.WebUI/src/api/serverRequest.ts`
   - sending requests and reading their JSON, with one wording for each way they fail: a request that couldn't reach the server, whatever the browser calls it, a success whose body isn't JSON, which names its content type, and a failed status, which carries the server's reason and code for a refusal read from its `{ "error": ..., "code": ... }` body (`refusalError`), as a refused play's result does too.
   - Every 401 is handled here once: it asks for pairing with the request's route without ids or a media token, for the one `last.log` line the page sends, which the server refuses from a device that isn't paired, and throws an `UnauthorizedError`, for which no screen shows or logs a failure of its own.
   - `requestFailure` words every failed request the user sees: "{what failed}: {the server's reason}", or "{what failed}." when it gave none, never with a status code or a content type, which only its `last.log` line names, leaving out the reason, which can name a file or a preset.
   - `noticeRequestFailure` shows that in the notice.
+  - `noAnswerFailure` words a request the server didn't answer in time: "{what failed}: The server didn't answer in time.", with the time limit in its `last.log` line.
   - `readWithNotice` sends a request and answers what it read, or null once its failure shows, for the bulk actions, and `requestWithNotice`, built on it, sends a change and says whether the server took it, for the rating, Shuffle reset, and Show in File Manager requests.
-  - `withTimeout` cancels a request that doesn't settle in time and never uses its late answer, with the 10 s limit a random pick, the range request about a file whose media failed, and every play request for a fresh media URL wait for.
+  - `withTimeout` cancels a request that doesn't settle in time and never uses its late answer, with the 10 s limit a random pick, the range request about a file whose media failed, and every play request, the library's tile play included, wait for.
 - `src/clients/web/ReelRoulette.WebUI/src/api/controlAccess.ts`
   - whether this device may do an admin action, from `GET /control/access`, and on its 401 the control-token prompt: the token typed, empty disabling Continue quietly, `POST /control/pair` on Continue, an accepted token allowing the action, and a wrong one keeping the prompt open with the server's reason in the field until the token changes.
 - `src/clients/web/ReelRoulette.WebUI/src/events/sseClient.ts`

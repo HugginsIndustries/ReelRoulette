@@ -81,7 +81,6 @@ function sameCategoryName(left: string, right: string): boolean {
 export function planTagEditorSave(input: TagSavePlanInput): TagSaveStep[] {
   const steps: TagSaveStep[] = [];
   const baselineById = new Map(input.baselineCategories.map((category) => [category.id.trim().toLowerCase(), category]));
-  const deleted = new Set(input.deleteCategoryIds.map((id) => id.trim().toLowerCase()));
   const baselineIndex = new Map<string, number>();
   for (const category of input.baselineCategories) {
     const id = category.id.trim();
@@ -92,7 +91,7 @@ export function planTagEditorSave(input: TagSavePlanInput): TagSaveStep[] {
   }
   const displayCategories = input.displayCategories.filter((category) => {
     const id = category.id.trim();
-    return id && !isUncategorized(id) && !deleted.has(id.toLowerCase());
+    return id && !isUncategorized(id);
   });
   displayCategories.forEach((category, index) => {
     const id = category.id.trim();
@@ -382,75 +381,6 @@ export type TagSaveAppliedTag = {
   tagName: string;
   changedItemIds: readonly string[];
 };
-
-export function replaceWithLiveTags(loaded: TaggedItem[], current: readonly TaggedItem[]): void {
-  const byId = new Map(current.map((item) => [item.id.trim(), item.tags ?? []]));
-  for (const item of loaded) {
-    const key = item.id.trim();
-    if (!byId.has(key)) {
-      continue;
-    }
-    item.tags = (byId.get(key) ?? []).slice();
-  }
-}
-
-export function snapshotTags(items: readonly TaggedItem[]): Array<{ id: string; tags: string[] }> {
-  return items.map((item) => ({ id: item.id, tags: item.tags.slice() }));
-}
-
-export function restoreTags(items: TaggedItem[], snapshot: readonly { id: string; tags: readonly string[] }[]): void {
-  const byId = new Map(snapshot.map((entry) => [entry.id.trim(), entry.tags]));
-  for (const item of items) {
-    const tags = byId.get(item.id.trim());
-    if (!tags) {
-      continue;
-    }
-    item.tags = tags.slice();
-  }
-}
-
-export function rollbackTagSave(
-  items: TaggedItem[],
-  snapshot: readonly { id: string; tags: readonly string[] }[],
-  accepted: readonly TagSaveStep[]
-): void {
-  restoreTags(items, snapshot);
-  applyTagSaveLocally(items, accepted);
-}
-
-export function echoesForSave(steps: readonly TagSaveStep[]): TagEcho[] {
-  const echoes: TagEcho[] = [];
-  for (const step of steps) {
-    if (step.kind === "apply-item-tags") {
-      echoes.push({
-        itemIds: step.itemIds,
-        addedTags: step.addTags,
-        removedTags: step.removeTags
-      });
-      continue;
-    }
-    if (step.kind !== "apply-auto-tag") {
-      continue;
-    }
-    for (const assignment of step.assignments) {
-      const tagName = assignment.tagName.trim();
-      if (!tagName) {
-        continue;
-      }
-      const itemIds = distinctIds(assignment.itemIds);
-      if (itemIds.length === 0) {
-        continue;
-      }
-      echoes.push({
-        itemIds,
-        addedTags: [tagName],
-        removedTags: [],
-        subsetIds: true
-      });
-    }
-  }
-  return echoes;
-}
 
 /** The ids, trimmed, without blank ones, and each once, in their order. */
 function distinctIds(values: readonly string[]): string[] {

@@ -205,9 +205,11 @@ ReelRoulette is a thin-client, API-first system:
   - A screen that fails to render stops showing, relays `ui-error screen=<name> error=<type>` to `last.log`, and leaves the others working.
   - A startup error shows its message as text.
 - Session-aware identity propagation (`clientId`/`sessionId`) through API + SSE paths.
-- Core playback/control/tag workflows aligned with server-authoritative behavior. The player's favorite and blacklist take the server's answer for the item the request was for, even after another item plays, and each play answer's flags and rating for its item; on `resyncRequired` the player forgets the item states it kept and reads the playing item again (`POST /api/library/item`), taking its favorite, blacklist, and rating.
+- Core playback/control/tag workflows aligned with server-authoritative behavior. A favorite or blacklist answer shows on the player's buttons only while the item it was for still plays, and each play answer's favorite, blacklist, and rating decide its item's, so an item played again shows the server's; on `resyncRequired` the player reads the playing item again (`POST /api/library/item`), taking its favorite, blacklist, and rating.
 - One random pick at a time: a press while one is waiting sends nothing.
-  - A pick the server does not answer within 10 seconds is cancelled, shows "No response from the server. Try again." in the in-app notice, and relays a `playback=random-pick-timeout` line to `last.log`.
+  - A pick the server does not answer within 10 seconds is cancelled, shows "Random selection failed: The server didn't answer in time." in the in-app notice, and relays a `playback=random-pick-timeout` line to `last.log`.
+  - A pick that answers after the user started another play since it was last asked for is dropped, and relays a `playback=random-pick-stale` line.
+    - The user's plays count from the press of Next or Random, a Previous that steps back, or the choice of a library tile; autoplay and a skip on from a file that failed don't count.
 - The player's Random button (`casino`), between Next and Loop, picks from anywhere in the history, as R does, and puts the pick where the Randomization tab's Random behavior says: at the end with Jump, the default, or right after the playing item with Insert, keeping every entry either way.
   - A file Insert put there that can't play is skipped by picking again with Insert.
 - Every other random pick, Next and autoplay at the end of the history and Play with nothing playing, goes at the end, while a file chosen from the library drops the entries after the playing one.
@@ -782,6 +784,7 @@ ReelRoulette is a thin-client, API-first system:
   - Then Only unrated and Min Rating (set with the rating's stars, which wrap under the label on a narrow screen, and change only the tab's filter, never a rating).
   - Media type.
   - Client source inclusion with each source labeled by its name and, when it differs, its folder, as "Videos (/media/videos)".
+    - A source turned off on the server shows disabled and doesn't count toward the sources checked.
   - Audio filter.
   - Minimum and maximum duration typed as whole MM:SS or HH:MM:SS with seconds under 60, and minutes under 60 in HH:MM:SS, or a number of seconds, where an empty field means no limit and its placeholder says "No minimum" or "No maximum".
     - Durations from the server are read leniently, so fractional seconds in a stored preset read as whole seconds.
@@ -859,8 +862,12 @@ ReelRoulette is a thin-client, API-first system:
   - Pressing it only moves to the first field that holds it: within the press, it shows the field's Filter tab section when needed and focuses the field as a tap does, so the browser brings it into view, above the on-screen keyboard once that opens.
   - The Filter tab's Apply turns its unsaved-changes dot red in place of the badge, and Add Preset and Update show a red dot where Apply's sits.
   - A Filter tab section with a flagged field shows the same badge on its tab's corner.
-- The Filter tab's durations, Favorites and Blacklisted pair, and Only unrated and Min Rating pair use it:
+- The Filter tab's durations, Favorites and Blacklisted pair, Only unrated and Min Rating pair, and sources use it:
   - Favorites only with Blacklisted only is flagged on both dropdowns, with one icon after Blacklisted, and Only unrated with a minimum rating on the checkbox and the stars, with one icon after the Only unrated label, whose tooltip says "Nothing unrated has a minimum rating. Clear one of them."
+  - No source checked, among those the server has on, is flagged with "Check at least one source.", with one icon after the first source that is on.
+    - It holds Apply with "Check at least one source to apply.", and Add Preset and Update with "Check at least one source first."
+    - Meanwhile the working filter keeps its sources, and the tab counts it as a change.
+  - A maximum duration below the minimum is flagged on Max with "Use a maximum at or above the minimum."; the same length in both is allowed.
   - Each pair holds Apply, Add Preset, and Update, which the durations hold too.
 - Its new preset name, flagged when a saved preset has it, ignoring case, disables Add Preset while it is empty or taken.
 - The names in Edit Tag, Edit Category, New Category, and Edit Preset, the tag editor's New tag name, and the Settings tab's Advance after use it too.
@@ -983,7 +990,7 @@ ReelRoulette is a thin-client, API-first system:
   - Hiding or showing the tab keeps that window and the scroll position and does not query again.
   - The header counts stay the current query totals after a filter or preset change that finishes while the tab is hidden.
   - Fill-on-scroll runs only while the tab is shown, requests one page at a time, and requests the next page once less than a page of loaded tiles is left below the screen, so a new query loads two pages.
-  - A further page that fails keeps the tiles already loaded, pops up "Library browse failed. Showing the tiles already loaded." as a Connection message with the `sync_problem` icon, and loads again after the scroll position changes.
+  - A further page that fails keeps the tiles already loaded, pops up "Library browse failed: {why} Showing the tiles already loaded." as a Connection message with the `sync_problem` icon, whose `last.log` line leaves the server's reason out, and loads again after the scroll position changes.
   - Filter, search, sort, and a preset pick, including **None**, start over from the first page whether the tab is shown or hidden.
   - Nothing is queried before the server passes the compatibility check with a library, and the first page then loads with them.
   - An empty result still scrolls to the top, and when the library has media but nothing matches, the grid says "Nothing matches the search or filters."
@@ -993,7 +1000,7 @@ ReelRoulette is a thin-client, API-first system:
 - Favorite, blacklist, playback, tag, and rating updates patch the loaded tiles or reload that window whether the tab is shown or hidden.
   - An update for many items at once, a bulk favorite, blacklist, or rating event, patches every loaded tile it names or reloads the window once.
   - `itemsRemoved` reloads the window once.
-  - The WebUI matches them to loaded tiles, the playing item, its item-state cache, and its pending tag saves by item id only, and names items by id in favorite, blacklist, record-playback, and tag-editor requests.
+  - The WebUI matches them to loaded tiles, the playing item, and its pending tag saves by item id only, and names items by id in favorite, blacklist, record-playback, and tag-editor requests.
   - A favorite or blacklist on an item outside the loaded window reloads when the event's previous values show the item enters or leaves the filter.
   - A rating change under Only unrated or a minimum rating reloads when its rating takes a loaded tile out, or its rating and previous rating show an item outside the window comes in or goes out.
   - A play under Only never played reloads for a loaded tile, and for an item outside the window when the event's play count shows it is the first.
@@ -1028,6 +1035,7 @@ ReelRoulette is a thin-client, API-first system:
 - Playback continues while open.
 - A click on a tile outside selection calls `POST /api/play/{itemId}` (persisted item **id**), closes the panel as the overlay on success, and starts returned media in the WebUI player without duplicate client `record-playback`.
   - Endpoint errors show in the in-app notice (404/409/415).
+  - A play the server doesn't answer within 10 seconds is cancelled with "Playback failed: The server didn't answer in time.", and a tile clicked while one waits does nothing.
 - Escape ends selection while the tab shows, and otherwise closes the panel.
 - Tile active state signed off in light/dark themes.
 - Selection: every tile has a check icon at its top left, a filled `check_circle` with the tooltip "Select" or "Deselect", beside the thumbnail rather than on it.

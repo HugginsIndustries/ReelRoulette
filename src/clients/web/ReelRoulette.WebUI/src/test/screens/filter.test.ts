@@ -1121,6 +1121,32 @@ describe("General tab", () => {
     expect(applied.maxDuration).toBeUndefined();
   });
 
+  it("flags a maximum duration below the minimum on Max, holding Apply, which moves to it, and not the same length in both", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+    const queries = libraryQueries(server).length;
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
+
+    await type(max, "1:00");
+    await type(min, "10:00");
+    expect(flagged(min)).toBe(false);
+    expect(flagged(max)).toBe(true);
+    expect(tooltipOf(max)?.textContent).toBe("Use a maximum at or above the minimum.");
+    expect(heldState(applyButton())).toEqual({ held: true, marked: true });
+    expect(applyButton().title).toBe("Correct the maximum duration to apply.");
+    await showTab("Tags");
+    await apply();
+    expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(max);
+    expect(libraryQueries(server)).toHaveLength(queries);
+
+    await type(min, "1:00");
+    expect(flagged(max)).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    expect(await applyAndWait(server)).toMatchObject({ minDuration: "00:01:00", maxDuration: "00:01:00" });
+  });
+
   it("a held Apply shows its dot red, with no badge, and its reason as its tooltip", async () => {
     await mountFilter();
     await openDialog();
@@ -1255,6 +1281,78 @@ describe("General tab", () => {
     expect(box("Movies (C:\\media\\movies)").checked).toBe(false);
     await click(box("Movies (C:\\media\\movies)"));
     expect((await applyAndWait(server)).includedSourceIds).toEqual([]);
+  });
+
+  it("flags Sources while no enabled source is checked, with one icon after the first, holding Apply, which moves to it", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+    const queries = libraryQueries(server).length;
+    const logsBefore = server.logLines().length;
+    const movies = box("Movies (C:\\media\\movies)");
+    const photos = box("C:\\media\\photos");
+    // The disabled source stays checked, and doesn't count.
+    expect(box("Archive (D:\\archive)")).toMatchObject({ checked: true, disabled: true });
+
+    await click(movies);
+    expect(flagged(movies)).toBe(false);
+    await click(photos);
+    expect(flagged(movies)).toBe(true);
+    expect(tooltipOf(movies)?.textContent).toBe("Check at least one source.");
+    expect(movies.closest("label")!.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
+    expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
+    expect(tabMarked("General")).toBe(true);
+    // It is a change, which the problem holds, rather than no change meaning every source.
+    expect(applyShowsChanges()).toBe(true);
+    expect(heldState(applyButton())).toEqual({ held: true, marked: true });
+    expect(applyButton().title).toBe("Check at least one source to apply.");
+    photos.focus();
+    await settle();
+    expect(tooltipShown(movies)).toBe(true);
+    photos.blur();
+
+    await showTab("Tags");
+    await apply();
+    expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(movies);
+    expect(isOpen()).toBe(true);
+    expect(libraryQueries(server)).toHaveLength(queries);
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
+
+    await click(photos);
+    expect(flagged(movies)).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-2", "source-3"]);
+  });
+
+  it("counts unchecking the last enabled source as a change, which Apply holds, while the filter keeps the sources applied", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+    await click(box("Movies (C:\\media\\movies)"));
+    expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-2", "source-3"]);
+
+    await openDialog();
+    expect(applyShowsChanges()).toBe(false);
+    await click(box("C:\\media\\photos"));
+    expect(applyShowsChanges()).toBe(true);
+    expect(heldState(applyButton())).toEqual({ held: true, marked: true });
+    expect(applyButton().title).toBe("Check at least one source to apply.");
+  });
+
+  it("keeps every source unchecked, still flagged, when the tab loads its sources again on coming back to it", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+    await click(box("Movies (C:\\media\\movies)"));
+    await click(box("C:\\media\\photos"));
+    expect(flagged(box("Movies (C:\\media\\movies)"))).toBe(true);
+
+    await click(panelTab("Library"));
+    await openDialog();
+    await waitFor(() => expect(server.requests("GET", "/api/sources")).toHaveLength(2));
+    await settle();
+    expect(box("Movies (C:\\media\\movies)").checked).toBe(false);
+    expect(box("C:\\media\\photos").checked).toBe(false);
+    expect(flagged(box("Movies (C:\\media\\movies)"))).toBe(true);
+    expect(heldState(applyButton())).toEqual({ held: true, marked: true });
   });
 });
 

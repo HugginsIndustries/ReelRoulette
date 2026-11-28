@@ -101,9 +101,10 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
         <p class="filter-hint">
           "Checked sources are included. If all are checked, no source restriction is stored."
         <div class="filter-stack">
-          <label>
-            <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
-            "Movies (C:\\media\\movies)"
+          <span class="vfield vfield-after">
+            <label>
+              <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
+              "Movies (C:\\media\\movies)"
           <label>
             <input checked="false" data-source-id="source-2" id="filter-src-1" type="checkbox">
             "C:\\media\\photos"
@@ -466,9 +467,10 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
         <p class="filter-hint">
           "Checked sources are included. If all are checked, no source restriction is stored."
         <div class="filter-stack">
-          <label>
-            <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
-            "Movies (C:\\media\\movies)"
+          <span class="vfield vfield-after">
+            <label>
+              <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
+              "Movies (C:\\media\\movies)"
           <label>
             <input checked="false" data-source-id="source-2" id="filter-src-1" type="checkbox">
             "C:\\media\\photos"
@@ -831,9 +833,10 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
         <p class="filter-hint">
           "Checked sources are included. If all are checked, no source restriction is stored."
         <div class="filter-stack">
-          <label>
-            <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
-            "Movies (C:\\media\\movies)"
+          <span class="vfield vfield-after">
+            <label>
+              <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
+              "Movies (C:\\media\\movies)"
           <label>
             <input checked="false" data-source-id="source-2" id="filter-src-1" type="checkbox">
             "C:\\media\\photos"

@@ -1412,6 +1412,39 @@ function ratingPairField(unratedBox, minimum, options) {
 }
 
 /**
+ * The Filter tab's Sources: with no source checked the filter matches nothing, so it is flagged. A source turned off on
+ * the server can't be checked or unchecked and its files never match, so only the other sources count. The icon sits
+ * after the first of them, which a held action moves to, and focusing any of them shows the tooltip. A checkbox's
+ * change updates it; call `update()` after setting the checkboxes.
+ */
+const SOURCES_PROBLEM = "Check at least one source.";
+function sourceChecksField(boxes, options) {
+  const usable = boxes.filter((box) => !box.disabled);
+  const check = () => (usable.some((box) => box.checked) ? null : { message: SOURCES_PROBLEM });
+  const field = new ValidatedField(usable[0], check, { ...options, partners: usable.slice(1) });
+  usable.forEach((box) => box.addEventListener("change", () => field.update()));
+  return field;
+}
+
+/**
+ * The Filter tab's Min and Max durations. Each is flagged as it is typed while it isn't a duration, and Max is flagged
+ * too while both are durations and Max is below Min, which matches nothing; the same length in both is allowed. Typing
+ * in Min checks Max again. Returns the two fields.
+ */
+const DURATION_ORDER_PROBLEM = "Use a maximum at or above the minimum.";
+function durationRangeFields(minInput, maxInput, options) {
+  const min = new ValidatedField(minInput, checkDuration, options);
+  const max = new ValidatedField(maxInput, (value) => {
+    const problem = checkDuration(value);
+    if (problem) return problem;
+    const [low, high] = [parseDuration(minInput.value), parseDuration(value)];
+    return typeof low === "number" && typeof high === "number" && high < low ? { message: DURATION_ORDER_PROBLEM } : null;
+  }, options);
+  minInput.addEventListener("input", () => max.update());
+  return { min, max };
+}
+
+/**
  * A custom range of the Filter tab's Date Filter: From and To, each the device's date picker, holding `YYYY-MM-DD`,
  * which compares as text in date order. A range needs both dates, so an emptied one is flagged, and so is a date
  * outside 1970 to 2099, which the server can't always resolve at the calendar's ends, and a To before its From is

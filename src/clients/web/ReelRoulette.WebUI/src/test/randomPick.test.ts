@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpStatusError, PLAYBACK_REQUEST_TIMEOUT_MS, UnexpectedResponseError } from "../api/serverRequest";
+import { HttpStatusError, PLAYBACK_REQUEST_TIMEOUT_MS, UnauthorizedError, UnexpectedResponseError } from "../api/serverRequest";
 import { HEADER_PRESET_STARRED_VALUE, createDefaultFilterState } from "../filter/filterStateModel";
 import { DEFAULT_RANDOM_OPTIONS } from "../random/randomOptions";
 import {
@@ -124,7 +124,9 @@ describe("randomPick", () => {
 
   it("maps each kind of answer and frees the next press after it", async () => {
     const answers: Array<() => Promise<Response>> = [
-      async () => new Response("", { status: 401 }),
+      async () => {
+        throw new UnauthorizedError();
+      },
       async () => jsonResponse({ error: LIBRARY_EMPTY }, 503),
       async () => randomAnswer(null),
       async () => {

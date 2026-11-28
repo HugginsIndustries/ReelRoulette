@@ -7,11 +7,13 @@ import {
   DATE_RANGE_CHOICES,
   DATE_START_PROBLEM,
   DATE_YEARS_PROBLEM,
+  DURATION_ORDER_PROBLEM,
   DURATION_PROBLEM,
   FILTER_ACTION_BESIDE,
   FILTER_ACTION_FIELDS,
   FLAG_MODES_PROBLEM,
   RATING_FILTERS_PROBLEM,
+  SOURCES_PROBLEM,
   editPresetNameProblem,
   filterFieldProblems,
   filterAsFieldsRead,
@@ -20,6 +22,7 @@ import {
   generalDraftAfterApply,
   generalDraftFromFilter,
   presetRowsFromApi,
+  sourceChecksForLoaded,
   sourceLabel,
   toggleFilterTag,
   type DateRangeDraft,
@@ -224,37 +227,68 @@ describe("filterWithGeneralDraft", () => {
     expect(filterWithGeneralDraft(partial, partialShown, SOURCES).includedSourceIds).toEqual(["source-2"]);
     expect(filterWithGeneralDraft(partial, { ...partialShown, sourceChecked: [true, true, true] }, SOURCES).includedSourceIds).toEqual([]);
   });
+
+  it("keeps the working filter's sources while no enabled source is checked, a disabled one checked or not", () => {
+    for (const sourceChecked of [[false, false, true], [false, false, false]]) {
+      const working = filter({ includedSourceIds: ["source-2"] });
+      expect(filterWithGeneralDraft(working, draft({ sourceChecked }), SOURCES).includedSourceIds, String(sourceChecked)).toEqual(["source-2"]);
+      expect(filterWithGeneralDraft(filter(), draft({ sourceChecked }), SOURCES).includedSourceIds, String(sourceChecked)).toEqual([]);
+    }
+  });
+});
+
+describe("sourceChecksForLoaded", () => {
+  const A: FilterSource = { id: "source-a", displayName: "A" };
+  const B: FilterSource = { id: "source-b", displayName: "B" };
+  const C: FilterSource = { id: "source-c", displayName: "C" };
+  const D: FilterSource = { id: "source-d", displayName: "D" };
+
+  it("carries each shown source's check over by id, through a reorder and a source removed, and checks a new one as the filter includes it", () => {
+    const shown = draft({ sourceChecked: [true, false, false] });
+    expect(sourceChecksForLoaded(shown, [A, B, C], [C, D, A], filter({ includedSourceIds: ["source-a"] }))).toEqual([false, false, true]);
+    expect(sourceChecksForLoaded(shown, [A, B, C], [C, D, A], filter({ includedSourceIds: ["source-a", "source-d"] }))).toEqual([false, true, true]);
+  });
+
+  it("keeps every shown source unchecked, though the filter it keeps meanwhile includes every source", () => {
+    const shown = draft({ sourceChecked: [false, false] });
+    expect(sourceChecksForLoaded(shown, [A, B], [B, A, D], filter({ includedSourceIds: [] }))).toEqual([false, false, true]);
+  });
 });
 
 describe("filterAsFieldsRead", () => {
   it("reads each duration as its field's text, empty as no limit, and nothing while either text isn't valid", () => {
     const applied = filter({ minDurationSeconds: 90, maxDurationSeconds: 600 });
-    expect(filterAsFieldsRead(applied, draft({ minText: "", maxText: "" }))).toMatchObject({
+    expect(filterAsFieldsRead(applied, draft({ minText: "", maxText: "" }), SOURCES)).toMatchObject({
       minDurationSeconds: null,
       maxDurationSeconds: null
     });
-    expect(filterAsFieldsRead(filter(), draft({ minText: "90", maxText: "10:00" }))).toMatchObject({
+    expect(filterAsFieldsRead(filter(), draft({ minText: "90", maxText: "10:00" }), SOURCES)).toMatchObject({
       minDurationSeconds: 90,
       maxDurationSeconds: 600
     });
-    expect(filterAsFieldsRead(filter(), draft({ minText: "abc" }))).toBeNull();
-    expect(filterAsFieldsRead(filter(), draft({ maxText: "1:75" }))).toBeNull();
+    expect(filterAsFieldsRead(filter(), draft({ minText: "abc" }), SOURCES)).toBeNull();
+    expect(filterAsFieldsRead(filter(), draft({ maxText: "1:75" }), SOURCES)).toBeNull();
     expect(applied).toMatchObject({ minDurationSeconds: 90, maxDurationSeconds: 600 });
   });
 
   it("reads each date range as its fields, and nothing while a custom range has a problem", () => {
     const applied = filter({ addedRange: "last7Days", createdRange: "thisYear" });
-    expect(filterAsFieldsRead(applied, draft({ added: custom("2026-01-03", "2026-01-03") }))).toMatchObject({
+    expect(filterAsFieldsRead(applied, draft({ added: custom("2026-01-03", "2026-01-03") }), SOURCES)).toMatchObject({
       addedRange: { from: "2026-01-03", to: "2026-01-03" },
       createdRange: null
     });
-    expect(filterAsFieldsRead(applied, draft({ added: custom("", "2026-01-03") }))).toBeNull();
-    expect(filterAsFieldsRead(applied, draft({ created: custom("2026-01-03", "2100-01-01") }))).toBeNull();
-    expect(filterAsFieldsRead(applied, draft({ created: custom("2026-03-31", "2026-01-03") }))).toBeNull();
+    expect(filterAsFieldsRead(applied, draft({ added: custom("", "2026-01-03") }), SOURCES)).toBeNull();
+    expect(filterAsFieldsRead(applied, draft({ created: custom("2026-01-03", "2100-01-01") }), SOURCES)).toBeNull();
+    expect(filterAsFieldsRead(applied, draft({ created: custom("2026-03-31", "2026-01-03") }), SOURCES)).toBeNull();
     // Dates kept for another choice aren't read.
-    expect(filterAsFieldsRead(applied, draft({ added: { choice: "last90Days", fromText: "", toText: "2026-01-03" } }))).toMatchObject({
+    expect(filterAsFieldsRead(applied, draft({ added: { choice: "last90Days", fromText: "", toText: "2026-01-03" } }), SOURCES)).toMatchObject({
       addedRange: "last90Days"
     });
+  });
+
+  it("reads nothing while no enabled source is checked", () => {
+    expect(filterAsFieldsRead(filter(), draft({ sourceChecked: [false, false, true] }), SOURCES)).toBeNull();
+    expect(filterAsFieldsRead(filter(), draft({ sourceChecked: [false, true, false] }), SOURCES)).not.toBeNull();
   });
 });
 
@@ -285,9 +319,10 @@ describe("filterFieldProblems", () => {
   const PRESETS = [{ id: "fav", name: "Favorites", filterState: filter() }];
 
   it("flags a duration that is not valid, read strictly, and not an empty one", () => {
-    expect(filterFieldProblems(draft(), "Mine", PRESETS)).toEqual({
+    expect(filterFieldProblems(draft(), SOURCES, "Mine", PRESETS)).toEqual({
       flagModes: null,
       ratingFilters: null,
+      sources: null,
       minDuration: null,
       maxDuration: null,
       addedFrom: null,
@@ -297,17 +332,46 @@ describe("filterFieldProblems", () => {
       newPresetName: null
     });
     for (const text of ["1:7x", "12abc", "1:75"]) {
-      expect(filterFieldProblems(draft({ minText: text }), "Mine", PRESETS).minDuration, text).toEqual({ message: DURATION_PROBLEM });
-      expect(filterFieldProblems(draft({ maxText: text }), "Mine", PRESETS).maxDuration, text).toEqual({ message: DURATION_PROBLEM });
+      expect(filterFieldProblems(draft({ minText: text }), SOURCES, "Mine", PRESETS).minDuration, text).toEqual({ message: DURATION_PROBLEM });
+      expect(filterFieldProblems(draft({ maxText: text }), SOURCES, "Mine", PRESETS).maxDuration, text).toEqual({ message: DURATION_PROBLEM });
     }
-    expect(filterFieldProblems(draft({ minText: "" }), "Mine", PRESETS).minDuration).toBeNull();
-    expect(filterFieldProblems(draft({ minText: "  " }), "Mine", PRESETS).minDuration).toBeNull();
-    expect(filterFieldProblems(draft({ minText: "90:00" }), "Mine", PRESETS).minDuration).toBeNull();
+    expect(filterFieldProblems(draft({ minText: "" }), SOURCES, "Mine", PRESETS).minDuration).toBeNull();
+    expect(filterFieldProblems(draft({ minText: "  " }), SOURCES, "Mine", PRESETS).minDuration).toBeNull();
+    expect(filterFieldProblems(draft({ minText: "90:00" }), SOURCES, "Mine", PRESETS).minDuration).toBeNull();
+  });
+
+  it("flags a maximum duration below the minimum on Max, after a Max that isn't valid, and not an equal one or an empty side", () => {
+    const problems = (minText: string, maxText: string) => {
+      const { minDuration, maxDuration } = filterFieldProblems(draft({ minText, maxText }), SOURCES, "Mine", PRESETS);
+      return { minDuration, maxDuration };
+    };
+    expect(problems("10:00", "1:00")).toEqual({ minDuration: null, maxDuration: { message: DURATION_ORDER_PROBLEM } });
+    expect(problems("600", "1:00")).toEqual({ minDuration: null, maxDuration: { message: DURATION_ORDER_PROBLEM } });
+    expect(problems("10:00", "600")).toEqual({ minDuration: null, maxDuration: null });
+    expect(problems("10:00", "1:75")).toEqual({ minDuration: null, maxDuration: { message: DURATION_PROBLEM } });
+    expect(problems("abc", "1:00")).toEqual({ minDuration: { message: DURATION_PROBLEM }, maxDuration: null });
+    expect(problems("10:00", "")).toEqual({ minDuration: null, maxDuration: null });
+    expect(problems("", "1:00")).toEqual({ minDuration: null, maxDuration: null });
+    expect(DURATION_ORDER_PROBLEM).toBe("Use a maximum at or above the minimum.");
+  });
+
+  it("flags the sources while no enabled source is checked, and not with no sources or only disabled ones", () => {
+    const problem = (sourceChecked: boolean[], sources: readonly FilterSource[] = SOURCES) =>
+      filterFieldProblems(draft({ sourceChecked }), sources, "Mine", PRESETS).sources;
+    expect(problem([false, false, false])).toEqual({ message: SOURCES_PROBLEM });
+    // A disabled source still checked doesn't count.
+    expect(problem([false, false, true])).toEqual({ message: SOURCES_PROBLEM });
+    expect(isFlagged(problem([false, false, true]))).toBe(true);
+    expect(problem([true, false, false])).toBeNull();
+    expect(problem([false, true, false])).toBeNull();
+    expect(problem([], [])).toBeNull();
+    expect(problem([false], [{ id: "off", isEnabled: false }])).toBeNull();
+    expect(SOURCES_PROBLEM).toBe("Check at least one source.");
   });
 
   it("flags a custom range's empty date, a date outside 1970 to 2099, and a To before its From", () => {
     const problems = (added: DateRangeDraft) => {
-      const { addedFrom, addedTo } = filterFieldProblems(draft({ added }), "Mine", PRESETS);
+      const { addedFrom, addedTo } = filterFieldProblems(draft({ added }), SOURCES, "Mine", PRESETS);
       return { addedFrom, addedTo };
     };
     expect(problems(custom("2026-01-03", "2026-03-31"))).toEqual({ addedFrom: null, addedTo: null });
@@ -322,37 +386,37 @@ describe("filterFieldProblems", () => {
     expect(problems(custom("", "2026-01-03"))).toEqual({ addedFrom: { message: DATE_START_PROBLEM }, addedTo: null });
     expect(isFlagged(problems(custom("", "")).addedFrom)).toBe(true);
     expect(DATE_YEARS_PROBLEM).toBe("Choose a date from 1970 to 2099.");
-    const created = filterFieldProblems(draft({ created: custom("2026-03-31", "") }), "Mine", PRESETS);
+    const created = filterFieldProblems(draft({ created: custom("2026-03-31", "") }), SOURCES, "Mine", PRESETS);
     expect(created).toMatchObject({ createdFrom: null, createdTo: { message: DATE_END_PROBLEM }, addedFrom: null, addedTo: null });
   });
 
   it("finds no date problem unless the choice is Custom range, whatever dates its fields kept", () => {
     for (const choice of [null, "last7Days", "thisYear"] as const) {
-      const { addedFrom, addedTo } = filterFieldProblems(draft({ added: { choice, fromText: "", toText: "" } }), "Mine", PRESETS);
+      const { addedFrom, addedTo } = filterFieldProblems(draft({ added: { choice, fromText: "", toText: "" } }), SOURCES, "Mine", PRESETS);
       expect({ addedFrom, addedTo }, String(choice)).toEqual({ addedFrom: null, addedTo: null });
     }
   });
 
   it("finds an empty new preset name required, without a flag, and flags a saved preset's name ignoring case", () => {
-    expect(filterFieldProblems(draft(), "  ", PRESETS).newPresetName).toBe(EMPTY_FIELD);
-    expect(isFlagged(filterFieldProblems(draft(), "  ", PRESETS).newPresetName)).toBe(false);
-    expect(filterFieldProblems(draft(), " FAVORITES ", PRESETS).newPresetName).toEqual({ message: "Use a name no other preset has." });
-    expect(filterFieldProblems(draft(), "Favorites 2", PRESETS).newPresetName).toBeNull();
+    expect(filterFieldProblems(draft(), SOURCES, "  ", PRESETS).newPresetName).toBe(EMPTY_FIELD);
+    expect(isFlagged(filterFieldProblems(draft(), SOURCES, "  ", PRESETS).newPresetName)).toBe(false);
+    expect(filterFieldProblems(draft(), SOURCES, " FAVORITES ", PRESETS).newPresetName).toEqual({ message: "Use a name no other preset has." });
+    expect(filterFieldProblems(draft(), SOURCES, "Favorites 2", PRESETS).newPresetName).toBeNull();
   });
 
   it.each(FLAG_MODE_PAIRS)("flags only Favorites only with Blacklisted only: Favorites %s with Blacklisted %s", (favorites, blacklisted) => {
     const shown = generalDraftFromFilter(filter({ favoritesMode: favorites, blacklistedMode: blacklisted }), SOURCES);
     const expected = favorites === "only" && blacklisted === "only" ? { message: FLAG_MODES_PROBLEM } : null;
-    expect(filterFieldProblems(shown, "Mine", PRESETS).flagModes).toEqual(expected);
+    expect(filterFieldProblems(shown, SOURCES, "Mine", PRESETS).flagModes).toEqual(expected);
   });
 
   it("does not flag Favorites only with a Blacklisted only choice whose box is off", () => {
-    expect(filterFieldProblems(draft({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: false, blacklistedChoice: "only" }), "Mine", PRESETS).flagModes).toBeNull();
+    expect(filterFieldProblems(draft({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: false, blacklistedChoice: "only" }), SOURCES, "Mine", PRESETS).flagModes).toBeNull();
   });
 
   it("flags Only unrated with a minimum rating, and either one alone not at all", () => {
     const problem = (onlyUnrated: boolean, minRating: number | null) =>
-      filterFieldProblems(draft({ onlyUnrated, minRating }), "Mine", PRESETS).ratingFilters;
+      filterFieldProblems(draft({ onlyUnrated, minRating }), SOURCES, "Mine", PRESETS).ratingFilters;
     expect(problem(true, 0.5)).toEqual({ message: RATING_FILTERS_PROBLEM });
     expect(problem(true, 5)).toEqual({ message: RATING_FILTERS_PROBLEM });
     expect(isFlagged(problem(true, 3))).toBe(true);
@@ -407,10 +471,13 @@ describe("filterHeldReason", () => {
     expect(filterHeldReason("apply", "createdTo")).toBe("Correct the Created dates to apply.");
     expect(filterHeldReason("addPreset", "addedTo")).toBe("Correct the Added dates first.");
     expect(filterHeldReason("updatePreset", "createdFrom")).toBe("Correct the Created dates first.");
+    expect(filterHeldReason("apply", "sources")).toBe("Check at least one source to apply.");
+    expect(filterHeldReason("addPreset", "sources")).toBe("Check at least one source first.");
+    expect(filterHeldReason("updatePreset", "sources")).toBe("Check at least one source first.");
   });
 
   it("checks the General fields for every action and Add Preset's name first, which sits beside it", () => {
-    const general = ["flagModes", "ratingFilters", "minDuration", "maxDuration", "addedFrom", "addedTo", "createdFrom", "createdTo"];
+    const general = ["flagModes", "ratingFilters", "sources", "minDuration", "maxDuration", "addedFrom", "addedTo", "createdFrom", "createdTo"];
     expect(FILTER_ACTION_FIELDS).toEqual({ apply: general, addPreset: ["newPresetName", ...general], updatePreset: general });
     expect(FILTER_ACTION_BESIDE).toEqual({ apply: [], addPreset: ["newPresetName"], updatePreset: [] });
   });

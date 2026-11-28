@@ -1257,6 +1257,24 @@ describe("Stats tab's rating", () => {
     expect(server.logLines().some((line) => line.startsWith("status=Rating update failed (HTTP 500)."))).toBe(true);
   });
 
+  it("keeps a second rating set before the first is answered, through the first's answer", async () => {
+    const answers: Array<() => void> = [];
+    const { server } = await openRated(2, {
+      reply: (call) => new Promise<Response>((resolve) => answers.push(() => resolve(ratingAnswer(call))))
+    });
+
+    await tapStars(ratingStars()!, xFor(4), "touch");
+    await tapStars(ratingStars()!, xFor(3), "touch");
+    await waitFor(() => expect(ratingRequests(server)).toHaveLength(2));
+    answers[0]!();
+    await waitFor(() => expect(popupsShown()).toEqual(["Rated 4 stars | holiday clip.mp4"]));
+    expect(starsShown(ratingStars()!)).toBe(3);
+
+    answers[1]!();
+    await waitFor(() => expect(popupsShown()).toEqual(["Rated 3 stars | holiday clip.mp4"]));
+    expect(starsShown(ratingStars()!)).toBe(3);
+  });
+
   it("shows another device's rating at once, and loads the tab again, as the Rated card shows", async () => {
     const { page, server, items } = await openRated(2);
     const statsLoads = () => server.requests("GET", "/api/library/stats").length;

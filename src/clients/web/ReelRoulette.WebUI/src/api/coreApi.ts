@@ -1,13 +1,19 @@
-import type { RuntimeConfig } from "../types/runtimeConfig";
 import { browserStorage } from "../state/deviceStore";
-import { readJson, refusalError, sendRequest, type HttpStatusError } from "./serverRequest";
+import type { AppApi } from "../state/appApi";
+import {
+  PLAYBACK_REQUEST_TIMEOUT_MS,
+  readJson,
+  refusalError,
+  withTimeout,
+  type HttpStatusError,
+  type TimedOutcome
+} from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
 type PlaybackItemResponse = components["schemas"]["PlaybackItemResponse"];
 
 export type PlayItemSuccess = {
   ok: true;
-  statusCode: number;
   response: PlaybackItemResponse;
 };
 
@@ -23,10 +29,6 @@ const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
 let fallbackClientId: string | null = null;
 let fallbackSessionId: string | null = null;
-
-function buildApiUrl(config: Pick<RuntimeConfig, "apiBaseUrl">, path: string): string {
-  return new URL(path, `${config.apiBaseUrl}/`).toString();
-}
 
 function createGuidFallback(): string {
   return `${Date.now()}-${Math.random()}`;
@@ -87,44 +89,38 @@ export interface PlayItemOptions {
    * for any play while Don't record plays is on. Defaults to true, sending the default body.
    */
   recordPlayback?: boolean;
-  /** Cancels the request. */
-  signal?: AbortSignal;
 }
 
 /**
- * Plays an item through `POST /api/play/{itemId}`. A refusal comes back as a `PlayItemFailure`, read as `refusalError`
- * reads it. A request that couldn't reach the server throws a `ServerUnreachableError`, and a success whose body isn't
- * JSON an `UnexpectedResponseError`.
+ * Plays an item through `POST /api/play/{itemId}`, waiting at most `PLAYBACK_REQUEST_TIMEOUT_MS`, as `withTimeout`
+ * waits. A refusal answers a `PlayItemFailure`, read as `refusalError` reads it. A request that couldn't reach the
+ * server fails with a `ServerUnreachableError`, a 401 with the `UnauthorizedError` of `api.request`, and a success whose
+ * body isn't JSON with an `UnexpectedResponseError`.
  */
-export async function requestPlayItem(
-  config: Pick<RuntimeConfig, "apiBaseUrl">,
+export function requestPlayItem(
+  api: Pick<AppApi, "request" | "url">,
   itemId: string,
   identity: { clientId: string; sessionId: string },
-  fetchImpl: typeof fetch = fetch,
   options: PlayItemOptions = {}
-): Promise<PlayItemResult> {
-  const encodedItemId = encodeURIComponent(itemId);
-  const response = await sendRequest(fetchImpl, buildApiUrl(config, `/api/play/${encodedItemId}`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      clientId: identity.clientId,
-      sessionId: identity.sessionId,
-      ...(options.recordPlayback === false ? { recordPlayback: false } : {})
-    }),
-    signal: options.signal
-  });
+): Promise<TimedOutcome<PlayItemResult>> {
+  return withTimeout(async (signal): Promise<PlayItemResult> => {
+    const response = await api.request(api.url(`/api/play/${encodeURIComponent(itemId)}`), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        clientId: identity.clientId,
+        sessionId: identity.sessionId,
+        ...(options.recordPlayback === false ? { recordPlayback: false } : {})
+      }),
+      signal
+    });
 
-  if (response.ok) {
-    const playResponse = await readJson<PlaybackItemResponse>(response);
-    return {
-      ok: true,
-      statusCode: response.status,
-      response: playResponse
-    };
-  }
+    if (response.ok) {
+      return { ok: true, response: await readJson<PlaybackItemResponse>(response) };
+    }
 
-  return { ok: false, refusal: await refusalError(response) };
+    return { ok: false, refusal: await refusalError(response) };
+  }, PLAYBACK_REQUEST_TIMEOUT_MS);
 }

@@ -34,6 +34,7 @@ import {
   filterWithGeneralDraft,
   generalDraftAfterApply,
   generalDraftFromFilter,
+  sourceChecksForLoaded,
   presetLoopReason,
   containsIgnoringCase,
   filterTagCategories,
@@ -311,18 +312,18 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
    * Works out the heading, the unsaved changes, whether the filter is the default one, and the fields' and actions'
    * problems. The heading's preset follows the working filter: None for the default filter, a saved preset with the
    * same filter, or else the last preset. The heading stars it while the filter, as its General fields read, differs
-   * from its filter, as while a duration's text isn't valid or a custom range has a problem. The chosen preset stays
-   * where it was put, or None once the list no longer has it. Presets go by id.
+   * from its filter, as while a duration's text isn't valid, a custom range has a problem, or no enabled source is
+   * checked. The chosen preset stays where it was put, or None once the list no longer has it. Presets go by id.
    */
   function settled(state: FilterDialogState): FilterDialogView {
-    const problems = filterFieldProblems(state.general, state.newPresetName, state.presets);
+    const problems = filterFieldProblems(state.general, state.sources, state.newPresetName, state.presets);
     const edit = state.presetEdit;
     const presetEditProblem = edit ? editPresetNameProblem(edit.name, state.presets, edit.id) : null;
     const applied = store.appliedFilter.peek();
     const presetsChanged = !presetListsEqual(state.presets, state.savedPresets);
     // A duration still being typed isn't in the working filter yet, so it counts as its field reads. Text that isn't
-    // valid, or a custom range with a problem, differs from every filter.
-    const typed = filterAsFieldsRead(state.working, state.general);
+    // valid, a custom range with a problem, or no enabled source checked differs from every filter.
+    const typed = filterAsFieldsRead(state.working, state.general, state.sources);
     // The preset follows the working filter, so text passed through while typing, such as an emptied field, doesn't
     // change it; only the heading's star follows the text.
     const headingPreset = dialogPresetBase(state.working, state.presets, state.headingPreset);
@@ -433,15 +434,18 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
   /**
    * Takes loaded sources, tags, and presets, keeping the working filter, the General fields as they are, such as a
-   * duration still being typed, with only their sources checked again for the loaded sources, and the source list they
-   * were filled from. The presets are taken by the merge.
+   * duration still being typed or every source unchecked, with each source's check carried over by id, and the source
+   * list they were filled from. The presets are taken by the merge.
    */
   function takeRemote(current: FilterDialogView, remote: Awaited<ReturnType<typeof loadRemote>>): void {
     update({
       sources: remote.sources,
       tagModel: remote.tagModel,
       ...presetsTaking(current, remote.presets),
-      general: { ...current.general, sourceChecked: generalDraftFromFilter(current.working, remote.sources).sourceChecked }
+      general: {
+        ...current.general,
+        sourceChecked: sourceChecksForLoaded(current.general, current.sources, remote.sources, current.working)
+      }
     });
   }
 
@@ -706,7 +710,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   // until this update settles it again.
   function followApplied(): void {
     const current = view.peek();
-    const typed = current ? filterAsFieldsRead(current.working, current.general) : null;
+    const typed = current ? filterAsFieldsRead(current.working, current.general, current.sources) : null;
     if (!current || !typed || !filterStatesEqualForPresetMatch(typed, current.applied)) {
       return;
     }
