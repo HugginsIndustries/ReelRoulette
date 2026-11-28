@@ -1,5 +1,5 @@
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
-import { isRecord, type DeviceStore } from "../state/deviceStore";
+import { isBoolean, isRecord, type DeviceStore } from "../state/deviceStore";
 
 /** The kinds of one-off message, each of which the popup settings can turn off. */
 export type NotificationKind = "actions" | "devices" | "refresh" | "skips" | "connection";
@@ -42,6 +42,9 @@ export const DEFAULT_POPUP_SETTINGS: Readonly<PopupSettings> = {
 /** The per-device store's key for the popup settings. */
 export const POPUP_SETTINGS_KEY = "notifications.popups";
 
+/** The per-device store's key for Show seconds, kept apart from the popup settings, which Show popups turns off. */
+export const SHOW_SECONDS_KEY = "notifications.showSeconds";
+
 /** A change to the popup settings: the settings it names, and the kinds it names, each in turn. */
 export type PopupSettingsChange = Partial<Omit<PopupSettings, "kinds">> & { kinds?: Partial<Record<NotificationKind, boolean>> };
 
@@ -64,9 +67,6 @@ export const POPUP_PAUSE_FLOOR_MS = 800;
 
 /** How long a closing popup takes to fade, before it goes. */
 export const POPUP_LEAVE_MS = 160;
-
-/** How often the list's times move on while it is open. */
-export const LIST_TIME_REFRESH_MS = 30_000;
 
 /** A message the list keeps. */
 export interface NotificationEntry {
@@ -126,8 +126,9 @@ export interface Notifications {
   readonly popups: ReadonlySignal<readonly Popup[]>;
   readonly listOpen: ReadonlySignal<boolean>;
   readonly settings: ReadonlySignal<PopupSettings>;
-  /** The time the list's entries are shown against; it moves on every 30 seconds while the list is open. */
-  readonly now: ReadonlySignal<number>;
+  /** Show seconds, off by default: the list's times read HH:MM:SS in place of HH:MM. */
+  readonly showSeconds: ReadonlySignal<boolean>;
+  setShowSeconds(on: boolean): void;
   /** A one-off message: it pops up if its kind is on, and the list keeps it either way. It relays its text. */
   notify(request: NotifyRequest): void;
   /** Keeps a notice in the list, unmarked, since the user saw it in its dialog. It relays nothing; the notice did. */
@@ -159,12 +160,10 @@ export interface Notifications {
 export interface NotificationsOptions {
   /** Sends a message's text to `last.log` as a `status=` line. */
   relay: (logText: string) => void;
-  /** Where the popup settings are kept. */
+  /** Where the popup settings and Show seconds are kept. */
   device: DeviceStore;
   /** The stage is in fullscreen, native or pseudo. */
   inFullscreen: ReadonlySignal<boolean>;
-  /** Defaults to `Date.now`. */
-  now?: () => number;
 }
 
 /** The popup settings kept on this device, each field falling back to its default. */
@@ -186,19 +185,6 @@ export function readPopupSettings(device: DeviceStore): PopupSettings {
   };
 }
 
-/** A message's time in the list: "Just now", "{n} min ago", then the time of day. */
-export function messageTime(time: number, now: number): string {
-  const seconds = Math.round((now - time) / 1000);
-  if (seconds < 60) {
-    return "Just now";
-  }
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} min ago`;
-  }
-  return new Date(time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 /** A popup's time: what it has left, whether it is counting down, and whether the pointer holds it paused. */
 interface PopupTime {
   remaining: number;
@@ -209,16 +195,14 @@ interface PopupTime {
 }
 
 export function createNotifications(options: NotificationsOptions): Notifications {
-  const now = options.now ?? (() => Date.now());
   const entries = signal<readonly NotificationEntry[]>([]);
   const unread = signal(0);
   const popups = signal<readonly Popup[]>([]);
   const listOpen = signal(false);
   const settings = signal(readPopupSettings(options.device));
-  const listNow = signal(now());
+  const showSeconds = signal(options.device.read(SHOW_SECONDS_KEY, false, isBoolean));
   const times = new Map<number, PopupTime>();
   let lastId = 0;
-  let listTimer: ReturnType<typeof setInterval> | undefined;
 
   const showing = (): readonly Popup[] => popups.peek().filter((popup) => !popup.leaving);
 
@@ -231,7 +215,7 @@ export function createNotifications(options: NotificationsOptions): Notification
     if (!time || time.remaining === 0 || time.held) {
       return;
     }
-    time.started = now();
+    time.started = Date.now();
     time.running = true;
     clearTimeout(time.timer);
     time.timer = setTimeout(() => dismiss(id), time.remaining);
@@ -245,7 +229,7 @@ export function createNotifications(options: NotificationsOptions): Notification
     }
     time.running = false;
     clearTimeout(time.timer);
-    time.remaining = Math.max(POPUP_PAUSE_FLOOR_MS, time.remaining - (now() - time.started));
+    time.remaining = Math.max(POPUP_PAUSE_FLOOR_MS, time.remaining - (Date.now() - time.started));
   }
 
   function startTime(id: number, warning: boolean): void {
@@ -310,7 +294,7 @@ export function createNotifications(options: NotificationsOptions): Notification
       text: request.text,
       detail: request.detail ?? "",
       warning,
-      time: now(),
+      time: Date.now(),
       unread: false,
       highlight: false
     };
@@ -342,8 +326,6 @@ export function createNotifications(options: NotificationsOptions): Notification
     }
     listOpen.value = false;
     entries.value = entries.peek().map((entry) => (entry.highlight ? { ...entry, highlight: false } : entry));
-    clearInterval(listTimer);
-    listTimer = undefined;
   }
 
   function openList(): void {
@@ -352,12 +334,7 @@ export function createNotifications(options: NotificationsOptions): Notification
     }
     entries.value = entries.peek().map((entry) => ({ ...entry, highlight: entry.unread, unread: false }));
     unread.value = 0;
-    listNow.value = now();
     listOpen.value = true;
-    clearInterval(listTimer);
-    listTimer = setInterval(() => {
-      listNow.value = now();
-    }, LIST_TIME_REFRESH_MS);
   }
 
   // With Show in fullscreen off, entering fullscreen closes the popups showing.
@@ -376,7 +353,7 @@ export function createNotifications(options: NotificationsOptions): Notification
     popups,
     listOpen,
     settings,
-    now: listNow,
+    showSeconds,
     notify,
 
     record(text) {
@@ -387,7 +364,7 @@ export function createNotifications(options: NotificationsOptions): Notification
         text,
         detail: "",
         warning: false,
-        time: now(),
+        time: Date.now(),
         unread: false,
         highlight: false
       });
@@ -436,6 +413,11 @@ export function createNotifications(options: NotificationsOptions): Notification
       options.device.write(POPUP_SETTINGS_KEY, next);
     },
 
+    setShowSeconds(on) {
+      showSeconds.value = on;
+      options.device.write(SHOW_SECONDS_KEY, on);
+    },
+
     preview() {
       const entry: NotificationEntry = {
         id: ++lastId,
@@ -444,7 +426,7 @@ export function createNotifications(options: NotificationsOptions): Notification
         text: "Popups show here.",
         detail: samplePopupDetail(settings.peek().seconds),
         warning: false,
-        time: now(),
+        time: Date.now(),
         unread: false,
         highlight: false
       };

@@ -305,7 +305,9 @@ ReelRoulette is a thin-client, API-first system:
 - The list, inside the fullscreen stage, shows:
   - Now, each active lasting state with its full text and, for Reconnecting…, the update notice, Server not compatible, and Running without a library, a second line.
     - The update notice's second line reads "The server has a newer version. Reloading the page loads it.", and a tap on its row reloads the page as a tap on the indicator does, asking first while the Filter or Tags tab holds unsaved changes.
-  - Recent, the last 50 messages, newest first, with "Just now", "{n} min ago", or the time of day, moving on every 30 seconds while it is open.
+  - Recent, the last 50 messages, newest first, each with its time in 24-hour time: "HH:MM" for a message from today and "MM-DD HH:MM" for one from another day.
+    - With Show seconds on, the times read "HH:MM:SS" and "MM-DD HH:MM:SS".
+    - The list works out the day each time it renders, so a message from before midnight gains its date at the list's next render.
   - Messages that didn't pop up show marked, and in-app notices show unmarked with the `error` icon and aren't counted.
   - Clear empties Recent.
   - While the list is open nothing pops up, and a popup showing with a new message's key closes.
@@ -687,6 +689,7 @@ ReelRoulette is a thin-client, API-first system:
   - Show file names on tiles, off by default and kept as `appearance.tileNames`, with the hint "Hovering a tile shows its name either way."
 - Notifications has Show popups, with its hint, and Popup settings, a group that opens and closes from its summary with a chevron, starts closed on each page load, and is disabled while Show popups is off.
   - It holds Show popups for, the five kinds each with its hint, Position, Show in fullscreen, and Show for, 3, 5, or 10 seconds.
+  - Show seconds follows, outside Popup settings and usable with Show popups off, off by default and kept as `notifications.showSeconds`, with the hint "Adds seconds to the times in the bell's list."
 - Panel has Side, Left or Right, and Auto-Pause, Responsive, Always, or Never, each choice named by its title, with its line under it.
 - Keyboard shortcuts, a section that opens and closes from its heading with a chevron and starts closed on each page load, lists each shortcut's keys and what they do, from the table the shortcuts are bound by, Esc's as "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen", with the hint "Shortcuts do nothing while you type in a text field."
 - Diagnostics shows:

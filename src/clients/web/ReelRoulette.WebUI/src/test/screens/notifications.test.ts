@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { POPUP_SETTINGS_KEY, messageTime, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
+import { POPUP_SETTINGS_KEY, SHOW_SECONDS_KEY, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
 import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
 import type { AppServices } from "../../state/appServices";
 import { RECONNECTING_DETAIL } from "../../state/lastingStates";
@@ -634,32 +634,23 @@ describe("the list", () => {
     expect(reloadPage).toHaveBeenCalledTimes(1);
   });
 
-  it("shows Recent newest first with their times, which move on while it is open, and marks what didn't pop up", async () => {
+  it("shows Recent newest first with today's times as HH:MM in 24-hour time, and marks what didn't pop up", async () => {
     useFakeClock();
     vi.setSystemTime(new Date(2026, 9, 13, 14, 5, 0));
     keepSettings({ kinds: { devices: false } });
     const services = await mountWithServices();
     await notify(services, { kind: "devices", text: "Blacklisted on another device", detail: "holiday clip.mp4" });
-    const first = Date.now();
-    await wait(3 * 60_000);
+    await wait(3 * 60_000 + 7_000);
     await notify(services, { kind: "actions", text: "Filters applied." });
     expect(badge().textContent).toBe("1");
 
     await click(bell());
     expect(part("recent").querySelector(".notify-group-title")!.hasAttribute("hidden")).toBe(false);
     expect(rows("recent")).toEqual([
-      { text: "Filters applied.", time: "Just now", detail: null, classes: [] },
-      { text: "Blacklisted on another device", time: "3 min ago", detail: "holiday clip.mp4", classes: ["is-unread"] }
+      { text: "Filters applied.", time: "14:08", detail: null, classes: [] },
+      { text: "Blacklisted on another device", time: "14:05", detail: "holiday clip.mp4", classes: ["is-unread"] }
     ]);
     expect(emptyText().hidden).toBe(true);
-
-    await wait(30_000);
-    expect(rows("recent").map((row) => row.time)).toEqual(["Just now", "3 min ago"]);
-    await wait(30_000);
-    expect(rows("recent").map((row) => row.time)).toEqual(["1 min ago", "4 min ago"]);
-    await wait(60 * 60_000);
-    expect(rows("recent")[1]!.time).toBe(messageTime(first, Date.now()));
-    expect(rows("recent")[1]!.time).toBe(new Date(first).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
 
     // Once seen, it is no longer marked.
     await click(bell());
@@ -667,7 +658,37 @@ describe("the list", () => {
     expect(rows("recent").map((row) => row.classes)).toEqual([[], []]);
   });
 
+  it("dates a message from another day as MM-DD HH:MM, from the list's next render after midnight", async () => {
+    useFakeClock();
+    vi.setSystemTime(new Date(2026, 9, 13, 23, 58, 30));
+    keepSettings({ popups: false });
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Filters applied." });
+    await click(bell());
+    expect(rows("recent").map((row) => row.time)).toEqual(["23:58"]);
+
+    await wait(2 * 60_000);
+    await notify(services, { kind: "actions", text: "Paired." });
+    expect(rows("recent").map((row) => row.time)).toEqual(["00:00", "10-13 23:58"]);
+  });
+
+  it("adds seconds to today's and another day's times with Show seconds on", async () => {
+    useFakeClock();
+    vi.setSystemTime(new Date(2026, 9, 13, 23, 58, 30));
+    localStorage.setItem(`rr_device.${SHOW_SECONDS_KEY}`, "true");
+    keepSettings({ popups: false });
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Filters applied." });
+    await wait(2 * 60_000 + 5_000);
+    await notify(services, { kind: "actions", text: "Paired." });
+
+    await click(bell());
+    expect(rows("recent").map((row) => row.time)).toEqual(["00:00:35", "10-13 23:58:30"]);
+  });
+
   it("keeps every in-app notice, unmarked, as an error, and the bell doesn't count it", async () => {
+    useFakeClock();
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 4, 0));
     const services = await mountWithServices();
     void services.dialogs.notice("Saving presets failed.");
     await flush();
@@ -677,7 +698,7 @@ describe("the list", () => {
     expect(toasts()).toEqual([]);
 
     await click(bell());
-    expect(rows("recent")).toEqual([{ text: "Saving presets failed.", time: "Just now", detail: null, classes: ["is-error"] }]);
+    expect(rows("recent")).toEqual([{ text: "Saving presets failed.", time: "09:04", detail: null, classes: ["is-error"] }]);
   });
 
   it("keeps the last 50 messages, and Clear empties it", async () => {

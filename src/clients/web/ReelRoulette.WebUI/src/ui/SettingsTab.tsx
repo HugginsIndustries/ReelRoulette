@@ -194,6 +194,7 @@ export function SettingsTab() {
         </Section>
         <Section id="settings-notifications" title="Notifications">
           <NotificationSettings />
+          <ShowSeconds />
         </Section>
         <Section id="settings-panel" title="Panel">
           <PanelSettings />
@@ -730,6 +731,20 @@ function NotificationSettings() {
         </fieldset>
       </details>
     </div>
+  );
+}
+
+/** Show seconds, for the bell's times, outside Popup settings, since the list shows its times with popups off too. */
+function ShowSeconds() {
+  const { notifications } = useApp();
+  return (
+    <Checkbox
+      id="settings-notify-seconds"
+      label="Show seconds"
+      hint="Adds seconds to the times in the bell's list."
+      checked={notifications.showSeconds.value}
+      onChange={notifications.setShowSeconds}
+    />
   );
 }
 

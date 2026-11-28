@@ -188,7 +188,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Notifications.tsx`
   - the player's bell, with its badge and its accessible name counting what didn't pop up, orange while it has unread messages or its list is open, which opens the list under it or closes it.
   - the popups, at the edge and side the popup settings say, each a card with its icon, message, second line, and Dismiss, paused while a mouse or pen points at it, and closed by a swipe past 64 px on a touch screen.
-  - the list, lined up with the bell, showing Now from `src/state/lastingStates.ts`, whose update notice's row takes a tap that asks the services to reload for the update, and Recent with their times, with Clear and Close, which takes Escape before the stage except while an in-app dialog is open, and closes on a press outside it, and Notification settings at its foot, which closes it, opens the Settings tab, and asks the settings service to show the popup settings.
+  - the list, lined up with the bell, showing Now from `src/state/lastingStates.ts`, whose update notice's row takes a tap that asks the services to reload for the update, and Recent with their times, worked out against the day each time it renders and with seconds while Show seconds is on, with Clear and Close, which takes Escape before the stage except while an in-app dialog is open, and closes on a press outside it, and Notification settings at its foot, which closes it, opens the Settings tab, and asks the settings service to show the popup settings.
   - However the list closes, focus inside it goes to the page.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Stage.tsx`
   - the fullscreen stage, holding the player with its popups, the side panel, the list behind the bell, the context menu, Auto Tag, the in-app dialogs' host, and Show layout measurements' figures, each in its error boundary, which stay inside the stage so they show in fullscreen.
@@ -297,6 +297,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - Player controls' Hide player controls, radio buttons named by their choice, with its line under it, and under Timeout only Hide after, a setting's field of the field validation pattern, and Keep visible while paused, a checkbox, all kept by the player's controls.
     - Appearance's Theme, Ambient mode with its hint and its Ambient mode settings, a `details` group closed at first whose sliders are named by their labels with the value shown beside them, and Reset to defaults, and Show file names on tiles, a checkbox with its hint.
     - Notifications' Show popups and Popup settings, a `details` group closed at first, whose Other devices kind names favorite, blacklist, rating, and preset changes, its controls each disabled with their fieldset while Show popups is off, a Position or Show for change showing the sample popup, and a request from the bell's list opening it and scrolling to Show popups.
+    - Notifications' Show seconds, a checkbox with its hint outside Popup settings, kept by the notifications service.
     - Panel's Side and Auto-Pause, radio buttons named by their choice, with its line under it.
     - Keyboard shortcuts, a `details` section closed at first that opens from its heading, listing the shortcuts' table with each key as a `kbd`, which a request from H opens and scrolls to.
     - Diagnostics, the client and session ids, client type, and device name in full, the server's version with its API version, or "Unknown" before a version check answers, the server's address, the app's version with its API version, labeled ReelRoulette, and the event stream's state, last event number, or "None" before the first event, and resyncs since the page loaded, from the server connection.
@@ -428,7 +429,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the page's one-off messages:
     - each relays its text, or a log text that leaves out a file or preset name, to `last.log`, pops up if the popup settings allow, at most three at once, the cap never closing a warning, one with the same key replacing the one showing, a warning staying until closed, and the time pausing while held, with a floor.
     - the list keeps it, the last 50, with in-app notices kept unmarked.
-  - The badge's count of what didn't pop up, the list's open state and the time its entries show against, and the popup settings, read per device from `notifications.popups` with each field falling back to its default, which a change merges into and keeps whole.
+  - The badge's count of what didn't pop up, the list's open state, and the popup settings, read per device from `notifications.popups` with each field falling back to its default, which a change merges into and keeps whole.
+  - Show seconds, for the list's times, read per device from `notifications.showSeconds`, apart from the popup settings.
   - nothing pops up while the list is open, and entering fullscreen closes the popups while Show in fullscreen is off.
   - The sample popup, key `preview`, shows for the popup time and never reaches the list, the badge, or `last.log`.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/wheel.ts`
@@ -644,6 +646,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - days and times as text:
     - a number as at least two digits and a duration split into hours, then the minutes and seconds under 60, which the seek row's time and the filter's durations use too.
     - a day written YYYY-MM-DD from a date and back to the start of that day, in the device's own time, as the Filter tab's custom range and the Filters line use them.
+    - a time of day as HH:MM or HH:MM:SS in 24-hour local time.
+    - a time as the bell's list shows it, its time of day for today and with MM-DD before it for another day.
     - a time as YYYY-MM-DD HH:MM:SS in 24-hour local time, as the Stats tab's Show exact times shows it.
 - `src/clients/web/ReelRoulette.WebUI/src/library/library.ts`
   - the Library tab's state and actions:

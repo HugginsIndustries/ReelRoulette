@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { messageTime, type NotificationEntry, type Popup } from "../notifications/notifications";
+import type { NotificationEntry, Popup } from "../notifications/notifications";
 import { activeLastingStates, lastingStateText } from "../state/lastingStates";
+import { whenText } from "../time/timeText";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
 import { keepInside } from "./placement";
@@ -241,14 +242,16 @@ export function NotificationList() {
       }))
     : [];
   const entries = notifications.entries.value;
-  const at = notifications.now.value;
+  // Each render reads the day afresh, so a message's time gains its date the next time the list renders after midnight.
+  const at = Date.now();
+  const seconds = notifications.showSeconds.value;
   const recent: ListRow[] = open
     ? entries.map((entry) => ({
         key: String(entry.id),
         icon: entry.icon,
         text: entry.text,
         detail: entry.detail || null,
-        time: messageTime(entry.time, at),
+        time: whenText(entry.time, at, seconds),
         className: entryClass(entry),
         onTap: null
       }))

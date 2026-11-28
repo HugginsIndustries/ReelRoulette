@@ -174,7 +174,7 @@ Last milestone completed: M12n1
 | Dev server | ✅ Complete | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
 | Build check | ✅ Complete | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
 | Reload notice | ✅ Complete | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
-| Times and dates | ⏳ Planned | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
+| Times and dates | ✅ Complete | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
 | Kept messages | ⏳ Planned | The bell's Recent list kept per device across reloads, up to its 50 messages with their read state, with Clear emptying it and the reset keeping it. |
 
 #### Mockup slice
@@ -428,6 +428,21 @@ Last milestone completed: M12n1
 - The Stats tab's exact times read as before, in Stats tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `clockText` and `whenText` in `src/time/timeText.ts` give a time of day as "HH:MM" or "HH:MM:SS", and a time from today as its time of day with "MM-DD" before it for another day, as the mockup's helpers of the same names do.
+- `exactTimeText` is built from `localDayText` and `clockText`, so the Stats tab's exact times read as before.
+- The bell's list shows each message's time through `whenText` against the time it renders, so a message from before midnight gains its date at the list's next render.
+- `messageTime`, the notifications service's `now` signal and its `now` clock option, and the open list's 30-second refresh (`LIST_TIME_REFRESH_MS`) are gone, so the service and the list both read `Date.now()`.
+- Show seconds is the notifications service's `showSeconds`, kept as one boolean under `notifications.showSeconds`, apart from the popup settings, as the Stats tab keeps `stats.exactTimes` itself.
+- In the Settings tab, Show seconds is a component of its own after `NotificationSettings` (`ShowSeconds` in `src/ui/SettingsTab.tsx`), which leaves `NotificationSettings`, which this round's other slices also edit, as it was.
+- The time text tests check the formatters, the notifications tests check Show seconds' default and its key, the notifications screen tests check the list's forms with Show seconds off and on and after midnight, and the Settings screen tests check Show seconds' default, its hint, its use with Show popups off, its effect on the bell, and its key after a refresh.
+- happy-dom doesn't disable the controls inside a disabled fieldset, so the Settings screen test checks that Show seconds isn't inside one (measured).
+- Broken one at a time, each guarded piece failed its tests: the today check, the exact time's seconds, the list's seconds, the day worked out on each render, the setting's write, and Show seconds' place outside the disabled fieldset (measured).
+- The mockup needed no change: it already shows the bell's times, Show seconds with its hint below Popup settings, and the Stats tab's exact times, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 98 test files and 2537 tests (measured).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the bell's times, Show seconds, and the formatters.
 
 #### Kept messages slice
 

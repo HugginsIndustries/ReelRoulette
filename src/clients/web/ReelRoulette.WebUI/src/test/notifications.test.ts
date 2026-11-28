@@ -3,13 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createNotifications,
   DEFAULT_POPUP_SETTINGS,
-  LIST_TIME_REFRESH_MS,
   NOTIFICATIONS_KEPT,
   POPUP_LEAVE_MS,
   POPUP_SETTINGS_KEY,
   readPopupSettings,
   SAMPLE_POPUP_KEY,
-  messageTime
+  SHOW_SECONDS_KEY
 } from "../notifications/notifications";
 import { createDeviceStore } from "../state/deviceStore";
 import { memoryStorage } from "./memoryStorage";
@@ -189,26 +188,20 @@ describe("notifications", () => {
     expect(notes.entries.value).toEqual([]);
   });
 
-  it("moves the list's times on every 30 seconds while it is open", () => {
-    const { notes } = setup();
-    notes.notify({ kind: "actions", text: "Filters applied." });
-    const sent = notes.entries.value[0]!.time;
-    notes.openList();
-    expect(messageTime(sent, notes.now.value)).toBe("Just now");
-    vi.advanceTimersByTime(LIST_TIME_REFRESH_MS * 3);
-    expect(messageTime(sent, notes.now.value)).toBe("1 min ago");
-    notes.closeList();
-    const closedAt = notes.now.value;
-    vi.advanceTimersByTime(LIST_TIME_REFRESH_MS * 4);
-    expect(notes.now.value).toBe(closedAt);
-  });
+  it("has Show seconds off by default, and keeps it on this device apart from the popup settings", () => {
+    const values = new Map<string, string>();
+    const device = createDeviceStore(memoryStorage(values));
+    const notes = createNotifications({ relay: () => {}, device, inFullscreen: signal(false) });
+    expect(notes.showSeconds.value).toBe(false);
 
-  it("reads a message's time as Just now, minutes ago, then the time of day", () => {
-    const sent = new Date(2026, 9, 13, 10, 0, 0).getTime();
-    expect(messageTime(sent, sent + 59_000)).toBe("Just now");
-    expect(messageTime(sent, sent + 60_000)).toBe("1 min ago");
-    expect(messageTime(sent, sent + 59 * 60_000)).toBe("59 min ago");
-    expect(messageTime(sent, sent + 60 * 60_000)).toBe(new Date(sent).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    notes.setShowSeconds(true);
+    expect(notes.showSeconds.value).toBe(true);
+    expect(values.get(`rr_device.${SHOW_SECONDS_KEY}`)).toBe("true");
+    expect(values.has(`rr_device.${POPUP_SETTINGS_KEY}`)).toBe(false);
+    expect(createNotifications({ relay: () => {}, device, inFullscreen: signal(false) }).showSeconds.value).toBe(true);
+
+    values.set(`rr_device.${SHOW_SECONDS_KEY}`, JSON.stringify("yes"));
+    expect(createNotifications({ relay: () => {}, device, inFullscreen: signal(false) }).showSeconds.value).toBe(false);
   });
 
   it("reads the popup settings kept on this device, each field falling back to its default", () => {

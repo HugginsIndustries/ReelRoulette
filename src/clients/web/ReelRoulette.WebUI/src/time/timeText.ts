@@ -23,8 +23,26 @@ export function localDay(day: string): Date {
   return new Date(year!, month! - 1, date!);
 }
 
+/** A date's time of day on this device, written HH:MM in 24-hour time, or HH:MM:SS with `seconds`. */
+export function clockText(date: Date, seconds = false): string {
+  const minutes = `${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}`;
+  return seconds ? `${minutes}:${twoDigits(date.getSeconds())}` : minutes;
+}
+
+/**
+ * `utcMs` on this device as the bell's list shows it: its time of day for a time on the same day as `nowMs`, with MM-DD
+ * before it for another day.
+ */
+export function whenText(utcMs: number, nowMs: number, seconds = false): string {
+  const date = new Date(utcMs);
+  if (localDayText(date) === localDayText(new Date(nowMs))) {
+    return clockText(date, seconds);
+  }
+  return `${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())} ${clockText(date, seconds)}`;
+}
+
 /** `utcMs` on this device, written YYYY-MM-DD HH:MM:SS in 24-hour time. */
 export function exactTimeText(utcMs: number): string {
   const date = new Date(utcMs);
-  return `${localDayText(date)} ${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}:${twoDigits(date.getSeconds())}`;
+  return `${localDayText(date)} ${clockText(date, true)}`;
 }

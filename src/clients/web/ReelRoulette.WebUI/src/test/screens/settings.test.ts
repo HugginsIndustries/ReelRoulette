@@ -1892,6 +1892,11 @@ function bell(): HTMLButtonElement {
   return document.getElementById("notify-btn") as HTMLButtonElement;
 }
 
+/** The times the bell's list shows, newest first. */
+function bellTimes(): string[] {
+  return Array.from(document.querySelectorAll("#notify-list [data-part='recent'] .notify-time"), (time) => time.textContent ?? "");
+}
+
 function keptPopupSettings(): unknown {
   const raw = localStorage.getItem("rr_device.notifications.popups");
   return raw === null ? null : JSON.parse(raw);
@@ -2007,6 +2012,30 @@ describe("Notifications", () => {
     expect(within(document.getElementById("notify-list")!).queryByText(SAMPLE)).toBeNull();
   });
 
+  it("has Show seconds off by default, with its hint, usable with Show popups off, and on, it adds seconds to the bell's times", async () => {
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () => randomAnswer(VIDEO_ITEM));
+    server.on("POST", "/api/favorite", flagAnswer);
+    await mount(server);
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await openSettings();
+    expect(checkbox("Show seconds").checked).toBe(false);
+    expect(hintOf(checkbox("Show seconds"))).toBe("Adds seconds to the times in the bell's list.");
+    await click(checkbox("Show popups"));
+    // happy-dom doesn't disable the controls in a disabled fieldset, so the check looks for one, as a browser does.
+    expect([checkbox("Show seconds").disabled, checkbox("Show seconds").closest("fieldset[disabled]")]).toEqual([false, null]);
+
+    await click(playerButton("Favorite"));
+    await click(bell());
+    expect(bellTimes()).toEqual([expect.stringMatching(/^\d\d:\d\d$/)]);
+    await click(bell());
+
+    await click(checkbox("Show seconds"));
+    expect(localStorage.getItem("rr_device.notifications.showSeconds")).toBe("true");
+    await click(bell());
+    expect(bellTimes()).toEqual([expect.stringMatching(/^\d\d:\d\d:\d\d$/)]);
+  });
+
   it("opens from the bell's list scrolled to Show popups, with Popup settings open, closing the list", async () => {
     await mount();
     await click(tab("Library"));
@@ -2040,7 +2069,7 @@ describe("Notifications", () => {
 });
 
 describe("kept on this device", () => {
-  it("keeps every popup setting after a page refresh", async () => {
+  it("keeps every popup setting and Show seconds after a page refresh", async () => {
     const page = await mount();
     await openSettings();
     await click(popupSettings().querySelector("summary")!);
@@ -2050,6 +2079,7 @@ describe("kept on this device", () => {
     await click(checkbox("Show in fullscreen"));
     await click(radio("3 seconds"));
     await click(checkbox("Show popups"));
+    await click(checkbox("Show seconds"));
     page.unmount();
 
     await mount();
@@ -2061,6 +2091,7 @@ describe("kept on this device", () => {
     expect(positionSelect().value).toBe("bottom-right");
     expect(checkbox("Show in fullscreen").checked).toBe(false);
     expect(radio("3 seconds").checked).toBe(true);
+    expect(checkbox("Show seconds").checked).toBe(true);
   });
 
   it("keeps the theme and Show file names on tiles after a page refresh", async () => {
@@ -2171,6 +2202,7 @@ describe("kept on this device", () => {
     moveSlider(slider("Blur"), 30);
     await settle();
     await click(checkbox("Show popups"));
+    await click(checkbox("Show seconds"));
     await click(playerButton("Autoplay"));
     await click(playerButton("Loop"));
     await click(playerButton("Mute"));
@@ -2187,6 +2219,7 @@ describe("kept on this device", () => {
       "rr_device.audio.enhanced",
       "rr_device.audio.volumeStep",
       "rr_device.notifications.popups",
+      "rr_device.notifications.showSeconds",
       "rr_device.panel.autoPause",
       "rr_device.panel.side",
       "rr_device.playback.advanceAfter",
