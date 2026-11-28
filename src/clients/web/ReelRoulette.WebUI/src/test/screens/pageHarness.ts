@@ -725,6 +725,11 @@ export function menuParts(menu: Element): string[] {
   return Array.from(menu.children).map((part) => (part.tagName === "HR" ? "—" : menuItemLabel(part)));
 }
 
+/** A menu's item labels, as a set: which items a menu offers is behavior, but their order and its rules are the mockup's. */
+export function menuLabels(menu: Element): Set<string> {
+  return new Set(Array.from(menu.querySelectorAll("button")).map(menuItemLabel));
+}
+
 /** A menu's items in order, each as its icon's name and its label, such as "heart_plus Add to favorites". */
 export function menuIcons(menu: Element): string[] {
   return Array.from(menu.querySelectorAll("button")).map(
@@ -1254,79 +1259,4 @@ export async function pickPreset(value: string): Promise<void> {
     fireEvent.click(previous);
   }
   await settle();
-}
-
-/**
- * The page markup, for checking that a screen moved to Preact renders the same elements and attributes. Three
- * things that differ between the old HTML and Preact's output without changing the page are normalized:
- * - Whitespace-only text is dropped and other text is trimmed: JSX drops the HTML's indentation, which shows
- *   nothing inside the flex rows the markup uses. A space that does show, as in the now-playing line, is
- *   checked by the test of that screen.
- * - Style declarations are compared as a sorted list: the HTML wrote `display:none`, and Preact writes
- *   `display: none;`. A zero length compares as `0px`: the HTML wrote `margin:0`, and Preact sets styles
- *   through the browser, which writes `margin: 0px`. An empty `class` attribute is left out:
- *   `classList.toggle` left one where Preact writes none. These two were added when moving the filter dialog and
- *   are deliberate.
- * - An `<option>` is compared by `option.value`, the value the browser uses, whether it comes from the
- *   attribute or the option's text: Preact skips writing a `value` attribute that equals the text, as for the
- *   library sort list's Name and Duration. This was added when moving the first screens and is deliberate.
- *
- * With `liveFormState`, a checkbox or radio is compared by its `checked` property, an option by its `selected`
- * property, and any other input by its `value` property, in place of those attributes: what the user sees. The
- * HTML wrote them as attributes, which keep their first value after the user changes the control, and Preact
- * sets the properties and writes no attribute. Added with the filter dialog's tests, before that screen moved.
- */
-export function normalizedMarkup(node: Node, options: { liveFormState?: boolean } = {}, depth = 0): string {
-  const pad = "  ".repeat(depth);
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
-    return text ? `${pad}"${text}"\n` : "";
-  }
-  if (node.nodeType !== Node.ELEMENT_NODE) {
-    return "";
-  }
-  const element = node as Element;
-  const isOption = element instanceof HTMLOptionElement;
-  const live = options.liveFormState ? liveFormState(element) : null;
-  const attributes = Array.from(element.attributes)
-    .filter((attribute) => !(isOption && attribute.name === "value"))
-    .filter((attribute) => !live || !(attribute.name in live))
-    .filter((attribute) => !(attribute.name === "class" && !attribute.value.trim()))
-    .map((attribute) => {
-      if (attribute.name === "style") {
-        const declarations = attribute.value
-          .split(";")
-          .map((part) => part.trim())
-          .filter(Boolean)
-          .map((part) => part.replace(/\s*:\s*/, ": ").replace(/: 0$/, ": 0px"))
-          .sort();
-        return `style="${declarations.join("; ")}"`;
-      }
-      return `${attribute.name}="${attribute.value}"`;
-    });
-  if (isOption) {
-    attributes.push(`value="${element.value}"`);
-  }
-  for (const [name, value] of Object.entries(live ?? {})) {
-    attributes.push(`${name}="${value}"`);
-  }
-  attributes.sort();
-  let out = `${pad}<${element.tagName.toLowerCase()}${attributes.length ? ` ${attributes.join(" ")}` : ""}>\n`;
-  for (const child of Array.from(element.childNodes)) {
-    out += normalizedMarkup(child, options, depth + 1);
-  }
-  return out;
-}
-
-/** The form state an element shows, by attribute name, for `liveFormState`. */
-function liveFormState(element: Element): Record<string, string> | null {
-  if (element instanceof HTMLOptionElement) {
-    return { selected: String(element.selected) };
-  }
-  if (element instanceof HTMLInputElement) {
-    return element.type === "checkbox" || element.type === "radio"
-      ? { checked: String(element.checked) }
-      : { value: element.value };
-  }
-  return null;
 }

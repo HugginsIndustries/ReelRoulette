@@ -28,26 +28,29 @@ function token(name: string): string {
 describe("a held action", () => {
   it("shows the red badge over its top-right corner, out of its flow, with its label dimmed and its reason as its title", () => {
     useStylesheet();
-    render(
-      <HeldButton id="add" class="btn" disabled={false} heldReason={REASON} onClick={() => {}}>
+    const add = (heldReason: string | null) => (
+      <HeldButton id="add" class="btn" disabled={false} heldReason={heldReason} onClick={() => {}}>
         Add Preset
       </HeldButton>
     );
+    const { rerender } = render(add(REASON));
     const button = byId<HTMLButtonElement>("add");
     const badge = button.querySelector<HTMLElement>(".btn-problem")!;
     const style = currentStyle(badge);
+    const labelOpacity = () => currentStyle(button.querySelector(".btn-label")!).opacity;
 
     expect(currentStyle(button).position).toBe("relative");
-    expect([style.position, style.top, style.right, style.fontSize]).toEqual(["absolute", "-6px", "-6px", "18px"]);
-    expect(style.fontFamily).toContain("Material Symbols Outlined");
+    expect([style.position, style.top, style.right]).toEqual(["absolute", "-6px", "-6px"]);
     expect(style.color).toBe(token("--error"));
-    expect(badge.textContent).toBe("error");
     expect(badge.getAttribute("aria-hidden")).toBe("true");
     expect(button.classList.contains("shows-problem")).toBe(true);
-    expect(currentStyle(button.querySelector(".btn-label")!).opacity).toBe("0.5");
+    const dimmed = labelOpacity();
     expect(button.title).toBe(REASON);
     // A text button keeps its own label as its name.
     expect(button.hasAttribute("aria-label")).toBe(false);
+
+    rerender(add(null));
+    expect(labelOpacity()).not.toBe(dimmed);
   });
 
   it("with a dot, turns the dot red while held, in place of the badge, and its label names it and is its title while no reason shows", () => {
@@ -60,6 +63,8 @@ describe("a held action", () => {
     const { rerender } = render(apply({ dot: true, disabled: false, heldReason: null }));
     const button = byId<HTMLButtonElement>("apply");
     const dot = () => button.querySelector<HTMLElement>(".unsaved-dot")!;
+    const labelOpacity = () => currentStyle(button.querySelector(".btn-label")!).opacity;
+    const unheld = labelOpacity();
     expect(button.getAttribute("aria-label")).toBe("Apply");
     expect(button.title).toBe("Apply");
     expect(dot().hidden).toBe(false);
@@ -71,7 +76,7 @@ describe("a held action", () => {
     expect(button.querySelector(".btn-problem")).toBeNull();
     expect(dot().hidden).toBe(false);
     expect(currentStyle(dot()).backgroundColor).toBe(token("--error"));
-    expect(currentStyle(button.querySelector(".btn-label")!).opacity).toBe("0.5");
+    expect(labelOpacity()).not.toBe(unheld);
     expect(button.getAttribute("aria-label")).toBe("Apply");
     expect(button.title).toBe(REASON);
 

@@ -12,7 +12,6 @@ import {
   json,
   mountPage,
   pageReady,
-  pickPreset,
   resetPage,
   setViewport,
   settle,
@@ -122,9 +121,6 @@ describe("a phone on its side", () => {
     expect(document.body.classList.contains("short-screen")).toBe(true);
     expect(shows(header())).toBe(false);
     expect(padding(app())).toEqual(["0px", "0px", "0px", "0px"]);
-    const player = currentStyle(document.getElementById("media-container")!);
-    // Its corners stay rounded, as in every view.
-    expect([player.borderRadius, player.clipPath]).toEqual(["8px", "inset(0 round 8px)"]);
 
     await click(panelButton());
     expect(stage().dataset.panelMode).toBe("overlay");
@@ -145,7 +141,6 @@ describe("a phone on its side", () => {
 
       expect(document.body.classList.contains("short-screen")).toBe(false);
       expect(shows(header())).toBe(true);
-      expect(currentStyle(document.getElementById("media-container")!).clipPath).toBe("inset(0 round 8px)");
     }
   });
 
@@ -178,7 +173,7 @@ describe("a phone on its side", () => {
     expect(panel().hidden).toBe(false);
   });
 
-  it("fits the panel's rows that don't scroll and the dialogs to the short screen", async () => {
+  it("keeps the Filter footer's icon buttons their size on the short screen, and fits the dialogs to it", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [] }));
     stubCoarsePointer();
@@ -186,26 +181,19 @@ describe("a phone on its side", () => {
     await mount(server);
 
     await click(panelButton());
-    expect(currentStyle(tab("Library")).height).toBe("40px");
-    expect([currentStyle(tab("Library")).minWidth, currentStyle(tab("Library")).minHeight]).toEqual(["40px", "40px"]);
-    expect(currentStyle(panel().querySelector(".library-overlay-header")!).minHeight).toBe("36px");
     await click(tab("Filter"));
-    expect(currentStyle(document.querySelector(".filter-tab")!).minHeight).toBe("38px");
     // The footer's icon buttons keep their size.
     for (const id of ["filter-clear-all-btn", "filter-discard-btn", "filter-apply-btn"]) {
       expect(currentStyle(document.getElementById(id)!).height, id).toBe("44px");
       expect(currentStyle(document.getElementById(id)!).minHeight, id).not.toBe("38px");
     }
-    await click(tab("Tags"));
-    expect(currentStyle(document.getElementById("tag-editor-category-select")!).minHeight).toBe("38px");
 
     await click(screen.getByRole("button", { name: "Play/Pause" }));
     expect(topDialog()?.textContent).toContain("Cannot play: server compatibility check failed.");
     expect(currentStyle(topDialog()!).maxHeight).toBe("calc(100dvh - 12px)");
-    expect(currentStyle(within(topDialog()!).getByRole("button", { name: "OK" })).minHeight).toBe("38px");
   });
 
-  it("fits the controls in the tabs' bodies and the tabs' headings to the short screen, as the mockup does", async () => {
+  it("keeps Choose Preset's, the Tags tab's, and Auto Tag's icon buttons and checkbox their size on the short screen", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/sources", () => json([]));
     server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [] }));
@@ -214,57 +202,20 @@ describe("a phone on its side", () => {
     await mount(server);
 
     await click(panelButton());
-    expect(currentStyle(panel().querySelector("#library-overlay h2")!).fontSize).toBe("16px");
-    expect(currentStyle(document.getElementById("library-sort-direction-btn")!).height).toBe("32px");
     await click(tab("Filter"));
     await waitFor(() => expect(document.getElementById("filter-min-dur-text")).not.toBeNull());
-    expect(currentStyle(document.getElementById("filter-dialog-heading")!).fontSize).toBe("16px");
-    expect(currentStyle(panel().querySelector(".filter-dialog-header")!).minHeight).toBe("36px");
-    expect(currentStyle(document.getElementById("filter-min-dur-text")!).minHeight).toBe("38px");
-    expect(currentStyle(document.getElementById("filter-dialog-preset-select")!).minHeight).toBe("38px");
     // Choose Preset's Load and Update are icon buttons, which keep their size.
     for (const id of ["filter-load-preset-btn", "filter-update-preset-btn"]) {
       expect(currentStyle(document.getElementById(id)!).height, id).toBe("44px");
     }
     await click(tab("Tags"));
-    expect(currentStyle(panel().querySelector(".tag-editor-header h2")!).fontSize).toBe("16px");
     // The tabs' icon buttons keep their size.
     expect(currentStyle(document.getElementById("tag-editor-discard-btn")!).height).toBe("44px");
     expect(currentStyle(document.getElementById("tag-editor-discard-btn")!).minHeight).not.toBe("38px");
-    expect(currentStyle(panel().querySelector(".tag-editor-header")!).minHeight).toBe("36px");
-    expect(currentStyle(document.getElementById("tag-editor-new-tag")!).minHeight).toBe("38px");
     fireEvent.click(document.getElementById("tag-editor-autotag-btn")!);
     await settle();
-    expect(currentStyle(document.getElementById("autotag-scan")!).minHeight).toBe("38px");
     expect(currentStyle(document.getElementById("autotag-close")!).minHeight).not.toBe("38px");
     expect(currentStyle(document.getElementById("autotag-full")!).minHeight).not.toBe("38px");
-  });
-
-  it("puts the Library tab's controls in two rows, the preset and search, then sort across both columns, at the lines' height, as the mockup does", async () => {
-    stubCoarsePointer();
-    setViewport(ON_ITS_SIDE);
-    const server = new FakeServer();
-    // A preset with a filter, so the Filters line shows.
-    server.on("GET", "/api/presets", () =>
-      json([{ id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only", selectedTags: [], excludedTags: [], includedSourceIds: [] } }])
-    );
-    await mount(server);
-
-    await click(panelButton());
-    await pickPreset("preset-favorites");
-    const controls = document.getElementById("library-controls")!;
-    expect(currentStyle(controls).display).toBe("grid");
-    expect(currentStyle(controls).gridTemplateColumns).toBe("1fr 1fr");
-    expect(currentStyle(controls.querySelector(".library-controls-pair")!).display).toBe("contents");
-    expect(currentStyle(controls.querySelector(".library-controls-sort")!).gridColumn).toBe("1 / -1");
-    // The controls keep the Filters and Random lines' height rather than the short screen's 38 px minimum.
-    for (const id of ["preset-select", "library-search-input", "library-sort-select", "library-sort-direction-btn"]) {
-      expect([currentStyle(document.getElementById(id)!).height, currentStyle(document.getElementById(id)!).minHeight], id).toEqual(["32px", "0"]);
-    }
-    for (const id of ["library-filter-summary", "library-random-line"]) {
-      const line = document.getElementById(id)!;
-      expect([line.hidden, currentStyle(line).height], id).toEqual([false, "32px"]);
-    }
   });
 
   it("keeps the panel's and the dialogs' sizes on a tablet", async () => {

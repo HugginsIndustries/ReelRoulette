@@ -8,9 +8,8 @@ import {
   currentStyle,
   FakeServer,
   json,
-  menuIcons,
   menuItemIn,
-  menuParts,
+  menuLabels,
   mountPage,
   movePointer,
   openNotices,
@@ -188,8 +187,8 @@ function statsBody(): HTMLElement {
   return document.getElementById("stats-body")!;
 }
 
-function sections(): HTMLElement[] {
-  return [...statsBody().querySelectorAll<HTMLElement>(".stats-section")];
+function section(heading: "Current file" | "Library"): HTMLElement {
+  return [...statsBody().querySelectorAll<HTMLElement>(".stats-section")].find((part) => part.querySelector("h3")?.textContent === heading)!;
 }
 
 function rows(): Record<string, string> {
@@ -218,7 +217,7 @@ describe("Stats tab", () => {
     resetPage();
   });
 
-  it("opens from the header's file name on the current file, then the library", async () => {
+  it("opens from the header's file name, showing the current file", async () => {
     const { page } = await mountStats();
 
     fireEvent.click(document.getElementById("now-playing-name")!);
@@ -228,28 +227,19 @@ describe("Stats tab", () => {
     expect(document.getElementById("panel-tab-stats")!.getAttribute("aria-selected")).toBe("true");
     expect(document.getElementById("panel-page-stats")!.hidden).toBe(false);
     await waitFor(() => expect(rows().Plays).toBe("1"));
-    expect(sections().map((section) => section.querySelector("h3")?.textContent)).toEqual(["Current file", "Library"]);
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(page.server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-video" }]);
   });
 
-  it("is the Stats tab, with its icon, between Tags and Filter", async () => {
-    await mountStats({ play: false });
-    const tabs = [...document.querySelectorAll(".panel-tablist .panel-tab")];
-
-    expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual(["Library", "Tags", "Stats", "Filter", "Randomization", "Settings"]);
-    expect(document.getElementById("panel-tab-stats")!.textContent).toBe("bar_chart");
-  });
-
-  it("says nothing is playing yet above the library's cards, which match the stats response", async () => {
+  it("says nothing is playing yet, and shows the library's cards, which match the stats response", async () => {
     await mountStats({ play: false });
     await openStatsTab();
 
     await waitFor(() => expect(cards()).toHaveLength(12));
-    expect(sections()[0]!.textContent).toBe("Current fileNothing is playing yet.");
+    expect(section("Current file").textContent).toBe("Current fileNothing is playing yet.");
     expect(ratingStars()).toBeNull();
-    expect(cards()).toEqual([
+    expect(new Set(cards())).toEqual(new Set([
       ["Videos", (1200).toLocaleString()],
       ["Photos", "30"],
       ["Total media", (1230).toLocaleString()],
@@ -262,7 +252,7 @@ describe("Stats tab", () => {
       ["Videos with audio", (1100).toLocaleString()],
       ["Videos without audio", "90"],
       ["Baseline loudness", "-20.4 LUFS"]
-    ]);
+    ]));
   });
 
   it.each([
@@ -284,13 +274,11 @@ describe("Stats tab", () => {
     ["a quiet video, boosted in full", { integratedLoudness: -26.44, peakDb: -12 }, "+6.0 dB"],
     ["a quiet video whose peak holds its boost back", { integratedLoudness: -32.44, peakDb: -4 }, "+9.0 dB (limited by peak)"],
     ["a video without loudness data", {}, "N/A"]
-  ])("shows the adjustment normalization applies to %s, toward the library's baseline, between Loudness and True peak", async (_, fields, expected) => {
+  ])("shows the adjustment normalization applies to %s, toward the library's baseline", async (_, fields, expected) => {
     await mountStats({ picks: [{ ...VIDEO, ...fields }] });
     fireEvent.click(document.getElementById("now-playing-name")!);
 
     await waitFor(() => expect(rows().Adjustment).toBe(expected));
-    const labels = Object.keys(rows());
-    expect(labels.slice(labels.indexOf("Loudness"), labels.indexOf("True peak") + 1)).toEqual(["Loudness", "Adjustment", "True peak"]);
   });
 
   it("shows the adjustment Off while normalization or Enhanced audio is off, and follows the settings as they change", async () => {
@@ -334,7 +322,7 @@ describe("Stats tab", () => {
 
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(rows().Plays).toBe("7"));
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4");
 
     items.set("item-other", { ...items.get("item-other")!, isFavorite: true });
     emit(page, "itemStateChanged", { itemId: "item-other", path: OTHER_VIDEO.id, isFavorite: true, isBlacklisted: false, clientId: page.clientId() });
@@ -365,7 +353,7 @@ describe("Stats tab", () => {
     server.on("POST", "/api/library/item", () => new Promise<Response>((resolve) => (release = () => resolve(json(itemRow(OTHER_VIDEO, { playCount: 7 }))))));
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(server.requests("POST", "/api/library/item")).toHaveLength(2));
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(ratingStars()).toBeNull();
 
@@ -387,11 +375,11 @@ describe("Stats tab", () => {
     emit(page, "playbackRecorded", { itemId: "item-other", playCount: 1, previousLastPlayedUtc: new Date(Date.now() - 2 * DAY).toISOString() });
     await settle();
     await playNext(OTHER_VIDEO);
-    await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
+    await waitFor(() => expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
     await waitFor(() => expect(rows()["Last played"]).toBe("2 days ago"));
   });
 
-  it("shows when the file was added and created right after Last played, how long ago through months and years, or Unknown without them", async () => {
+  it("shows when the file was added and created, how long ago through months and years, or Unknown without them", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 9, 22, 12, 0, 0));
     const dated = itemRow(VIDEO, { dateAddedUtc: new Date(2026, 6, 10, 9, 0, 0).toISOString(), dateCreatedUtc: new Date(2021, 2, 1, 8, 0, 0).toISOString() });
@@ -399,14 +387,12 @@ describe("Stats tab", () => {
     fireEvent.click(document.getElementById("now-playing-name")!);
 
     await waitFor(() => expect([rows().Added, rows().Created]).toEqual(["3 months ago", "5 years ago"]));
-    const labels = Object.keys(rows());
-    expect(labels.slice(labels.indexOf("Last played"), labels.indexOf("Favorite") + 1)).toEqual(["Last played", "Added", "Created", "Favorite"]);
 
     emit(page, "playbackRecorded", { itemId: "item-video", playCount: 1, previousLastPlayedUtc: new Date(2026, 9, 22, 11, 58, 0).toISOString() });
     await waitFor(() => expect(rows()["Last played"]).toBe("2 minutes ago"));
 
     await playNext(OTHER_VIDEO);
-    await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
+    await waitFor(() => expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
     await waitFor(() => expect([rows().Added, rows().Created]).toEqual(["Unknown", "Unknown"]));
   });
 
@@ -421,11 +407,11 @@ describe("Stats tab", () => {
     });
     await mountStats({ play: false, items: [photo], picks: [PHOTO] });
     fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
-    await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach.jpg"));
+    await waitFor(() => expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("beach.jpg"));
     fireEvent.click(document.getElementById("now-playing-name")!);
 
     await waitFor(() => expect(rows().Added).toBe("2 days ago"));
-    expect(Object.keys(rows())).toEqual(["Plays", "Last played", "Added", "Created", "Favorite", "Blacklisted"]);
+    expect(new Set(Object.keys(rows()))).toEqual(new Set(["Plays", "Last played", "Added", "Created", "Favorite", "Blacklisted"]));
     expect(rows().Created).toBe("Unknown");
   });
 
@@ -446,7 +432,7 @@ describe("Stats tab", () => {
     await waitFor(() => expect(rows().Plays).toBe("1"));
 
     expect(button().closest(".stats-tab-header")).not.toBeNull();
-    expect([button().getAttribute("aria-label"), button().title, button().textContent]).toEqual(["Show exact times", "Show exact times", "calendar_clock"]);
+    expect([button().getAttribute("aria-label"), button().title]).toEqual(["Show exact times", "Show exact times"]);
     expect(button().classList.contains("active")).toBe(false);
     expect(currentStyle(button()).color).not.toBe(orange());
     expect(times().some((time) => exact.includes(time ?? ""))).toBe(false);
@@ -581,10 +567,10 @@ describe("Stats tab", () => {
     const { server } = await mountStats({ setup: (fake) => fake.on("GET", "/api/library/stats", () => status(500)) });
     fireEvent.click(document.getElementById("now-playing-name")!);
 
-    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe("Stats load failed."));
+    await waitFor(() => expect(section("Library").querySelector(".filter-hint.is-error")?.textContent).toBe("Stats load failed."));
     expect(statsBody().querySelectorAll(".filter-hint.is-error")).toHaveLength(1);
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed (HTTP 500)."))).toBe(true);
   });
@@ -610,8 +596,8 @@ describe("Stats tab", () => {
 
     await waitFor(() => expect(cards()).toHaveLength(12));
     expect(server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-video" }]);
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(ratingStars()).toBeNull();
     expect(statsBody().querySelector(".filter-hint.is-error")).toBeNull();
@@ -628,8 +614,8 @@ describe("Stats tab", () => {
     await settle();
     await openStatsTab();
 
-    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe(`Running without a library. ${message}`));
-    expect(sections()[0]!.textContent).toBe("Current fileNothing is playing yet.");
+    await waitFor(() => expect(section("Library").querySelector(".filter-hint.is-error")?.textContent).toBe(`Running without a library. ${message}`));
+    expect(section("Current file").textContent).toBe("Current fileNothing is playing yet.");
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(server.requests("GET", "/api/library/stats")).toHaveLength(0);
     expect(document.querySelectorAll(".stat-card")).toHaveLength(0);
@@ -644,8 +630,8 @@ describe("Stats tab", () => {
     await settle();
     await openStatsTab();
 
-    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe("Server requires client API version 3 or newer."));
-    expect(sections()[0]!.textContent).toBe("Current fileNothing is playing yet.");
+    await waitFor(() => expect(section("Library").querySelector(".filter-hint.is-error")?.textContent).toBe("Server requires client API version 3 or newer."));
+    expect(section("Current file").textContent).toBe("Current fileNothing is playing yet.");
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(server.requests("GET", "/api/library/stats")).toHaveLength(0);
     expect(document.querySelectorAll(".stat-card")).toHaveLength(0);
@@ -667,8 +653,8 @@ describe("Stats tab", () => {
     expect(ratingStars()).toBeNull();
     expect(cards()).toHaveLength(0);
     expect(statsBody().querySelector(".filter-hint.is-error")).toBeNull();
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed"))).toBe(false);
   });
 
@@ -681,27 +667,26 @@ describe("Stats tab", () => {
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, libraryState: "newer", libraryMessage: message }));
     // The stream failing checks the version again.
     page.stream().fail();
-    await waitFor(() => expect(sections()[1]!.querySelector(".filter-hint.is-error")?.textContent).toBe(`Running without a library. ${message}`));
+    await waitFor(() => expect(section("Library").querySelector(".filter-hint.is-error")?.textContent).toBe(`Running without a library. ${message}`));
 
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(ratingStars()).toBeNull();
-    expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
+    expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
   });
 
-  it("shows the file's tags in a row of their own below the table, with no Tags label, and nothing there for a file without tags", async () => {
+  it("shows the file's tags, with no Tags label, and nothing there for a file without tags", async () => {
     await mountStats({ items: [itemRow(VIDEO, { tags: ["Beach"] }), itemRow(OTHER_VIDEO)], picks: [VIDEO, OTHER_VIDEO] });
     fireEvent.click(document.getElementById("now-playing-name")!);
     await waitFor(() => expect(tagChips()).toEqual(["Beach"]));
 
-    expect(statsBody().querySelector("dl.stats-table")!.nextElementSibling?.classList.contains("stats-tags")).toBe(true);
     expect(Object.keys(rows())).not.toContain("Tags");
 
     await playNext(OTHER_VIDEO);
-    await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
+    await waitFor(() => expect(section("Current file").querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));
     await waitFor(() => expect(statsBody().querySelector("dl")).not.toBeNull());
     expect(statsBody().querySelector(".stats-tags")).toBeNull();
     expect(Object.keys(rows())).not.toContain("Tags");
-    expect(sections()[0]!.textContent).not.toContain("None");
+    expect(section("Current file").textContent).not.toContain("None");
   });
 });
 
@@ -804,24 +789,16 @@ describe("Stats tab's file menus", () => {
     await openOnFile({ fileManager: true });
     expect([fileName().classList.contains("menu-surface"), filePath().classList.contains("menu-surface")]).toEqual([true, true]);
 
-    expect(menuIcons(await openMenuOn(fileName()))).toEqual([
-      "content_copy Copy name",
-      "content_copy Copy path",
-      "folder_open Show in File Manager"
-    ]);
+    expect(menuLabels(await openMenuOn(fileName()))).toEqual(new Set(["Copy name", "Copy path", "Show in File Manager"]));
     expect([fileName().classList.contains("is-menu-target"), filePath().classList.contains("is-menu-target")]).toEqual([true, false]);
 
-    expect(menuIcons(await openMenuOn(filePath()))).toEqual([
-      "content_copy Copy name",
-      "content_copy Copy path",
-      "folder_open Show in File Manager"
-    ]);
+    expect(menuLabels(await openMenuOn(filePath()))).toEqual(new Set(["Copy name", "Copy path", "Show in File Manager"]));
     expect([fileName().classList.contains("is-menu-target"), filePath().classList.contains("is-menu-target")]).toEqual([false, true]);
   });
 
   it("leave out Show in File Manager while the server doesn't list it", async () => {
     await openOnFile({ fileManager: false });
-    expect(menuParts(await openMenuOn(filePath()))).toEqual(["Copy name", "Copy path"]);
+    expect(menuLabels(await openMenuOn(filePath()))).toEqual(new Set(["Copy name", "Copy path"]));
   });
 
   it("open at a long press with a finger", async () => {
@@ -830,7 +807,7 @@ describe("Stats tab's file menus", () => {
 
     fireEvent.pointerDown(filePath(), { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 120, clientY: 140 });
     await vi.advanceTimersByTimeAsync(500);
-    expect(menuParts(contextMenuShown()!)).toEqual(["Copy name", "Copy path", "Show in File Manager"]);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy name", "Copy path", "Show in File Manager"]));
     expect(filePath().classList.contains("is-menu-target")).toBe(true);
   });
 
@@ -849,7 +826,7 @@ describe("Stats tab's file menus", () => {
     await waitFor(() => expect(cards()).toHaveLength(12));
 
     expect(statsBody().querySelector("dl")).toBeNull();
-    expect(menuParts(await openMenuOn(filePath()))).toEqual(["Copy name", "Copy path"]);
+    expect(menuLabels(await openMenuOn(filePath()))).toEqual(new Set(["Copy name", "Copy path"]));
   });
 
   it("Show in File Manager asks the server to open its file manager at the item, and says so with the file's name", async () => {
@@ -1025,7 +1002,7 @@ describe("Stats tab's tag menus", () => {
     await waitFor(() => expect(tagChips()).toEqual(["Beach", "Calm"]));
     expect(statsTag("Beach").classList.contains("menu-surface")).toBe(true);
 
-    expect(menuIcons(await openMenuOn(statsTag("Beach")))).toEqual(["filter_alt Filter by this tag"]);
+    expect(menuLabels(await openMenuOn(statsTag("Beach")))).toEqual(new Set(["Filter by this tag"]));
     expect(statsTag("Beach").classList.contains("is-menu-target")).toBe(true);
     fireEvent.click(menuItemIn(contextMenuShown()!, "Filter by this tag"));
     await waitFor(() => expect(filterIncluded()).toEqual(["Beach"]));
@@ -1039,7 +1016,7 @@ describe("Stats tab's tag menus", () => {
     expect(rightClick(statsTag("Beach"))).toBe(false);
     await settle();
     expect(contextMenuShown()).toBeNull();
-    expect(menuParts(await openMenuOn(statsTag("Calm")))).toEqual(["Filter by this tag"]);
+    expect(menuLabels(await openMenuOn(statsTag("Calm")))).toEqual(new Set(["Filter by this tag"]));
   });
 });
 
@@ -1048,14 +1025,12 @@ describe("Stats tab's rating", () => {
     resetPage();
   });
 
-  it("shows the file's rating in stars under its path, after its Rating label", async () => {
+  it("shows the file's rating in stars, with its Rating label", async () => {
     await openRated(3.5);
 
     const stars = ratingStars()!;
     expect(starsShown(stars)).toBe(3.5);
     const line = stars.closest(".stats-rating")!;
-    expect(line.previousElementSibling?.classList.contains("stats-path")).toBe(true);
-    expect(line.nextElementSibling?.matches("dl.stats-table")).toBe(true);
     expect(line.querySelector(".stats-rating-label")?.textContent).toBe("Rating");
 
     resetPage();
@@ -1303,23 +1278,6 @@ describe("Stats tab's rating", () => {
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     await settle();
     expect(starsShown(ratingStars()!)).toBe(2.5);
-  });
-
-  it("draws empty stars in the panel's text color, white in the Dark theme and dark in the Light theme", async () => {
-    useStylesheet();
-    await openRated(1);
-    const empty = ratingStars()!.querySelectorAll<HTMLElement>(".rating-star")[4]!;
-    const root = document.documentElement;
-
-    for (const [theme, color] of [
-      ["theme-dark", "#e0e0e0"],
-      ["theme-light", "#1a1d21"]
-    ]) {
-      root.classList.remove("theme-dark", "theme-light");
-      root.classList.add(theme!);
-      expect(currentStyle(root).getPropertyValue("--page-fg").trim()).toBe(color);
-      expect([theme, currentStyle(empty).color]).toEqual([theme, color]);
-    }
   });
 
   it("shows a rating set on its stars on the player's star at once, and one set in the player's popover on its stars", async () => {

@@ -26,7 +26,7 @@ import {
   json,
   menuIcons,
   menuItemIn,
-  menuParts,
+  menuLabels,
   mountPage,
   movePointer,
   rightClick,
@@ -60,7 +60,6 @@ import {
   stubReadOnlyVolume,
   stubWebAudio,
   tapPage,
-  stylesheetText,
   useStylesheet,
   FakeWebAudio,
   type FakeGain,
@@ -1162,7 +1161,7 @@ describe("loop and autoplay", () => {
     expect(video().src).toBe(SECOND_VIDEO_URL);
   });
 
-  it("in Timer mode, with Loop holding autoplay, repeats a stretch that starts where a seek lands, shown faintly behind the scrub bar", async () => {
+  it("in Timer mode, with Loop holding autoplay, repeats a stretch that starts where a seek lands, and shows the stretch", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     localStorage.setItem("rr_device.playback.autoplayMode", '"timer"');
     localStorage.setItem("rr_device.playback.advanceAfter", "10");
@@ -1176,7 +1175,6 @@ describe("loop and autoplay", () => {
     fireEvent.playing(video());
     await flush();
     const stretch = document.getElementById("seek-loop") as HTMLElement;
-    expect(stretch.parentElement).toBe(seekSlider().parentElement);
     expect([stretch.hidden, stretch.style.getPropertyValue("--loop-from")]).toEqual([false, "0"]);
 
     fireEvent.input(seekSlider(), { target: { value: "60" } });
@@ -1688,7 +1686,7 @@ describe("volume gestures", () => {
     expect(page.webAudio.gain!.level).toBeCloseTo(0.6);
   });
 
-  it("the volume indicator shows centered over the player, in white with a shadow and no background, outside the controls, for the wheel and a two-finger drag, while the controls are hidden too, not for the slider, and fades out 800 ms after the last change", async () => {
+  it("the volume indicator shows outside the controls, for the wheel and a two-finger drag, while the controls are hidden too, not for the slider, and fades out 800 ms after the last change", async () => {
     hideControlsOnClick();
     useFakeClock();
     useStylesheet();
@@ -1703,13 +1701,10 @@ describe("volume gestures", () => {
     await flush();
     expect(indicatorShows()).toBe("volume_up 55%");
     const box = volumeIndicator();
-    expect(box.parentElement).toBe(mediaArea());
     expect(document.getElementById("overlay-controls")!.contains(box)).toBe(false);
     await click(video());
     expect(controlsShown()).toBe(false);
-    const style = currentStyle(box);
-    expect([style.position, style.top, style.left, style.transform, style.opacity]).toEqual(["absolute", "50%", "50%", "translate(-50%, -50%)", "1"]);
-    expect([style.backgroundColor, style.color, style.fontWeight, style.fontVariantNumeric, style.filter]).toEqual(["", "#fff", "600", "tabular-nums", "drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8))"]);
+    expect(currentStyle(box).opacity).toBe("1");
 
     await vi.advanceTimersByTimeAsync(700);
     dragTwoFingers(30);
@@ -1722,16 +1717,14 @@ describe("volume gestures", () => {
     expect(currentStyle(box).opacity).toBe("0");
   });
 
-  it("the volume indicator fades in over 120 ms and out over 250 ms, and not at all with reduced motion", async () => {
+  it("the volume indicator doesn't fade with reduced motion", async () => {
     useStylesheet();
     await mount(serverPicking(VIDEO_ITEM));
     const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
-    // The rule whose selector list names the selector, as the volume and seek indicators share their look.
-    const rule = (selector: string) => rules.find((candidate) => (candidate as CSSStyleRule).selectorText?.split(", ").includes(selector)) as CSSStyleRule | undefined;
-    expect([rule(".volume-indicator")?.style.transition, rule(".volume-indicator.is-shown")?.style.transitionDuration]).toEqual(["opacity 0.25s", "0.12s"]);
     const reduced = rules
       .filter((candidate): candidate is CSSMediaRule => (candidate as CSSMediaRule).media?.mediaText.includes("prefers-reduced-motion"))
       .flatMap((candidate) => Array.from(candidate.cssRules) as CSSStyleRule[]);
+    // The rule whose selector list names the selector, as the volume and seek indicators share their look.
     const reducedRule = (selector: string) => reduced.find((candidate) => candidate.selectorText?.split(", ").includes(selector));
     expect([reducedRule(".volume-indicator")?.style.transition, reducedRule(".volume-indicator.is-shown")?.style.transition]).toEqual(["none", "none"]);
   });
@@ -2047,7 +2040,6 @@ describe("scrub bar on a photo", () => {
 
     expect(seekRow()).toBe(row);
     expect(row.style.display).toBe("");
-    expect(photoTimerBar().parentElement!.parentElement).toBe(row);
     expect(photoTimerBar().disabled).toBe(false);
     expect([photoTimerBar().max, photoTimerBar().value, timeDisplay()]).toEqual(["10", "0", "0:00 / 0:10"]);
     expect(iconOf("Play/Pause")).toBe("pause");
@@ -2200,8 +2192,7 @@ describe("ambient mode", () => {
     expect(ambientLayer().hidden).toBe(false);
   });
 
-  it("off, leaves the space around the picture plain black in both themes, and copies nothing", async () => {
-    useStylesheet();
+  it("off, shows no ambient layer and copies nothing", async () => {
     localStorage.setItem("rr_device.appearance.ambient", "false");
     const canvases = sampling();
     await mount(serverPicking(VIDEO_ITEM));
@@ -2210,7 +2201,6 @@ describe("ambient mode", () => {
     await vi.advanceTimersByTimeAsync(3_000);
     expect(ambientLayer().hidden).toBe(true);
     expect(canvases.copiesOf(video())).toBe(0);
-    inEachTheme((theme) => expect([theme, currentStyle(mediaArea()).backgroundColor]).toEqual([theme, "#000"]));
   });
 
   it("sits behind the video and the photo, which are positioned to draw above it", async () => {
@@ -2231,87 +2221,16 @@ describe("ambient mode", () => {
   });
 });
 
-describe("the player's rounded corners", () => {
-  /** The selectors of the stylesheet's rules, nested ones included, that give the player its corners. */
-  function playerCornerRules(): string[] {
-    const flatten = (rules: CSSRuleList): CSSRule[] =>
-      Array.from(rules).flatMap((rule) => [rule, ...("cssRules" in rule ? flatten((rule as CSSGroupingRule).cssRules) : [])]);
-    return Array.from(document.styleSheets)
-      .flatMap((sheet) => flatten(sheet.cssRules))
-      .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && rule.selectorText.split(",").some((part) => part.trim().endsWith(".media-container")))
-      .filter((rule) => rule.style.borderRadius || rule.style.clipPath)
-      .map((rule) => rule.selectorText);
-  }
-
-  function corners(): string[] {
-    return [currentStyle(mediaArea()).clipPath, currentStyle(mediaArea()).borderRadius];
-  }
-
-  it("are clipped by a rounded clip-path as well as overflow, so they stay rounded on iOS, and stay rounded in fullscreen", async () => {
-    useStylesheet();
-    await mount(serverPicking(VIDEO_ITEM));
-    expect(corners()).toEqual(["inset(0 round 8px)", "8px"]);
-
-    await click(button("Fullscreen"));
-    expect(isPseudoFullscreen()).toBe(true);
-    expect(corners()).toEqual(["inset(0 round 8px)", "8px"]);
-    // happy-dom doesn't match the browser's fullscreen, so the stylesheet is read: only the player's own rule sets its
-    // corners.
-    expect(playerCornerRules()).toEqual([".media-container"]);
-  });
-});
-
-describe("colors", () => {
-  it("keep the player's time light in both themes, and checkboxes, radio buttons, and sliders orange", async () => {
-    useStylesheet();
-    const server = serverPicking(VIDEO_ITEM);
-    await mountAndPlay(server);
-    await openPanel("Filter");
-    const filter = await waitFor(() => {
-      const found = document.getElementById("panel-page-filter")!;
-      expect(found.querySelector('input[type="checkbox"]')).not.toBeNull();
-      expect(found.querySelector('input[type="radio"]')).not.toBeNull();
-      return found;
-    });
-    const controls = [seekSlider(), filter.querySelector('input[type="checkbox"]')!, filter.querySelector('input[type="radio"]')!];
-    const root = document.documentElement;
-
-    try {
-      for (const theme of ["theme-dark", "theme-light"]) {
-        root.classList.remove("theme-dark", "theme-light");
-        root.classList.add(theme);
-        expect([theme, currentStyle(document.getElementById("time-display")!).color]).toEqual([theme, "#ffffff"]);
-        expect(controls.map((control) => currentStyle(control).accentColor)).toEqual(["#ef7f22", "#ef7f22", "#ef7f22"]);
-      }
-    } finally {
-      root.classList.remove("theme-dark", "theme-light");
-    }
-  });
-});
-
 describe("seek row", () => {
-  it("sets the scrub bar, the time, Mute, and the volume slider the row's 12 px gap apart, with the time's digits all one width", async () => {
+  it("keeps the time's digits all one width, so Mute and the volume slider don't shift as it counts", async () => {
     useStylesheet();
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
-    const row = currentStyle(seekRow());
-    const wrap = currentStyle(document.getElementById("seek-wrap")!);
-    const bar = currentStyle(seekSlider());
-    const time = currentStyle(document.getElementById("time-display")!);
-    const volume = currentStyle(volumeSlider());
 
-    expect([...seekRow().children].map((child) => child.id)).toEqual(["seek-wrap", "time-display", "mute-btn", "volume-wrap"]);
-    expect([row.display, row.gap]).toEqual(["flex", "12px"]);
-    // A range input's own margin, 2 px in browsers, would widen the gap, and so would its wrapper's.
-    expect([bar.marginLeft, bar.marginRight, volume.marginLeft, volume.marginRight]).toEqual(["0px", "0px", "0px", "0px"]);
-    expect([wrap.marginLeft, wrap.marginRight, wrap.paddingLeft, wrap.paddingRight].every((value) => value === "" || value === "0px")).toBe(true);
-    // The time takes its own width, with no minimum or alignment adding space beside it.
-    expect([time.minWidth, time.textAlign, time.fontVariantNumeric]).toEqual(["", "", "tabular-nums"]);
-    // The volume slider is 84 px wide on every screen, and doesn't grow as the scrub bar does.
-    expect([volume.width, volume.height, volume.flexGrow]).toEqual(["84px", "24px", "0"]);
+    expect(currentStyle(document.getElementById("time-display")!).fontVariantNumeric).toBe("tabular-nums");
   });
 
-  it("keeps Mute's 44 px target without making the row taller than its sliders, and Mute is no longer in the transport row", async () => {
+  it("keeps Mute's 44 px target without making the row taller than its sliders", async () => {
     useStylesheet();
     const server = serverPicking(VIDEO_ITEM);
     await mount(server);
@@ -2324,18 +2243,14 @@ describe("seek row", () => {
     expect(px(mute.height) + px(mute.marginTop) + px(mute.marginBottom)).toBeLessThanOrEqual(px(currentStyle(seekSlider()).height));
     expect(-px(mute.marginTop)).toBeLessThanOrEqual(px(controls.gap) + 4);
     expect(-px(mute.marginBottom)).toBeLessThanOrEqual(px(controls.paddingBottom));
-    expect(document.querySelector(".overlay-controls-transport #mute-btn")).toBeNull();
   });
 });
 
 describe("Random", () => {
-  it("sits between Next and Loop, and with Play behavior on Jump, from the middle of history picks a new item and adds it at the end, keeping the plays ahead", async () => {
+  it("with Play behavior on Jump, from the middle of history picks a new item and adds it at the end, keeping the plays ahead", async () => {
     localStorage.setItem("rr_device.playback.playBehavior", '"jump"');
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, PHOTO_ITEM);
     const { store } = await mountWithServices(server);
-    const transport = [...document.querySelectorAll(".overlay-controls-transport button")].map((control) => control.getAttribute("aria-label"));
-    expect(transport).toEqual(["Previous", "Play/Pause", "Next", "Random", "Loop", "Autoplay", "Fullscreen"]);
-    expect(iconOf("Random")).toBe("casino");
     expect(button("Random").title).toBe("Random");
 
     await click(emptyState());
@@ -2750,12 +2665,6 @@ describe("controls and gestures, with Hide player controls on On click/tap", () 
     expect(video().src).toBe(VIDEO_URL);
     expect(controlsShown()).toBe(true);
   });
-
-  it("the player shows no tap highlight, which Chrome on Android flashes over what a tap clicks, and its controls inherit that", () => {
-    // happy-dom drops the property when it parses the stylesheet, so the test reads the player's rule as written.
-    const rule = /\n\.media-container \{([^}]*)\}/.exec(stylesheetText())?.[1] ?? "";
-    expect(rule).toContain("-webkit-tap-highlight-color: transparent;");
-  });
 });
 
 describe("double-tap seeking and the seek indicator", () => {
@@ -2874,7 +2783,6 @@ describe("double-tap seeking and the seek indicator", () => {
     await tapAt(300);
     expect([seekIndicatorShows(), controlsShown()]).toEqual(["+ 10 chevron_right", false]);
     const box = document.getElementById("seek-indicator-forward")!;
-    expect(box.parentElement).toBe(mediaArea());
     expect(document.getElementById("overlay-controls")!.contains(box)).toBe(false);
     await vi.advanceTimersByTimeAsync(SEEK_INDICATOR_MS - 1);
     expect(seekIndicatorShows()).toBe("+ 10 chevron_right");
@@ -2890,27 +2798,16 @@ describe("double-tap seeking and the seek indicator", () => {
     expect([video().currentTime, seekIndicatorShows()]).toEqual([30, null]);
   });
 
-  it("the seek indicator sits 24 px in from each side in white with a shadow, fades in over 120 ms as its chevron slides out and out over 250 ms, and not at all with reduced motion", async () => {
+  it("the seek indicator stays transparent until a seek shows it, and neither fades nor slides its chevron with reduced motion", async () => {
     useStylesheet();
     await mount(serverPicking(VIDEO_ITEM));
-    const back = currentStyle(document.getElementById("seek-indicator-back")!);
-    const forward = currentStyle(document.getElementById("seek-indicator-forward")!);
-    expect([back.left, forward.right, back.top, back.transform, back.opacity]).toEqual(["24px", "24px", "50%", "translateY(-50%)", "0"]);
-    expect([back.backgroundColor, back.color, back.fontWeight, back.fontVariantNumeric, back.filter]).toEqual(["", "#fff", "600", "tabular-nums", "drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8))"]);
+    expect(currentStyle(document.getElementById("seek-indicator-back")!).opacity).toBe("0");
 
     const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
-    // The rule whose selector list names the selector, as the volume and seek indicators share their look.
-    const rule = (selector: string) => rules.find((candidate) => (candidate as CSSStyleRule).selectorText?.split(", ").includes(selector)) as CSSStyleRule | undefined;
-    expect([rule(".seek-indicator")?.style.transition, rule(".seek-indicator.is-shown")?.style.transitionDuration]).toEqual(["opacity 0.25s", "0.12s"]);
-    expect([rule(".seek-indicator.is-back.is-shown .material-symbol-icon")?.style.animation, rule(".seek-indicator.is-forward.is-shown .material-symbol-icon")?.style.animation]).toEqual([
-      "seek-chevron-back 0.3s ease-out",
-      "seek-chevron-forward 0.3s ease-out"
-    ]);
-    const slide = (name: string) => (rules.find((candidate) => (candidate as CSSKeyframesRule).name === name) as CSSKeyframesRule | undefined)?.cssRules[0] as CSSKeyframeRule | undefined;
-    expect([slide("seek-chevron-back")?.style.transform, slide("seek-chevron-forward")?.style.transform]).toEqual(["translateX(10px)", "translateX(-10px)"]);
     const reduced = rules
       .filter((candidate): candidate is CSSMediaRule => (candidate as CSSMediaRule).media?.mediaText.includes("prefers-reduced-motion"))
       .flatMap((candidate) => Array.from(candidate.cssRules) as CSSStyleRule[]);
+    // The rule whose selector list names the selector, as the volume and seek indicators share their look.
     const reducedRule = (selector: string) => reduced.find((candidate) => candidate.selectorText?.split(", ").includes(selector));
     expect([reducedRule(".seek-indicator")?.style.transition, reducedRule(".seek-indicator.is-shown")?.style.transition, reducedRule(".seek-indicator.is-shown .material-symbol-icon")?.style.animation]).toEqual(["none", "none", "none"]);
   });
@@ -3227,15 +3124,14 @@ describe("Don't record plays on this device", () => {
     expect(playsCounted(server)).toBe(1);
   });
 
-  it("shows Counts disabled with its icon while it is on, hiding and showing with the controls, in fullscreen too", async () => {
+  it("shows Counts disabled while it is on, hiding and showing with the controls, in fullscreen too", async () => {
     hideControlsOnClick();
     useStylesheet();
     keepDontRecordPlays(true);
     const server = serverPicking(VIDEO_ITEM);
     const page = await mountAndPlay(server);
     expect(mediaArea().contains(countsDisabled())).toBe(true);
-    expect(countsDisabled()!.textContent).toBe("play_disabledCounts disabled");
-    expect(countsDisabled()!.querySelector(".material-symbol-icon")!.textContent).toBe("play_disabled");
+    expect(countsDisabled()!.textContent).toContain("Counts disabled");
     expect(page.server.logLines()).toContain("developer=dont-record-plays-on-at-load");
     // happy-dom reports no opacity where no rule sets one, which is fully shown.
     expect(controlsShown()).toBe(true);
@@ -3275,20 +3171,16 @@ describe("Don't record plays on this device", () => {
     expect(countsDisabled()).toBeNull();
   });
 
-  it("sits under the bell, below the indicator on a narrow player, in the developer style, and under the popups", async () => {
+  it("sits under the bell, below the indicator on a narrow player, and under the popups", async () => {
     useStylesheet();
     keepDontRecordPlays(true);
     await mountWithServices();
 
     const pill = currentStyle(countsDisabled()!);
-    expect([pill.position, pill.top, pill.left, pill.pointerEvents]).toEqual(["absolute", "64px", "12px", "none"]);
-    const root = currentStyle(document.documentElement);
-    expect(pill.borderStyle).toBe("dashed");
-    expect(pill.backgroundColor).toBe(root.getPropertyValue("--dev-bg").trim());
-    expect(currentStyle(countsDisabled()!.querySelector(".material-symbol-icon")!).color).toBe(root.getPropertyValue("--dev").trim());
+    expect([pill.top, pill.pointerEvents]).toEqual(["64px", "none"]);
     // The player clips to its rounded corners, which makes it its own stacking context, so the pill's z-index counts only
     // inside it, and the popups beside it, at 1200, cover it.
-    expect(currentStyle(mediaArea()).clipPath).toBe("inset(0 round 8px)");
+    expect(currentStyle(mediaArea()).clipPath).not.toBe("");
     const popups = document.getElementById("toasts")!;
     expect(mediaArea().contains(popups)).toBe(false);
     expect(popups.parentElement).toBe(mediaArea().parentElement);
@@ -3516,15 +3408,15 @@ describe("the player's indicator", () => {
     expect(currentStyle(indicatorBox()).opacity).not.toBe("0");
   });
 
-  it("sits at the player's top center, clear of the corner buttons on both sides, a long state ending in an ellipsis", async () => {
+  it("stays clear of the corner buttons on both sides, a long state ending in an ellipsis", async () => {
     useStylesheet();
     const { store } = await mountWithServices();
     store.refreshProgress.value = { stage: "Fingerprinting files", percent: 50 };
     await flush();
 
     const box = currentStyle(indicatorBox());
-    expect([box.position, box.top, box.left, box.transform]).toEqual(["absolute", "14px", "50%", "translateX(-50%)"]);
-    // The corner buttons take the last 212 px at the right, so the indicator leaves that much on both sides.
+    // The corner buttons take the last 212 px at the right, so the centered indicator leaves that much on both sides.
+    expect([box.left, box.transform]).toEqual(["50%", "translateX(-50%)"]);
     expect(box.maxWidth).toBe("calc(100% - 440px)");
     expect(box.pointerEvents).toBe("none");
     const text = currentStyle(indicatorText());
@@ -3544,7 +3436,8 @@ describe("the player's indicator", () => {
     store.reconnecting.value = true;
     await flush();
 
-    expect(currentStyle(indicatorBox()).maxWidth).toBe("calc(100% - 336px)");
+    const box = currentStyle(indicatorBox());
+    expect([box.left, box.transform, box.maxWidth]).toEqual(["50%", "translateX(-50%)", "calc(100% - 336px)"]);
 
     // A narrow player's indicator sits below the corner buttons, on either side.
     stubLayoutSize(599);
@@ -3604,24 +3497,28 @@ describe("the player's rating", () => {
     return currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim();
   }
 
-  it("shows the playing item's rating on a star between the panel button and Favorite, orange with the rating in its badge, and outlined without one while unrated", async () => {
+  /** The gaps between the corner buttons at the player's right, by their right offsets: each 44 px button needs 44. */
+  function rightCornerGaps(): number[] {
+    const offsets = ["panel-btn", "rating-btn", "favorite-btn", "blacklist-btn"]
+      .map((id) => currentStyle(document.getElementById(id)!).right)
+      .filter((right) => right !== "auto")
+      .map((right) => parseFloat(right))
+      .sort((a, b) => a - b);
+    return offsets.slice(1).map((right, index) => right - offsets[index]!);
+  }
+
+  it("shows the playing item's rating on a star, orange with the rating in its badge, and outlined without one while unrated", async () => {
     useStylesheet();
     await playRated(rated(VIDEO_ITEM, 3.5), rated(SECOND_VIDEO, 3), PHOTO_ITEM);
 
     const star = ratingButton();
-    expect(star.previousElementSibling?.id).toBe("panel-btn");
-    expect(star.nextElementSibling).toBe(ratingPopover());
-    expect(ratingPopover().nextElementSibling?.id).toBe("favorite-btn");
     expect([star.type, star.title]).toEqual(["button", "Rating, 3.5 stars"]);
     expect(ratingPopover().hidden).toBe(true);
-    expect(star.querySelector(".material-symbol-icon")!.textContent).toBe("star");
     expect(starShows()).toEqual(["Rating, 3.5 stars", true, "3.5"]);
     expect(currentStyle(star).color).toBe(orange());
-    const right = (id: string) => currentStyle(document.getElementById(id)!).right;
-    expect([right("panel-btn"), right("rating-btn"), right("favorite-btn"), right("blacklist-btn")]).toEqual(["168px", "116px", "64px", "12px"]);
-    // The bell's badge, at the same place over its button.
-    const badge = currentStyle(ratingBadge());
-    expect([badge.position, badge.top, badge.right, badge.boxShadow]).toEqual(["absolute", "4px", "4px", "0 0 0 2px #000"]);
+    // The panel button, the star, Favorite, and Blacklist.
+    const gaps = rightCornerGaps();
+    expect([gaps.length, gaps.filter((gap) => gap < 44)]).toEqual([3, []]);
 
     await click(button("Next"));
     expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
@@ -3632,14 +3529,15 @@ describe("the player's rating", () => {
     expect(currentStyle(star).color).not.toBe(orange());
   });
 
-  it("stays left of Favorite while the panel is on the left, whose button then sits just right of the bell", async () => {
+  it("puts the panel button just right of the bell while the panel is on the left, clear of the star, Favorite, and Blacklist", async () => {
     localStorage.setItem("rr_device.panel.side", '"left"');
     useStylesheet();
     await mount(serverPicking(VIDEO_ITEM));
 
     const panelButton = currentStyle(document.getElementById("panel-btn")!);
     expect([panelButton.left, panelButton.right]).toEqual(["64px", "auto"]);
-    expect(currentStyle(ratingButton()).right).toBe("116px");
+    const gaps = rightCornerGaps();
+    expect([gaps.length, gaps.filter((gap) => gap < 44)]).toEqual([2, []]);
   });
 
   it("opens nothing for a press while nothing plays or while the server asks for pairing", async () => {
@@ -3817,38 +3715,14 @@ describe("the player's rating", () => {
     expect(video().src).toBe(VIDEO_URL);
   });
 
-  it("looks like the player's other icons: the stars alone at the player's center, white when empty, each glyph with a text shadow, and only the stars take presses", async () => {
+  it("shows nothing while hidden, and while open only the stars take presses", async () => {
     useStylesheet();
     await playRated(rated(VIDEO_ITEM, 3.5));
-    // Hidden, it shows nothing, though it lays the stars out as a flexbox while open.
     expect(currentStyle(ratingPopover()).display).toBe("none");
     await pressStar();
 
-    const popover = currentStyle(ratingPopover());
-    expect([popover.position, popover.display, popover.alignItems, popover.justifyContent, popover.pointerEvents]).toEqual([
-      "absolute",
-      "flex",
-      "center",
-      "center",
-      "none"
-    ]);
-    // It spans the player, with no background, and centers the stars without a transform.
-    expect([popover.transform, popover.backgroundColor]).toEqual(["", ""]);
-    expect(stylesheetText()).toMatch(/\.rating-popover \{[^}]*inset: 0;/);
-    const stars = currentStyle(popoverStars());
-    expect([stars.pointerEvents, stars.marginLeft]).toEqual(["auto", "0px"]);
-
-    const root = currentStyle(document.documentElement);
-    const shadow = root.getPropertyValue("--control-drop-shadow").trim();
-    const [full, , , half, empty] = [...popoverStars().querySelectorAll<HTMLElement>(".rating-star")];
-    const part = (star: HTMLElement | undefined, name: "outline" | "fill") => currentStyle(star!.querySelector(`.rating-${name}`)!);
-    expect(currentStyle(empty!).color).toBe(root.getPropertyValue("--icon-foreground").trim());
-    expect([part(empty, "outline").textShadow, part(full, "fill").textShadow]).toEqual([shadow, shadow]);
-    // A half star's shadow is its outline's, so none is cut off with its filled half.
-    expect([part(half, "outline").textShadow, part(half, "fill").textShadow]).toEqual([shadow, ""]);
-    // The filled star spans its star and centers its glyph there without a transform.
-    expect(part(full, "fill").transform).toBe("");
-    expect(stylesheetText()).toMatch(/\.rating-fill \{ position: absolute; inset: 0;/);
+    expect(currentStyle(ratingPopover()).pointerEvents).toBe("none");
+    expect(currentStyle(popoverStars()).pointerEvents).toBe("auto");
   });
 
   it("follows a rating the keys set at once, on the star and in the popover", async () => {
@@ -4000,6 +3874,17 @@ describe("the player's menu", () => {
   const MENU_HEIGHT = 300;
   const DELETE_ONE = "Permanently delete 1 file from disk and remove it from the library? This can't be undone.";
   const OTHER_ROW_ID = "item-other";
+  const PLAYING_ITEM_ACTIONS = new Set([
+    "Add to favorites",
+    "Add to blacklist",
+    "Rate…",
+    "Edit tags…",
+    "Show stats",
+    "Clear playback stats…",
+    "Copy name",
+    "Copy path",
+    "Delete file…"
+  ]);
 
   /** An item the player plays as the library's query and `POST /api/library/item` give it, with playback stats. */
   function libraryRow(item: typeof VIDEO_ITEM, overrides: Record<string, unknown> = {}) {
@@ -4085,7 +3970,7 @@ describe("the player's menu", () => {
     await flush();
   }
 
-  it("opens at a right-click on the picture, in place of the browser's menu, with the playing item's actions in their groups, leaving the picture untinted", async () => {
+  it("opens at a right-click on the picture, in place of the browser's menu, with the playing item's actions, leaving the picture untinted", async () => {
     stubContextMenuSize(MENU_WIDTH, MENU_HEIGHT);
     const server = menuServer();
     await mountAndPlay(server);
@@ -4095,32 +3980,7 @@ describe("the player's menu", () => {
     const menu = contextMenuShown()!;
     expect(menu).not.toBeNull();
     expect(contextMenuPlace(MENU_WIDTH, MENU_HEIGHT)).toEqual({ left: 120, top: 140 });
-    expect(menuParts(menu)).toEqual([
-      "Add to favorites",
-      "Add to blacklist",
-      "—",
-      "Rate…",
-      "Edit tags…",
-      "Show stats",
-      "Clear playback stats…",
-      "—",
-      "Copy name",
-      "Copy path",
-      "—",
-      "Delete file…"
-    ]);
-    expect(menuIcons(menu)).toEqual([
-      "heart_plus Add to favorites",
-      "thumb_down Add to blacklist",
-      "star Rate…",
-      "tag Edit tags…",
-      "bar_chart Show stats",
-      "delete_history Clear playback stats…",
-      "content_copy Copy name",
-      "content_copy Copy path",
-      "delete_forever Delete file…"
-    ]);
-    expect(menuItemIn(menu, "Delete file…").classList.contains("menu-danger")).toBe(true);
+    expect(menuLabels(menu)).toEqual(PLAYING_ITEM_ACTIONS);
     expect([...menu.querySelectorAll("button")].every((item) => !item.disabled)).toBe(true);
     expect(mediaArea().classList.contains("is-menu-target")).toBe(false);
     // The playing item isn't a loaded tile, so the menu read it whole.
@@ -4243,6 +4103,7 @@ describe("the player's menu", () => {
     server.on("POST", "/api/favorite", flagAnswer);
     server.on("POST", "/api/blacklist", flagAnswer);
     const page = await mountAndPlay(server);
+    const flagItems = (menu: Element) => ["Add to favorites", "Remove from favorites", "Add to blacklist", "Remove from blacklist"].filter((label) => menuLabels(menu).has(label));
 
     await openMenu();
     await pick("Add to favorites");
@@ -4250,7 +4111,7 @@ describe("the player's menu", () => {
     expect(server.requests("POST", "/api/favorite").map((call) => call.body)).toEqual([{ itemId: "item-video", isFavorite: true, clientId: page.clientId() }]);
     expect(isLit("Favorite")).toBe(true);
     expect(popups()).toEqual([{ text: "Added to favorites", detail: "holiday clip.mp4" }]);
-    expect(menuParts(await openMenu()).slice(0, 2)).toEqual(["Remove from favorites", "Add to blacklist"]);
+    expect(flagItems(await openMenu())).toEqual(["Remove from favorites", "Add to blacklist"]);
     await pick("Remove from favorites");
     expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ itemId: "item-video", isFavorite: false, clientId: page.clientId() });
     expect(popups()).toEqual([{ text: "Removed from favorites", detail: "holiday clip.mp4" }]);
@@ -4260,7 +4121,7 @@ describe("the player's menu", () => {
     expect(server.requests("POST", "/api/blacklist").map((call) => call.body)).toEqual([{ itemId: "item-video", isBlacklisted: true, clientId: page.clientId() }]);
     expect(isLit("Blacklist")).toBe(true);
     expect(popups()).toEqual([{ text: "Blacklisted", detail: "holiday clip.mp4" }]);
-    expect(menuParts(await openMenu()).slice(0, 2)).toEqual(["Add to favorites", "Remove from blacklist"]);
+    expect(flagItems(await openMenu())).toEqual(["Add to favorites", "Remove from blacklist"]);
     await pick("Remove from blacklist");
     expect(server.requests("POST", "/api/blacklist")[1]!.body).toEqual({ itemId: "item-video", isBlacklisted: false, clientId: page.clientId() });
   });
@@ -4348,8 +4209,7 @@ describe("the player's menu", () => {
     await click(emptyState());
 
     const menu = await openMenu();
-    expect(menuParts(menu).slice(-5)).toEqual(["Copy name", "Copy path", "Show in File Manager", "—", "Delete file…"]);
-    expect(menuIcons(menu)).toContain("folder_open Show in File Manager");
+    expect(menuLabels(menu).has("Show in File Manager")).toBe(true);
     await pick("Show in File Manager");
     expect(server.requests("POST", "/api/show-in-file-manager/item-video")).toHaveLength(1);
     await waitFor(() => expect(popups()).toEqual([{ text: "Opened in the file manager.", detail: "holiday clip.mp4" }]));
@@ -4394,20 +4254,7 @@ describe("the player's menu", () => {
     await mountAndPlay(server);
 
     const menu = await openMenu();
-    expect(menuParts(menu)).toEqual([
-      "Add to favorites",
-      "Add to blacklist",
-      "—",
-      "Rate…",
-      "Edit tags…",
-      "Show stats",
-      "Clear playback stats…",
-      "—",
-      "Copy name",
-      "Copy path",
-      "—",
-      "Delete file…"
-    ]);
+    expect(menuLabels(menu)).toEqual(PLAYING_ITEM_ACTIONS);
     expect(menuItemIn(menu, "Clear playback stats…").disabled).toBe(false);
     await waitFor(() => expect(server.logLines()).toContain("library=item-read-failed status=503"));
     expect(openNotices()).toEqual([]);

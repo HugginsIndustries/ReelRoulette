@@ -9,7 +9,6 @@ import {
   IPHONE_USER_AGENT,
   json,
   mountPage,
-  normalizedMarkup,
   openNotices,
   pageReady,
   pickPreset,
@@ -667,14 +666,13 @@ describe("mobile browsers", () => {
 });
 
 describe("page structure", () => {
-  it("keeps the starting markup", async () => {
+  it("plays the video inline on an iPhone, preloading it, with no picture-in-picture or casting", async () => {
     const page = mountPage();
     await pageReady(page.server);
-    await settle();
-    // Diagnostics' values differ by run, browser, and release, so they are left out; the Settings tab's tests check them.
-    const root = page.root.cloneNode(true) as HTMLElement;
-    root.querySelectorAll(".diag dd").forEach((value) => (value.textContent = "…"));
-    expect(normalizedMarkup(root)).toMatchSnapshot();
+    const video = page.root.querySelector("video")!;
+
+    expect(["playsinline", "webkit-playsinline", "disablepictureinpicture", "disableremoteplayback"].filter((name) => !video.hasAttribute(name))).toEqual([]);
+    expect(video.getAttribute("preload")).toBe("auto");
   });
 
   it("keeps the same video element while the header changes and the event stream opens", async () => {

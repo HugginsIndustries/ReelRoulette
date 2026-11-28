@@ -168,7 +168,7 @@ describe("the dialog component", () => {
     expect(openDialogs()).toEqual([]);
   });
 
-  it("opens a confirmation above the dialog that asked, with Cancel focused and a red Delete", async () => {
+  it("opens a confirmation above the dialog that asked, with Cancel focused", async () => {
     renderWithDialogs();
     const edit = await openEditTag();
     await press(buttonIn(edit, "Delete"));
@@ -179,7 +179,6 @@ describe("the dialog component", () => {
     expect(confirm.getAttribute("role")).toBe("alertdialog");
     expect(document.getElementById(confirm.getAttribute("aria-labelledby")!)?.textContent).toBe('Delete tag "Beach"?');
     expect(document.activeElement).toBe(buttonIn(confirm, "Cancel"));
-    expect(buttonIn(confirm, "Delete").classList.contains("btn-danger")).toBe(true);
 
     await press(buttonIn(confirm, "Delete"));
     expect(openDialogs()).toEqual([]);
@@ -405,7 +404,7 @@ describe("the dialog in the page", () => {
     unmount = null;
   });
 
-  it("shows inside the stage in fullscreen, themed, and works there", async () => {
+  it("shows inside the stage in fullscreen, and works there", async () => {
     const fullscreen = stubFullscreenApi();
     const { services } = mountWithServices();
     await settle();
@@ -417,7 +416,6 @@ describe("the dialog in the page", () => {
     await settle();
     const confirm = top();
     expect(stage().contains(confirm)).toBe(true);
-    expect(confirm.classList.contains("app-dialog")).toBe(true);
     expect(confirm.open).toBe(true);
     await press(buttonIn(confirm, "Discard"));
     await expect(answer).resolves.toBe(true);

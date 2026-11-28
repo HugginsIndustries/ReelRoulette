@@ -78,7 +78,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 - **Slices**: a table of each slice, its status, and one line on what it delivers, in the order they land. Each row has a `#### {Slice} slice` section, in the same order, with these parts:
   - **Scope**: what the slice builds, naming the files, routes, and contracts it changes.
   - **Traps**: facts the implementer would otherwise trip on. Mark a fact that was run or measured "(measured)", one measured earlier that promotion couldn't measure again "(measured before promotion)", and one reasoned but not checked "(inferred)"; an unmarked fact was read from the code or docs. Never write "at this edit"; promotion re-checks every fact.
-  - **Acceptance**: testable outcomes, each naming the tests or checks that show it. Automated tests plus at most a quick spot check.
+  - **Acceptance**: testable outcomes, each naming the tests or checks that show it. Automated tests plus at most a quick spot check. A criterion about where something sits, in what order, or how it looks names the spot check, not tests, unless the order is the app's own or the look shows a state, as `AGENTS.md` describes.
   - **Evidence**: added when the slice lands, never while it is planned: what ran and its result, measured figures, docs updated, and waivers.
 - A slice's status moves on its own. The entry's Status is ⏳ Planned while every slice is, ✅ Complete only when every slice is, and 🚧 In Progress otherwise.
 - An entry without slices has `#### Scope`, `#### Traps`, `#### Acceptance`, and `#### Evidence` sections in place of the table and slice sections, with the same rules.
@@ -3332,7 +3332,7 @@ Last milestone completed: M12n1
 #### Acceptance
 
 - From another device, no library, random, or player surface is reachable before login; from localhost, no login is shown, in WebUI tests for gating.
-- Tiles show each account's colored circle, first letter, and name at desktop and mobile widths, in WebUI tests for login.
+- Tiles show each account's colored circle, first letter, and name, in WebUI tests for login.
 - Failed PINs and lockouts show clear errors, including the remaining lockout time, in WebUI tests for wrong PIN and lockout.
 - Before first-run setup is done, the gate shows the setup-incomplete message, in WebUI tests for setup incomplete.
 - Reloading or reopening needs a new login, in WebUI tests for reload.
@@ -3765,7 +3765,8 @@ Last milestone completed: M12n1
 
 #### Acceptance
 
-- The side panel, dialogs, the phone's full-screen overlays, and the bell's list open and close with the approved animations, and at once with reduced motion, in WebUI tests of each with and without reduced motion.
+- The side panel, dialogs, the phone's full-screen overlays, and the bell's list open and close animated, and at once with reduced motion, in WebUI tests of each with and without reduced motion.
+- The animations look as the approved mockup shows, checked in the spot check.
 - A close finishes at its timeout when its animation never ends, in WebUI tests of a close whose animation doesn't end.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's phone and iPad.
@@ -3795,7 +3796,8 @@ Last milestone completed: M12n1
 
 #### Acceptance
 
-- The surfaces it covers animate in the style Animations sets, and with animations off they change at once, in WebUI tests of each.
+- The surfaces it covers animate, and with animations off they change at once, in WebUI tests of each.
+- The surfaces animate in the style Animations sets, checked in a spot check on the user's phone and iPad.
 - The Settings section's choices are kept on the device across a page refresh, in Settings tab tests.
 - The system's reduce-motion setting and the user's choice combine as this milestone decides, in WebUI tests of each combination.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -3978,7 +3980,7 @@ Last milestone completed: M12n1
 
 #### Acceptance
 
-- Tiles show their item's rating as the approved mockup shows, and an unrated item's tile shows none, in Library screen tests.
+- Tiles show their item's rating, and an unrated item's tile shows none, in Library screen tests.
 - A rating change updates only that tile when the rule says patch, in WebUI tests for tile patching.
 - The mockup shows the tile rating as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's phone.
@@ -4062,7 +4064,8 @@ Last milestone completed: M12n1
 - The read is in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
 - The rail places each group's label or dot where its first item falls in the filtered set, for each sort, in WebUI tests of the timeline rail.
 - The pointer's floating label names the point under it, and a click or drag jumps the grid there, loading the page at that position, in WebUI tests of the timeline rail.
-- With the rail off, the custom thumb is centered in the right margin, about 3 px wide with the pointer over the grid and 6 px over the scrollbar, and dragging it seeks, in WebUI tests of the custom thumb.
+- With the rail off, dragging the custom thumb seeks, and it is wider with the pointer over the scrollbar than over the grid, in WebUI tests of the custom thumb.
+- The custom thumb's place in the right margin and its widths match the mockup, checked in a spot check in a desktop browser.
 - The mockup matches what this slice shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 

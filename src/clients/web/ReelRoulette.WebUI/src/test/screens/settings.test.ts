@@ -32,6 +32,7 @@ import {
 } from "./pageHarness";
 import { COMPRESSION_GLIDE_SECONDS } from "../../playback/audioStage";
 import { COMPRESSION_PRESETS, compressionGainDb, webAudioMakeupDb } from "../../playback/compression";
+import { THEME_META } from "../../settings/theme";
 import { FADE_MS } from "../../ui/FieldValidation";
 import { SETTING_SAVED_MS } from "../../validation/fieldValidation";
 
@@ -137,6 +138,15 @@ function hintOf(control: HTMLElement): string | null {
   return hint?.matches(".setting-hint") ? hint.textContent : null;
 }
 
+/** A setting's expander's label, without its chevron. */
+function summaryLabel(details: HTMLDetailsElement): string {
+  const summary = details.querySelector("summary")!;
+  return Array.from(summary.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join("");
+}
+
 /** The player's volume slider, at the end of the seek row. */
 function volumeSlider(): HTMLInputElement {
   return within(document.getElementById("media-container")!).getByRole("slider", { name: "Volume", hidden: true }) as HTMLInputElement;
@@ -207,30 +217,18 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Audio, Player controls, Appearance, Notifications, Panel, Keyboard shortcuts, Diagnostics, and Developer, in that order, then says settings apply at once, with no Save", async () => {
+  it("says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
-    const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Playback",
-      "Audio",
-      "Player controls",
-      "Appearance",
-      "Notifications",
-      "Panel",
-      "Keyboard shortcuts",
-      "Diagnostics",
-      "Developer"
-    ]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
     // Loudness normalization settings' and Ambient mode settings' Reset to defaults, Custom's Reset to Medium, and Reset
     // this device's settings are the tab's only buttons.
-    expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => [button.id, button.textContent])).toEqual([
+    expect(new Set(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => [button.id, button.textContent]))).toEqual(new Set([
       ["settings-loudness-reset", "Reset to defaults"],
       ["settings-compression-reset", "Reset to Medium"],
       ["settings-ambient-reset", "Reset to defaults"],
       ["settings-reset-device", "Reset this device's settings"]
-    ]);
+    ]));
   });
 
   it("has no entry that turns Loop, Autoplay, or Mute on or off, which the player's buttons do, and no key badge outside the shortcut reference", async () => {
@@ -244,13 +242,10 @@ describe("the Settings tab", () => {
 });
 
 describe("Enhanced audio", () => {
-  it("sits in Audio, right after Playback, on until turned off, with its hint", async () => {
+  it("is on until turned off, with its hint", async () => {
     await mount();
     await openSettings();
     const box = checkbox("Enhanced audio");
-    const section = box.closest("section")!;
-    expect(section.querySelector("h3")!.textContent).toBe("Audio");
-    expect(section.previousElementSibling?.querySelector("h3")?.textContent).toBe("Playback");
     expect(box.checked).toBe(true);
     expect(hintOf(box)).toBe(
       "Processes audio in the app, for loudness normalization and compression."
@@ -273,18 +268,13 @@ describe("Enhanced audio", () => {
 });
 
 describe("Volume step", () => {
-  it("sits first in Audio, before Enhanced audio, offering 1, 2, 5, and 10 percent, 5 until chosen, with its hint", async () => {
+  it("offers 1, 2, 5, and 10 percent, 5 until chosen, with its hint", async () => {
     await mount();
     await openSettings();
     const group = within(settingsPage()).getByRole("radiogroup", { name: "Volume step", hidden: true });
-    const section = group.closest("section")!;
-    expect(section.querySelector("h3")!.textContent).toBe("Audio");
-    const settings = Array.from(section.querySelectorAll(":scope > .setting"));
-    expect(settings[0]!.contains(group)).toBe(true);
-    expect(settings[1]!.contains(checkbox("Enhanced audio"))).toBe(true);
     const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
-    expect(names).toEqual(["1%", "2%", "5%", "10%"]);
-    expect(names.map((name) => radio(name!).checked)).toEqual([false, false, true, false]);
+    expect(new Set(names)).toEqual(new Set(["1%", "2%", "5%", "10%"]));
+    expect(names.filter((name) => radio(name!).checked)).toEqual(["5%"]);
     expect(hintOf(group)).toBe("Also for the scroll wheel and a two-finger drag over the player.");
   });
 
@@ -345,17 +335,15 @@ describe("Loudness normalization", () => {
 
   const gain = (db: number) => Math.pow(10, db / 20);
 
-  it("sits in Audio right under Enhanced audio, on by default, with its hint, and its settings beside it, closed at first", async () => {
+  it("is on by default, with its hint, and its settings closed at first", async () => {
     await mount(serverWith());
     await openSettings();
     const box = loudnessBox();
     expect([box.checked, box.disabled]).toEqual([true, false]);
     expect(hintOf(box)).toBe("Evens out loudness between videos.");
-    expect(box.closest(".setting")!.previousElementSibling).toBe(checkbox("Enhanced audio").closest(".setting"));
     const more = loudnessSettings();
     expect(more.open).toBe(false);
-    expect(more.querySelector("summary")!.textContent).toBe("chevron_rightLoudness normalization settings");
-    expect(box.closest(".setting")!.contains(more)).toBe(true);
+    expect(summaryLabel(more)).toBe("Loudness normalization settings");
   });
 
   it("offers Automatic, the library's baseline, by default, Quieter, Standard, Louder, and Manual, a 15 dB boost limit, and Allow limiting on", async () => {
@@ -393,7 +381,6 @@ describe("Loudness normalization", () => {
     expect(manual.hidden).toBe(true);
     await click(radio("Manual"));
     expect(manual.hidden).toBe(false);
-    expect(radio("Manual").closest('[role="radiogroup"]')!.contains(manual)).toBe(true);
     expect(manualTarget().value).toBe("-18");
     expect(manualTarget().hasAttribute("inputmode")).toBe(false);
     await click(radio("Standard"));
@@ -555,17 +542,15 @@ describe("Compression", () => {
     return raw === null ? null : JSON.parse(raw);
   }
 
-  it("sits in Audio right under Loudness normalization, off by default, with its hint, and its settings beside it, closed at first", async () => {
+  it("is off by default, with its hint, and its settings closed at first", async () => {
     await mount();
     await openSettings();
     const box = compressionBox();
     expect([box.checked, box.disabled]).toEqual([false, false]);
     expect(hintOf(box)).toBe("Evens out loudness within a video.");
-    expect(box.closest(".setting")!.previousElementSibling).toBe(checkbox("Loudness normalization").closest(".setting"));
     const more = compressionSettings();
     expect(more.open).toBe(false);
-    expect(more.querySelector("summary")!.textContent).toBe("chevron_rightCompression settings");
-    expect(box.closest(".setting")!.contains(more)).toBe(true);
+    expect(summaryLabel(more)).toBe("Compression settings");
   });
 
   it("offers Strength's Light, Medium, by default, Strong, and Custom, each with its hint, and Custom's values only under Custom, at Medium's", async () => {
@@ -579,7 +564,6 @@ describe("Compression", () => {
       ["Custom", false, "Set each value yourself."]
     ]);
     expect(custom().hidden).toBe(true);
-    expect(strength("Custom").closest(".choice-stack")!.contains(custom())).toBe(true);
     await click(strength("Custom"));
     expect(custom().hidden).toBe(false);
     expect(fieldTexts()).toEqual(MEDIUM_TEXTS);
@@ -711,21 +695,13 @@ describe("Audio's defaults", () => {
 });
 
 describe("Autoplay mode and Loop stops autoplay", () => {
-  it("sit in Playback around Advance after: Autoplay mode first, Normal until chosen, each mode with its line and the group with its hint, and Loop stops autoplay after it, on until turned off, with its hint, before Seek step", async () => {
+  it("are Normal until chosen, each mode with its line and the group with its hint, and Loop stops autoplay on until turned off, with its hint", async () => {
     await mount();
     await openSettings();
-    const playback = advanceAfter().closest("section")!;
-    const settings = Array.from(playback.querySelectorAll(":scope > .setting"));
-    expect(settings).toHaveLength(5);
-    expect(within(settings[0] as HTMLElement).getByRole("radiogroup", { name: "Autoplay mode", hidden: true })).toBeTruthy();
-    expect(settings[1]!.contains(advanceAfter())).toBe(true);
-    expect(settings[2]!.contains(checkbox("Loop stops autoplay"))).toBe(true);
-    expect(within(settings[3] as HTMLElement).getByRole("radiogroup", { name: "Seek step", hidden: true })).toBeTruthy();
-
     expect([radio("Normal").checked, radio("Timer").checked]).toEqual([true, false]);
     expect(hintOf(radio("Normal"))).toBe("Photos advance after the timer; videos play to the end.");
     expect(hintOf(radio("Timer"))).toBe("Every item advances after the timer. Pausing a video holds it.");
-    expect(hintOf(within(settings[0] as HTMLElement).getByRole("radiogroup", { hidden: true }))).toBe("The player's autoplay button turns it on and off.");
+    expect(hintOf(within(settingsPage()).getByRole("radiogroup", { name: "Autoplay mode", hidden: true }))).toBe("The player's autoplay button turns it on and off.");
     expect(checkbox("Loop stops autoplay").checked).toBe(true);
     expect(hintOf(checkbox("Loop stops autoplay"))).toBe(
       "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
@@ -776,8 +752,8 @@ describe("Seek step", () => {
     await openSettings();
     const group = within(settingsPage()).getByRole("radiogroup", { name: "Seek step", hidden: true });
     const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
-    expect(names).toEqual(["1 second", "5 seconds", "10 seconds"]);
-    expect(names.map((name) => radioOf("Seek step", name!).checked)).toEqual([false, true, false]);
+    expect(new Set(names)).toEqual(new Set(["1 second", "5 seconds", "10 seconds"]));
+    expect(names.filter((name) => radioOf("Seek step", name!).checked)).toEqual(["5 seconds"]);
 
     await click(radioOf("Seek step", "1 second"));
     expect(localStorage.getItem("rr_device.player.seekStep")).toBe("1");
@@ -790,15 +766,12 @@ describe("Seek step", () => {
 });
 
 describe("Play behavior", () => {
-  it("sits last in Playback, after Seek step, Insert first and chosen until set, each with its line and the group with its hint, and is kept after a page refresh", async () => {
+  it("offers Insert, chosen until set, and Jump, each with its line and the group with its hint, and is kept after a page refresh", async () => {
     const page = await mount();
     await openSettings();
     const group = within(settingsPage()).getByRole("radiogroup", { name: "Play behavior", hidden: true });
-    const settings = Array.from(advanceAfter().closest("section")!.querySelectorAll(":scope > .setting"));
-    expect(settings.at(-1)!.contains(group)).toBe(true);
-    expect(within(settings.at(-2) as HTMLElement).getByRole("radiogroup", { name: "Seek step", hidden: true })).toBeTruthy();
     const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
-    expect(names).toEqual(["Insert", "Jump"]);
+    expect(new Set(names)).toEqual(new Set(["Insert", "Jump"]));
     expect([radioOf("Play behavior", "Insert").checked, radioOf("Play behavior", "Jump").checked]).toEqual([true, false]);
     expect(hintOf(radioOf("Play behavior", "Insert"))).toBe("Puts the item right after the current one, keeping the plays ahead after it.");
     expect(hintOf(radioOf("Play behavior", "Jump"))).toBe("Adds the item at the end of the history.");
@@ -815,15 +788,13 @@ describe("Play behavior", () => {
 });
 
 describe("Keyboard shortcuts", () => {
-  it("sits between Panel and Diagnostics, collapsed, opening from its heading with a chevron", async () => {
+  it("is collapsed, opening from its heading", async () => {
     await mount();
     await openSettings();
     const section = document.getElementById("settings-shortcuts") as HTMLDetailsElement;
-    expect(section.closest("section")!.previousElementSibling?.querySelector("h3")?.textContent).toBe("Panel");
-    expect(section.closest("section")!.nextElementSibling?.querySelector("h3")?.textContent).toBe("Diagnostics");
     expect(section.open).toBe(false);
     const summary = section.querySelector("summary")!;
-    expect([summary.querySelector(".setting-more-chevron")?.textContent, summary.querySelector("h3")?.textContent]).toEqual(["chevron_right", "Keyboard shortcuts"]);
+    expect(summary.querySelector("h3")?.textContent).toBe("Keyboard shortcuts");
     await click(summary);
     expect(section.open).toBe(true);
   });
@@ -1069,21 +1040,23 @@ describe("Player controls", () => {
     return document.getElementById("settings-hide-timeout")!;
   }
 
-  it("sits after Audio: Hide player controls on Timeout until changed, each mode with its line, and Hide after at 3 seconds and Keep visible while paused, on, shown only under Timeout", async () => {
+  it("has Hide player controls on Timeout until changed, each mode with its line, and Hide after at 3 seconds and Keep visible while paused, on, shown only under Timeout", async () => {
     await mount();
     await openSettings();
-    const section = hideMode("Timeout").closest("section")!;
-    expect(section.querySelector("h3")!.textContent).toBe("Player controls");
     const choices = within(settingsPage()).getByRole("radiogroup", { name: "Hide player controls", hidden: true });
     expect(
-      within(choices)
-        .getAllByRole("radio", { hidden: true })
-        .map((choice) => [choice.getAttribute("value"), (choice as HTMLInputElement).checked, hintOf(choice)])
-    ).toEqual([
-      ["timeout", true, "They hide after a time with no activity."],
-      ["click", false, "A click or tap on the player shows or hides them."],
-      ["never", false, null]
-    ]);
+      new Set(
+        within(choices)
+          .getAllByRole("radio", { hidden: true })
+          .map((choice) => [choice.getAttribute("value"), (choice as HTMLInputElement).checked, hintOf(choice)])
+      )
+    ).toEqual(
+      new Set([
+        ["timeout", true, "They hide after a time with no activity."],
+        ["click", false, "A click or tap on the player shows or hides them."],
+        ["never", false, null]
+      ])
+    );
     expect(timeoutSettings().hidden).toBe(false);
     expect(hideAfter().value).toBe("3");
     expect(checkbox("Keep visible while paused").checked).toBe(true);
@@ -1133,7 +1106,7 @@ describe("Advance after's saved check", () => {
     return settingsPage().querySelector(".vfield-saved");
   }
 
-  it("shows a green check when Enter or leaving the field saves a new value, then fades the check out", async () => {
+  it("shows a check when Enter or leaving the field saves a new value, then fades the check out", async () => {
     await mount();
     await openSettings();
     fakeTimers();
@@ -1145,7 +1118,7 @@ describe("Advance after's saved check", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await flush();
     expect(fade(check())).toBe("shown");
-    expect([check()!.textContent, check()!.parentElement]).toEqual(["check_circle", input.closest(".vfield")]);
+    expect(check()!.parentElement).toBe(input.closest(".vfield"));
     await vi.advanceTimersByTimeAsync(SETTING_SAVED_MS - 1);
     expect(fade(check())).toBe("shown");
     await vi.advanceTimersByTimeAsync(1);
@@ -1246,23 +1219,15 @@ describe("the field validation pattern's fades", () => {
     return style;
   }
 
-  it("fade in and out by the stylesheet over the time the app keeps them rendered, and take no motion under reduced motion", async () => {
+  it("fade out by the stylesheet over the time the app keeps them rendered, and take no motion under reduced motion", async () => {
     useStylesheet();
     await mount();
     const rules = styleRules();
     const reduced = styleRules("prefers-reduced-motion: reduce");
-    const fadeIn = Array.from(document.styleSheets)
-      .flatMap((sheet) => Array.from(sheet.cssRules))
-      .find((rule): rule is CSSKeyframesRule => (rule as CSSKeyframesRule).name === "field-mark-in");
-    const from = fadeIn?.cssRules[0] as CSSKeyframeRule | undefined;
-    expect([fadeIn?.cssRules.length, from?.keyText, from?.style.opacity]).toEqual([1, "0%", "0"]);
 
     for (const selector of FADED) {
       const fading = `${selector.replace(".is-shown", "")}.is-fading-out`;
-      expect([selector, styleOf(rules, selector)]).toEqual([
-        selector,
-        { animation: `field-mark-in ${FADE_MS}ms ease`, transition: `opacity ${FADE_MS}ms ease` }
-      ]);
+      expect([selector, styleOf(rules, selector).transition?.match(/(\d+)ms/)?.[1]]).toEqual([selector, String(FADE_MS)]);
       // A fade out takes over from a fade in that hasn't finished.
       expect([fading, styleOf(rules, fading)]).toEqual([fading, { opacity: "0", animation: "none" }]);
       expect([selector, styleOf(reduced, selector)]).toEqual([selector, { animation: "none", transition: "none" }]);
@@ -1315,11 +1280,9 @@ describe("Auto-Pause", () => {
     // Beside the player, Responsive pauses nothing.
     await openSettings();
     const choices = within(settingsPage()).getByRole("radiogroup", { name: "Auto-Pause", hidden: true });
-    expect(within(choices).getAllByRole("radio", { hidden: true }).map((choice) => choice.getAttribute("aria-labelledby"))).toEqual([
-      "settings-auto-pause-responsive",
-      "settings-auto-pause-always",
-      "settings-auto-pause-never"
-    ]);
+    expect(new Set(within(choices).getAllByRole("radio", { hidden: true }).map((choice) => choice.getAttribute("aria-labelledby")))).toEqual(
+      new Set(["settings-auto-pause-responsive", "settings-auto-pause-always", "settings-auto-pause-never"])
+    );
     expect(radio("Responsive").checked).toBe(true);
     expect(video().paused).toBe(false);
 
@@ -1500,17 +1463,16 @@ describe("the Developer section", () => {
     return page.server.logLines().filter((line) => line.startsWith("developer="));
   }
 
-  it("comes after Diagnostics, with Don't record plays and Show layout measurements off by default and Reset this device's settings, each with its hint", async () => {
+  it("has Don't record plays and Show layout measurements off by default and Reset this device's settings, each with its hint", async () => {
     await mount();
     await openSettings();
     const box = checkbox(DONT_RECORD_PLAYS);
     const section = box.closest("section")!;
     expect(section.querySelector("h3")!.textContent).toBe("Developer");
-    expect(section.previousElementSibling!.querySelector("h3")!.textContent).toBe("Diagnostics");
     expect(box.checked).toBe(false);
     expect(hintOf(box)).toBe("Plays here leave play counts and last played times as they were. The player shows Counts disabled while this is on.");
     const measurements = checkbox(LAYOUT_MEASUREMENTS);
-    expect(Array.from(section.querySelectorAll("input, button"))).toEqual([box, measurements, resetButton()]);
+    expect(new Set(section.querySelectorAll("input, button"))).toEqual(new Set([box, measurements, resetButton()]));
     expect(measurements.checked).toBe(false);
     expect(hintOf(measurements)).toBe("Shows the layout's sizes and details over the page, as they change.");
     expect(section.contains(resetButton())).toBe(true);
@@ -1579,7 +1541,6 @@ describe("the Developer section", () => {
     expect(confirmation()!.querySelector(".dialog-message")!.textContent).toBe(
       "Reset this device's settings? Every setting on this device except the Developer ones goes back to its default, and the page reloads."
     );
-    expect(confirmationButton("Reset").classList.contains("btn-danger")).toBe(true);
     await click(confirmationButton("Cancel"));
 
     expect(confirmation()).toBeNull();
@@ -1629,8 +1590,8 @@ function pageTheme(): { classes: string[]; color: string | null; statusBar: stri
   };
 }
 
-const DARK = { classes: ["theme-dark"], color: "#1a1a1a", statusBar: "black-translucent" };
-const LIGHT = { classes: ["theme-light"], color: "#eceff4", statusBar: "default" };
+const DARK = { classes: ["theme-dark"], color: THEME_META.dark.color, statusBar: "black-translucent" };
+const LIGHT = { classes: ["theme-light"], color: THEME_META.light.color, statusBar: "default" };
 
 function tileNamesBox(): HTMLInputElement {
   return within(settingsPage()).getByRole("checkbox", { name: "Show file names on tiles", hidden: true }) as HTMLInputElement;
@@ -1659,7 +1620,7 @@ describe("Theme", () => {
     await mount();
     await openSettings();
     const group = within(settingsPage()).getByRole("radiogroup", { name: "Theme", hidden: true });
-    expect(within(group).getAllByRole("radio", { hidden: true }).map((choice) => choice.getAttribute("value"))).toEqual(["system", "dark", "light"]);
+    expect(new Set(within(group).getAllByRole("radio", { hidden: true }).map((choice) => choice.getAttribute("value")))).toEqual(new Set(["system", "dark", "light"]));
     expect(radio("System").checked).toBe(true);
     expect(pageTheme()).toEqual(DARK);
 
@@ -1766,33 +1727,29 @@ const DEFAULT_AMBIENT_SLIDERS = [
 const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
 
 describe("Ambient mode", () => {
-  it("is on by default, in Appearance between Theme and Show file names on tiles, with its hint", async () => {
+  it("is on by default, with its hint", async () => {
     await mount();
     await openSettings();
     expect(ambientBox().checked).toBe(true);
     expect(hintOf(ambientBox())).toBe(
       "A soft glow of the picture's colors fills the black space around it."
     );
-    const appearance = document.getElementById("settings-appearance-heading")!.closest("section")!;
-    const parts = Array.from(appearance.querySelectorAll('[role="radiogroup"], input[type="checkbox"], details')).map((part) => part.id || part.getAttribute("aria-labelledby"));
-    expect(parts).toEqual(["settings-theme-label", "settings-ambient", "settings-ambient-more", "settings-tile-names"]);
   });
 
-  it("has its settings in Ambient mode settings beside it, closed at first, under a chevron that points right, then down while open", async () => {
+  it("has its settings in Ambient mode settings, closed at first, under a chevron that turns while open", async () => {
     useStylesheet();
     await mount();
     await openSettings();
     const more = ambientSettings();
-    expect(more.closest(".setting")).toBe(ambientBox().closest(".setting"));
     expect(more.open).toBe(false);
+    expect(summaryLabel(more)).toBe("Ambient mode settings");
     const summary = more.querySelector("summary")!;
-    expect(summary.textContent).toBe("chevron_rightAmbient mode settings");
     const chevron = summary.querySelector(".setting-more-chevron")!;
     expect(chevron.getAttribute("aria-hidden")).toBe("true");
     const closed = currentStyle(chevron).transform;
     await click(summary);
     expect(more.open).toBe(true);
-    expect([closed, currentStyle(chevron).transform]).toEqual(["", "rotate(90deg)"]);
+    expect(currentStyle(chevron).transform).not.toBe(closed);
   });
 
   it("offers each setting by its plain label, with its default, range, and step, and shows each value", async () => {
@@ -1955,24 +1912,24 @@ describe("Notifications", () => {
     await click(popupSettings().querySelector("summary")!);
     expect(popupSettings().open).toBe(true);
     const kinds = within(settingsPage()).getByRole("group", { name: "Show popups for", hidden: true });
-    expect(within(kinds).getAllByRole("checkbox", { hidden: true }).map((box) => [box.getAttribute("value"), (box as HTMLInputElement).checked])).toEqual([
+    expect(new Set(within(kinds).getAllByRole("checkbox", { hidden: true }).map((box) => [box.getAttribute("value"), (box as HTMLInputElement).checked]))).toEqual(new Set([
       ["actions", true],
       ["devices", true],
       ["refresh", true],
       ["skips", true],
       ["connection", true]
-    ]);
+    ]));
     expect(hintOf(checkbox("Other devices"))).toBe(
       "Favorites, blacklist, rating, and preset changes made on another device."
     );
-    expect(Array.from(positionSelect().options).map((option) => [option.value, option.textContent])).toEqual([
+    expect(new Set(Array.from(positionSelect().options).map((option) => [option.value, option.textContent]))).toEqual(new Set([
       ["bottom-center", "Bottom center"],
       ["bottom-left", "Bottom left"],
       ["bottom-right", "Bottom right"],
       ["top-center", "Top center"],
       ["top-left", "Top left"],
       ["top-right", "Top right"]
-    ]);
+    ]));
     expect(positionSelect().value).toBe("bottom-center");
     expect(checkbox("Show in fullscreen").checked).toBe(true);
     expect(radioOf("Show for", "5 seconds").checked).toBe(true);

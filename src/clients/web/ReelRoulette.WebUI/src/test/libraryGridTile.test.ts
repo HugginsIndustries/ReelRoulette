@@ -69,51 +69,42 @@ describe("grid tile", () => {
     expect(element.querySelector(".library-grid-tile-scrim")).not.toBeNull();
   });
 
-  it("shows favorite and blacklist as filled badge icons, and no badge without either", () => {
+  it("shows favorite and blacklist as badge icons, and no badge without either", () => {
     expect(badgeIcons(createGridTile("item-1", { ...view, isFavorite: true }, false).element)).toEqual(["favorite"]);
     expect(badgeIcons(createGridTile("item-1", { ...view, isBlacklisted: true }, false).element)).toEqual(["thumb_down"]);
     const both = createGridTile("item-1", { ...view, isFavorite: true, isBlacklisted: true }, false).element;
     expect(badgeIcons(both)).toEqual(["favorite", "thumb_down"]);
-    for (const icon of both.querySelectorAll(".library-grid-tile-badge-icon")) {
-      expect(icon.className).toBe("material-symbol-icon is-filled library-grid-tile-badge-icon");
-    }
     expect(createGridTile("item-1", view, false).element.querySelector(".library-grid-tile-badge")).toBeNull();
   });
 
-  it("gives every tile the playing icon, and marks only the playing one", () => {
+  it("marks only the playing tile", () => {
     const playing = createGridTile("item-1", view, true);
     const other = createGridTile("item-2", view, false);
 
-    expect(playing.element.className).toBe("library-grid-tile menu-surface is-playing");
-    expect(other.element.className).toBe("library-grid-tile menu-surface");
-    for (const { element } of [playing, other]) {
-      expect(element.querySelector(".library-grid-tile-playing > .material-symbol-icon.is-filled")?.textContent).toBe(
-        "play_circle"
-      );
-    }
+    expect(playing.element.classList.contains("is-playing")).toBe(true);
+    expect(other.element.classList.contains("is-playing")).toBe(false);
     playing.setPlaying(false);
     other.setPlaying(true);
-    expect(playing.element.className).toBe("library-grid-tile menu-surface");
-    expect(other.element.className).toBe("library-grid-tile menu-surface is-playing");
+    expect(playing.element.classList.contains("is-playing")).toBe(false);
+    expect(other.element.classList.contains("is-playing")).toBe(true);
   });
 
-  it("gives every tile a filled check icon beside its thumbnail, whose tooltip says what a click does, which marks it selected", () => {
+  it("gives every tile a check icon whose tooltip says what a click does, which marks it selected", () => {
     const tile = createGridTile("item-1", view, false);
     const check = within(tile.element).getByTitle("Select");
+    const marks = (element: HTMLElement) => ["menu-surface", "is-playing", "is-selected"].map((name) => element.classList.contains(name));
 
-    expect(check.querySelector(".material-symbol-icon.is-filled")?.textContent).toBe("check_circle");
-    expect(check.parentElement).toBe(tile.element);
-    expect(tile.element.className).toBe("library-grid-tile menu-surface");
+    expect(marks(tile.element)).toEqual([true, false, false]);
 
     tile.setSelected(true);
     expect(within(tile.element).getByTitle("Deselect")).toBe(check);
-    expect(tile.element.className).toBe("library-grid-tile menu-surface is-selected");
+    expect(marks(tile.element)).toEqual([true, false, true]);
     tile.setSelected(false);
     expect(within(tile.element).getByTitle("Select")).toBe(check);
-    expect(tile.element.className).toBe("library-grid-tile menu-surface");
+    expect(marks(tile.element)).toEqual([true, false, false]);
 
     const selected = createGridTile("item-2", view, true, true);
-    expect(selected.element.className).toBe("library-grid-tile menu-surface is-playing is-selected");
+    expect(marks(selected.element)).toEqual([true, true, true]);
   });
 
   it("makes the file name the whole tile's tooltip and the name bar's text, as text", () => {

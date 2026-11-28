@@ -13,7 +13,6 @@ import {
   FakeServer,
   json,
   mountPage,
-  normalizedMarkup,
   openNotices,
   pageReady,
   pickPreset,
@@ -561,64 +560,50 @@ describe("opening and closing", () => {
     expect(applyShowsChanges()).toBe(false);
   });
 
-  it("has Clear all filters, Discard changes, and Apply as icon buttons, each with its tooltip", async () => {
+  it("has Clear all filters, Discard changes, and Apply, each with its tooltip", async () => {
     await mountFilter();
     await openDialog();
     const footer = dialog().querySelector(".filter-dialog-footer")!;
     expect(
-      Array.from(footer.querySelectorAll("button")).map((button) => [
-        button.id,
-        button.className.split(" ").includes("icon-btn"),
-        button.getAttribute("aria-label"),
-        button.title,
-        button.querySelector(".material-symbol-icon")?.textContent
+      new Set(Array.from(footer.querySelectorAll("button")).map((button) => [button.id, button.getAttribute("aria-label"), button.title]))
+    ).toEqual(
+      new Set([
+        ["filter-clear-all-btn", "Clear all filters", "Clear all filters"],
+        ["filter-discard-btn", "Discard changes", "Discard changes"],
+        ["filter-apply-btn", "Apply", "Apply"]
       ])
-    ).toEqual([
-      ["filter-clear-all-btn", true, "Clear all filters", "Clear all filters", "filter_alt_off"],
-      ["filter-discard-btn", true, "Discard changes", "Discard changes", "undo"],
-      ["filter-apply-btn", true, "Apply", "Apply", "save"]
-    ]);
+    );
     // Only Apply has a dot.
     expect(footer.querySelectorAll(".unsaved-dot")).toHaveLength(1);
-    expect(applyDot().parentElement).toBe(applyButton());
   });
 
-  it("has no Refresh: its heading row holds only the heading", async () => {
+  it("has no Refresh", async () => {
     await mountFilter();
     await openDialog();
     expect(within(dialog()).queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(byId("filter-dialog-refresh-btn")).toBeNull();
-    expect(Array.from(dialog().querySelector(".filter-dialog-header")!.children).map((child) => child.id)).toEqual(["filter-dialog-heading"]);
   });
 
-  it("its sections are text tabs in the shared tab look, marked active by aria-selected in orange, with no border", async () => {
+  it("its sections are 44 px tabs, the active one marked by aria-selected and a color the others don't have", async () => {
     await mountFilter();
     await openDialog();
     useStylesheet();
     const tabs = within(dialog()).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.className)).toEqual(["tab text-tab filter-tab", "tab text-tab filter-tab", "tab text-tab filter-tab"]);
     expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual(["true", "false", "false"]);
 
     const [general, tags] = tabs.map((tab) => currentStyle(tab));
-    // The heading's size and weight, the 44 px touch height, and no border; the page's text color until active, then orange.
-    expect([general!.fontSize, general!.fontWeight, general!.minHeight, general!.paddingLeft, general!.borderTopWidth]).toEqual(["18.4px", "700", "44px", "12px", "0px"]);
-    expect(tags!.color).toBe("#e0e0e0");
-    expect(general!.color).toBe("#ef7f22");
-    expect(getComputedStyle(dialog().querySelector(".filter-dialog-tabstrip")!).gap).toBe("4px");
+    expect(general!.minHeight).toBe("44px");
+    expect(general!.color).not.toBe(tags!.color);
   });
 
-  it("keeps Choose Preset's row on one line, the dropdown taking the room Load and Update leave, and spaces its footer as the Tags tab's", async () => {
+  it("keeps Choose Preset's row on one line, the dropdown shrinking to the room Load and Update leave", async () => {
     await mountFilter();
     await openDialog();
     useStylesheet();
     const select = dialog().querySelector("#filter-dialog-preset-select") as HTMLSelectElement;
     expect(getComputedStyle(select.parentElement!).flexWrap).toBe("nowrap");
     const chosen = getComputedStyle(select);
-    expect([chosen.flexGrow, chosen.flexShrink, chosen.flexBasis, chosen.minWidth]).toEqual(["1", "1", "0px", "0"]);
-    // The Tags tab's footer row has the same gap, so Discard changes and Apply sit where its Discard changes and Save do.
-    expect(getComputedStyle(dialog().querySelector(".filter-dialog-footer")!).gap).toBe("8px");
-    // Apply's label is a flex box, so its icon sits where the Tags tab's Save icon does, with no line of text lifting it.
-    expect(getComputedStyle(dialog().querySelector("#filter-apply-btn > .btn-label")!).display).toBe("inline-flex");
+    expect([chosen.flexShrink, chosen.minWidth]).toEqual(["1", "0"]);
   });
 
   it("enables Apply and Discard changes, with Apply orange and its dot, only while there are changes, after a change put back and after Clear all too", async () => {
@@ -668,17 +653,17 @@ describe("opening and closing", () => {
     expect(clearAllButton().disabled).toBe(false);
   });
 
-  it("switches tabs, showing the Presets panel as a flex column", async () => {
+  it("switches tabs, showing the chosen panel and hiding the others", async () => {
     await mountFilter();
     await openDialog();
 
     await showTab("Presets");
     expect(selectedTab()).toBe("Presets");
     expect(byId("filter-panel-general").style.display).toBe("none");
-    expect(byId("filter-panel-presets").style.display).toBe("flex");
+    expect(byId("filter-panel-presets").style.display).not.toBe("none");
     await showTab("Tags");
     expect(selectedTab()).toBe("Tags");
-    expect(byId("filter-panel-tags").style.display).toBe("block");
+    expect(byId("filter-panel-tags").style.display).not.toBe("none");
     expect(byId("filter-panel-presets").style.display).toBe("none");
   });
 
@@ -869,19 +854,6 @@ describe("opening and closing", () => {
     expect(server.logLines().some((line) => /^status=Filter load failed|^filter=event-load-failed/.test(line))).toBe(false);
     expect(dialog().querySelector("input")).toBeNull();
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine(`${method} ${path}`)));
-  });
-
-  it("keeps its markup on each tab", async () => {
-    await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
-    await pickPreset("preset-rich");
-    localStorage.setItem("rr_device.filter.expandedTagCategories", JSON.stringify(["cat-places", "cat-people", "__filter_uncategorized__"]));
-
-    await openDialog();
-    expect(normalizedMarkup(dialog(), { liveFormState: true })).toMatchSnapshot("general");
-    await showTab("Tags");
-    expect(normalizedMarkup(dialog(), { liveFormState: true })).toMatchSnapshot("tags");
-    await showTab("Presets");
-    expect(normalizedMarkup(dialog(), { liveFormState: true })).toMatchSnapshot("presets");
   });
 
   it("says when there are no sources, tags, or presets", async () => {
@@ -1147,7 +1119,7 @@ describe("General tab", () => {
     expect(await applyAndWait(server)).toMatchObject({ minDuration: "00:01:00", maxDuration: "00:01:00" });
   });
 
-  it("a held Apply shows its dot red, with no badge, and its reason as its tooltip", async () => {
+  it("a held Apply shows its dot in another color, with no badge, and its reason as its tooltip", async () => {
     await mountFilter();
     await openDialog();
     useStylesheet();
@@ -1156,13 +1128,13 @@ describe("General tab", () => {
     expect(applyButton().classList.contains("shows-problem")).toBe(true);
     expect(applyButton().querySelector(".btn-problem")).toBeNull();
     expect(applyDot().hidden).toBe(false);
-    expect(currentStyle(applyDot()).backgroundColor).toBe(currentStyle(document.documentElement).getPropertyValue("--error").trim());
+    const heldColor = currentStyle(applyDot()).backgroundColor;
     expect(applyButton().title).toBe("Correct the minimum duration to apply.");
     expect(applyButton().getAttribute("aria-label")).toBe("Apply");
 
     await type(byId("filter-min-dur-text"), "1:30");
     expect(applyButton().classList.contains("shows-problem")).toBe(false);
-    expect(currentStyle(applyDot()).backgroundColor).toBe(currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim());
+    expect(currentStyle(applyDot()).backgroundColor).not.toBe(heldColor);
   });
 
   it("a held Apply moves to its field within the press, showing its section before it focuses the field, without preventScroll or a scroll first", async () => {
@@ -1197,7 +1169,7 @@ describe("General tab", () => {
     expect(tooltipShown(min)).toBe(true);
   });
 
-  it("marks a flagged section's tab with the badge at the top right of its name, without a disc, out of its flow, and nothing after its name", async () => {
+  it("marks a flagged section's tab with a badge out of its flow", async () => {
     await mountFilter();
     await openDialog();
     useStylesheet();
@@ -1209,9 +1181,7 @@ describe("General tab", () => {
     const badge = tab.querySelector<HTMLElement>(".section-problem")!;
     const style = currentStyle(badge);
     expect(currentStyle(tab).position).toBe("relative");
-    expect([style.position, style.top, style.right, style.fontSize]).toEqual(["absolute", "2px", "-6px", "18px"]);
-    expect(style.backgroundImage).toBe("none");
-    expect(style.fontFamily).toContain("Material Symbols Outlined");
+    expect(style.position).toBe("absolute");
     expect(badge.getAttribute("aria-hidden")).toBe("true");
     expect(selectedTab()).toBe("Tags");
   });
@@ -1283,7 +1253,7 @@ describe("General tab", () => {
     expect((await applyAndWait(server)).includedSourceIds).toEqual([]);
   });
 
-  it("flags Sources while no enabled source is checked, with one icon after the first, holding Apply, which moves to it", async () => {
+  it("flags Sources while no enabled source is checked, with one icon, holding Apply, which moves to it", async () => {
     const { server } = await mountFilter();
     await openDialog();
     const queries = libraryQueries(server).length;
@@ -1298,7 +1268,6 @@ describe("General tab", () => {
     await click(photos);
     expect(flagged(movies)).toBe(true);
     expect(tooltipOf(movies)?.textContent).toBe("Check at least one source.");
-    expect(movies.closest("label")!.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);
     // It is a change, which the problem holds, rather than no change meaning every source.
@@ -1369,16 +1338,16 @@ describe("Favorites and Blacklisted filters", () => {
     await mountFilter();
     await openDialog();
 
-    const stack = dialog().querySelector("#filter-panel-general .filter-stack") as HTMLElement;
-    expect(Array.from(stack.children).slice(0, 2).map((row) => row.className)).toEqual(["mode-row", "mode-row"]);
     for (const [name, id] of [["Favorites", "filter-fav"], ["Blacklisted", "filter-bl"]] as const) {
       expect(box(name).id).toBe(id);
       expect(box(name).type).toBe("checkbox");
       expect(flagSelect(name).id).toBe(`${id}-mode`);
-      expect(Array.from(flagSelect(name).options).map((option) => [option.value, option.textContent])).toEqual([
-        ["only", "only"],
-        ["excluded", "excluded"]
-      ]);
+      expect(new Set(Array.from(flagSelect(name).options).map((option) => [option.value, option.textContent]))).toEqual(
+        new Set([
+          ["only", "only"],
+          ["excluded", "excluded"]
+        ])
+      );
     }
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(flagRow("Blacklisted")).toEqual(BLACKLISTED_DEFAULT);
@@ -1478,7 +1447,7 @@ describe("Favorites and Blacklisted filters", () => {
 });
 
 describe("Favorites only with Blacklisted only", () => {
-  it("is flagged with one icon after Blacklisted, and holds Apply, Add Preset, and Update", async () => {
+  it("is flagged with one icon, and holds Apply, Add Preset, and Update", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1497,7 +1466,6 @@ describe("Favorites only with Blacklisted only", () => {
     // The pick gave up focus, so only the red icon shows, and the tooltip waits for the pointer or a held action.
     expect(document.activeElement).toBe(document.body);
     expect(tooltipShown(flagSelect("Blacklisted"))).toBe(false);
-    expect(flagSelect("Blacklisted").nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);
     const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
@@ -1554,17 +1522,10 @@ function minRatingStars(): HTMLElement {
 }
 
 describe("Only unrated and Min Rating", () => {
-  it("sit at the end of Basic Filters, Only unrated after the other options and Min Rating's stars below it, empty for none", async () => {
+  it("show Only files this browser can play as a checkbox, and Only unrated unchecked and Min Rating's stars empty for none", async () => {
     await mountFilter();
     await openDialog();
-    const stack = box("Only never played").closest(".filter-stack")!;
-    const labels = [...stack.querySelectorAll("label")].map((label) => label.textContent!.trim());
-    expect(labels.slice(-2)).toEqual(["Only files this browser can play", "Only unrated"]);
-    const row = minRatingStars().closest(".min-rating-row")!;
-    expect(row.parentElement).toBe(stack);
-    expect(row.previousElementSibling).toBe(box("Only unrated").closest(".vfield"));
-    expect(row.firstElementChild!.textContent).toBe("Min Rating");
-    expect(row.lastElementChild).toBe(minRatingStars());
+    expect(box("Only files this browser can play").type).toBe("checkbox");
     expect(box("Only unrated").checked).toBe(false);
     expect(starsShown(minRatingStars())).toBe(0);
   });
@@ -1590,7 +1551,7 @@ describe("Only unrated and Min Rating", () => {
     expect(ratingRequests(server)).toEqual([]);
   });
 
-  it("are flagged together on Only unrated with a minimum, with one icon after Only unrated, and hold Apply, Add Preset, and Update", async () => {
+  it("are flagged together on Only unrated with a minimum, with one icon, and hold Apply, Add Preset, and Update", async () => {
     stubStarLayout();
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
@@ -1608,7 +1569,6 @@ describe("Only unrated and Min Rating", () => {
     const logsBefore = server.logLines().length;
     expect(flagged(unrated)).toBe(true);
     expect(tooltipOf(unrated)?.textContent).toBe("Nothing unrated has a minimum rating. Clear one of them.");
-    expect(unrated.closest("label")!.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);
     const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
@@ -1697,21 +1657,21 @@ async function chooseRange(name: DateFilterName, value: string): Promise<void> {
 }
 
 describe("Date Filter", () => {
-  it("sits at the end of General after Duration Filter, Added and Created each a dropdown, with From and To only while Custom range is chosen", async () => {
+  it("has Added and Created each a dropdown, with From and To only while Custom range is chosen", async () => {
     await mountFilter();
     await openDialog();
-    const sections = [...byId("filter-panel-general").querySelectorAll(".filter-section > h3")].map((h3) => h3.textContent);
-    expect(sections.slice(-2)).toEqual(["Duration Filter", "Date Filter"]);
     for (const name of ["Added", "Created"] as const) {
       expect(within(dialog()).getByLabelText(name)).toBe(dateSelect(name));
-      expect([...dateSelect(name).options].map((option) => [option.value, option.textContent])).toEqual([
-        ["", "Any time"],
-        ["last7Days", "Last 7 days"],
-        ["last30Days", "Last 30 days"],
-        ["last90Days", "Last 90 days"],
-        ["thisYear", "This year"],
-        ["custom", "Custom range"]
-      ]);
+      expect(new Set([...dateSelect(name).options].map((option) => [option.value, option.textContent]))).toEqual(
+        new Set([
+          ["", "Any time"],
+          ["last7Days", "Last 7 days"],
+          ["last30Days", "Last 30 days"],
+          ["last90Days", "Last 90 days"],
+          ["thisYear", "This year"],
+          ["custom", "Custom range"]
+        ])
+      );
       expect(dateSelect(name).value).toBe("");
       expect(byId(`filter-${name.toLowerCase()}-range`)).toBeNull();
     }
@@ -1800,7 +1760,6 @@ describe("Date Filter", () => {
 
     await type(from, "");
     expect(fieldIcon(from)).not.toBeNull();
-    expect(from.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
     expect(tooltipOf(from)?.textContent).toBe("Choose a start date.");
     expect(fieldIcon(to)).toBeNull();
     expect(tabMarked("General")).toBe(true);
@@ -2002,7 +1961,7 @@ describe("Tags tab", () => {
     expect(categoryTitles()).toEqual(["Places", "Mood", "People"]);
   });
 
-  it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its match mode keeps its own action", async () => {
+  it("start collapsed, and the header's name or padding expands and collapses one, while its match mode keeps its own action", async () => {
     await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
     await openDialog();
@@ -2011,7 +1970,6 @@ describe("Tags tab", () => {
       expect(categoryGrid(title).hidden, title).toBe(true);
       expect(categoryToggle(title).title, title).toBe("Expand category");
     }
-    expect(dialog().querySelector(".tag-category-header .material-symbol-icon")).toBeNull();
 
     await click(categoryToggle("Places"));
     expect(categoryGrid("Places").hidden).toBe(false);
@@ -2122,7 +2080,6 @@ describe("Tags tab", () => {
       const mode = matchMode(title);
       expect(mode.title, title).toBe("Match mode");
       expect(mode.closest("label"), title).toBeNull();
-      expect(mode.classList.contains("filter-local-mode"), title).toBe(true);
     }
     expect(dialog().textContent).not.toContain("Local");
   });
@@ -2313,14 +2270,13 @@ describe("Presets tab", () => {
     expect(presets.list[1]).toEqual(BEACH_PRESET);
   });
 
-  it("each preset row has a drag handle, its name, and Edit preset, and nothing else", async () => {
+  it("each preset row's buttons are its drag handle and Edit preset, named for it", async () => {
     await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
 
     for (const name of ["Favorites", "Beach days"]) {
       const row = presetRow(name);
-      expect(Array.from(row.children).map((child) => child.className), name).toEqual(["drag-handle", "filter-preset-name", "icon-btn"]);
       const buttons = Array.from(row.querySelectorAll("button"));
       expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual([`Reorder ${name}`, `Edit preset ${name}`]);
       expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder", "Edit preset"]);
@@ -2447,7 +2403,6 @@ describe("Presets tab", () => {
     expect(document.activeElement).toBe(name);
     fireEvent.input(name, { target: { value: "Shore" } });
     const remove = buttonIn(edit, "Delete");
-    expect(remove.classList.contains("btn-danger")).toBe(true);
     await press(remove);
 
     const confirm = topDialog();
@@ -2455,7 +2410,6 @@ describe("Presets tab", () => {
     expect(confirm.getAttribute("role")).toBe("alertdialog");
     expect(document.getElementById(confirm.getAttribute("aria-labelledby")!)?.textContent).toBe('Delete preset "Beach days"?');
     expect(document.activeElement).toBe(buttonIn(confirm, "Cancel"));
-    expect(buttonIn(confirm, "Delete").classList.contains("btn-danger")).toBe(true);
 
     await press(buttonIn(confirm, "Cancel"));
     expect(appDialogs()).toEqual([edit]);
@@ -3158,23 +3112,19 @@ describe("presets need a filter of their own", () => {
     expectReason(updateButton(), DEFAULT_REASON);
   });
 
-  it("Load, Update, and Add Preset are icon buttons, named and titled Load preset, Update preset, and Add preset", async () => {
+  it("Load, Update, and Add Preset are named and titled Load preset, Update preset, and Add preset", async () => {
     await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await click(box("Only never played"));
     await showTab("Presets");
     await chooseInDialog("Favorites");
-    expect(presetSelectInDialog().nextElementSibling).toBe(loadButton());
-    expect(loadButton().nextElementSibling).toBe(updateButton());
-    for (const [button, label, icon] of [
-      [loadButton(), "Load preset", "sync"],
-      [updateButton(), "Update preset", "save"],
-      [addButton(), "Add preset", "add"]
+    for (const [button, label] of [
+      [loadButton(), "Load preset"],
+      [updateButton(), "Update preset"],
+      [addButton(), "Add preset"]
     ] as const) {
-      expect(button.classList.contains("icon-btn"), label).toBe(true);
       expect(button.getAttribute("aria-label"), label).toBe(label);
       expect(button.title, label).toBe(label);
-      expect(button.querySelector(".material-symbol-icon")?.textContent?.trim(), label).toBe(icon);
     }
   });
 });

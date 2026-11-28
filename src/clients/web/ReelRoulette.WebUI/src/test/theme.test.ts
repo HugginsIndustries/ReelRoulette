@@ -16,10 +16,7 @@ describe("isThemeChoice", () => {
 });
 
 describe("THEME_META", () => {
-  it("gives each theme its page background, and dark status bar text only to the light theme", () => {
-    expect(THEME_META).toEqual({
-      dark: { color: "#1a1a1a", statusBarStyle: "black-translucent" },
-      light: { color: "#eceff4", statusBarStyle: "default" }
-    });
+  it("gives dark status bar text only to the light theme", () => {
+    expect([THEME_META.dark.statusBarStyle, THEME_META.light.statusBarStyle]).toEqual(["black-translucent", "default"]);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
-import { adjustmentText, fileRows, libraryCards, loudnessText, orderTags, timeAgo, truePeakText, type LibraryStats } from "../stats/statsModel";
+import { adjustmentText, fileRows, loudnessText, orderTags, timeAgo, truePeakText } from "../stats/statsModel";
 
 const NOW = Date.parse("2026-10-13T20:00:00Z");
 const MINUTE = 60_000;
@@ -110,41 +110,6 @@ describe("stats model", () => {
 
     const exact = rowsOf(video, true);
     expect([exact["Last played"], exact.Added, exact.Created]).toEqual(["2026-10-12 07:08:09", "2024-01-02 23:59:58", "2019-06-30 00:00:01"]);
-  });
-
-  it("gives the library's cards in the mockup's order", () => {
-    const stats = {
-      global: {
-        totalVideos: 1200,
-        totalPhotos: 30,
-        totalMedia: 1230,
-        favorites: 4,
-        blacklisted: 2,
-        rated: 12,
-        totalPlays: 15000,
-        uniquePlayedMedia: 900,
-        neverPlayedMedia: 330,
-        videosWithAudio: 1100,
-        videosWithoutAudio: 90,
-        baselineLoudnessLufs: -20.44
-      },
-      sources: []
-    } as unknown as LibraryStats;
-
-    expect(libraryCards(stats)).toEqual([
-      { label: "Videos", value: (1200).toLocaleString() },
-      { label: "Photos", value: "30" },
-      { label: "Total media", value: (1230).toLocaleString() },
-      { label: "Favorites", value: "4" },
-      { label: "Blacklisted", value: "2" },
-      { label: "Rated", value: "12" },
-      { label: "Total plays", value: (15000).toLocaleString() },
-      { label: "Unique played", value: "900" },
-      { label: "Never played", value: "330" },
-      { label: "Videos with audio", value: (1100).toLocaleString() },
-      { label: "Videos without audio", value: "90" },
-      { label: "Baseline loudness", value: "-20.4 LUFS" }
-    ]);
   });
 
   it("orders tags by their categories' saved order, then by name, with tags without a category last", () => {

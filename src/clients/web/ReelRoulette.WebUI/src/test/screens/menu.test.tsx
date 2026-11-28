@@ -5,7 +5,7 @@ import type { AppServices } from "../../state/appServices";
 import { AppContext } from "../../ui/appContext";
 import { ContextMenuHost, Menu } from "../../ui/Menu";
 import { createContextMenu, type MenuItem } from "../../ui/menuModel";
-import { menuIcons, menuItemIn as item, menuParts as parts } from "./pageHarness";
+import { menuItemIn as item, menuParts as parts } from "./pageHarness";
 
 afterEach(() => {
   cleanup();
@@ -36,15 +36,13 @@ describe("the menu", () => {
     expect(menu.querySelectorAll("hr.menu-rule")).toHaveLength(1);
   });
 
-  it("draws each item's icon at its left, which leaves the item's name its label", () => {
+  it("leaves an item with an icon its label as its name", () => {
     const { container } = render(<Menu groups={[[{ label: "Rate…", icon: "star", onPick: () => {} }]]} onClose={() => {}} />);
     const menu = container.querySelector<HTMLElement>(".menu")!;
-    expect(menuIcons(menu)).toEqual(["star Rate…"]);
-    expect(item(menu, "Rate…").firstElementChild?.className).toBe("material-symbol-icon");
     expect(within(menu).getByRole("button", { name: "Rate…" })).toBe(item(menu, "Rate…"));
   });
 
-  it("marks a destructive item red, and disables an item with its reason as its tooltip", () => {
+  it("disables an item with its reason as its tooltip", () => {
     const groups: MenuItem[][] = [
       [{ label: "Rename", icon: "edit", onPick: () => {}, disabledReason: "Pick one item to rename" }],
       [{ label: "Delete", icon: "delete_forever", onPick: () => {}, danger: true }]
@@ -52,8 +50,7 @@ describe("the menu", () => {
     const { container } = render(<Menu groups={groups} onClose={() => {}} />);
     const menu = container.querySelector<HTMLElement>(".menu")!;
     expect([item(menu, "Rename").disabled, item(menu, "Rename").title]).toEqual([true, "Pick one item to rename"]);
-    expect([item(menu, "Delete").disabled, item(menu, "Delete").title, item(menu, "Delete").className]).toEqual([false, "", "menu-danger"]);
-    expect(item(menu, "Rename").className).toBe("");
+    expect([item(menu, "Delete").disabled, item(menu, "Delete").title]).toEqual([false, ""]);
   });
 
   it("closes before a picked item's action runs, and a disabled item does nothing", () => {

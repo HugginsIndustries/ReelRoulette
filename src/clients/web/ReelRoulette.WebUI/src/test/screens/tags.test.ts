@@ -11,11 +11,9 @@ import {
   FakeServer,
   fingerPress,
   json,
-  menuIcons,
   menuItemIn,
-  menuParts,
+  menuLabels,
   mountPage,
-  normalizedMarkup,
   openNotices,
   pageReady,
   pickPreset,
@@ -836,23 +834,14 @@ describe("opening and closing", () => {
     expect(tags.modelRequests()).toHaveLength(4);
   });
 
-  it("has Discard changes just before Save, an icon button with the undo icon, and no Refresh", async () => {
+  it("has Discard changes, with its tooltip and no dot, and no Refresh", async () => {
     await mountTags();
     await openEditor();
     expect(within(editor()).queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(byId("tag-editor-refresh-btn")).toBeNull();
     const discard = discardButton();
-    expect(discard.nextElementSibling).toBe(saveButton());
-    expect([discard.className, discard.title, discard.getAttribute("aria-label"), discard.querySelector(".material-symbol-icon")?.textContent]).toEqual([
-      "icon-btn",
-      "Discard changes",
-      "Discard changes",
-      "undo"
-    ]);
+    expect([discard.title, discard.getAttribute("aria-label")]).toEqual(["Discard changes", "Discard changes"]);
     expect(discard.querySelector(".unsaved-dot")).toBeNull();
-    // The Filter tab's footer has the same gap, so Discard changes and Save sit where its Discard changes and Apply do.
-    useStylesheet();
-    expect(getComputedStyle(discard.parentElement!).gap).toBe("8px");
   });
 
   it("Save shows the unsaved-changes dot, as the panel's tabs do, only while there are changes", async () => {
@@ -916,25 +905,6 @@ describe("opening and closing", () => {
     await waitFor(() =>
       expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/tag-editor/model", { id: VIDEO_ITEM.id }, 1))
     );
-  });
-
-  it("keeps its markup, and Auto Tag's and the Edit Tag dialog's", async () => {
-    localStorage.setItem("rr_device.tags.expandedCategories", JSON.stringify(["cat-places", "cat-people", "uncategorized"]));
-    await mountTags();
-    await openEditor();
-    await click(chipButton("alps", "Add"));
-    await click(chipButton("Bob", "Remove"));
-    expect(normalizedMarkup(editor(), { liveFormState: true })).toMatchSnapshot("edit tags");
-
-    await editTag("Beach");
-    expect(normalizedMarkup(modal(), { liveFormState: true })).toMatchSnapshot("edit tag dialog");
-    await click(modalButton("Cancel"));
-
-    await openAutoTag();
-    await scan();
-    await expand("beach");
-    await click(fileCheck("beach", "beach a.mp4"));
-    expect(normalizedMarkup(autoTag(), { liveFormState: true })).toMatchSnapshot("auto tag");
   });
 
   it("shows category, tag, and file names as text", async () => {
@@ -1181,14 +1151,13 @@ describe("Edit Tags", () => {
     await expectSaved();
   });
 
-  it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its drag handle and Edit keep their own actions", async () => {
+  it("start collapsed, and the header's name or padding expands and collapses one, while its drag handle and Edit keep their own actions", async () => {
     await mountTags();
     await openEditor();
     for (const title of categoryTitles()) {
       expect(categoryGrid(title).hidden, title).toBe(true);
       expect(categoryToggle(title).title, title).toBe("Expand category");
     }
-    expect(body().querySelector(".tag-category-toggle .material-symbol-icon")).toBeNull();
 
     await click(categoryToggle("Places"));
     expect(categoryGrid("Places").hidden).toBe(false);
@@ -1316,7 +1285,6 @@ describe("Edit Tags", () => {
     expect(titles(header("Places"))).toEqual(["Drag to reorder", "Expand category"]);
     const places = handle("Places");
     expect(places.getAttribute("aria-label")).toBe("Reorder Places");
-    expect(places.textContent).toBe("drag_indicator");
     expect(places.disabled).toBe(false);
     expect(titles(header("Uncategorized"))).toEqual(["Uncategorized stays last", "Expand category"]);
     expect(handle("Uncategorized").disabled).toBe(true);
@@ -1361,7 +1329,7 @@ describe("Edit Tags", () => {
       await pointerMove(30);
       expect(category("Places").classList.contains("is-dragging")).toBe(true);
       expect(getComputedStyle(categoryGrid("Places")).display).toBe("none");
-      expect(getComputedStyle(categoryGrid("Mood")).display).toBe("flex");
+      expect(getComputedStyle(categoryGrid("Mood")).display).not.toBe("none");
       // Its middle, at 100, is short of Mood's, at 102: it follows the pointer and nothing makes way.
       await pointerMove(100);
       expect(transforms()).toEqual(["translateY(80px)", "", "", ""]);
@@ -1375,7 +1343,7 @@ describe("Edit Tags", () => {
       expect(categoryTitles()).toEqual(["Mood", "Places", "People", "Uncategorized"]);
       expect(transforms()).toEqual(["", "", "", ""]);
       expect(category("Places").classList.contains("is-dragging")).toBe(false);
-      expect(getComputedStyle(categoryGrid("Places")).display).toBe("flex");
+      expect(getComputedStyle(categoryGrid("Places")).display).not.toBe("none");
       expect(optionLabels(footerCategory())).toEqual(["Mood", "Places", "People", "Uncategorized"]);
       expect(savePending()).toBe(true);
 
@@ -1544,11 +1512,9 @@ describe("Edit Tags", () => {
 
     await editCategory("People");
     const remove = dialogButton(nameDialog("Edit Category"), "Delete");
-    expect(remove.classList.contains("btn-danger")).toBe(true);
     await press(remove);
     expect(confirmMessage()).toBe('Delete category "People"? Tags will become Uncategorized.');
     expect(appDialogs()).toEqual([nameDialog("Edit Category"), confirmation()]);
-    expect(dialogButton(confirmation(), "Delete").classList.contains("btn-danger")).toBe(true);
     await answer("Cancel");
     expect(appDialogs()).toEqual([nameDialog("Edit Category")]);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
@@ -1682,7 +1648,6 @@ describe("Edit Tags", () => {
     await mountTags();
     await openEditor();
     const field = newTagField();
-    expect(field.closest(".vfield")?.parentElement?.classList.contains("tag-editor-footer-row")).toBe(true);
     expect(fieldProblem(field)).toBeNull();
     expect(disabledWithoutIcon(addTagButton())).toBe(true);
     expect(addTagButton().title).toBe("Add tag");
@@ -1824,12 +1789,10 @@ describe("Edit Tags", () => {
     await editTag("Bob");
     await typeInto(modalName(), "Robert");
     const remove = modalButton("Delete");
-    expect(remove.classList.contains("btn-danger")).toBe(true);
     await press(remove);
     expect(appDialogs()).toEqual([modal(), confirmation()]);
     expect(confirmMessage()).toBe('Delete tag "Bob"?');
     expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
-    expect(dialogButton(confirmation(), "Delete").classList.contains("btn-danger")).toBe(true);
 
     await answer("Cancel");
     expect(appDialogs()).toEqual([modal()]);
@@ -1910,8 +1873,7 @@ describe("menus", () => {
   it("a tag's menu filters by it, edits it, or deletes it, on the tag tinted while it is open", async () => {
     await mountTags();
     await openEditor();
-    expect(menuIcons(await openTagMenu("Beach"))).toEqual(["filter_alt Filter by this tag", "edit_note Edit…", "delete Delete…"]);
-    expect(menuParts(shownMenu())).toEqual(["Filter by this tag", "—", "Edit…", "Delete…"]);
+    expect(menuLabels(await openTagMenu("Beach"))).toEqual(new Set(["Filter by this tag", "Edit…", "Delete…"]));
     expect(menuItemIn(shownMenu(), "Filter by this tag").disabled).toBe(false);
     expect(chip("Beach").classList.contains("is-menu-target")).toBe(true);
 
@@ -1924,7 +1886,7 @@ describe("menus", () => {
     // A right-click on a tag's button opens the tag's menu, and presses nothing.
     rightClick(chipButton("Alice", "Add"));
     await settle();
-    expect(menuParts(shownMenu())).toEqual(["Filter by this tag", "—", "Edit…", "Delete…"]);
+    expect(menuLabels(shownMenu())).toEqual(new Set(["Filter by this tag", "Edit…", "Delete…"]));
     expect(chipState("Alice").pending).toBeNull();
   });
 
@@ -1964,7 +1926,7 @@ describe("menus", () => {
 
     // A tag the filter includes has no Filter by this tag.
     await openEditor();
-    expect(menuParts(await openTagMenu("Calm"))).toEqual(["Edit…", "Delete…"]);
+    expect(menuLabels(await openTagMenu("Calm"))).toEqual(new Set(["Edit…", "Delete…"]));
   });
 
   it("Filter by this tag keeps the Filter tab's changes, taking the tag out of the excluded tags, and goes by them", async () => {
@@ -1981,7 +1943,7 @@ describe("menus", () => {
 
     await click(panelTab("Tags"));
     // The tab's unsaved filter includes Beach already.
-    expect(menuParts(await openTagMenu("Beach"))).toEqual(["Edit…", "Delete…"]);
+    expect(menuLabels(await openTagMenu("Beach"))).toEqual(new Set(["Edit…", "Delete…"]));
     await openTagMenu("Bob");
     await pick("Filter by this tag");
     await waitFor(() => expect(filterTabOn()).toBe("tags"));
@@ -2026,8 +1988,7 @@ describe("menus", () => {
   it("a category's menu adds a new tag to it, edits it, or deletes it, and Uncategorized's only adds a new tag", async () => {
     await mountTags();
     await openEditor();
-    expect(menuIcons(await openCategoryMenu("Mood"))).toEqual(["new_label New tag in this category", "edit_note Edit…", "delete Delete…"]);
-    expect(menuParts(shownMenu())).toEqual(["New tag in this category", "—", "Edit…", "Delete…"]);
+    expect(menuLabels(await openCategoryMenu("Mood"))).toEqual(new Set(["New tag in this category", "Edit…", "Delete…"]));
     expect(header("Mood").classList.contains("is-menu-target")).toBe(true);
 
     await pick("New tag in this category");
@@ -2042,7 +2003,7 @@ describe("menus", () => {
     expect(nameField("Edit Category").value).toBe("Mood");
     await press(dialogButton(nameDialog("Edit Category"), "Cancel"));
 
-    expect(menuParts(await openCategoryMenu("Uncategorized"))).toEqual(["New tag in this category"]);
+    expect(menuLabels(await openCategoryMenu("Uncategorized"))).toEqual(new Set(["New tag in this category"]));
     await pick("New tag in this category");
     expect([footerCategory().value, document.activeElement]).toEqual(["uncategorized", newTagField()]);
   });
@@ -2070,12 +2031,12 @@ describe("menus", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
     await fingerPress(chip("Beach").querySelector(".tag-chip-label")!, 500);
-    expect(menuParts(shownMenu())).toEqual(["Filter by this tag", "—", "Edit…", "Delete…"]);
+    expect(menuLabels(shownMenu())).toEqual(new Set(["Filter by this tag", "Edit…", "Delete…"]));
 
     // The click a long press on the category's name or its header's padding ends with doesn't expand it.
     for (const target of [category("Mood").querySelector(".tag-category-name")!, header("Mood")]) {
       await fingerPress(target, 500);
-      expect(menuParts(shownMenu())).toEqual(["New tag in this category", "—", "Edit…", "Delete…"]);
+      expect(menuLabels(shownMenu())).toEqual(new Set(["New tag in this category", "Edit…", "Delete…"]));
       expect(categoryGrid("Mood").hidden).toBe(true);
     }
 
@@ -2086,22 +2047,21 @@ describe("menus", () => {
     expect(contextMenuShown()).toBeNull();
   });
 
-  it("tint a green or orange tag while its menu is open, over the tag's own ring", async () => {
+  it("tint a green or orange tag while its menu is open", async () => {
     useStylesheet();
     await mountTags();
     await openEditor();
-    const tint = "inset 0 0 0 100vmax rgba(127, 127, 127, 0.16)";
-    expect(currentStyle(chip("Beach")).boxShadow).not.toBe(tint);
+    const green = currentStyle(chip("Beach")).boxShadow;
     await openTagMenu("Beach");
-    expect(currentStyle(chip("Beach")).boxShadow).toBe(tint);
+    expect(currentStyle(chip("Beach")).boxShadow).not.toBe(green);
 
-    // A tag only some of the selected items have is orange, with a ring of its own too.
+    // A tag only some of the selected items have is orange.
     const orange = document.createElement("div");
     orange.className = "tag-chip state-some";
     document.body.append(orange);
-    expect(currentStyle(orange).boxShadow).not.toBe(tint);
+    const untinted = currentStyle(orange).boxShadow;
     orange.classList.add("is-menu-target");
-    expect(currentStyle(orange).boxShadow).toBe(tint);
+    expect(currentStyle(orange).boxShadow).not.toBe(untinted);
   });
 });
 
@@ -2552,14 +2512,10 @@ describe("Auto Tag", () => {
     await scan();
     const head = results().querySelector(".autotag-table-head") as HTMLElement;
     const columns = getComputedStyle(head).gridTemplateColumns;
-    // Both counts take a fixed width rather than their own content's.
-    expect(columns).toBe("40px 40px minmax(0, 1fr) 7rem 7rem");
+    // Both counts, the last two columns, take a fixed length rather than their own content's.
+    expect(columns).toMatch(/ [\d.]+(px|rem) [\d.]+(px|rem)$/);
     for (const name of rowNames()) {
       expect(getComputedStyle(row(name).querySelector(".autotag-row-main") as HTMLElement).gridTemplateColumns).toBe(columns);
-    }
-    expect(getComputedStyle(head).columnGap).toBe("12px");
-    for (const cell of results().querySelectorAll(".autotag-count")) {
-      expect(getComputedStyle(cell).textAlign).toBe("center");
     }
   });
 

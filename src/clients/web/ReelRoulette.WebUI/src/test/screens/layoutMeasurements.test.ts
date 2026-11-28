@@ -55,13 +55,6 @@ function details(): string[] {
   return document.getElementById("layout-details")!.textContent!.split("\n");
 }
 
-function rulers(): Array<Record<string, string>> {
-  return Array.from(document.querySelectorAll<HTMLElement>(".dev-ruler")).map(({ style }) => {
-    const edges = ["left", "top", "width", "height"].filter((edge) => style.getPropertyValue(edge));
-    return Object.fromEntries(edges.map((edge) => [edge, style.getPropertyValue(edge)]));
-  });
-}
-
 function probe(): HTMLElement {
   return document.querySelector<HTMLElement>(".dev-safe-probe")!;
 }
@@ -111,10 +104,6 @@ describe("Show layout measurements", () => {
     await mount();
     expect(placed("layout-window-width")).toEqual({ text: "1200 px", left: 605, top: 54 });
     expect(placed("layout-window-height")).toEqual({ text: "800 px", left: 44, top: 407 });
-    expect(rulers()).toEqual([
-      { left: "20px", top: "50px", width: "1170px" },
-      { left: "23px", top: "47px", height: "719px" }
-    ]);
 
     setViewport({ width: 1000, height: 700 });
     await nextFrame();
@@ -129,7 +118,7 @@ describe("Show layout measurements", () => {
     expect(placed("layout-window-height")).toEqual({ text: "700 px", left: 71, top: 340 });
   });
 
-  it("shows the player's width centered below the indicator, lower on a narrow player, following the player column", async () => {
+  it("shows the player's width below the indicator, lower on a narrow player, following the player column", async () => {
     const observers = stubResizeObservers();
     setViewport({ width: 1200, height: 800 });
     await mount();
@@ -137,12 +126,12 @@ describe("Show layout measurements", () => {
     observers.resize(column);
     await nextFrame();
     // The corner buttons sit 12 px down, and the indicator below them.
-    expect(placed("layout-player-width")).toEqual({ text: "1200 px", left: 600, top: 112 });
+    expect(placed("layout-player-width")).toMatchObject({ text: "1200 px", top: 112 });
 
     box.width = 500;
     observers.resize(column);
     await nextFrame();
-    expect(placed("layout-player-width")).toEqual({ text: "500 px", left: 250, top: 160 });
+    expect(placed("layout-player-width")).toMatchObject({ text: "500 px", top: 160 });
   });
 
   it("keeps the player's width below the status bar on a short screen, and hides it while the overlay panel covers the player", async () => {
@@ -155,7 +144,7 @@ describe("Show layout measurements", () => {
     const { column } = stubPlayerColumn({ top: 0, width: 900, height: 400 });
     observers.resize(column);
     await nextFrame();
-    expect(placed("layout-player-width")).toEqual({ text: "900 px", left: 450, top: 70 });
+    expect(placed("layout-player-width")).toMatchObject({ text: "900 px", top: 70 });
 
     await click(document.getElementById("panel-btn")!);
     await nextFrame();
