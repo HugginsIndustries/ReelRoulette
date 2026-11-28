@@ -498,6 +498,7 @@ Last milestone completed: M12n4
 - The mockup needed no change: it already keeps the list with each message's read state, writes it at the same four points, counts its badge from the kept unread messages, and keeps the list through its reset, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, with 98 test files and 2571 tests (measured).
 - `CONTEXT.md` and `docs/domain-inventory.md` describe the kept list, the badge's count, and the reset keeping it.
+- The user's spot check on main after the merge passed: a message in the bell stayed listed with its time after a reload, and an unread one kept the badge's count.
 
 #### Release checks
 
@@ -578,6 +579,7 @@ Last milestone completed: M12n4
 - After the advisor's review, the label hides as its slider becomes disabled and shows the value under the same point anew for a new length (a `MutationObserver` on the slider's `disabled` and `max`), and the scrub bar's hides as each new item starts (`hidesOn: store.playAttemptId`), since one video following another disables and enables the bar within one render; the volume test checks the volume's `--fill`, after a change and a mute.
 - Player screen tests show the label hiding as a new item starts under a resting mouse, refreshing for a new length, and hiding as a photo's timer bar becomes disabled; each failed with its code broken (measured).
 - The mockup's label hides and refreshes the same way (`follow` and `hide` from `initSliderLabel`).
+- The user's spot check on main after the merge passed: hovering or touching the scrub bar and the volume slider grew them with the label above showing the time or the volume, and both showed the pointing hand.
 
 #### Loop markers slice
 
@@ -656,6 +658,7 @@ Last milestone completed: M12n4
 - A press and release that moved no marker no longer sends the video to the start marker (`marksBeforeDrag` in `src/playback/player.ts`).
 - The scrub bar's menu and I and O do nothing on a video that failed.
 - A Player screen test and two player tests cover those, each failing with its fix broken, alone or together (measured).
+- The user's spot check on main after the merge passed: markers set from the scrub bar's menu and with I and O made the video repeat between them, and dragging a marker left the video playing where it was.
 
 #### Release checks
 
