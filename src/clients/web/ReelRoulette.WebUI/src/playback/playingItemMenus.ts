@@ -12,20 +12,25 @@ import type { Player } from "./player";
 import type { PlayerControls } from "./playerControls";
 
 /**
- * The menus on the playing item: the player's picture's, the header's now-playing name's, and the Stats tab's file
- * name's and path's. Each works as the controls it repeats do, and closes when another item plays, as the rating's
- * stars do, so none acts on an item that has gone.
+ * The menus on the playing item: the player's picture's and its scrub bar's, the header's now-playing name's, and the
+ * Stats tab's file name's and path's. Each works as the controls it repeats do, and closes when another item plays, as
+ * the rating's stars do, so none acts on an item that has gone.
  */
 export interface PlayingItemMenus {
   /**
    * The player's picture's menu, at `point`, once the playing item's playback stats are known: Add to or Remove from
    * favorites and the blacklist, as the player's buttons do; Rate…, which opens the player's stars, Edit tags…, which
    * shows the Tags tab on the item, Show stats, and Clear playback stats…, disabled with its reason while the item has
-   * none to clear; Copy name, Copy path, and Show in File Manager; and Delete file…. The controls stay while it is
-   * open, and their countdown starts again as it closes, showing them only when the user closed it. With nothing
-   * playing, nothing opens.
+   * none to clear; Copy name, Copy path, and Show in File Manager; and Delete file…, held over the player as
+   * `showOverPlayer` holds it. With nothing playing, nothing opens.
    */
   openPlayerMenu(point: WindowPoint): Promise<void>;
+  /**
+   * Opens a menu over the player at `point`, as its picture's and its scrub bar's are, which closes when another item
+   * plays. The controls stay while it is open, and their countdown starts again as it closes, showing them only when
+   * the user closed it.
+   */
+  showOverPlayer(point: WindowPoint, groups: MenuGroups): void;
   /**
    * The header's now-playing name's menu: Show stats, then Copy name, Copy path, and Show in File Manager, or null
    * while nothing plays.
@@ -73,6 +78,12 @@ export function createPlayingItemMenus(options: PlayingItemMenusOptions): Playin
     };
     contextMenu.open(opened);
     shown = opened;
+  }
+
+  function showOverPlayer(point: WindowPoint, groups: MenuGroups): void {
+    // A close the user made is activity, which shows the controls; one on its own, as when another item plays, isn't.
+    show({ point, groups, onClose: (byUser) => playerControls.hold("menu", false, { quietly: !byUser }) });
+    playerControls.hold("menu", true);
   }
 
   const showStats: MenuItem = { label: "Show stats", icon: "bar_chart", onPick: () => void panel.showTab("stats") };
@@ -141,14 +152,10 @@ export function createPlayingItemMenus(options: PlayingItemMenusOptions): Playin
       if (request.signal.aborted || known === "unauthorized") {
         return;
       }
-      // A close the user made is activity, which shows the controls; one on its own, as when another item plays, isn't.
-      show({
-        point,
-        groups: playerGroups(item, known),
-        onClose: (byUser) => playerControls.hold("menu", false, { quietly: !byUser })
-      });
-      playerControls.hold("menu", true);
+      showOverPlayer(point, playerGroups(item, known));
     },
+
+    showOverPlayer,
 
     nameGroups() {
       const item = store.current.peek();

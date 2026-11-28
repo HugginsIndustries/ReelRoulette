@@ -850,10 +850,30 @@ html.theme-light .ambient canvas {
 .rating-popover .rating { margin-left: 0; pointer-events: auto; }
 .rating-popover .rating-star { color: var(--icon-foreground); }
 .rating-popover .rating-outline, .rating-popover .is-full .rating-fill { text-shadow: var(--control-drop-shadow); }
+/* The player's sliders, the scrub bar and the volume, are drawn by the page in place of the browser's own look: a track,
+   orange up to the value and a slightly see-through dark gray after it, and a plain orange thumb. A mouse or pen over
+   one, or dragging it, makes the track thicker and the thumb full size, growing in place, and a label above the pointer
+   shows the value there; the scrub bar also fills light gray from the value up to a pointer ahead of it. A finger on
+   one does the same, its label higher so the finger doesn't cover it and without the light gray fill, until it lifts.
+   The thumb's box takes presses and stays one size, so the value's place never shifts: 16 px, or 28 px on a touch
+   screen, where the sliders are 32 px tall and reach into the space above and below the row, which stays 24 px. The
+   thumb's center runs from half that box in from each end, and the track, with rounded ends, runs from where the
+   thumb's center sits at 0 to where it sits at the end, so at either end the thumb sits centered on the track's end and
+   covers it. The track's length never changes: growing changes only its thickness and the thumb's size, around a
+   center that stays put. The track is drawn apart from the slider, under its thumb, so its rounded shape clips every
+   fill on it. Each shows the pointing hand while it can be dragged, and a disabled one is dimmed. */
 .overlay-seek-row {
+  --thumb-half: 8px;
+  --slider-track: 4px;
+  --slider-knob: 10px;
+  --slider-ahead: rgb(64 64 64 / 0.8);
+  --slider-preview: #a6a6a6;
   display: flex;
   align-items: center;
   gap: 12px;
+}
+@media (pointer: coarse) {
+  .overlay-seek-row { --thumb-half: 14px; }
 }
 .overlay-seek-row input[type="range"] {
   flex: 1;
@@ -862,7 +882,92 @@ html.theme-light .ambient canvas {
   /* A browser's own margin on a range input, 2 px, would widen the row's gap. */
   margin: 0;
 }
+@media (pointer: coarse) {
+  .overlay-seek-row input[type="range"] { height: 32px; margin: -4px 0; }
+}
 .overlay-seek-row input[type="range"]:disabled { cursor: default; }
+.slider-wrap {
+  position: relative;
+  --track-h: var(--slider-track);
+  --knob: var(--slider-knob);
+}
+@media (hover: hover) {
+  .slider-wrap:hover:has(> .player-slider:not(:disabled)) { --track-h: 6px; --knob: 16px; }
+}
+.slider-wrap:has(> .player-slider:not(:disabled):active),
+.slider-wrap.is-touched:has(> .player-slider:not(:disabled)) {
+  --track-h: 6px;
+  --knob: 16px;
+}
+.slider-wrap:has(> .player-slider:disabled) { opacity: var(--icon-disabled-opacity); }
+/* The track: orange up to the value, light gray on to a pointer ahead of it, and dark gray after, as parts of its length
+   (--fill and --preview, from 0 to 1, set on the slider's wrapper). */
+.slider-track {
+  position: absolute;
+  top: 50%;
+  left: var(--thumb-half);
+  right: var(--thumb-half);
+  height: var(--track-h);
+  transform: translateY(-50%);
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    var(--huggins-orange) calc(var(--fill, 0) * 100%),
+    var(--slider-preview) calc(var(--fill, 0) * 100%),
+    var(--slider-preview) calc(var(--preview, 0) * 100%),
+    var(--slider-ahead) calc(var(--preview, 0) * 100%)
+  );
+}
+.player-slider {
+  position: relative;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.player-slider::-webkit-slider-runnable-track { height: var(--slider-track); background: transparent; }
+.player-slider::-moz-range-track { height: var(--slider-track); background: transparent; }
+.player-slider::-moz-range-progress { background: transparent; }
+.player-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(2 * var(--thumb-half));
+  height: calc(2 * var(--thumb-half));
+  margin-top: calc((var(--slider-track) - 2 * var(--thumb-half)) / 2);
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--huggins-orange) 92%, transparent 100%) center / var(--knob) var(--knob) no-repeat;
+}
+.player-slider::-moz-range-thumb {
+  width: calc(2 * var(--thumb-half));
+  height: calc(2 * var(--thumb-half));
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--huggins-orange) 92%, transparent 100%) center / var(--knob) var(--knob) no-repeat;
+}
+/* The label above a slider: a pill, its text centered in its height, raised above a finger. */
+.slider-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.slider-label[hidden] { display: none; }
+.slider-label.is-touch { bottom: calc(100% + 28px); }
 /* Mute keeps its 44 px target without making the row taller than its 24 px sliders: its box reaches into the gap above
    the row and the controls' padding below it, so the transport row, and the popups that rise above the controls, stay
    where they are. */
@@ -872,28 +977,72 @@ html.theme-light .ambient canvas {
 .volume { display: inline-flex; align-items: center; }
 .volume[hidden] { display: none; }
 .overlay-seek-row .volume input[type="range"] { flex: none; width: 84px; }
-/* The scrub bar's wrapper holds the stretch Timer mode repeats while Loop holds autoplay, shown faintly behind the bar's
-   track. The thumb's center runs from half its width in from each end, so the stretch is inset by that much to line
-   up with it. */
+/* The scrub bar's wrapper holds the stretch that repeats, shown faintly behind the bar's track: the one between the loop
+   markers, or the one Timer mode repeats while Loop holds autoplay. It is drawn in a rounded box over the track's length, which clips it, so at the track's ends it rounds as the
+   track does. */
 .seek-wrap {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  position: relative;
 }
-.seek-wrap input[type="range"] { position: relative; }
-.seek-loop {
-  --thumb-half: 8px;
+.seek-loop-clip {
   position: absolute;
   top: 50%;
-  height: 12px;
+  left: var(--thumb-half);
+  right: var(--thumb-half);
+  height: 14px;
   transform: translateY(-50%);
-  border-radius: 6px;
+  border-radius: 7px;
+  overflow: hidden;
   pointer-events: none;
-  left: calc(var(--thumb-half) + (100% - 2 * var(--thumb-half)) * var(--loop-from, 0));
-  width: calc((100% - 2 * var(--thumb-half)) * (var(--loop-to, 0) - var(--loop-from, 0)));
+}
+.seek-loop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 7px;
+  left: calc(100% * var(--loop-from, 0));
+  width: calc(100% * (var(--loop-to, 0) - var(--loop-from, 0)));
   background: rgb(239 127 34 / 0.35);
+}
+/* The stretch's end at a loop marker is square; the clip box still rounds it at the track's ends. A loop marker is a
+   thin orange line across the bar, on top of its track and thumb, a little taller than the stretch and centered on it,
+   lined up with the thumb's center as the track is. The square around the line takes presses and drags the marker, so a
+   press there doesn't reach the bar; it is larger on a touch screen, and shows the sideways resize cursor. */
+.seek-loop.from-mark {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.seek-loop.to-mark {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.loop-mark {
+  --mark-press: 24px;
+  position: absolute;
+  top: 50%;
+  left: calc(var(--thumb-half) + (100% - 2 * var(--thumb-half)) * var(--at, 0));
+  z-index: 1;
+  width: var(--mark-press);
+  height: var(--mark-press);
+  margin: calc(var(--mark-press) / -2) 0 0 calc(var(--mark-press) / -2);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.loop-mark::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 18px;
+  margin: -9px 0 0 -1.5px;
+  border-radius: 1.5px;
+  background: var(--huggins-orange);
+}
+@media (pointer: coarse) {
+  .loop-mark { --mark-press: 36px; }
 }
 /* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, the row's gap from
    the bar, so that width may change between items with different time formats. */

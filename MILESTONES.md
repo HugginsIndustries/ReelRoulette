@@ -513,43 +513,159 @@ Last milestone completed: M12n4
 
 ### M12n5 - WebUI Loop Range
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
 - **Depends on**: WebUI Autoplay Modes, whose Timer mode's repeating stretch the markers define while they are set.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
 
-- With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them, in Normal and Timer mode and with Autoplay off.
-- While markers are set, they define Timer mode's repeating stretch, in place of the stretch that starts where a seek lands and runs for Advance after.
-- A repeat between the markers only moves the video's position: nothing loads again, shows Loading…, or records another play, as Loop's other repeats do.
-- Before the app is built, the markers are designed in the mockup and approved: how they are set, moved, and cleared with a mouse and on a touch screen, and whether a shortcut sets one at the current position; how they show on the scrub bar beside Timer mode's stretch; whether a video keeps them when it plays again or the page refreshes; and what they do while Loop stops autoplay is off.
+- The scrub bar's track, its stretch band, and the loop markers line up with the thumb's center, which runs from half the thumb's box in from each end (`--thumb-half`, 8 px, or 14 px on a touch screen).
 
-#### Traps
+#### Slices
 
-- The scrub bar is a native range input that the player sets rather than renders from state, so a re-render never moves it while it is dragged (`seekSlider` in `src/playback/player.ts`). Markers drawn on it must leave the bar its own dragging (inferred).
-- WebUI Autoplay Modes wraps the scrub bar in `seek-wrap`, with Timer mode's stretch, `seek-loop`, behind its track, inset by half the thumb's width at each end so it lines up with the thumb.
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Player sliders | ✅ Complete | The scrub bar and the volume slider drawn by the page: a rounded track, an orange thumb that grows under a mouse or a finger, a label with the value at the pointer, the scrub bar's light gray preview, the pointing hand, and Timer mode's stretch in a rounded 14 px band. |
+| Loop markers | ✅ Complete | Start and end markers set from the scrub bar's menu or I and O, dragged, and cleared by the menu, X, or Loop off, with the video sent into the stretch when they change and Loop treating the stretch as the whole video. |
+
+#### Player sliders slice
+
+**Scope**
+
+- The player's sliders, the scrub bar and the volume:
+  - The page draws both in place of the browser's own look, which also replaces the browser's dimming on hover.
+  - The track runs from where the thumb's center sits at 0 to where it sits at the end, with rounded ends, and keeps that length: orange up to the value and `rgb(64 64 64 / 0.8)` after it.
+  - The track is its own element under the slider, so its rounded shape clips every fill on it, and the slider draws only its thumb.
+  - The thumb is a plain orange circle with no border, 10 px at rest.
+  - The thumb's box, which takes presses, stays one size so the value's place never shifts: 16 px, or 28 px on a touch screen, where the sliders are 32 px tall and reach 4 px past the 24 px row above and below it.
+  - A mouse or pen over a slider, or dragging it, makes its track 6 px thick and its thumb 16 px, at once and around a center that never moves, and so does a finger on it until it lifts.
+  - A label above the pointer shows the value there: the time on the scrub bar, as m:ss, or h:mm:ss from an hour, and the volume as "{n}%" on the volume slider.
+  - The label shows under a mouse or pen while it is over the slider or drags it, and under a finger while it is on the slider, 28 px above the slider so the finger doesn't cover it.
+  - The label is a 22 px tall pill, `rgb(0 0 0 / 0.55)`, its text centered in its height, 6 px above the slider, and kept within the slider's width.
+  - On the scrub bar, a mouse or pen ahead of the value fills the track light gray (`#a6a6a6`) from the value up to the pointer; a finger doesn't.
+  - Both sliders show the pointing hand cursor while they can be dragged, which fixes the app's plain arrow, and a disabled slider shows the default cursor and is dimmed to the disabled icons' opacity, track included.
+  - The volume slider drops its "Volume" tooltip, which would cover the label, and keeps its accessible name; the volume indicator over the player still doesn't show for it.
+- The stretch band behind the scrub bar's track:
+  - Timer mode's stretch, a faint orange band (`rgb(239 127 34 / 0.35)`) behind the track, is now 14 px tall with 7 px rounded ends.
+  - The band is drawn in a rounded box over the track's length, which clips it, so it rounds at the track's ends.
+- The player sets the scrub bar's fill wherever it sets the slider's value (`src/playback/player.ts`), the volume slider's renders from the shown volume, and a new `src/ui/sliderLabel.ts` shows the label, the light gray preview, and a finger's pressed look (`src/ui/Player.tsx`, `src/styles.css`).
+
+**Traps**
+
+- The scrub bar is a native range input that the player sets rather than renders from state, so a re-render never moves it while it is dragged (`seekSlider` in `src/playback/player.ts`).
+- Chrome styles a range input's track only through its pseudo-elements, so the track is drawn as its own element under the slider, as in the mockup, with the value's fill set on the slider's wrapper.
+- A browser may take over a finger's drag on a range input and cancel its pointer events, so the mockup follows a finger on a slider with touch events (inferred).
+- happy-dom gives every element a zero-size box, so tests of the label's value at a point stub the slider's `getBoundingClientRect`.
+- The volume slider's tests find it by its accessible name, "Volume", which stays when its tooltip goes.
+
+**Acceptance**
+
+- A mouse over either slider, or a finger on it, shows the label with the value at that point, the time or "{n}%", a finger's lift and the mouse leaving hide it, and a disabled scrub bar shows none, in Player screen tests.
+- The value at a point across a slider follows the thumb's center, in unit tests.
+- The sliders' look, their growth, the light gray preview, the stretch band, and the pointing hand match the approved mockup, in the spot check.
+- `npm run verify` passes.
+
+**Evidence**
+
+- The seek row's sliders are drawn as the mockup draws them: a `slider-track` element and a `slider-label` in each `slider-wrap`, the `player-slider` thumb rules, and the band in its `seek-loop-clip` box (`src/ui/Player.tsx`, `src/styles.css`).
+- The player sets the scrub bar's `--fill` on `#seek-wrap` wherever it sets the slider's value or length, and as a drag's seek arrives (`setSeekBar` and `fillSeekBar` in `src/playback/player.ts`, with `seekWrap` among its elements); the volume wrapper's renders from the shown volume.
+- `useSliderLabel` in `src/ui/sliderLabel.ts` shows the label, the preview, and a finger's pressed look; it tracks a mouse over the slider with its own flag where the mockup asks `:hover`, which behaves the same and works in happy-dom.
+- Player screen tests under "the sliders' labels" show the label's value under a mouse, a pen's drag off the bar, and a finger, its hiding as the mouse leaves, the drag ends, and the finger lifts, none on a disabled bar, and the volume's "{n}%"; `src/test/sliderLabel.test.ts` covers the value at a point, and a player test covers the fill as a video plays, after a drag, for a new item, and on a photo's timer.
+- Each new test failed with the code it guards broken in a copy under `artifacts/scratch/`, then restored (measured).
+- The existing volume test now expects the slider to have no tooltip.
+- `npm run verify` passed: 100 test files, 2587 tests, and the build checks (measured).
+- After the advisor's review, the label hides as its slider becomes disabled and shows the value under the same point anew for a new length (a `MutationObserver` on the slider's `disabled` and `max`), and the scrub bar's hides as each new item starts (`hidesOn: store.playAttemptId`), since one video following another disables and enables the bar within one render; the volume test checks the volume's `--fill`, after a change and a mute.
+- Player screen tests show the label hiding as a new item starts under a resting mouse, refreshing for a new length, and hiding as a photo's timer bar becomes disabled; each failed with its code broken (measured).
+- The mockup's label hides and refreshes the same way (`follow` and `hide` from `initSliderLabel`).
+
+#### Loop markers slice
+
+**Scope**
+
+- Setting the markers:
+  - A right-click on a video's scrub bar, or a long press on a touch screen, opens the scrub bar's menu at the pointer: "Set loop start at {time}" (`start` icon) and "Set loop end at {time}" (`keyboard_tab` icon), at the time under the pointer, and "Clear loop markers" (`close` icon), disabled with "No loop markers to clear" while none is set.
+  - The scrub bar has no menu on a photo, on a video that can't play, or with nothing playing.
+  - I and O set the start and the end where the video is, and X clears them, on a video that can play; the shortcut reference lists "I / O: Set the loop's start or end marker where the video is, turning Loop on" and "X: Clear the loop markers".
+  - Setting a marker turns Loop on, and turning Loop off clears the markers.
+  - The markers stay in order at least 1 second apart: a marker set within a second of the other, or past it, clears the other.
+  - Each stays at least 1 second from the video's other end: a start before its last second, an end after its first.
+  - Nothing keeps them: another item, the same item played again, and a page refresh start without them.
+- Moving the markers:
+  - A marker's press area, a 24 px square around its line, or 36 px on a touch screen, drags it sideways with a mouse or a finger, up to 1 second from the other marker, and shows the sideways resize cursor (`ew-resize`).
+  - A drag moves only the marker: the video's position and the scrub bar's thumb stay where they are while it lasts, and playback follows the markers wherever they are.
+  - The player's controls stay shown while a marker is dragged, as while the scrub bar is.
+  - A long press on a marker's press area opens no menu, as on other drag handles, and a right-click there opens the scrub bar's menu.
+- Where the video goes:
+  - Whenever the markers change, by the menu, I or O, or letting go of a drag, a video now outside the stretch, before it or at or after its end, goes to the start marker, and one inside it stays where it is.
+  - With only a start set, the stretch runs to the video's end, and with only an end set, from the video's start.
+  - A video that plays up to the end marker, or to the video's end, goes back to the start marker.
+  - A seek the user makes before the start marker plays into the stretch, and one past the end marker plays on to the video's end, which then goes back to the start marker.
+  - A repeat between the markers only moves the video's position: nothing loads again, shows Loading…, or records another play, as Loop's other repeats do.
+- How Loop treats the stretch:
+  - While either marker is set, Loop treats the stretch as the whole video, in Normal and Timer mode and with Autoplay off.
+  - The stretch takes the place of Timer mode's stretch, which starts where a seek lands and runs for Advance after, and clearing the markers while that stretch applies starts it where the video is.
+  - With Loop stops autoplay off and Autoplay on, a stretch shorter than Advance after repeats until it advances, at once in Timer mode and once the repeat in progress finishes in Normal mode, and a longer one plays once to its end marker before autoplay goes on.
+  - The Settings tab's Loop stops autoplay hint ends "…repeats until it advances, as does a shorter stretch between loop markers."
+- How the markers show:
+  - The stretch between the markers shows in Timer mode's band, square at a marker, and rounds at the track's ends even where a marker sits there.
+  - Each marker is a plain orange line, 3 px wide and 18 px tall, centered on the scrub bar and drawn on top of its track and thumb.
+- A new `src/playback/loopMarks.ts` holds the markers' rules, the player keeps the markers and repeats the stretch (`src/playback/player.ts`), the scrub bar's wrapper gets its own menu surface and the markers (`src/ui/Player.tsx`, `src/styles.css`), and the shortcuts and their reference gain I, O, and X (`src/keyboard/shortcuts.ts`).
+
+**Traps**
+
+- A marker's press area sits on top of the scrub bar, so a press there drags the marker, not the bar's thumb.
 - WebUI Player Controls keeps the controls shown while the scrub bar or volume is dragged, so dragging a marker has to keep them shown too (inferred).
-- The keyboard shortcuts WebUI Keyboard Shortcuts adds, listed in the mockup's shortcut reference, already take most of the keys a marker could use.
-- WebUI Context Menus opens the player's menu from its picture, not from its controls, so a right-click or a long press on the scrub bar is free for the markers.
+- Loop uses the video's own repeat (`video.loop = videoLoops()` in `syncVideo` in `src/playback/player.ts`), which goes back to 0, so it has to be off while markers are set and the player repeats the stretch itself (inferred).
+- A video's `timeupdate` comes about every 250 ms; the player also checks Timer mode's stretch on every animation frame while the video plays (`moveBar`), which keeps a repeat at the end marker close to it.
+- The app's menu surfaces answer their groups without the point the menu opens at (`groupsFor` in `useMenuSurface`, `src/ui/Menu.tsx`), so the scrub bar's wrapper adds its surface with `contextMenu.addSurface`, whose `open` gets the point, as the picture's does; the innermost surface wins (`surfaceAt` in `src/ui/menuModel.ts`).
+- A Player screen test checks that a right-click on the scrub bar opens no menu, which this slice changes.
+- The app's long press skips what `LONG_PRESS_SKIPS` in `src/ui/menuOpener.ts` names, which a marker's press area joins.
+- Chrome on Android moves the thumb to where a long press on the track begins, seeking the video there before the menu opens (inferred).
+- The keyboard shortcuts WebUI Keyboard Shortcuts adds already take most keys; I, O, and X are free.
 - On iOS with Enhanced audio on, a repeat by seek leaves the sound out of sync with the picture, the known issue "The sound drifts out of sync on iOS with Enhanced audio on" in `ISSUES.md` (inferred).
 
-#### Acceptance
+**Acceptance**
 
-- With Loop on and both markers set, a video repeats between them with Autoplay off and in Normal and Timer mode, in player and Player screen tests.
-- While markers are set, Timer mode's repeating stretch is the range between them, in a test.
+- The scrub bar's menu offers Set loop start and Set loop end at the time under the pointer and Clear loop markers, disabled while none is set, and none on a photo or with nothing playing, in Player screen tests.
+- I, O, and X set and clear the markers where the video is, setting one turns Loop on, and turning Loop off clears them, in Player screen tests.
+- Dragging a marker moves it, by mouse and touch, up to a second from the other, and leaves the video's position as it was, in Player screen tests.
+- After the markers change, a video outside the stretch goes to the start marker and one inside stays, and a seek past the end marker plays on to the video's end, in player tests.
+- With Loop on and markers set, a video repeats between them with Autoplay off and in Normal and Timer mode, and one marker alone repeats to or from the video's end, in player and Player screen tests.
+- While markers are set, Timer mode's repeating stretch is the range between them, and with Loop stops autoplay off a stretch shorter than Advance after repeats until it advances, in player tests.
 - A repeat between the markers records no other play and keeps the video's source, in a test.
-- The markers are set, moved, and cleared as the approved mockup shows, by mouse and touch, and by a shortcut if the approved mockup gives one, in Player screen tests.
-- The mockup shows the markers as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- Another item and the same item played again start without markers, in Player screen tests.
+- The markers' rules, their order, spacing, and the stretch they make, in unit tests.
+- The markers' look and the resize cursor match the approved mockup, in the spot check.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
+
+**Evidence**
+
+- `src/playback/loopMarks.ts` holds the markers' rules, which `src/test/loopMarks.test.ts` covers; each rule's test failed with it broken (measured).
+- The player keeps the markers per item, steps Timer mode's stretch and the video's own `loop` aside while either is set, measures the marked stretch against Advance after, and repeats it from `repeatMarkedStretch`, checked on each animation frame and time update from `checkedAt`, which every seek it makes sets through `moveVideo`; `videoEnded` goes back to the start marker through the same path Timer mode's stretch uses (`restartFromEnd`), with no load, Loading…, `last.log` line, or recorded play (`src/playback/player.ts`).
+- The player's `loopMarks` signal gives the markers' places, and `setLoopMark`, `setLoopMarkHere`, `clearLoopMarks`, `dragLoopMark`, and `endLoopMarkDrag` change them; `setLoop` turns Loop on for a marker and clears them as Loop turns off.
+- `#seek-wrap` adds its own menu surface, opened through `showOverPlayer` in `src/playback/playingItemMenus.ts`, which the picture's menu now shares, and `LoopMarkers` in `src/ui/Player.tsx` draws and drags the markers; `.loop-mark` joins `LONG_PRESS_SKIPS`, and I, O, and X join the shortcut table and its reference.
+- The menu and the drag share `sliderValueAtPoint` from `src/ui/sliderLabel.ts` for the time under the pointer.
+- Player tests cover repeats with Autoplay off and in Normal and Timer mode, one marker alone, the jump rule, a seek past the end marker, Timer mode's stretch stepping aside and coming back, Loop stops autoplay off with a short and a long stretch, Loop off and a new item clearing them, and a repeat keeping the source, the attempt, and the play count; Player and keyboard screen tests cover the menu by right-click and long press, Clear's disabled reason, no menu on a photo, the keys, Loop turning on, mouse and touch drags leaving `currentTime`, and a long press on a marker opening nothing.
+- 28 breaks of the model and the UI each failed at least one new test, and each was restored (measured).
+- The Player screen test that a right-click on the scrub bar opens no menu now leaves the scrub bar out; `keyboardShortcuts.test.ts` uses Q in place of X as its unbound key; the settings screen test reads the new Loop stops autoplay hint.
+- `npm run verify` passed: 100 test files, 2606 tests, and the build checks (measured).
+- The app matches the approved mockup; the mockup's drag rule and the app's `dragLoopMark` clamp alike.
+- After the advisor's review of the branch, a drag whose marker goes mid-drag, as another item starts, ends with it, and a move with no button down drags nothing, so a mouse's pointer can't drag a later item's marker.
+- A press and release that moved no marker no longer sends the video to the start marker (`marksBeforeDrag` in `src/playback/player.ts`).
+- The scrub bar's menu and I and O do nothing on a video that failed.
+- A Player screen test and two player tests cover those, each failing with its fix broken, alone or together (measured).
 
 #### Release checks
 
 - Manual: On the iPad and a desktop browser, setting, moving, and clearing the markers on the scrub bar works by touch and by mouse, and a video repeats between them.
+- Manual: On the iPad, the Android phone, and a desktop browser, the scrub bar and the volume slider grow under a finger or the mouse and show the value above it.
 
 #### Not included
 
 - Markers on a photo, whose scrub bar is its timer.
+- Keeping markers for an item across plays, page refreshes, or devices.
 
 ### M12n6 - Library Profiles
 

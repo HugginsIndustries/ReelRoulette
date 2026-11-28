@@ -1290,15 +1290,22 @@ describe("volume and Enhanced audio", () => {
     const linesBefore = server.logLines().length;
 
     expect([volumeSlider().min, volumeSlider().max, volumeSlider().step, volumeSlider().value]).toEqual(["0", "100", "1", "100"]);
-    expect(volumeSlider().title).toBe("Volume");
+    // It has no tooltip, which would cover its label.
+    expect(volumeSlider().hasAttribute("title")).toBe(false);
     expect(volumeWrap().hidden).toBe(false);
     // Before the gain stage starts, the sound plays directly, at the element's own volume.
+    expect(volumeWrap().style.getPropertyValue("--fill")).toBe("1");
     moveVolume(40);
     await flush();
     expect(volumeSlider().value).toBe("40");
+    expect(volumeWrap().style.getPropertyValue("--fill")).toBe("0.4");
     expect(video().volume).toBeCloseTo(0.4);
     expect(document.querySelectorAll("#toasts .toast")).toHaveLength(0);
     expect(server.logLines().slice(linesBefore)).toEqual([]);
+
+    // Mute moves the slider, and its track's orange, to 0.
+    await click(button("Mute"));
+    expect(volumeWrap().style.getPropertyValue("--fill")).toBe("0");
   });
 
   it("starts the gain stage on a tap's pointerup, not its pointerdown, and a key starts it too", async () => {
@@ -2205,6 +2212,366 @@ describe("seek row", () => {
     expect(px(mute.height) + px(mute.marginTop) + px(mute.marginBottom)).toBeLessThanOrEqual(px(currentStyle(seekSlider()).height));
     expect(-px(mute.marginTop)).toBeLessThanOrEqual(px(controls.gap) + 4);
     expect(-px(mute.marginBottom)).toBeLessThanOrEqual(px(controls.paddingBottom));
+  });
+});
+
+describe("the sliders' labels", () => {
+  /** A label above a slider showing `text`, while it shows. */
+  function shownLabel(text: string): HTMLElement | null {
+    return screen.queryByText(text, { ignore: "[hidden], script, style" });
+  }
+
+  /** Places `slider` across the page from `left`, `width` wide, its thumb's center running from 8 px in from each end. */
+  function placeSlider(slider: HTMLElement, left: number, width: number): void {
+    Object.defineProperty(slider, "getBoundingClientRect", { configurable: true, value: () => new DOMRect(left, 0, width, 24) });
+  }
+
+  /** Plays the first pick as a video 125 seconds long, with the scrub bar 216 px wide from the page's left edge. */
+  async function playOnPlacedBar(): Promise<void> {
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
+    fireEvent.loadedMetadata(video());
+    await flush();
+    placeSlider(seekSlider(), 0, 216);
+  }
+
+  function seekWrap(): HTMLElement {
+    return document.getElementById("seek-wrap") as HTMLElement;
+  }
+
+  it("show the time under a mouse over the scrub bar, following it, and hide once it leaves", async () => {
+    await playOnPlacedBar();
+
+    fireEvent.pointerMove(seekSlider(), { pointerType: "mouse", clientX: 108 });
+    expect(shownLabel("1:02")).not.toBeNull();
+    fireEvent.pointerMove(seekSlider(), { pointerType: "mouse", clientX: 208 });
+    expect(shownLabel("1:02")).toBeNull();
+    expect(shownLabel("2:05")).not.toBeNull();
+
+    fireEvent.pointerLeave(seekWrap(), { pointerType: "mouse" });
+    expect(shownLabel("2:05")).toBeNull();
+  });
+
+  it("follow a pen dragging the scrub bar off it until it's let go", async () => {
+    await playOnPlacedBar();
+
+    fireEvent.pointerMove(seekSlider(), { pointerType: "pen", clientX: 8 });
+    fireEvent.pointerDown(seekSlider(), { pointerType: "pen", clientX: 8 });
+    fireEvent.pointerLeave(seekWrap(), { pointerType: "pen" });
+    expect(shownLabel("0:00")).not.toBeNull();
+    fireEvent.pointerMove(document, { pointerType: "pen", clientX: 48 });
+    expect(shownLabel("0:25")).not.toBeNull();
+
+    fireEvent.pointerUp(document, { pointerType: "pen" });
+    expect(shownLabel("0:25")).toBeNull();
+  });
+
+  it("show the time under a finger on the scrub bar, following it, and hide once it lifts", async () => {
+    await playOnPlacedBar();
+
+    fireEvent.touchStart(seekSlider(), { touches: [{ clientX: 48, clientY: 10 }] });
+    expect(shownLabel("0:25")).not.toBeNull();
+    fireEvent.touchMove(seekSlider(), { touches: [{ clientX: 108, clientY: 10 }] });
+    expect(shownLabel("1:02")).not.toBeNull();
+
+    fireEvent.touchEnd(seekSlider(), { touches: [] });
+    expect(shownLabel("1:02")).toBeNull();
+  });
+
+  it("hide as a new item starts under a resting mouse, and show the value under it anew for a new length", async () => {
+    await mountAndPlay(serverPicking(VIDEO_ITEM, SECOND_VIDEO));
+    Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
+    fireEvent.loadedMetadata(video());
+    await flush();
+    placeSlider(seekSlider(), 0, 216);
+    fireEvent.pointerMove(seekSlider(), { pointerType: "mouse", clientX: 108 });
+    expect(shownLabel("1:02")).not.toBeNull();
+
+    // The same length, now 250 seconds, puts twice the time under the resting mouse.
+    Object.defineProperty(video(), "duration", { configurable: true, value: 250 });
+    fireEvent.loadedMetadata(video());
+    await flush();
+    expect(shownLabel("1:02")).toBeNull();
+    expect(shownLabel("2:05")).not.toBeNull();
+
+    // A new item hides it, and its length shows nothing under the resting mouse until it moves.
+    await click(button("Next"));
+    await flush();
+    expect(shownLabel("2:05")).toBeNull();
+    Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
+    fireEvent.loadedMetadata(video());
+    await flush();
+    expect(shownLabel("1:02")).toBeNull();
+  });
+
+  it("hide once the scrub bar under a resting mouse becomes disabled, as a photo's timer stops with Autoplay", async () => {
+    await mount(serverPicking(PHOTO_ITEM));
+    await click(button("Autoplay"));
+    await click(emptyState());
+    await flush();
+    placeSlider(photoTimerBar(), 0, 216);
+    fireEvent.pointerMove(photoTimerBar(), { pointerType: "mouse", clientX: 108 });
+    expect(shownLabel("0:05")).not.toBeNull();
+
+    fireEvent.keyDown(document.body, { key: "a" });
+    fireEvent.keyUp(document.body, { key: "a" });
+    await flush();
+    expect(photoTimerBar().disabled).toBe(true);
+    expect(shownLabel("0:05")).toBeNull();
+  });
+
+  it("show nothing over the scrub bar while it is disabled, as before anything plays", async () => {
+    await mount(serverPicking(VIDEO_ITEM));
+    expect(seekSlider().disabled).toBe(true);
+    placeSlider(seekSlider(), 0, 216);
+
+    fireEvent.pointerMove(seekSlider(), { pointerType: "mouse", clientX: 108 });
+    fireEvent.touchStart(seekSlider(), { touches: [{ clientX: 108, clientY: 10 }] });
+    expect(shownLabel("0:50")).toBeNull();
+  });
+
+  it("show the volume under a mouse over the volume slider or a finger on it, and hide once it leaves or lifts", async () => {
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    placeSlider(volumeSlider(), 500, 84);
+
+    fireEvent.pointerMove(volumeSlider(), { pointerType: "mouse", clientX: 525 });
+    expect(shownLabel("25%")).not.toBeNull();
+    fireEvent.pointerLeave(volumeWrap(), { pointerType: "mouse" });
+    expect(shownLabel("25%")).toBeNull();
+
+    fireEvent.touchStart(volumeSlider(), { touches: [{ clientX: 549, clientY: 10 }] });
+    expect(shownLabel("60%")).not.toBeNull();
+    fireEvent.touchEnd(volumeSlider(), { touches: [] });
+    expect(shownLabel("60%")).toBeNull();
+  });
+});
+
+describe("the scrub bar's loop markers", () => {
+  const MENU_AT_0_25 = ["start Set loop start at 0:25", "keyboard_tab Set loop end at 0:25", "close Clear loop markers"];
+
+  /**
+   * Plays the first pick as a video 125 seconds long, with the scrub bar 216 px wide from the page's left edge, so the
+   * time under the pointer is 0:25 at 48 px, 1:02 at 108 px, and 1:40 at 168 px.
+   */
+  async function playOnPlacedBar(server: FakeServer = serverPicking(VIDEO_ITEM, SECOND_VIDEO)): Promise<void> {
+    await mountAndPlay(server);
+    Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    await flush();
+    Object.defineProperty(seekSlider(), "getBoundingClientRect", { configurable: true, value: () => new DOMRect(0, 0, 216, 24) });
+  }
+
+  /** Opens the scrub bar's menu with a right-click at `x`, and the right button's release, and returns it. */
+  async function openBarMenu(x: number, target: Element = seekSlider()): Promise<HTMLElement> {
+    rightClick(target, x, 10);
+    fireEvent.pointerUp(target, { pointerType: "mouse", pointerId: 1, button: 2, clientX: x, clientY: 10 });
+    await flush();
+    const menu = contextMenuShown();
+    if (!menu) {
+      throw new Error("No menu opened.");
+    }
+    return menu;
+  }
+
+  /** Sets a marker from the scrub bar's menu at `x`. */
+  async function setMarker(which: "start" | "end", x: number): Promise<void> {
+    const menu = await openBarMenu(x);
+    const item = Array.from(menu.querySelectorAll("button")).find((button) => button.textContent?.includes(`Set loop ${which} at`))!;
+    await click(item);
+  }
+
+  /** The markers that show, by their titles. */
+  function markers(): string[] {
+    return screen.queryAllByTitle(/^Loop (start|end)$/).map((marker) => marker.title);
+  }
+
+  /** A pointer presses `marker` at `x`, moves to each of `moves`, and lets go there. */
+  async function drag(marker: Element, pointerType: "mouse" | "touch", x: number, ...moves: number[]): Promise<void> {
+    fireEvent.pointerDown(marker, { pointerType, pointerId: 3, isPrimary: true, button: 0, clientX: x, clientY: 10 });
+    for (const move of moves) {
+      fireEvent.pointerMove(marker, { pointerType, pointerId: 3, buttons: 1, clientX: move, clientY: 10 });
+    }
+    await flush();
+  }
+
+  async function letGo(marker: Element, pointerType: "mouse" | "touch"): Promise<void> {
+    fireEvent.pointerUp(marker, { pointerType, pointerId: 3, button: 0, clientX: 0, clientY: 10 });
+    await flush();
+  }
+
+  it("a right-click on a video's scrub bar opens its menu at the time under the pointer, with Clear loop markers disabled while none is set", async () => {
+    await playOnPlacedBar();
+
+    expect(rightClick(seekSlider(), 48, 10)).toBe(false);
+    await flush();
+    const menu = contextMenuShown()!;
+    expect(menuIcons(menu)).toEqual(MENU_AT_0_25);
+    const clear = menuItemIn(menu, "Clear loop markers");
+    expect([clear.disabled, clear.title]).toEqual([true, "No loop markers to clear"]);
+  });
+
+  it("a long press with a finger on a video's scrub bar opens its menu at the time where it began", async () => {
+    useFakeClock();
+    await playOnPlacedBar();
+
+    fireEvent.pointerDown(seekSlider(), { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 108, clientY: 10 });
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    expect(menuIcons(contextMenuShown()!)).toEqual(["start Set loop start at 1:02", "keyboard_tab Set loop end at 1:02", "close Clear loop markers"]);
+  });
+
+  it("opens no menu on a photo's scrub bar or with nothing playing", async () => {
+    localStorage.setItem("rr_device.player.autoplay", JSON.stringify(true));
+    await mount(serverPicking(PHOTO_ITEM));
+    rightClick(seekSlider(), 48, 10);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+
+    await click(emptyState());
+    expect(photo().src).toBe(PHOTO_URL);
+    rightClick(photoTimerBar(), 48, 10);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+  });
+
+  it("set a marker from the menu, turning Loop on, show while set, and clear by the menu or as Loop turns off, and the video repeats between them", async () => {
+    await playOnPlacedBar();
+    expect([isLit("Loop"), markers()]).toEqual([false, []]);
+
+    await setMarker("start", 48);
+    expect([isLit("Loop"), markers(), video().currentTime]).toEqual([true, ["Loop start"], 25]);
+    await setMarker("end", 168);
+    expect(markers()).toEqual(["Loop start", "Loop end"]);
+    video().currentTime = 100.2;
+    fireEvent.timeUpdate(video());
+    expect(video().currentTime).toBe(25);
+
+    const menu = await openBarMenu(48);
+    expect(menuItemIn(menu, "Clear loop markers").disabled).toBe(false);
+    await click(menuItemIn(menu, "Clear loop markers"));
+    expect([isLit("Loop"), markers()]).toEqual([true, []]);
+
+    await setMarker("end", 168);
+    await click(button("Loop"));
+    expect([isLit("Loop"), markers()]).toEqual([false, []]);
+  });
+
+  it("start another item, and the same item played again, without markers", async () => {
+    await playOnPlacedBar(serverPicking(VIDEO_ITEM, VIDEO_ITEM, SECOND_VIDEO));
+    await setMarker("start", 48);
+    expect(markers()).toEqual(["Loop start"]);
+
+    await click(button("Next"));
+    expect([video().src, markers()]).toEqual([VIDEO_URL, []]);
+    await setMarker("end", 168);
+    expect(markers()).toEqual(["Loop end"]);
+    await click(button("Next"));
+    expect([video().src, markers(), isLit("Loop")]).toEqual([SECOND_VIDEO_URL, [], true]);
+  });
+
+  it("drag a marker with a mouse up to a second from the other, leaving the video where it is until it's let go, and keep the controls shown meanwhile", async () => {
+    useFakeClock();
+    await playOnPlacedBar();
+    await setMarker("start", 48);
+    await setMarker("end", 168);
+    fireEvent.input(seekSlider(), { target: { value: "60" } });
+    const end = screen.getByTitle("Loop end");
+
+    // To 0:40, while the video is at 1:00.
+    await drag(end, "mouse", 168, 140, 72);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect([video().currentTime, seekSlider().value, controlsShown()]).toEqual([60, "60", true]);
+    await letGo(end, "mouse");
+    expect(video().currentTime).toBe(25);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(controlsShown()).toBe(false);
+
+    // Toward the start, it stops a second after it, at 0:26, so a video at 0:25.5 stays inside the stretch.
+    fireEvent.input(seekSlider(), { target: { value: "25.5" } });
+    await drag(end, "mouse", 72, 8);
+    await letGo(end, "mouse");
+    expect(video().currentTime).toBe(25.5);
+  });
+
+  it("drag a marker with a finger, leaving the video where it is until it's let go", async () => {
+    await playOnPlacedBar();
+    await setMarker("start", 48);
+    await setMarker("end", 168);
+    fireEvent.input(seekSlider(), { target: { value: "60" } });
+    const start = screen.getByTitle("Loop start");
+
+    // To 1:27.5, past the video at 1:00.
+    await drag(start, "touch", 48, 100, 148);
+    expect(video().currentTime).toBe(60);
+    await letGo(start, "touch");
+    expect(video().currentTime).toBe(87.5);
+  });
+
+  it("drag nothing once a drag's marker has gone, or for a pointer moving with no button down, and a press and release that moved nothing leaves the video where it is", async () => {
+    await playOnPlacedBar();
+    await setMarker("start", 48);
+    await setMarker("end", 168);
+    const atOf = (title: string) => screen.getByTitle(title).style.getPropertyValue("--at");
+
+    // A drag that a new item cut short, its release landing on the page.
+    await drag(screen.getByTitle("Loop end"), "mouse", 168, 140);
+    await click(button("Next"));
+    fireEvent.pointerUp(document, { pointerType: "mouse", pointerId: 3, button: 0 });
+    Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    await flush();
+    await setMarker("start", 48);
+    await setMarker("end", 168);
+    const end = atOf("Loop end");
+    fireEvent.pointerMove(screen.getByTitle("Loop end"), { pointerType: "mouse", pointerId: 3, buttons: 1, clientX: 100, clientY: 10 });
+    await flush();
+    expect(atOf("Loop end")).toBe(end);
+
+    // A drag whose release never came, then a move with no button down.
+    fireEvent.pointerDown(screen.getByTitle("Loop end"), { pointerType: "mouse", pointerId: 3, isPrimary: true, button: 0, clientX: 168, clientY: 10 });
+    fireEvent.pointerMove(screen.getByTitle("Loop end"), { pointerType: "mouse", pointerId: 3, buttons: 0, clientX: 100, clientY: 10 });
+    await flush();
+    expect(atOf("Loop end")).toBe(end);
+
+    // A seek past the end marker, then a press and release on it that moved nothing.
+    fireEvent.input(seekSlider(), { target: { value: "110" } });
+    await drag(screen.getByTitle("Loop end"), "mouse", 168);
+    await letGo(screen.getByTitle("Loop end"), "mouse");
+    expect(video().currentTime).toBe(110);
+  });
+
+  it("open no menu on a video that failed, and I sets no marker there", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    server.on("GET", "/api/media/item-video", () => json({ error: "Media can't be read" }, 503));
+    await playOnPlacedBar(server);
+    await failVideoAndItsFreshUrl();
+    expect(openNotices()).toEqual(["This video couldn't load. The server may be waiting on a slow or disconnected drive or share."]);
+    await click(screen.getByRole("button", { name: "OK" }));
+    rightClick(seekSlider(), 48, 10);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+    fireEvent.keyDown(document.body, { key: "i" });
+    fireEvent.keyUp(document.body, { key: "i" });
+    await flush();
+    expect([markers(), isLit("Loop")]).toEqual([[], false]);
+  });
+
+  it("a long press on a marker opens no menu, and a right-click there opens the scrub bar's", async () => {
+    useFakeClock();
+    await playOnPlacedBar();
+    await setMarker("start", 48);
+    const start = screen.getByTitle("Loop start");
+
+    fireEvent.pointerDown(start, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 48, clientY: 10 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+    fireEvent.pointerUp(start, { pointerType: "touch", pointerId: 1, button: 0, clientX: 48, clientY: 10 });
+    await flush();
+
+    expect(menuIcons(await openBarMenu(48, start))[0]).toBe("start Set loop start at 0:25");
   });
 });
 
@@ -4044,7 +4411,7 @@ describe("the player's menu", () => {
     expect(menuIcons(await openMenu()).slice(0, 2)).toEqual(["heart_plus Add to favorites", "thumb_up Remove from blacklist"]);
   });
 
-  it("opens none at a right-click on a control, the scrub bar, the seek row, or the open rating's stars, nor with nothing playing", async () => {
+  it("opens none at a right-click on a control, the seek row, or the open rating's stars, nor with nothing playing", async () => {
     const server = menuServer();
     await mount(server);
     for (const target of [emptyState(), mediaArea()]) {
@@ -4058,7 +4425,7 @@ describe("the player's menu", () => {
     expect(ratingPopover().hidden).toBe(false);
     expect(mediaArea().contains(ratingPopover())).toBe(true);
     // The stars first, since a press elsewhere closes them.
-    for (const target of [popoverStars(), button("Loop"), ratingButton(), seekSlider(), seekRow()]) {
+    for (const target of [popoverStars(), button("Loop"), ratingButton(), seekRow()]) {
       rightClick(target);
       await flush();
       expect(contextMenuShown()).toBeNull();

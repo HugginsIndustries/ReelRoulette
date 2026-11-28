@@ -351,24 +351,93 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 .rating-popover .rating { margin-left: 0; pointer-events: auto; }
 .rating-popover .rating-star { color: var(--icon-foreground); }
 .rating-popover .rating-outline, .rating-popover .is-full .rating-fill { text-shadow: var(--control-drop-shadow); }
-.overlay-seek-row { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+/* The player's sliders, the scrub bar and the volume, are drawn by the page: a track, orange up to the value and a
+   slightly see-through dark gray after it, and a plain orange knob. A mouse or pen over one, or dragging it, makes the track thicker and the knob
+   full size, growing in place, and a label above the pointer shows the value there; the scrub bar also fills light gray
+   from the value up to a pointer ahead of it. A finger on one does the same, its label higher so the finger doesn't
+   cover it and without the light gray fill, until it lifts. The knob's box takes presses and stays one size, so the
+   value's place never shifts: today's 16 px, or 28 px on a touch screen, where the sliders are 32 px tall and reach into
+   the space above and below the row, which stays 24 px. The knob's center runs from half that box in from each end, and
+   the track, with rounded ends, runs from where the knob's center sits at 0 to where it sits at the end, so at either
+   end the knob sits centered on the track's end and covers it, with no orange before it. The track's length never
+   changes: growing changes only its thickness and the knob's size, around a center that stays put. The track is drawn
+   apart from the slider, under its knob, so its rounded shape clips every fill on it. Each shows the pointing hand
+   while it can be dragged, and a disabled one is dimmed. */
+.overlay-seek-row {
+  --thumb-half: 8px; --slider-track: 4px; --slider-knob: 10px; --slider-ahead: rgb(64 64 64 / 0.8); --slider-preview: #a6a6a6;
+  display: flex; align-items: center; gap: 12px; pointer-events: auto;
+}
+@media (pointer: coarse) { .overlay-seek-row { --thumb-half: 14px; } }
 /* The sliders drop a browser's own margin, 2 px, so the bar, the time, Mute, and the volume sit the row's gap apart. */
 .overlay-seek-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; }
+@media (pointer: coarse) { .overlay-seek-row input[type="range"] { height: 32px; margin: -4px 0; } }
+.slider-wrap { position: relative; --track-h: var(--slider-track); --knob: var(--slider-knob); }
+@media (hover: hover) { .slider-wrap:hover:has(> .player-slider:not(:disabled)) { --track-h: 6px; --knob: 16px; } }
+.slider-wrap:has(> .player-slider:not(:disabled):active), .slider-wrap.is-touched:has(> .player-slider:not(:disabled)) { --track-h: 6px; --knob: 16px; }
+.slider-wrap:has(> .player-slider:disabled) { opacity: var(--icon-disabled-opacity); }
+/* The track: orange up to the value, light gray on to a pointer ahead of it, and dark gray after, as parts of its length
+   (--fill and --preview, from 0 to 1, set on the slider's wrapper). */
+.slider-track {
+  position: absolute; top: 50%; left: var(--thumb-half); right: var(--thumb-half); height: var(--track-h); transform: translateY(-50%);
+  border-radius: 999px; pointer-events: none;
+  background: linear-gradient(to right, var(--huggins-orange) calc(var(--fill, 0) * 100%), var(--slider-preview) calc(var(--fill, 0) * 100%),
+    var(--slider-preview) calc(var(--preview, 0) * 100%), var(--slider-ahead) calc(var(--preview, 0) * 100%));
+}
+.player-slider { position: relative; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+.player-slider::-webkit-slider-runnable-track { height: var(--slider-track); background: transparent; }
+.player-slider::-moz-range-track { height: var(--slider-track); background: transparent; }
+.player-slider::-moz-range-progress { background: transparent; }
+.player-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: calc(2 * var(--thumb-half)); height: calc(2 * var(--thumb-half));
+  margin-top: calc((var(--slider-track) - 2 * var(--thumb-half)) / 2); border: 0; border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--huggins-orange) 92%, transparent 100%) center / var(--knob) var(--knob) no-repeat;
+}
+.player-slider::-moz-range-thumb {
+  width: calc(2 * var(--thumb-half)); height: calc(2 * var(--thumb-half)); border: 0; border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--huggins-orange) 92%, transparent 100%) center / var(--knob) var(--knob) no-repeat;
+}
+/* The label above a slider: a pill, its text centered in its height. */
+.slider-label {
+  position: absolute; bottom: calc(100% + 6px); left: 0; transform: translateX(-50%); z-index: 2; pointer-events: none;
+  display: flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: rgb(0 0 0 / 0.55);
+  color: #fff; font-size: 0.8rem; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.slider-label[hidden] { display: none; }
+.slider-label.is-touch { bottom: calc(100% + 28px); }
 /* Mute keeps its 44 px target without making the row taller than its 24 px sliders: its box reaches into the gap above
    the row and the controls' padding below it, so the transport row, and the popups that rise above the controls, stay
    where they are. */
 .overlay-seek-row .overlay-btn { flex: none; margin: -10px 0; }
-/* The scrub bar's wrapper holds the stretch Timer mode repeats while Loop holds autoplay, shown faintly behind the bar's
-   track. The thumb's center runs from half its width in from each end, so the stretch lines up with it. */
-.seek-wrap { flex: 1; min-width: 0; display: flex; align-items: center; position: relative; }
-.seek-wrap input[type="range"] { position: relative; }
+/* The scrub bar's wrapper holds the stretch that repeats, shown faintly behind the bar's track: the one between the loop
+   markers, or the one Timer mode repeats while Loop holds autoplay. It is drawn in a rounded box over the track's length,
+   which clips it, so at the track's ends it rounds as the track does; the markers line up with the knob's center as
+   the track does. */
+.seek-wrap { flex: 1; min-width: 0; display: flex; align-items: center; }
+.seek-loop-clip {
+  position: absolute; top: 50%; left: var(--thumb-half); right: var(--thumb-half); height: 14px; transform: translateY(-50%);
+  border-radius: 7px; overflow: hidden; pointer-events: none;
+}
 .seek-loop {
-  --thumb-half: 8px;
-  position: absolute; top: 50%; height: 12px; transform: translateY(-50%); border-radius: 6px; pointer-events: none;
-  left: calc(var(--thumb-half) + (100% - 2 * var(--thumb-half)) * var(--loop-from, 0));
-  width: calc((100% - 2 * var(--thumb-half)) * (var(--loop-to, 0) - var(--loop-from, 0)));
+  position: absolute; top: 0; bottom: 0; border-radius: 7px;
+  left: calc(100% * var(--loop-from, 0)); width: calc(100% * (var(--loop-to, 0) - var(--loop-from, 0)));
   background: rgb(239 127 34 / 0.35);
 }
+/* The stretch's end at a loop marker is square. A loop marker is a thin orange line across the bar, on top of it and its
+   thumb, a little taller than the stretch and centered on it, so the two read as one. The area around the line takes presses, and drags the marker, so a press there doesn't reach the bar; it is
+   wider and taller on a touch screen, and shows the sideways resize cursor. */
+.seek-loop.from-mark { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.seek-loop.to-mark { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.loop-mark {
+  --mark-press: 24px;
+  position: absolute; top: 50%; width: var(--mark-press); height: var(--mark-press); margin: calc(var(--mark-press) / -2) 0 0 calc(var(--mark-press) / -2);
+  z-index: 1; left: calc(var(--thumb-half) + (100% - 2 * var(--thumb-half)) * var(--at, 0));
+  cursor: ew-resize; touch-action: none;
+}
+.loop-mark::before {
+  content: ""; position: absolute; top: 50%; left: 50%; width: 3px; height: 18px; margin: -9px 0 0 -1.5px; border-radius: 1.5px;
+  background: var(--huggins-orange);
+}
+@media (pointer: coarse) { .loop-mark { --mark-press: 36px; } }
 .overlay-seek-row input[type="range"]:disabled { cursor: default; }
 /* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, so that width may
    change between items with different time formats. */
@@ -616,9 +685,9 @@ a.icon-btn { text-decoration: none; }
 
 /* Volume, at the end of the seek row; hidden only while Enhanced audio is off where the browser keeps volume read-only
    (iOS), since a control hides only because of a user setting. */
-.volume { display: inline-flex; align-items: center; }
+.volume { display: inline-flex; align-items: center; position: relative; }
 /* 84 px on every screen, a phone's too. */
-.volume input[type="range"] { flex: none; width: 84px; height: 24px; }
+.volume input[type="range"] { flex: none; width: 84px; }
 .fake-video.is-error { background: #000; animation: none; }
 .fake-video.is-error .subject { display: none; }
 
@@ -1104,10 +1173,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
           </div>
           <div class="overlay-seek-row">
-            <span class="seek-wrap" id="seek-wrap"><span class="seek-loop" id="seek-loop" hidden></span><input type="range" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek"></span>
+            <span class="seek-wrap slider-wrap" id="seek-wrap"><span class="seek-loop-clip"><span class="seek-loop" id="seek-loop" hidden></span></span><span class="slider-track"></span><input type="range" class="player-slider" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek"><span class="loop-mark" id="loop-start" title="Loop start" hidden></span><span class="loop-mark" id="loop-end" title="Loop end" hidden></span><span class="slider-label" hidden></span></span>
             <span id="time-display"></span>
             <button id="mute-btn" class="overlay-btn" aria-label="Mute" title="Mute"><span class="material-symbol-icon">volume_up</span></button>
-            <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="100" aria-label="Volume" title="Volume"></span>
+            <span class="volume slider-wrap" id="volume-wrap"><span class="slider-track"></span><input type="range" class="player-slider" id="volume" min="0" max="100" step="1" value="100" aria-label="Volume"><span class="slider-label" hidden></span></span>
           </div>
         </div>
       </div>
@@ -1406,7 +1475,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-loop-stops"> Loop stops autoplay</label></div>
-              <p class="setting-hint">With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances.</p>
+              <p class="setting-hint">With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances, as does a shorter stretch between loop markers.</p>
             </div>
             <div class="setting">
               <span class="setting-label" id="set-seek-label">Seek step</span>
@@ -2255,6 +2324,10 @@ const playback = {
   // Where Timer mode's repeating stretch starts, and whether it applies, while Loop holds autoplay.
   loopStart: 0,
   stretching: false,
+  // The loop markers' times, each null while it isn't set, and where the video was when its passing of the end marker
+  // was last checked, which a seek sets, so a seek past the end marker isn't taken for reaching it.
+  marks: { start: null, end: null },
+  checkedAt: 0,
   autoplay: store.get("autoplay", false),
   loop: store.get("loop", false),
   muted: store.get("muted", false),
@@ -2263,6 +2336,8 @@ const playback = {
 const history = [];
 let historyIndex = -1;
 let pickInFlight = false;
+// The loop marker being dragged, "start" or "end", with its pointer, or null.
+let markerDrag = null;
 // For build/check.mjs: "?instant" in the address skips the mockup's waits.
 const instant = new URLSearchParams(location.search).has("instant");
 
@@ -2341,7 +2416,14 @@ const cannotPlay = (item) => item.missing || item.removed || !browserCanShow(ite
 // server can't read the file, which the player stops on.
 const SKIP_LIMIT = 10;
 const skips = (item) => !state.mediaStalled && cannotPlay(item);
-const shortVideo = (item) => item.duration < state.advanceAfter;
+// The loop markers, set with Loop on: the start, from the video's start while unset, to the end, to the video's end while
+// unset. While either is set, Loop treats the stretch between them as the whole video: it repeats, and with Loop stops
+// autoplay off, one shorter than Advance after repeats until it advances, and a longer one plays once to its end marker.
+const hasMarks = () => playback.marks.start !== null || playback.marks.end !== null;
+const markFrom = () => playback.marks.start ?? 0;
+const markTo = (item) => playback.marks.end ?? item.duration;
+const playLength = (item) => (hasMarks() ? markTo(item) - markFrom() : item.duration);
+const shortVideo = (item) => playLength(item) < state.advanceAfter;
 // A video's timer runs while autoplay will advance it: in Timer mode, and in either mode for a video shorter than the
 // timer that Loop repeats while autoplay goes on. Anything that stops it applying holds it, keeping its time, and so
 // does pausing the video. Timer mode advances the video once it has run, even mid-way; Normal mode lets a repeat in
@@ -2353,9 +2435,10 @@ const videoTimerHasRun = () => playback.timer >= state.advanceAfter;
 const videoRepeats = (item) => playback.loop && (!autoplayGoesOn() || shortVideo(item));
 // In Timer mode, while Loop holds autoplay, a video repeats a stretch of Advance after seconds, or up to its end when
 // that comes first. The stretch starts at the start of the item, where the video is when the stretch starts to apply,
-// and where a seek lands, and shows faintly on the scrub bar.
+// and where a seek lands, and shows faintly on the scrub bar. Loop markers take its place while either is set.
 const repeatsStretch = () =>
-  !!playback.item && !isPhoto(playback.item) && playback.autoplay && playback.loop && state.loopStopsAutoplay && state.autoplayMode === "timer";
+  !!playback.item && !isPhoto(playback.item) && playback.autoplay && playback.loop && state.loopStopsAutoplay && state.autoplayMode === "timer" &&
+  !hasMarks();
 const stretchEnd = (item) => Math.min(playback.loopStart + state.advanceAfter, item.duration);
 // The stretch starts where the video is, except that a video at its end starts it, and goes back, Advance after seconds
 // before the end, or at 0 for a shorter video.
@@ -2384,10 +2467,11 @@ function catchUp() {
   }
   clockAt = now;
 }
-// Moves the time to `seconds`, as a new item or a seek does.
+// Moves the time to `seconds`, as a new item, a seek, or a repeat does.
 function setTime(seconds) {
   catchUp();
   playback.time = seconds;
+  playback.checkedAt = seconds;
 }
 
 // Brings the time up to now and acts on the end of the item or of its timer: every 250 ms, and every animation frame
@@ -2413,16 +2497,21 @@ function advance() {
     if (playback.time >= stretchEnd(item)) setTime(playback.loopStart);
   } else if (state.autoplayMode === "timer" && videoTimerRuns() && videoTimerHasRun()) {
     return void goNext();
-  } else if (playback.time >= item.duration) {
-    if (videoRepeats(item) && !(autoplayGoesOn() && videoTimerHasRun())) setTime(0);
+  } else if (reachedEnd(item)) {
+    if (videoRepeats(item) && !(autoplayGoesOn() && videoTimerHasRun())) setTime(markFrom());
     else if (playback.autoplay) return void goNext();
     else {
       setTime(item.duration);
       setPlaying(false, "end");
     }
   }
+  playback.checkedAt = playback.time;
   renderTime();
 }
+// The video's end, or with loop markers set, its end marker, reached by playing up to it rather than by a seek past it.
+// A seek past the end marker plays on to the video's end, which then counts as the stretch's end too.
+const reachedEnd = (item) =>
+  playback.time >= item.duration || (hasMarks() && playback.checkedAt < markTo(item) && playback.time >= markTo(item));
 setInterval(advance, 250);
 let barFrame = 0;
 function moveBarWhilePlaying() {
@@ -2438,9 +2527,86 @@ function moveBarWhilePlaying() {
   }
 }
 
+// ---- The player's sliders ----
+// A slider's value with the fill its track draws up to it.
+function setSlider(input, value) {
+  input.value = String(value);
+  const min = Number(input.min);
+  const max = Number(input.max);
+  input.parentElement.style.setProperty("--fill", String(max > min ? (Number(input.value) - min) / (max - min) : 0));
+}
+// Where a point across a slider falls, from 0 to 1: its thumb's center runs from half the thumb's box in from each end.
+function sliderFraction(input, clientX) {
+  const box = input.getBoundingClientRect();
+  const half = parseFloat(getComputedStyle(input).getPropertyValue("--thumb-half")) || 8;
+  const span = box.width - 2 * half;
+  return span > 0 ? Math.max(0, Math.min(1, (clientX - box.left - half) / span)) : 0;
+}
+const sliderValueAt = (input, clientX) => Number(input.min) + sliderFraction(input, clientX) * (Number(input.max) - Number(input.min));
+// The label above a slider: the value under a mouse or pen while it is over the slider or drags it, and under a finger
+// while it is on the slider, which also gives the slider its pressed look until it lifts. The scrub bar's light gray
+// fill follows a mouse or pen only. A loop marker's area is part of the scrub bar's, so the label follows a marker drag.
+// A slider that becomes disabled under the pointer hides it, and a new length shows the value under the same point anew;
+// the scrub bar's also hides as each new item starts. It returns `follow`, for the page to call as the slider changes.
+function initSliderLabel(input, text, previews) {
+  const wrap = input.parentElement;
+  const label = wrap.querySelector(".slider-label");
+  let mouseDrag = false;
+  let touching = false;
+  let shownAt = { clientX: 0, byTouch: false };
+  function show(clientX, byTouch) {
+    if (input.disabled) return void hide();
+    shownAt = { clientX, byTouch };
+    label.textContent = text(sliderValueAt(input, clientX));
+    label.hidden = false;
+    label.classList.toggle("is-touch", byTouch);
+    const box = wrap.getBoundingClientRect();
+    const half = label.offsetWidth / 2;
+    label.style.left = `${Math.max(half, Math.min(box.width - half, clientX - box.left))}px`;
+    if (previews && !byTouch) wrap.style.setProperty("--preview", String(sliderFraction(input, clientX)));
+  }
+  function hide() {
+    label.hidden = true;
+    wrap.style.removeProperty("--preview");
+  }
+  wrap.addEventListener("pointermove", (event) => event.pointerType !== "touch" && show(event.clientX, false));
+  wrap.addEventListener("pointerleave", (event) => event.pointerType !== "touch" && !mouseDrag && hide());
+  input.addEventListener("pointerdown", (event) => (mouseDrag = event.pointerType !== "touch"));
+  document.addEventListener("pointermove", (event) => mouseDrag && show(event.clientX, false));
+  document.addEventListener("pointerup", () => {
+    if (!mouseDrag) return;
+    mouseDrag = false;
+    if (!wrap.matches(":hover")) hide();
+  });
+  wrap.addEventListener("touchstart", (event) => {
+    if (input.disabled) return;
+    touching = true;
+    wrap.classList.add("is-touched");
+    show(event.touches[0].clientX, true);
+  }, { passive: true });
+  wrap.addEventListener("touchmove", (event) => touching && show(event.touches[0].clientX, true), { passive: true });
+  const lift = () => {
+    if (!touching) return;
+    touching = false;
+    wrap.classList.remove("is-touched");
+    hide();
+  };
+  wrap.addEventListener("touchend", lift);
+  wrap.addEventListener("touchcancel", lift);
+  return {
+    hide,
+    follow: () => !label.hidden && show(shownAt.clientX, shownAt.byTouch)
+  };
+}
+// The scrub bar's label shows the time, or the photo timer's, at that point; the volume's, the volume there, as the
+// volume indicator over the player, which the slider doesn't show, reads.
+const seekLabel = initSliderLabel($("seek"), (seconds) => fmt(seconds), true);
+initSliderLabel($("volume"), (volume) => `${Math.round(volume)}%`, false);
+
 function renderTime() {
   const item = playback.item;
   const seek = $("seek");
+  const [wasDisabled, wasMax] = [seek.disabled, seek.max];
   // First, since a stretch that starts at the video's end moves the video.
   followStretch();
   if (!item || isPhoto(item)) {
@@ -2448,22 +2614,32 @@ function renderTime() {
     // shows 0:00 / 0:00, as it does before anything plays, so the controls keep their look.
     seek.disabled = !photoBarFills();
     seek.max = String(item ? photoSeconds() : 1);
-    seek.value = String(photoBarFills() ? playback.time : 0);
+    setSlider(seek, photoBarFills() ? playback.time : 0);
     seek.setAttribute("aria-label", item ? "Photo timer" : "Seek");
     $("time-display").textContent = photoBarFills() ? fmtPosition(playback.time, photoSeconds()) : "0:00 / 0:00";
   } else {
     seek.disabled = !!playback.failed;
     seek.max = String(item.duration);
-    seek.value = String(playback.time);
+    setSlider(seek, playback.time);
     seek.setAttribute("aria-label", "Seek");
     $("time-display").textContent = fmtPosition(playback.time, item.duration);
   }
+  if (seek.disabled !== wasDisabled || seek.max !== wasMax) seekLabel.follow();
   const stretch = $("seek-loop");
-  stretch.hidden = !repeatsStretch();
+  const marked = hasMarks() && !!item && !isPhoto(item);
+  stretch.hidden = !marked && !repeatsStretch();
   if (!stretch.hidden) {
-    stretch.style.setProperty("--loop-from", String(playback.loopStart / item.duration));
-    stretch.style.setProperty("--loop-to", String(stretchEnd(item) / item.duration));
+    const [from, to] = marked ? [markFrom(), markTo(item)] : [playback.loopStart, stretchEnd(item)];
+    stretch.style.setProperty("--loop-from", String(from / item.duration));
+    stretch.style.setProperty("--loop-to", String(to / item.duration));
   }
+  stretch.classList.toggle("from-mark", marked && playback.marks.start !== null);
+  stretch.classList.toggle("to-mark", marked && playback.marks.end !== null);
+  [["loop-start", "start"], ["loop-end", "end"]].forEach(([id, which]) => {
+    const at = playback.marks[which];
+    $(id).hidden = !marked || at === null;
+    if (marked && at !== null) $(id).style.setProperty("--at", String(at / item.duration));
+  });
 }
 
 function chipText() {
@@ -2503,7 +2679,7 @@ function renderPlayback() {
   // and Mute always shows whether sound is muted. While it is, the slider sits at 0.
   $("mute-btn").classList.toggle("active", playback.muted);
   setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
-  $("volume").value = String(shownVolume());
+  setSlider($("volume"), shownVolume());
   // The file name opens the Stats tab; its tooltip shows the full name and then "Show stats".
   $("np-name").parentElement.hidden = !item;
   $("np-name").textContent = item ? item.name : "";
@@ -2561,14 +2737,18 @@ function start(item) {
   ratings.flush();
   ratingPopover.close();
   // A menu on the item before closes too, so none acts on an item that has gone.
-  if (contextMenu.openOn()?.matches("#media, #np-name, .stats-file-name, .stats-path")) contextMenu.close();
+  if (contextMenu.openOn()?.matches("#media, #seek-wrap, #np-name, .stats-file-name, .stats-path")) contextMenu.close();
   playback.item = item;
   // The Stats tab shows when the item was last played before this play.
   item.playedBefore = item.lastPlayedAt;
   setTime(0);
   playback.timer = 0;
-  // A new item's repeating stretch starts at its start, and the seek indicator's total starts over.
+  // A new item's repeating stretch starts at its start, and the seek indicator's total starts over. It starts with no
+  // loop markers, even an item played again, as it starts at its start.
   playback.loopStart = 0;
+  playback.marks = { start: null, end: null };
+  markerDrag = null;
+  seekLabel.hide();
   playback.stretching = repeatsStretch();
   hideSeekIndicator();
   playback.failed = mediaFailure(item);
@@ -3030,7 +3210,7 @@ media.addEventListener("click", () => {
 const seekableVideo = () => !!playback.item && !isPhoto(playback.item) && !playback.failed;
 function seekByStep(direction) {
   catchUp();
-  playback.time = Math.max(0, Math.min(playback.item.duration, playback.time + direction * state.seekStep));
+  setTime(Math.max(0, Math.min(playback.item.duration, playback.time + direction * state.seekStep)));
   seekStartsStretch();
   renderTime();
   showSeekIndicator(direction * state.seekStep);
@@ -3064,11 +3244,11 @@ function hideSeekIndicator() {
 // Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, a press on the
 // controls, or a key shows them and restarts the countdown. A tap acts through its click, and a touch moving over the
 // player isn't activity, so the controls come back only once the click has landed on the player, and a tap where a
-// hidden button sits only shows them. They stay while a mouse or pen pointer is over them, while the scrub bar or
-// volume is dragged, and, with Keep visible while paused, while playback waits for the user, as Play shows: not on a
-// photo whose timer the bar doesn't show, as once it ends and autoplay moves on. A touch doesn't count as over them,
-// and focus on a control doesn't hold them: after a tap on Play they still hide. On click/tap: a click or tap on the
-// player shows or hides them, as today. Never: they stay.
+// hidden button sits only shows them. They stay while a mouse or pen pointer is over them, while the scrub bar, a loop
+// marker, or the volume is dragged, while the player's or the scrub bar's menu is open, and, with Keep visible while
+// paused, while playback waits for the user, as Play shows: not on a photo whose timer the bar doesn't show, as once it
+// ends and autoplay moves on. A touch doesn't count as over them, and focus on a control doesn't hold them: after a tap
+// on Play they still hide. On click/tap: a click or tap on the player shows or hides them, as today. Never: they stay.
 const overlayControls = $("overlay-controls");
 const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
 let hideTimer = 0;
@@ -3083,7 +3263,7 @@ function waitsForUser() {
 }
 function controlsHeld() {
   return pointerOnControls || draggingControl || (state.keepWhilePaused && waitsForUser()) || notes.listShown() || ratingPopover.isOpen() ||
-    contextMenu.openOn() === media;
+    contextMenu.openOn() === media || contextMenu.openOn() === $("seek-wrap");
 }
 function restartHideCountdown() {
   clearTimeout(hideTimer);
@@ -3438,13 +3618,90 @@ function followLoopChange() {
   }
 }
 // Loop, Autoplay, and Mute keep their state across a page refresh (WebUI Settings Panel).
-// Each brings the time up to now first, since it can start or stop a photo's timer.
-$("loop-btn").addEventListener("click", () => {
+// Each brings the time up to now first, since it can start or stop a photo's timer. Turning Loop off clears the loop
+// markers, so the video plays on past them.
+function setLoop(on) {
   catchUp();
-  playback.loop = !playback.loop;
+  playback.loop = on;
   store.set("loop", playback.loop);
+  if (!on) playback.marks = { start: null, end: null };
   followLoopChange();
   renderPlayback();
+}
+$("loop-btn").addEventListener("click", () => setLoop(!playback.loop));
+
+// ---- Loop markers ----
+// A right-click on the scrub bar, or a long press on a touch screen, opens its menu on a video that can play: Set loop
+// start and Set loop end at the time under the pointer, and Clear loop markers, disabled while none is set. I and O set
+// a marker where the video is, and X clears them. Setting one turns Loop on. The markers stay in order, at least a
+// second apart, so one set too close to the other, or past it, clears the other. A marker's line, on top of the bar,
+// drags it, with a mouse or a finger, up to a second from the other marker. A drag moves only the marker, and the video
+// and the bar's thumb stay where they are while it lasts, as playback follows the markers wherever they are. Whenever the
+// markers change, by the menu, I or O, or letting go of a drag, a video now outside the stretch, before it or after it,
+// goes to the start marker, and one inside it stays where it is. A seek outside the stretch still goes where it lands.
+// Nothing keeps them: turning Loop off clears them, and another item, or the same one played again, starts without them.
+const MARK_GAP = 1;
+// A marker also stays a second from the video's other end: a start before its last second, an end after its first.
+function setMark(which, seconds) {
+  const item = playback.item;
+  const at = which === "start" ? Math.max(0, Math.min(item.duration - MARK_GAP, seconds)) : Math.max(MARK_GAP, Math.min(item.duration, seconds));
+  const other = which === "start" ? "end" : "start";
+  const otherAt = playback.marks[other];
+  if (otherAt !== null && (which === "start" ? otherAt - at : at - otherAt) < MARK_GAP) playback.marks[other] = null;
+  playback.marks[which] = at;
+  if (!playback.loop) setLoop(true);
+  keepInStretch();
+  renderPlayback();
+}
+// After the markers change, a video outside the stretch, before it or at or after its end, goes to the start marker.
+function keepInStretch() {
+  if (playback.time < markFrom() || playback.time >= markTo(playback.item)) setTime(markFrom());
+}
+// Clearing them while Timer mode's stretch applies starts that stretch where the video is.
+function clearMarks() {
+  playback.marks = { start: null, end: null };
+  renderPlayback();
+}
+// The time under the pointer on the scrub bar, where the thumb's center would be.
+const seekTimeAt = (clientX) => sliderValueAt($("seek"), clientX);
+contextMenu.add("#seek-wrap", (_el, x) => {
+  if (!seekableVideo()) return null;
+  const at = seekTimeAt(x);
+  return [
+    [
+      menuItem("start", `Set loop start at ${fmt(at)}`, () => setMark("start", at)),
+      menuItem("keyboard_tab", `Set loop end at ${fmt(at)}`, () => setMark("end", at))
+    ],
+    [menuItem("close", "Clear loop markers", clearMarks, { reason: hasMarks() ? null : "No loop markers to clear" })]
+  ];
+}, { mark: false, onClose: (_el, byUser) => (byUser ? controlsActivity() : restartHideCountdown()) });
+function dragMarkerTo(seconds) {
+  const item = playback.item;
+  const which = markerDrag.which;
+  const at = which === "start" ? Math.min(seconds, markTo(item) - MARK_GAP) : Math.max(seconds, markFrom() + MARK_GAP);
+  playback.marks[which] = Math.max(0, Math.min(item.duration, at));
+  renderTime();
+}
+function endMarkerDrag(event) {
+  if (markerDrag?.id !== event.pointerId) return;
+  markerDrag = null;
+  keepInStretch();
+  renderTime();
+}
+[["loop-start", "start"], ["loop-end", "end"]].forEach(([id, which]) => {
+  const grip = $(id);
+  grip.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !seekableVideo()) return;
+    event.preventDefault();
+    markerDrag = { which, id: event.pointerId };
+    draggingControl = true;
+    grip.setPointerCapture?.(event.pointerId);
+  });
+  grip.addEventListener("pointermove", (event) => {
+    if (markerDrag?.id === event.pointerId) dragMarkerTo(seekTimeAt(event.clientX));
+  });
+  grip.addEventListener("pointerup", endMarkerDrag);
+  grip.addEventListener("pointercancel", endMarkerDrag);
 });
 $("autoplay-btn").addEventListener("click", () => {
   catchUp();
@@ -8053,6 +8310,8 @@ const SHORTCUTS = [
   ["A", "Autoplay on or off"],
   ["M", "Mute"],
   [", / .", "One frame back or forward, while a video is paused"],
+  ["I / O", "Set the loop's start or end marker where the video is, turning Loop on"],
+  ["X", "Clear the loop markers"],
   ["[ / ]", "Volume down or up by the volume step"],
   ["1 – 6", "Open Library, Tags, Stats, Filter, Randomization, or Settings; the open tab's key closes the panel"],
   ["T", "Tags"],
@@ -8179,11 +8438,14 @@ document.addEventListener("keydown", (event) => {
     const target = playback.time + (key === "." ? 1 : -1) / 30;
     // There is no frame after the last, and a step to the end would end the video.
     if (target >= item.duration) return;
-    playback.time = Math.max(0, target);
+    setTime(Math.max(0, target));
     playback.frameStep = key === "." ? "forward" : "back";
     seekStartsStretch();
     return renderPlayback();
   }
+  // I and O set the loop's start and end markers where the video is, and X clears them.
+  if ((key === "i" || key === "o") && video) return handled() || (catchUp(), setMark(key === "i" ? "start" : "end", playback.time));
+  if (key === "x" && video) return handled() || clearMarks();
   if ((key === "[" || key === "]") && volumeAdjustable()) return handled() || stepVolumeWithIndicator(key === "]" ? 1 : -1);
   if (key === "p") return handled() || (state.open ? closePanel() : $("panel-btn").click());
   if (TAB_KEYS[key]) {
@@ -8196,7 +8458,7 @@ document.addEventListener("keydown", (event) => {
 blurDropdownsAfterPick();
 
 // ---- Volume and pairing ----
-$("volume").value = String(shownVolume());
+setSlider($("volume"), shownVolume());
 $("volume").addEventListener("pointerdown", beginVolumeChange);
 $("volume").addEventListener("input", (event) => moveVolume(Number(event.target.value)));
 // A drag ends where it's let go: on the slider's change, or the pointer's release wherever it is.

@@ -25,6 +25,17 @@ import type { components } from "../types/openapi.generated";
 import type { BulkItemStateChangedPayload } from "../types/serverContracts";
 import type { AudioStage } from "./audioStage";
 import { createFrameClock, type FramedVideo } from "./frameStep";
+import {
+  dragLoopMark,
+  hasLoopMarks,
+  loopStretch,
+  NO_LOOP_MARKS,
+  positionAfterMarksChange,
+  setLoopMark,
+  type LoopMark,
+  type LoopMarks,
+  type LoopStretch
+} from "./loopMarks";
 import { mediaFailureMessage, probeMedia, SKIP_LIMIT, skipText, type MediaFailure } from "./mediaFailure";
 import { basenameFromPath, formatPlaybackPosition, playingFileName } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
@@ -61,10 +72,18 @@ export interface SeekSliderElement {
   max: string;
 }
 
-/** The stretch behind the scrub bar's track, which the player shows and places through its CSS variables. */
-export interface SeekStretchElement {
-  hidden: boolean;
+/** An element the player styles through its CSS variables. */
+export interface StyledElement {
   readonly style: { setProperty(name: string, value: string): void };
+}
+
+/**
+ * The stretch behind the scrub bar's track, which the player shows and places through its CSS variables, and marks
+ * `from-mark` and `to-mark` for a loop marker at its start and its end.
+ */
+export interface SeekStretchElement extends StyledElement {
+  hidden: boolean;
+  readonly classList: { toggle(name: string, force: boolean): unknown };
 }
 
 /**
@@ -77,7 +96,12 @@ export interface PlayerElements {
   emptyState: ShownElement;
   /** Not rendered from state, so a re-render never moves it while it is dragged. */
   seekSlider: SeekSliderElement;
-  /** Timer mode's repeating stretch, shown faintly behind the scrub bar while Loop holds autoplay. */
+  /** The scrub bar's wrapper, whose `--fill`, from 0 to 1, is how far its track draws orange, up to the value. */
+  seekWrap: StyledElement;
+  /**
+   * The stretch that repeats, shown faintly behind the scrub bar: the one between the loop markers while either is set,
+   * or Timer mode's while Loop holds autoplay.
+   */
   seekStretch: SeekStretchElement;
 }
 
@@ -132,6 +156,12 @@ export const RECOVERY_RETRY_MS = 5_000;
  * repeats a stretch of Advance after seconds; off, autoplay goes on, and a video shorter than Advance after repeats
  * until it has run. A repeat only restarts the photo's timer or the video's position.
  *
+ * With Loop on, a video's loop markers mark a stretch of it, from the start marker, or the video's start while it isn't
+ * set, to the end marker, or the video's end. While either is set, Loop treats the stretch as the whole video: it takes
+ * the place of Timer mode's stretch, and a video that plays up to the end marker, or to the video's end, goes back to
+ * the start marker, or autoplay goes on, as at the video's end. Nothing keeps them: another item, or the same one played
+ * again, starts without them, and turning Loop off clears them.
+ *
  * A history step gets a fresh media URL from the server before it plays, so a token a server restart dropped never
  * plays. When a video that had played fails, the player first gets it a fresh URL and plays it on from where it was,
  * waiting for the connection when the server can't be reached. Otherwise, or when that fails too, it asks the server
@@ -166,6 +196,11 @@ export interface Player {
   readonly mediaFailed: ReadonlySignal<boolean>;
   /** The seek indicator, which J, L, and a double-tap show through `seekBy`. */
   readonly seekIndicator: Pick<SeekIndicator, "back" | "forward">;
+  /**
+   * The loop markers' places, as parts of the video's length, each null while it isn't set, and both null while no video
+   * whose length is known shows.
+   */
+  readonly loopMarks: ReadonlySignal<LoopMarks>;
 
   attach(elements: PlayerElements): void;
   /** Stops the photo timer and lets go of the elements. */
@@ -227,6 +262,27 @@ export interface Player {
    * happens while it plays, on a photo, before its length is known, or forward from its last frame.
    */
   stepFrame(direction: -1 | 1): void;
+  /**
+   * Sets a loop marker at `seconds`, by the markers' rules (`setLoopMark`), on a video whose length is known, and turns
+   * Loop on, as its button does. A video then outside the stretch, before it or at or after its end, goes to the start
+   * marker, and one inside it stays where it is. Nothing happens on a photo, before the video's length is known, or on a
+   * video that failed.
+   */
+  setLoopMark(which: LoopMark, seconds: number): void;
+  /** I and O: sets a loop marker where the video is, as `setLoopMark` does. */
+  setLoopMarkHere(which: LoopMark): void;
+  /** Clears the loop markers. While Timer mode's stretch applies, it then starts where the video is. */
+  clearLoopMarks(): void;
+  /**
+   * Moves a set loop marker to `seconds` as a drag does (`dragLoopMark`), leaving the video where it is; playback follows
+   * the markers meanwhile.
+   */
+  dragLoopMark(which: LoopMark, seconds: number): void;
+  /**
+   * A marker's drag ended: once it moved a marker, a video outside the stretch goes to the start marker, as after
+   * `setLoopMark`; a press and release that moved nothing changes nothing.
+   */
+  endLoopMarkDrag(): void;
   /**
    * Auto-Pause: pauses the video, or holds a photo's timer, keeping the time it has left, and holds playback until
    * `autoResume`, so an item that starts meanwhile, as a random pick or a history step answers or a file is skipped,
@@ -339,6 +395,7 @@ export function createPlayer(options: PlayerOptions): Player {
   const blacklisted = signal(false);
   const timeText = signal(NO_TIME);
   const mediaFailed = signal(false);
+  const loopMarkPlaces = signal<LoopMarks>(NO_LOOP_MARKS);
   const seekIndicator = createSeekIndicator();
   const photoTimer = createPhotoTimer({ onEnd: photoTimerEnded });
   const frameClock = createFrameClock();
@@ -393,8 +450,20 @@ export function createPlayer(options: PlayerOptions): Player {
   /** Where Timer mode's repeating stretch starts, in seconds, and whether it applies now. */
   let stretchStart = 0;
   let stretching = false;
-  /** Timer mode's stretch went back to its start from the video's end, so the `playing` that follows is a repeat's. */
-  let stretchRestarting = false;
+  /**
+   * A repeat went back from the video's end, to the start of Timer mode's stretch or to the start marker, so the
+   * `playing` that follows is a repeat's.
+   */
+  let restartingFromEnd = false;
+  /** The loop markers' times, in seconds, which only the item playing now has. */
+  let marks: LoopMarks = NO_LOOP_MARKS;
+  /** The markers as a drag found them, until it ends, so a press and release that moved nothing changes nothing. */
+  let marksBeforeDrag: LoopMarks | null = null;
+  /**
+   * Where the video was when the player last checked it against the end marker, which every seek the player makes sets,
+   * so only playing up to the end marker reaches it, and a seek past it plays on to the video's end.
+   */
+  let checkedAt = 0;
   /** The video's source, which a new element takes over. */
   let videoSource = "";
   /** Where the video was when a new element took over, which it seeks to once its metadata has loaded. */
@@ -455,14 +524,19 @@ export function createPlayer(options: PlayerOptions): Player {
    * video, and the video plays from there. Whether the browser repeats the video itself follows.
    */
   function seekVideoTo(position: number): void {
-    const { video } = elements!;
     if (!stretching) {
-      video.currentTime = position;
+      moveVideo(position);
       return;
     }
     stretchStart = stretchStartAt(position);
-    video.currentTime = stretchStart;
+    moveVideo(stretchStart);
     syncVideo();
+  }
+
+  /** Every move the player makes of the video's position, a seek or a repeat, which its check of the end marker starts from. */
+  function moveVideo(position: number): void {
+    elements!.video.currentTime = position;
+    checkedAt = position;
   }
 
   /** Autoplay goes on to the next item unless Loop holds it there, which it does while Loop stops autoplay is on. */
@@ -484,23 +558,47 @@ export function createPlayer(options: PlayerOptions): Player {
     return photoShown() && autoplayGoesOn() && photoTimer.active;
   }
 
-  /** The video's length is known and shorter than Advance after. */
-  function videoShorterThanTimer(): boolean {
-    const duration = elements!.video.duration;
-    return Number.isFinite(duration) && duration > 0 && duration < store.advanceAfterSeconds.peek();
+  /** The stretch the loop markers make while either is set and the video's length is known, or null. */
+  function markedStretch(): LoopStretch | null {
+    const video = seekableVideo();
+    return video ? loopStretch(marks, video.duration) : null;
   }
 
   /**
-   * The video's timer advances it: in Timer mode, and in either mode for a video shorter than Advance after that Loop
-   * repeats while autoplay goes on.
+   * The length Loop treats as the whole video's, once known: the stretch between the loop markers while either is set,
+   * or the video's.
+   */
+  function playLength(): number {
+    const stretch = markedStretch();
+    return stretch ? stretch.to - stretch.from : elements!.video.duration;
+  }
+
+  /** The video's length, or the stretch between the loop markers while either is set, is known and shorter than Advance after. */
+  function videoShorterThanTimer(): boolean {
+    const length = playLength();
+    return Number.isFinite(length) && length > 0 && length < store.advanceAfterSeconds.peek();
+  }
+
+  /**
+   * The video's timer advances it: in Timer mode, and in either mode for a video, or a stretch between loop markers,
+   * shorter than Advance after that Loop repeats while autoplay goes on.
    */
   function videoTimerApplies(): boolean {
     return autoplayGoesOn() && (store.autoplayMode.peek() === "timer" || (store.loop.peek() && videoShorterThanTimer()));
   }
 
-  /** In Timer mode, while Loop holds autoplay, a video repeats a stretch of Advance after seconds. */
+  /**
+   * In Timer mode, while Loop holds autoplay, a video repeats a stretch of Advance after seconds, which steps aside while
+   * the loop markers mark one.
+   */
   function stretchApplies(): boolean {
-    return store.autoplay.peek() && store.loop.peek() && store.loopStopsAutoplay.peek() && store.autoplayMode.peek() === "timer";
+    return (
+      store.autoplay.peek() &&
+      store.loop.peek() &&
+      store.loopStopsAutoplay.peek() &&
+      store.autoplayMode.peek() === "timer" &&
+      !hasLoopMarks(marks)
+    );
   }
 
   /** The stretch ends Advance after seconds from its start, or at the video's end when that comes first. */
@@ -526,14 +624,23 @@ export function createPlayer(options: PlayerOptions): Player {
   }
 
   /**
-   * The browser repeats the video itself, without a pause or its end, while Loop repeats it whole: with Autoplay off,
-   * while Loop holds autoplay in Normal mode, for a video shorter than Advance after until, in Normal mode, its timer
-   * has run, and while Timer mode's stretch is the whole video. Any other stretch goes back to its start itself.
+   * Loop repeats the video, or the stretch between the loop markers, rather than letting autoplay go on at its end: with
+   * Autoplay off, while Loop holds autoplay, and while it is shorter than Advance after until, in Normal mode, its timer
+   * has run.
+   */
+  function videoRepeats(): boolean {
+    return store.loop.peek() && (!autoplayGoesOn() || (videoShorterThanTimer() && !videoTimerDone));
+  }
+
+  /**
+   * The browser repeats the video itself, without a pause or its end, while Loop repeats it whole and Timer mode's stretch
+   * doesn't apply, or while that stretch is the whole video. Any other stretch, Timer mode's or the loop markers', the
+   * player takes back to its start itself.
    */
   function videoLoops(): boolean {
-    if (!store.loop.peek()) return false;
+    if (!store.loop.peek() || hasLoopMarks(marks)) return false;
     if (stretchApplies()) return stretchIsWholeVideo();
-    return !autoplayGoesOn() || (videoShorterThanTimer() && !videoTimerDone);
+    return videoRepeats();
   }
 
   /**
@@ -548,7 +655,7 @@ export function createPlayer(options: PlayerOptions): Player {
     if (applies && !stretching) {
       stretchStart = stretchStartAt(video.currentTime);
       if (stretchStart !== video.currentTime) {
-        video.currentTime = stretchStart;
+        moveVideo(stretchStart);
       }
     }
     stretching = applies;
@@ -561,16 +668,36 @@ export function createPlayer(options: PlayerOptions): Player {
     showStretch();
   }
 
-  /** Shows Timer mode's stretch faintly behind the scrub bar, once the video's length places it, and hides it otherwise. */
+  /**
+   * Shows the stretch that repeats faintly behind the scrub bar, once the video's length places it, and hides it
+   * otherwise: the one between the loop markers, marked at each end a marker sets, or Timer mode's. The markers' places
+   * follow.
+   */
   function showStretch(): void {
     if (!elements) return;
-    const { seekStretch, video } = elements;
-    const duration = video.duration;
-    const shown = stretching && videoShown() && Number.isFinite(duration) && duration > 0;
+    const { seekStretch } = elements;
+    const video = seekableVideo();
+    const marked = video ? loopStretch(marks, video.duration) : null;
+    const shown = !!video && (marked !== null || stretching);
     seekStretch.hidden = !shown;
-    if (shown) {
-      seekStretch.style.setProperty("--loop-from", String(stretchStart / duration));
-      seekStretch.style.setProperty("--loop-to", String(stretchEnd() / duration));
+    if (video && shown) {
+      const [from, to] = marked ? [marked.from, marked.to] : [stretchStart, stretchEnd()];
+      seekStretch.style.setProperty("--loop-from", String(from / video.duration));
+      seekStretch.style.setProperty("--loop-to", String(to / video.duration));
+    }
+    seekStretch.classList.toggle("from-mark", marked !== null && marks.start !== null);
+    seekStretch.classList.toggle("to-mark", marked !== null && marks.end !== null);
+    showLoopMarks(video?.duration ?? null);
+  }
+
+  /** The loop markers' places, as parts of the video's `duration`, or none while it isn't known. */
+  function showLoopMarks(duration: number | null): void {
+    const place = (seconds: number | null) => (duration === null || seconds === null ? null : seconds / duration);
+    const start = place(marks.start);
+    const end = place(marks.end);
+    const shown = loopMarkPlaces.peek();
+    if (shown.start !== start || shown.end !== end) {
+      loopMarkPlaces.value = { start, end };
     }
   }
 
@@ -583,8 +710,80 @@ export function createPlayer(options: PlayerOptions): Player {
     const { video } = elements;
     const end = stretchEnd();
     if (end < video.duration && video.currentTime >= end) {
-      video.currentTime = stretchStart;
+      moveVideo(stretchStart);
     }
+  }
+
+  /**
+   * A video that plays up to the end marker, checked on each time update and animation frame from where it was last
+   * checked, goes back to the start marker while Loop repeats it, and otherwise autoplay goes on. A seek past the end
+   * marker doesn't reach it, so the video plays on to its end, and an end marker at the video's end is reached when the
+   * video ends.
+   */
+  function repeatMarkedStretch(): void {
+    const stretch = markedStretch();
+    if (!stretch) return;
+    const position = elements!.video.currentTime;
+    const reached = stretch.to < elements!.video.duration && checkedAt < stretch.to && position >= stretch.to;
+    checkedAt = position;
+    if (!reached) return;
+    if (videoRepeats()) {
+      moveVideo(stretch.from);
+    } else if (autoplayGoesOn()) {
+      advance();
+    }
+  }
+
+  /**
+   * Goes back from the video's end to `position` and plays on, a repeat: nothing loads, shows Loading…, relays, or is
+   * recorded again.
+   */
+  function restartFromEnd(position: number): void {
+    const { video } = elements!;
+    restartingFromEnd = true;
+    moveVideo(position);
+    void audio.play(video).catch(() => {
+      restartingFromEnd = false;
+    });
+  }
+
+  /**
+   * The loop markers changed by a set or the end of a drag: a video now outside the stretch goes to the start marker, and
+   * playback follows them.
+   */
+  function followMarksChange(): void {
+    const stretch = markedStretch();
+    const position = stretch ? positionAfterMarksChange(elements!.video.currentTime, stretch) : null;
+    if (position !== null) {
+      moveVideo(position);
+      showTime();
+    }
+    syncVideo();
+  }
+
+  /**
+   * Sets a loop marker at `seconds`, turning Loop on as its button does, on a video whose length is known. The markers
+   * change before Loop turns on, so Timer mode's stretch never starts.
+   */
+  function markAt(which: LoopMark, seconds: number): void {
+    const video = seekableVideo();
+    if (!video || mediaFailed.peek()) return;
+    marks = setLoopMark(marks, which, seconds, video.duration);
+    if (!store.loop.peek()) {
+      setLoop(true);
+    }
+    followMarksChange();
+  }
+
+  /** Turns Loop on or off, as its button does; off clears the loop markers, so the video plays on past them. */
+  function setLoop(on: boolean): void {
+    store.setLoop(on);
+    if (!on) {
+      marks = NO_LOOP_MARKS;
+    }
+    followLoopChange();
+    syncVideo();
+    showToggles();
   }
 
   /** Auto-Pause has nothing of what shows to resume. */
@@ -621,7 +820,7 @@ export function createPlayer(options: PlayerOptions): Player {
     // The browser pauses a video at its end just before its `ended`, which repeats it or moves on, so that pause
     // doesn't wait for the user. Neither does the time between items, once an item starts and before its media shows,
     // as while a history step waits for its fresh media URL.
-    const movesOn = videoShown() && elements!.video.ended && (stretching || autoplayGoesOn());
+    const movesOn = videoShown() && elements!.video.ended && (stretching || hasLoopMarks(marks) || autoplayGoesOn());
     const betweenItems = !!store.current.peek() && !videoShown() && !photoShown();
     paused.value = !play.disabled && !play.showsPause && !movesOn && !betweenItems;
     moveBarWhilePlaying();
@@ -646,6 +845,7 @@ export function createPlayer(options: PlayerOptions): Player {
       showPhotoTime();
     } else {
       repeatStretch();
+      repeatMarkedStretch();
       showTime();
     }
     moveBarWhilePlaying();
@@ -661,16 +861,14 @@ export function createPlayer(options: PlayerOptions): Player {
   /** While the bar shows a photo's timer, it fills as the timer runs; otherwise it is empty and the time 0:00 / 0:00. */
   function showPhotoTime(): void {
     if (!elements || !photoShown()) return;
-    const { seekSlider } = elements;
     if (!photoBarShown()) {
-      seekSlider.value = "0";
+      setSeekBar("0");
       timeText.value = NO_TIME;
       return;
     }
     const seconds = photoTimer.length / 1000;
     const elapsed = photoTimer.elapsed() / 1000;
-    seekSlider.max = String(seconds);
-    seekSlider.value = String(elapsed);
+    setSeekBar(String(elapsed), String(seconds));
     timeText.value = formatPlaybackPosition(elapsed, seconds);
   }
 
@@ -750,9 +948,24 @@ export function createPlayer(options: PlayerOptions): Player {
 
   function showTime(): void {
     if (!elements || !elements.video.duration) return;
-    const { video, seekSlider } = elements;
+    const { video } = elements;
     timeText.value = formatPlaybackPosition(video.currentTime, video.duration);
-    seekSlider.value = videoLengthUnknown() ? "0" : String(video.currentTime);
+    setSeekBar(videoLengthUnknown() ? "0" : String(video.currentTime));
+  }
+
+  /** Sets the scrub bar's value, and its length when given, with the orange its track draws up to the value. */
+  function setSeekBar(value: string, max?: string): void {
+    const { seekSlider } = elements!;
+    if (max !== undefined) seekSlider.max = max;
+    seekSlider.value = value;
+    fillSeekBar();
+  }
+
+  /** The scrub bar's track draws orange up to its value, as a part of its length, and none while it has no length. */
+  function fillSeekBar(): void {
+    const { seekSlider, seekWrap } = elements!;
+    const length = Number(seekSlider.max);
+    seekWrap.style.setProperty("--fill", String(length > 0 ? Number(seekSlider.value) / length : 0));
   }
 
   /**
@@ -760,7 +973,7 @@ export function createPlayer(options: PlayerOptions): Player {
    * fails, and the play is recorded unless the server already recorded it. The media loads with `loadMedia`.
    */
   function beginAttempt(item: PlayingItem, origin: AttemptOrigin, recordPlayback: boolean): number {
-    const { video, photo, emptyState, seekSlider } = elements!;
+    const { video, photo, emptyState } = elements!;
     store.playAttemptId.value += 1;
     const attemptId = store.playAttemptId.peek();
     attemptOrigin = origin;
@@ -780,12 +993,16 @@ export function createPlayer(options: PlayerOptions): Player {
     stepWaiting = false;
     // What Auto-Pause held of the last item has nothing left to resume.
     dropAutoPaused();
-    // A new item's stretch starts at its start, its frames are timed anew, and the seek indicator's total starts over.
+    // A new item's stretch starts at its start, its frames are timed anew, and the seek indicator's total starts over. It
+    // starts without loop markers, even the same item played again.
     frameClock.reset();
     seekIndicator.clear();
     stretchStart = 0;
     stretching = false;
-    stretchRestarting = false;
+    restartingFromEnd = false;
+    marks = NO_LOOP_MARKS;
+    marksBeforeDrag = null;
+    checkedAt = 0;
     armed = null;
     mediaFailed.value = false;
     resumeAt = null;
@@ -799,8 +1016,9 @@ export function createPlayer(options: PlayerOptions): Player {
     video.pause();
     video.src = "";
     photo.src = "";
-    // The bar starts empty, so it never shows the last item's time.
-    seekSlider.value = "0";
+    // The bar starts empty, so it never shows the last item's time, nor the last item's stretch or loop markers.
+    setSeekBar("0");
+    showStretch();
     showToggles();
     return attemptId;
   }
@@ -1566,10 +1784,7 @@ export function createPlayer(options: PlayerOptions): Player {
     },
 
     toggleLoop() {
-      store.setLoop(!store.loop.peek());
-      followLoopChange();
-      syncVideo();
-      showToggles();
+      setLoop(!store.loop.peek());
     },
 
     toggleAutoplay() {
@@ -1591,6 +1806,8 @@ export function createPlayer(options: PlayerOptions): Player {
     toggleBlacklist: () => toggleFlag("isBlacklisted"),
 
     seek(value) {
+      // A drag has moved the bar itself, so its track's orange follows it at once.
+      if (elements) fillSeekBar();
       if (photoShown()) {
         if (photoBarShown()) {
           photoTimer.seek(Number(value) * 1000);
@@ -1620,6 +1837,35 @@ export function createPlayer(options: PlayerOptions): Player {
       if (target >= video.duration) return;
       seekVideoTo(Math.max(0, target));
       showTime();
+    },
+
+    loopMarks: loopMarkPlaces,
+
+    setLoopMark: markAt,
+
+    setLoopMarkHere(which) {
+      const video = seekableVideo();
+      if (video) markAt(which, video.currentTime);
+    },
+
+    clearLoopMarks() {
+      if (!hasLoopMarks(marks)) return;
+      marks = NO_LOOP_MARKS;
+      syncVideo();
+    },
+
+    dragLoopMark(which, seconds) {
+      const video = seekableVideo();
+      if (!video || marks[which] === null) return;
+      marksBeforeDrag ??= marks;
+      marks = dragLoopMark(marks, which, seconds, video.duration);
+      syncVideo();
+    },
+
+    endLoopMarkDrag() {
+      const before = marksBeforeDrag;
+      marksBeforeDrag = null;
+      if (before && hasLoopMarks(marks) && (before.start !== marks.start || before.end !== marks.end)) followMarksChange();
     },
 
     autoPause() {
@@ -1674,9 +1920,9 @@ export function createPlayer(options: PlayerOptions): Player {
         trace("info", "video-onplaying-stale", { expectedPlayAttemptId: attempt.attemptId });
         return;
       }
-      // A stretch's repeat from the video's end only plays on, so it relays nothing.
-      const repeat = stretchRestarting;
-      stretchRestarting = false;
+      // A repeat from the video's end only plays on, so it relays nothing.
+      const repeat = restartingFromEnd;
+      restartingFromEnd = false;
       if (!repeat) {
         trace("info", "video-onplaying");
       }
@@ -1708,11 +1954,11 @@ export function createPlayer(options: PlayerOptions): Player {
       if (!armedFor("video") || !elements) return;
       // A new element that took over the video goes on from where the one before it was.
       if (resumeAt !== null) {
-        elements.video.currentTime = resumeAt;
+        moveVideo(resumeAt);
         resumeAt = null;
       }
       if (!videoLengthUnknown()) {
-        elements.seekSlider.max = String(elements.video.duration || 100);
+        setSeekBar(elements.seekSlider.value, String(elements.video.duration || 100));
       }
       showTime();
       // Its length decides whether the bar is enabled, whether it is shorter than Advance after, and where its stretch
@@ -1724,19 +1970,18 @@ export function createPlayer(options: PlayerOptions): Player {
     videoTimeUpdated() {
       if (!armedFor("video")) return;
       repeatStretch();
+      repeatMarkedStretch();
       showTime();
     },
 
     videoEnded() {
       if (!armedFor("video") || !elements) return;
       // A stretch that starts mid-video and reaches the video's end starts over from its start, without loading again;
-      // the browser repeats one that is the whole video itself.
-      if (stretching) {
-        stretchRestarting = true;
-        elements.video.currentTime = stretchStart;
-        void audio.play(elements.video).catch(() => {
-          stretchRestarting = false;
-        });
+      // the browser repeats one that is the whole video itself. While loop markers are set, the video's end, reached by
+      // playing or after a seek past the end marker, goes back to the start marker while Loop repeats the stretch.
+      const stretch = markedStretch();
+      if (stretching || (stretch && videoRepeats())) {
+        restartFromEnd(stretch ? stretch.from : stretchStart);
         return;
       }
       if (!autoplayGoesOn()) return;

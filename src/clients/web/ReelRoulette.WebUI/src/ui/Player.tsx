@@ -1,11 +1,16 @@
 import { useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { takesKeys } from "../keyboard/shortcuts";
+import type { LoopMark } from "../playback/loopMarks";
 import { createMediaGestures } from "../playback/mediaGestures";
+import { formatPlaybackTime } from "../playback/nowPlaying";
+import type { Player as PlayerModel } from "../playback/player";
 import { ratingText } from "../rating/rating";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
+import type { MenuGroups } from "./menuModel";
 import { NotifyButton } from "./Notifications";
 import { RatingStars } from "./RatingStars";
+import { sliderValueAtPoint, useSliderLabel } from "./sliderLabel";
 
 /** The video's boolean attributes, present and empty as in the page's HTML. */
 const VIDEO_FLAGS: Record<string, string> = {
@@ -31,6 +36,9 @@ function lit(className: string, active: boolean): string {
   return active ? `${className} active` : className;
 }
 
+/** The volume slider's label: the volume at that point, as the volume indicator over the player reads. */
+const volumeText = (volume: number) => `${Math.round(volume)}%`;
+
 /** A control's click, which never reaches the media area behind it. */
 function press(action: () => unknown) {
   return (event: Event) => {
@@ -44,16 +52,41 @@ function stopPropagation(event: Event): void {
 }
 
 /**
+ * The scrub bar's menu at `seconds`, the time under the pointer: Set loop start and Set loop end there, and Clear loop
+ * markers, disabled while none is set.
+ */
+function scrubBarGroups(player: PlayerModel, seconds: number): MenuGroups {
+  const time = formatPlaybackTime(seconds);
+  const marks = player.loopMarks.peek();
+  return [
+    [
+      { label: `Set loop start at ${time}`, icon: "start", onPick: () => player.setLoopMark("start", seconds) },
+      { label: `Set loop end at ${time}`, icon: "keyboard_tab", onPick: () => player.setLoopMark("end", seconds) }
+    ],
+    [
+      {
+        label: "Clear loop markers",
+        icon: "close",
+        onPick: () => player.clearLoopMarks(),
+        disabledReason: marks.start === null && marks.end === null ? "No loop markers to clear" : null
+      }
+    ]
+  ];
+}
+
+/**
  * The media area: ambient mode's glow, the video and photo, the empty state, and the controls over them. The player
  * sets the media elements' sources and which of them shows itself, and ambient mode whether its glow shows and its
- * settings, so their `style`, the glow's `hidden`, the seek slider's value, and the stretch behind it are rendered once
- * and never changed here. The video element is never moved, and is replaced only when the player asks for a new one,
- * once Enhanced audio is off, which then takes over the video. The seek row stays in its place before anything plays
- * and on a photo too, so the controls never move. The player claims its touches (`touch-action: none`), so a two-finger
- * drag changes the volume without the browser scrolling or zooming, and over it the scroll wheel never scrolls the page.
+ * settings, so their `style`, the glow's `hidden`, the seek slider's value and its track's fill, and the stretch behind
+ * it are rendered once and never changed here, nor are the sliders' labels, which their own hook shows. The video
+ * element is never moved, and is replaced only when the player asks for a new one, once Enhanced audio is off, which
+ * then takes over the video. The seek row stays in its place before anything plays and on a photo too, so the controls
+ * never move. The player claims its touches (`touch-action: none`), so a two-finger drag changes the volume without the
+ * browser scrolling or zooming, and over it the scroll wheel never scrolls the page.
  * Hide player controls decides when the controls show; hidden, they can't be pressed, so a first tap only shows them.
  * A right-click or a long press on the picture, not on the controls, the rating's stars, or the indicator while it takes
- * a tap, opens the playing item's menu, and with nothing playing opens nothing.
+ * a tap, opens the playing item's menu, and with nothing playing opens nothing. One on a video's scrub bar opens the
+ * scrub bar's menu, at the time under the pointer, and one on a photo's opens nothing.
  */
 export function Player() {
   const { store, player, playerControls: controls, audio, ambient, fullscreen, settings, contextMenu, playingMenus } = useApp();
@@ -64,8 +97,16 @@ export function Player() {
   const video = useRef<HTMLVideoElement>(null);
   const photo = useRef<HTMLImageElement>(null);
   const emptyState = useRef<HTMLDivElement>(null);
+  const seekWrap = useRef<HTMLSpanElement>(null);
   const seekSlider = useRef<HTMLInputElement>(null);
+  const seekLabel = useRef<HTMLSpanElement>(null);
   const seekStretch = useRef<HTMLSpanElement>(null);
+  const volumeSlider = useRef<HTMLInputElement>(null);
+  const volumeLabel = useRef<HTMLSpanElement>(null);
+  // The scrub bar's label shows the time at that point, or the photo timer's, with the light gray fill ahead of the value,
+  // and hides as each new item starts, so it never shows a time for the last item's length.
+  useSliderLabel(seekSlider, seekLabel, { text: formatPlaybackTime, previews: true, hidesOn: store.playAttemptId });
+  useSliderLabel(volumeSlider, volumeLabel, { text: volumeText });
   /** The volume slider is pressed, so its drag is one volume change until it's let go. */
   const sliderPressed = useRef(false);
   const gestures = useMemo(
@@ -89,7 +130,7 @@ export function Player() {
     []
   );
 
-  /** A drag of the scrub bar or the volume keeps the controls shown until it's let go. */
+  /** A drag of the scrub bar, the volume, or a loop marker keeps the controls shown until it's let go. */
   function pressBar(): void {
     controls.hold("drag", true);
   }
@@ -113,6 +154,7 @@ export function Player() {
       photo: photo.current!,
       emptyState: emptyState.current!,
       seekSlider: seekSlider.current!,
+      seekWrap: seekWrap.current!,
       seekStretch: seekStretch.current!
     });
     ambient.attach({ layer: ambientLayer.current!, canvas: ambientCanvas.current!, video: video.current!, photo: photo.current! });
@@ -183,8 +225,17 @@ export function Player() {
         void playingMenus.openPlayerMenu(point);
       }
     });
+    // The scrub bar's own menu, inside the media area's, on a video whose length is known.
+    const removeScrubBarMenu = contextMenu.addSurface({
+      element: seekWrap.current!,
+      menuAt: () => (player.seekable() && !player.mediaFailed.peek() ? true : null),
+      open(_on, point) {
+        playingMenus.showOverPlayer(point, scrubBarGroups(player, sliderValueAtPoint(seekSlider.current!, point.x)));
+      }
+    });
     return () => {
       removeMenu();
+      removeScrubBarMenu();
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
       area.removeEventListener("pointermove", onPointerMove);
@@ -274,29 +325,99 @@ export function Player() {
           <button id="fullscreen-btn" class={OVERLAY_BUTTON} aria-label="Fullscreen" title="Fullscreen" onClick={press(fullscreen.toggle)}><span class="material-symbol-icon">{fullscreen.active.value ? "fullscreen_exit" : "fullscreen"}</span></button>
         </div>
         <div id="seek-row" class="overlay-seek-row">
-          <span id="seek-wrap" class="seek-wrap">
-            <span id="seek-loop" class="seek-loop" hidden ref={seekStretch}></span>
-            <input type="range" id="seek-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onPointerDown={pressBar} onInput={(event) => player.seek(event.currentTarget.value)} />
+          <span id="seek-wrap" class="seek-wrap slider-wrap menu-surface" ref={seekWrap}>
+            <span class="seek-loop-clip">
+              <span id="seek-loop" class="seek-loop" hidden ref={seekStretch}></span>
+            </span>
+            <span class="slider-track"></span>
+            <input type="range" id="seek-slider" class="player-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onPointerDown={pressBar} onInput={(event) => player.seek(event.currentTarget.value)} />
+            <LoopMarkers timeAt={(clientX) => sliderValueAtPoint(seekSlider.current!, clientX)} onPress={pressBar} />
+            <span class="slider-label" hidden ref={seekLabel}></span>
           </span>
           <span id="time-display">{player.timeText}</span>
           <button id="mute-btn" class={lit(OVERLAY_TOGGLE, muted)} aria-label="Mute" title="Mute" onClick={press(audio.toggleMute)}><span class="material-symbol-icon">{muted ? "volume_off" : "volume_up"}</span></button>
-          <span id="volume-wrap" class="volume" hidden={!audio.volumeShown.value}>
+          <span id="volume-wrap" class="volume slider-wrap" hidden={!audio.volumeShown.value} style={{ "--fill": String(audio.shownVolume.value / 100) }}>
+            <span class="slider-track"></span>
             <input
               type="range"
               id="volume-slider"
+              class="player-slider"
               min="0"
               max="100"
               step="1"
               value={String(audio.shownVolume.value)}
               aria-label="Volume"
-              title="Volume"
+              ref={volumeSlider}
               onPointerDown={pressSlider}
               onInput={(event) => audio.setVolume(Number(event.currentTarget.value))}
             />
+            <span class="slider-label" hidden ref={volumeLabel}></span>
           </span>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The loop markers on the scrub bar, each a line at its place, on top of the bar's track and thumb, shown while it is
+ * set. A press with the main button, a mouse's or a finger's, drags a marker by the time under the pointer (`timeAt`),
+ * moving only the marker, and calls `onPress`, which keeps the controls shown until it's let go. Letting go ends the
+ * drag, which may send the video to the start marker.
+ */
+function LoopMarkers({ timeAt, onPress }: { timeAt: (clientX: number) => number; onPress: () => void }) {
+  const { player } = useApp();
+  const places = player.loopMarks.value;
+  /** The marker being dragged, with its pointer, or null. */
+  const drag = useRef<{ which: LoopMark; pointerId: number } | null>(null);
+  // A marker that goes while it is dragged, as another item starts or X clears it, takes its pointer capture with it, so
+  // its drag ends here, with nothing left for its release to do.
+  const dragged = drag.current?.which;
+  useLayoutEffect(() => {
+    if (dragged && places[dragged] === null) drag.current = null;
+  }, [dragged, places.start, places.end]);
+
+  function endDrag(event: PointerEvent): void {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = null;
+    player.endLoopMarkDrag();
+  }
+
+  function marker(which: LoopMark, title: string, at: number | null) {
+    if (at === null) return null;
+    return (
+      <span
+        class="loop-mark"
+        title={title}
+        style={{ "--at": String(at) }}
+        onPointerDown={(event) => {
+          if (event.button !== 0 || !player.seekable()) return;
+          event.preventDefault();
+          drag.current = { which, pointerId: event.pointerId };
+          onPress();
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (drag.current?.pointerId !== event.pointerId) return;
+          // A move with no button down belongs to no drag: its release went somewhere else.
+          if (event.buttons === 0) {
+            drag.current = null;
+            return;
+          }
+          player.dragLoopMark(drag.current.which, timeAt(event.clientX));
+        }}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
+      ></span>
+    );
+  }
+
+  return (
+    <>
+      {marker("start", "Loop start", places.start)}
+      {marker("end", "Loop end", places.end)}
+    </>
   );
 }
 

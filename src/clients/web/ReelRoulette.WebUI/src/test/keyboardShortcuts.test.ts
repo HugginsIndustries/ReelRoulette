@@ -82,6 +82,9 @@ const BOUND: readonly [KeyPress, ShortcutAction][] = [
   [press("m"), "mute"],
   [press(","), "frameBack"],
   [press("."), "frameForward"],
+  [press("i"), "loopStart"],
+  [press("o"), "loopEnd"],
+  [press("x"), "clearLoop"],
   [press("["), "volumeDown"],
   [press("]"), "volumeUp"],
   [press("1"), "library"],
@@ -121,7 +124,8 @@ describe("shortcutFor", () => {
       [
         " ", ",", ".", "-", "=", "1", "2", "3", "4", "5", "6", "ArrowLeft", "ArrowRight", "Shift+F", "Shift+f", "[", "]",
         "Shift+0", "Shift+1", "Shift+2", "Shift+3", "Shift+4", "Shift+5", "Shift+)", "Shift+!", "Shift+@", "Shift+#", "Shift+$", "Shift+%",
-        "a", "b", "f", "h", "j", "k", "l", "m", "p", "r", "s", "t", "A", "B", "F", "H", "J", "K", "L", "M", "P", "R", "S", "T"
+        "a", "b", "f", "h", "i", "j", "k", "l", "m", "o", "p", "r", "s", "t", "x",
+        "A", "B", "F", "H", "I", "J", "K", "L", "M", "O", "P", "R", "S", "T", "X"
       ].sort()
     );
   });
@@ -252,6 +256,8 @@ function services(options: { open?: boolean; tab?: PanelTab; volumeShown?: boole
       playOrPause: note("playOrPause"),
       seekBy: note("seekBy"),
       stepFrame: note("stepFrame"),
+      setLoopMarkHere: note("setLoopMarkHere"),
+      clearLoopMarks: note("clearLoopMarks"),
       previous: note("previous"),
       next: note("next"),
       pickRandom: note("pickRandom"),
@@ -283,7 +289,7 @@ describe("runShortcut", () => {
     const actions: ShortcutAction[] = [
       "playOrPause", "seekBack", "seekForward", "previous", "next", "random", "favorite", "blacklist",
       "rate1", "rate2", "rate3", "rate4", "rate5", "clearRating", "ratingDown", "ratingUp",
-      "autoplay", "mute", "frameBack", "frameForward", "volumeDown", "volumeUp", "panel", "fullscreen"
+      "autoplay", "mute", "frameBack", "frameForward", "loopStart", "loopEnd", "clearLoop", "volumeDown", "volumeUp", "panel", "fullscreen"
     ];
     const { services: shown, calls } = services();
     actions.forEach((action) => runShortcut(action, shown));
@@ -308,6 +314,9 @@ describe("runShortcut", () => {
       'toggleMute({"byKey":true})',
       "stepFrame(-1)",
       "stepFrame(1)",
+      "setLoopMarkHere(start)",
+      "setLoopMarkHere(end)",
+      "clearLoopMarks",
       "stepVolume(-1)",
       "stepVolume(1)",
       "toggle",
@@ -383,7 +392,7 @@ describe("listenForShortcuts", () => {
   it("keeps an unbound key from the browser without running anything or moving focus", () => {
     const { calls, stop } = listening();
     const slider = focused(input("range"));
-    expect(["ArrowUp", "Tab", "Enter", "PageDown", "x"].map((key) => keyDown(slider, key))).toEqual([false, false, false, false, false]);
+    expect(["ArrowUp", "Tab", "Enter", "PageDown", "q"].map((key) => keyDown(slider, key))).toEqual([false, false, false, false, false]);
     expect([calls, document.activeElement]).toEqual([[], slider]);
     expect([keyDown(slider, "F5"), keyDown(slider, "Escape"), keyDown(slider, "ArrowDown", { ctrlKey: true })]).toEqual([true, true, true]);
     stop();

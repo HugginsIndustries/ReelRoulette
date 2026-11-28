@@ -791,10 +791,12 @@ function placeAtPoint(menu, x, y) {
  * The context menu. A page mounts it, in the stage on the main page so it shows in fullscreen, and from then on the
  * browser's own menu is off on the page, except in text fields, which keep it for copy, paste, and spell check. Each
  * surface with a menu is added by its selector, with `groupsFor(el)` answering its groups, or nothing while it has no
- * menu. A mouse's right-click anywhere on a surface, its buttons included, opens its menu at the pointer, and a
- * right-click where no menu exists opens nothing. A long press with a finger or a pen opens it where the press began,
- * except on a button, a drag handle, or the rating stars, so buttons stay free for their tooltips; a surface may name
- * buttons that are part of it, such as a category's name. Options:
+ * menu. `groupsFor` also gets the point the menu opens at, for a surface whose menu depends on where it was pressed,
+ * such as the scrub bar's. A mouse's right-click anywhere on a surface, its buttons included, opens its menu at the
+ * pointer, and a right-click where no menu exists opens nothing. A long press with a finger or a pen opens it where the
+ * press began, except on a button, a drag handle, a loop marker, or the rating stars, so buttons stay free for their
+ * tooltips and handles for their drags; a surface may name buttons that are part of it, such as a category's name.
+ * Options:
  * - `except`: parts of the surface that open nothing, such as the player's controls.
  * - `pressOn`: buttons in the surface that a long press still opens its menu on.
  * - `mark`: false, or a test of the element, to leave out the highlight on the element the menu acts on.
@@ -831,7 +833,7 @@ const contextMenu = (() => {
       if (!surface) continue;
       const left = surface.except && target.closest(surface.except);
       if (left && el.contains(left)) return null;
-      const held = pressing && target.closest("button, .drag-handle, .rating, .panel-handle");
+      const held = pressing && target.closest("button, .drag-handle, .rating, .panel-handle, .loop-mark");
       if (held && el.contains(held) && !held.matches(surface.pressOn || "*:not(*)")) return null;
       return { surface, el };
     }
@@ -839,7 +841,7 @@ const contextMenu = (() => {
   }
   function open(surface, el, x, y) {
     close();
-    const groups = surface.groupsFor(el);
+    const groups = surface.groupsFor(el, x, y);
     if (!groups || !fillMenu(menu, groups, () => close(true))) return;
     menu.hidden = false;
     placeAtPoint(menu, x, y);

@@ -595,6 +595,8 @@ describe("keyboard shortcuts", () => {
       ["A", "Autoplay on or off"],
       ["M", "Mute"],
       [", / .", "One frame back or forward, while a video is paused"],
+      ["I / O", "Set the loop's start or end marker where the video is, turning Loop on"],
+      ["X", "Clear the loop markers"],
       ["[ / ]", "Volume down or up by the volume step"],
       ["1 – 6", "Open Library, Tags, Stats, Filter, Randomization, or Settings; the open tab's key closes the panel"],
       ["T", "Tags"],
@@ -713,6 +715,44 @@ describe("keyboard shortcuts", () => {
     video().currentTime = 90;
     await press(".");
     expect(stretchFrom()).toBeCloseTo((90 + 1 / 30) / 120, 10);
+  });
+});
+
+describe("loop marker keys", () => {
+  /** The loop markers that show on the scrub bar, by their titles. */
+  function markers(): string[] {
+    return screen.queryAllByTitle(/^Loop (start|end)$/).map((marker) => marker.title);
+  }
+
+  it("I and O set the loop's start and end markers where the video is, turning Loop on, and X clears them, leaving Loop on", async () => {
+    await mount(serverPicking(VIDEO_ITEM));
+    await press("k");
+    await loadVideo(120);
+    expect([isLit("Loop"), markers()]).toEqual([false, []]);
+
+    video().currentTime = 30;
+    await press("i");
+    expect([isLit("Loop"), markers()]).toEqual([true, ["Loop start"]]);
+    // At the end marker, the video goes to the start marker.
+    video().currentTime = 60;
+    await press("o");
+    expect([markers(), video().currentTime]).toEqual([["Loop start", "Loop end"], 30]);
+
+    await press("x");
+    expect([isLit("Loop"), markers()]).toEqual([true, []]);
+    video().currentTime = 50;
+    await press("o");
+    expect([markers(), video().currentTime]).toEqual([["Loop end"], 0]);
+  });
+
+  it("I, O, and X do nothing on a photo", async () => {
+    await mount(serverPicking(PHOTO_ITEM));
+    await press("k");
+    expect(document.getElementById("photo")!.style.display).toBe("block");
+    for (const key of ["i", "o", "x"]) {
+      await press(key);
+    }
+    expect([isLit("Loop"), markers()]).toEqual([false, []]);
   });
 });
 

@@ -70,6 +70,7 @@ beforeEach(() => {
         <span class="drag-handle"></span>
         <div class="rating"><span class="star"></span></div>
         <div class="panel-handle"></div>
+        <span class="loop-mark"></span>
       </div>
       <p class="gap"></p>
     </div>
@@ -142,9 +143,9 @@ describe("context menus", () => {
     expect(opened).toHaveLength(1);
   });
 
-  it("open at no long press on a button, a drag handle, the rating's stars, or the panel's resize handle, whose clicks go through", () => {
+  it("open at no long press on a button, a drag handle, the rating's stars, the panel's resize handle, or a loop marker, whose clicks go through", () => {
     surface($("#list"));
-    for (const target of [$("#list button"), $(".drag-handle"), $(".star"), $(".panel-handle")]) {
+    for (const target of [$("#list button"), $(".drag-handle"), $(".star"), $(".panel-handle"), $(".loop-mark")]) {
       expect(longPress(target)).toBe(true);
     }
     expect(longPress($(".gap"))).toBe(true);

@@ -237,10 +237,17 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the volume slider's press and the page's next `pointerup` or `pointercancel`, which bound its drag as one volume change and, with the scrub bar's press, a drag that keeps the controls shown.
     - a pointer other than a touch moving over the player, a mouse or pen pointer over a control, the page's key presses, and a press on the controls, which is activity, for the player's controls.
     - the media area as a menu surface, whose picture, not its controls, seek row, the rating's stars, or the update notice, opens the playing item's menu while something plays, telling the gestures that the touch that opened it is neither a tap nor a swipe.
+    - the scrub bar's wrapper as a menu surface inside it, which on a video whose length is known opens the scrub bar's menu at the time under the pointer: Set loop start, Set loop end, and Clear loop markers.
+    - the loop markers (`LoopMarkers`), drawn from the player's places on top of the scrub bar, each dragged by its pointer, holding the controls as the scrub bar's press does, and ending the drag as it's let go.
   - The transport row has Random between Next and Loop, and the fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen.
-  - The player sets the media elements' sources and `display`, the seek slider's value, and the stretch behind it (`#seek-loop` in `#seek-wrap`), shown and placed while Timer mode repeats one, and ambient mode the glow's `hidden` and settings, so the component renders those once.
+  - The player sets the media elements' sources and `display`, the seek slider's value with its track's fill (`--fill` on `#seek-wrap`), and the stretch behind it (`#seek-loop` in its clip box in `#seek-wrap`), shown and placed while Timer mode repeats one, and ambient mode the glow's `hidden` and settings, so the component renders those once.
+  - The scrub bar and the volume slider each sit in a `slider-wrap` with their own track element under them and a label above them, which `useSliderLabel` shows; the volume's fill renders from the shown volume.
   - It renders a new video element only for the player's next video key, once Enhanced audio is off, and hands it to the audio stage, the player, and ambient mode; it attaches the glow to ambient mode with the video and photo, and the video to the audio stage.
   - The seek row ends with Mute and the volume slider, shown while the audio stage says so.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/sliderLabel.ts`
+  - the player's sliders' labels (`useSliderLabel`): the value under a mouse or pen over the slider or dragging it, and under a finger on it, followed with touch events, raised for a finger, kept within the slider's width, and none on a disabled slider, hiding as the slider becomes disabled, showing the value under the same point anew for a new length, and, on the scrub bar, hiding as each new item starts.
+  - a finger's pressed look (`is-touched` on the wrapper) until it lifts, and the scrub bar's light gray fill (`--preview`) up to a mouse or pen.
+  - the value at a point across a slider, from the thumb's center at its start to its center at its end (`sliderFraction`, `sliderValueAt`, and `sliderValueAtPoint`, which the scrub bar's menu and the loop markers' drag use), with half the thumb's box read from `--thumb-half`.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/LibraryOverlay.tsx`
   - the Library tab:
     - header with the count line, "{matching} / {total} shown", and the button that collapses the controls, the Filters line, and the Random line together.
@@ -419,7 +426,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - opening the context menu's surfaces' menus, from the app's root:
     - the browser's own menu blocked across the page but in text fields.
     - a mouse's right-click on a surface opening its menu at the pointer.
-    - a long press with a finger or a pen opening it where the press began, but not on buttons, except those the surface counts as part of it, drag handles, the rating's stars, or the panel's resize handle.
+    - a long press with a finger or a pen opening it where the press began, but not on buttons, except those the surface counts as part of it, drag handles, the rating's stars, the panel's resize handle, or the scrub bar's loop markers.
     - the click a long press ends with stopped before anything hears it.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/longPress.ts`
   - a long press with a finger or a pen anywhere on the page: half a second without moving 8 px, started only by the first finger down, cancelled by a second finger, a scroll the browser takes over, or lifting first, with whether the click it ends with is to be used up, and whether the last press was a mouse's.
@@ -539,6 +546,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - Loop stops autoplay, which decides whether Loop holds autoplay.
     - the video's own `loop`, set while Loop repeats it whole.
     - Timer mode's repeating stretch, which starts where a seek lands, or Advance after seconds before the end for a seek to the end or a video at its end, the browser repeating one that is the whole video, and shows behind the scrub bar.
+    - the loop markers (`loopMarks`, `setLoopMark`, `setLoopMarkHere`, `clearLoopMarks`, `dragLoopMark`, `endLoopMarkDrag`), kept for the item playing now, turning Loop on as one is set and cleared as Loop turns off, and sending the video to the start marker when a change leaves it outside the stretch.
+    - the stretch between the markers in place of Timer mode's while either is set, with the video's own `loop` off: a video that plays up to the end marker, from where the player last checked it, which every seek it makes sets, or to its end, goes back to the start marker while Loop repeats it, and otherwise autoplay goes on.
     - repeats that restart only a photo's timer or the video's position.
     - favorite and blacklist.
     - seek and the time display.
@@ -571,6 +580,12 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - a step's target, the middle of the frame before or after the one shown, or one frame from the position while an earlier step's frame is still on its way.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/seekIndicator.ts`
   - the seek indicator for J, L, and double-taps: which side shows, back or forward, and the seconds it reads, adding up seeks the same way, each by its full step, and fading out a second after the last, the total then starting over, as it does with a seek the other way, each side keeping its seconds as it fades out
+- `src/clients/web/ReelRoulette.WebUI/src/playback/loopMarks.ts`
+  - the loop markers' rules:
+    - the stretch they make, from the start marker, or the video's start, to the end marker, or the video's end.
+    - a marker set within the video, at least a second from its other end, clearing the other marker when it lands within a second of it or past it.
+    - a marker's drag, which stops a second short of the other marker, or of the video's other end, and leaves the other where it is.
+    - where the video goes once they change: to the stretch's start while it is outside the stretch, before it or at or after its end.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/loadingHolds.ts`
   - what the player waits for, a pick, a library play, or a media load, and whether Loading… shows: once something has waited half a second, counted once from the first wait until every wait ends.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/audioStage.ts`
@@ -637,13 +652,14 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - which elements take every key pressed in them (text fields, dropdowns, and editable text).
     - which key presses the page takes (every other one but a key the focused element handled, one with Ctrl, Alt, or Meta, F1 to F12, and Escape).
     - which of those are shortcuts (none for a held key other than J, L, comma, period, [, ], -, and =).
-    - what each does through the player, the player's rating, the audio stage, the panel, fullscreen, and the settings.
+    - what each does through the player, the player's rating, the audio stage, the panel, fullscreen, and the settings, I, O, and X setting and clearing the loop markers.
     - the page's listener, which an open dialog stops, which keeps every key the page takes from the browser, so a key no shortcut binds does nothing, and which takes focus off the focused control before a shortcut runs.
     - the page's listener that has a dropdown give up focus after a pick.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/nowPlaying.ts`
   - the playing item's file name, now-playing name, cut to 45 characters with "…", tooltip, and duration, the time format, m:ss or h:mm:ss from an hour, and the seek row's elapsed and total time, the elapsed time in the total's shape.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/playingItemMenus.ts`
   - the menus on the playing item, each closing when another item plays:
+    - a menu over the player (`showOverPlayer`), which holds the controls while it is open and shows them as it closes only when the user closed it, for the scrub bar's menu and the picture's.
     - the player's picture's, once the library's read of the item says whether it has playback stats, with favorites and the blacklist through the player's toggles, Rate…, which opens the player's rating popover, Show stats, Edit tags…, Clear playback stats…, and Delete file… from the library menus' item builders, and the file items, holding the player's controls while it is open and showing them as it closes only when the user closed it.
     - the header's now-playing name's, with Show stats and the file items.
     - the Stats tab's file name's and path's, with the file items.

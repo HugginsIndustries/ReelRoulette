@@ -127,17 +127,32 @@ function fakePhoto() {
   return photo;
 }
 
-/** A stand-in for the stretch behind the scrub bar, keeping the CSS variables the player sets on it. */
-function fakeStretch() {
+/** A stand-in for an element the player styles, keeping the CSS variables it sets on it. */
+function fakeStyled() {
   const vars = new Map<string, string>();
   return {
-    hidden: true,
     vars,
     style: {
       setProperty(name: string, value: string) {
         vars.set(name, value);
       }
     }
+  };
+}
+
+/** A stand-in for the stretch behind the scrub bar, keeping the classes the player sets on it. */
+function fakeStretch() {
+  const classes = new Set<string>();
+  return {
+    hidden: true,
+    classes,
+    classList: {
+      toggle(name: string, force: boolean) {
+        if (force) classes.add(name);
+        else classes.delete(name);
+      }
+    },
+    ...fakeStyled()
   };
 }
 
@@ -269,6 +284,7 @@ function setup(
     photo: fakePhoto(),
     emptyState: { style: { display: "" } },
     seekSlider: { value: "0", max: "100" },
+    seekWrap: fakeStyled(),
     seekStretch: fakeStretch()
   };
   player.attach(elements satisfies PlayerElements);
@@ -302,6 +318,8 @@ function setup(
       player.videoMetadataLoaded();
       player.videoPlaying();
     },
+    /** How far the scrub bar's track draws orange, as a part of its length. */
+    fill: () => Number(elements.seekWrap.vars.get("--fill")),
     /** The stretch behind the scrub bar: whether it shows, and where it starts and ends, as fractions of the video. */
     stretch: () => ({
       hidden: elements.seekStretch.hidden,
@@ -1231,6 +1249,31 @@ describe("createPlayer", () => {
     expect(page.elements.photo.sources.filter(Boolean)).toHaveLength(1);
   });
 
+  it("fills the bar's track up to its value as a video plays, after a drag, on a photo's timer, and empties it for a new item", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(VIDEO);
+    const { video, seekSlider } = page.elements;
+    expect(page.fill()).toBe(0);
+    video.duration = 120;
+    page.player.videoMetadataLoaded();
+    video.currentTime = 30;
+    page.player.videoTimeUpdated();
+    expect(page.fill()).toBe(0.25);
+
+    // The drag moves the bar itself, then asks for its seek.
+    seekSlider.value = "90";
+    page.player.seek("90");
+    expect(page.fill()).toBe(0.75);
+
+    page.play(PHOTO);
+    expect(page.fill()).toBe(0);
+    await vi.advanceTimersByTimeAsync(3_000);
+    page.frames.run();
+    expect(page.fill()).toBeCloseTo(0.2);
+  });
+
   it("empties the bar for each new item, and shows a video's time from 0:00 until its length is known", async () => {
     vi.useFakeTimers();
     const page = setup();
@@ -2076,6 +2119,255 @@ describe("autoplay modes and Loop stops autoplay", () => {
     page.player.toggleAutoplay();
     expect(page.player.timeText.value).toBe("0:00 / 0:15");
     expect(page.store.playAttemptId.value).toBe(1);
+  });
+});
+
+describe("loop markers", () => {
+  /** Lets a random pick the timer or the end marker started answer. */
+  const settle = () => vi.advanceTimersByTimeAsync(0);
+  /** The classes the player set on the stretch behind the scrub bar for a marker at each of its ends. */
+  const stretchEnds = (page: ReturnType<typeof setup>) => [...page.elements.seekStretch.classes].sort();
+
+  it("repeat the stretch between them with Autoplay off, and in Normal and Timer mode while Loop holds autoplay, as the video plays up to the end marker, only moving its position", async () => {
+    vi.useFakeTimers();
+    for (const mode of ["off", "normal", "timer"] as const) {
+      const page = setup();
+      page.store.setAdvanceAfter(10);
+      if (mode !== "off") {
+        page.store.setAutoplayMode(mode);
+        page.player.toggleAutoplay();
+      }
+      page.playVideo(VIDEO, 120);
+      const { video } = page.elements;
+      const source = video.src;
+      video.currentTime = 30;
+      page.player.setLoopMark("start", 20);
+      page.player.setLoopMark("end", 50);
+      expect([mode, page.store.loop.value, video.loop, video.currentTime]).toEqual([mode, true, false, 30]);
+      expect([mode, page.stretch(), stretchEnds(page)]).toEqual([mode, { hidden: false, from: String(20 / 120), to: String(50 / 120) }, ["from-mark", "to-mark"]]);
+      expect(page.player.loopMarks.value).toEqual({ start: 20 / 120, end: 50 / 120 });
+
+      video.currentTime = 50.1;
+      page.player.videoTimeUpdated();
+      expect([mode, video.currentTime]).toEqual([mode, 20]);
+      video.currentTime = 50.02;
+      page.frames.run();
+      expect([mode, video.currentTime]).toEqual([mode, 20]);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect([mode, page.requests("/api/random").length, page.store.playAttemptId.value, video.src, page.requests("/api/record-playback").length]).toEqual([mode, 0, 1, source, 1]);
+    }
+  });
+
+  it("let a seek past the end marker play on to the video's end, which goes back to the start marker without loading again, relaying, or recording another play, and a seek before the start marker play into the stretch", async () => {
+    const page = setup();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+    const source = video.src;
+    page.player.setLoopMark("start", 20);
+    page.player.setLoopMark("end", 50);
+    expect(video.currentTime).toBe(20);
+
+    page.player.seek("80");
+    video.currentTime = 80.25;
+    page.player.videoTimeUpdated();
+    page.frames.run();
+    expect(video.currentTime).toBe(80.25);
+
+    // The browser pauses the video at its end just before its `ended`, which doesn't wait for the user.
+    video.currentTime = 120;
+    video.paused = true;
+    video.ended = true;
+    page.player.videoPlayStateChanged();
+    expect(page.player.paused.value).toBe(false);
+    const plays = video.plays.length;
+    page.player.videoEnded();
+    expect([video.currentTime, video.plays.length]).toEqual([20, plays + 1]);
+    page.player.videoPlaying();
+    expect(page.relayed.filter((line) => line.includes("video-onplaying"))).toHaveLength(1);
+    expect(page.statuses).toEqual(["Playing"]);
+    await vi.waitFor(() => expect(page.requests("/api/record-playback")).toHaveLength(1));
+    expect([video.src, page.store.playAttemptId.value, page.store.loading.shown.value]).toEqual([source, 1, false]);
+
+    page.player.seek("5");
+    video.currentTime = 30;
+    page.player.videoTimeUpdated();
+    video.currentTime = 50.1;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(20);
+  });
+
+  it("with only a start, repeat it to the video's end, and with only an end, from the video's start", () => {
+    const page = setup();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+
+    page.player.setLoopMark("start", 100);
+    expect(video.currentTime).toBe(100);
+    expect([page.stretch(), stretchEnds(page)]).toEqual([{ hidden: false, from: String(100 / 120), to: "1" }, ["from-mark"]]);
+    expect(page.player.loopMarks.value).toEqual({ start: 100 / 120, end: null });
+    video.currentTime = 120;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(120);
+    page.player.videoEnded();
+    expect(video.currentTime).toBe(100);
+
+    page.player.clearLoopMarks();
+    page.player.setLoopMark("end", 30);
+    expect(video.currentTime).toBe(0);
+    expect([page.stretch(), stretchEnds(page)]).toEqual([{ hidden: false, from: "0", to: "0.25" }, ["to-mark"]]);
+    expect(page.player.loopMarks.value).toEqual({ start: null, end: 0.25 });
+    video.currentTime = 30.1;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(0);
+  });
+
+  it("send a video outside the stretch, before it or at or after its end, to the start marker when they change, by a set or the end of a drag, and leave one inside it, which a drag itself never moves", () => {
+    const page = setup();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+
+    video.currentTime = 10;
+    page.player.setLoopMark("start", 20);
+    expect(video.currentTime).toBe(20);
+    video.currentTime = 60;
+    page.player.setLoopMark("end", 60);
+    expect(video.currentTime).toBe(20);
+    video.currentTime = 40;
+    page.player.setLoopMark("end", 90);
+    expect(video.currentTime).toBe(40);
+
+    page.player.dragLoopMark("end", 30);
+    expect([video.currentTime, page.player.loopMarks.value]).toEqual([40, { start: 20 / 120, end: 30 / 120 }]);
+    // Up to a second from the other marker.
+    page.player.dragLoopMark("end", 10);
+    expect([video.currentTime, page.player.loopMarks.value]).toEqual([40, { start: 20 / 120, end: 21 / 120 }]);
+    page.player.endLoopMarkDrag();
+    expect(video.currentTime).toBe(20);
+
+    video.currentTime = 20.5;
+    page.player.dragLoopMark("start", 5);
+    page.player.endLoopMarkDrag();
+    expect([video.currentTime, page.player.loopMarks.value]).toEqual([20.5, { start: 5 / 120, end: 21 / 120 }]);
+
+    // A press and release on a marker that moved nothing leaves a video past the end marker where it is.
+    page.player.seek("100");
+    page.player.endLoopMarkDrag();
+    expect(video.currentTime).toBe(100);
+  });
+
+  it("are set on no video that failed, by a set or where the video is", async () => {
+    const page = setup();
+    answerProbe(page, VIDEO, () => json({ error: "Media can't be read" }, 503));
+    // Its length is known, but it never played, so it fails at once rather than first getting a fresh media URL.
+    page.play(VIDEO, "library");
+    page.elements.video.duration = 120;
+    page.player.videoMetadataLoaded();
+    failMedia(page);
+    await vi.waitFor(() => expect(page.player.mediaFailed.value).toBe(true));
+
+    page.player.setLoopMark("start", 20);
+    page.player.setLoopMarkHere("end");
+    expect([page.player.loopMarks.value, page.store.loop.value]).toEqual([{ start: null, end: null }, false]);
+  });
+
+  it("take the place of Timer mode's stretch while set, which starts where the video is once they clear", () => {
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setAutoplayMode("timer");
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+    expect(page.stretch()).toEqual({ hidden: false, from: "0", to: String(10 / 120) });
+
+    video.currentTime = 5;
+    page.player.setLoopMark("start", 30);
+    page.player.setLoopMark("end", 70);
+    expect([video.currentTime, page.stretch()]).toEqual([30, { hidden: false, from: "0.25", to: String(70 / 120) }]);
+    video.currentTime = 45;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(45);
+
+    page.player.clearLoopMarks();
+    expect([video.currentTime, page.stretch(), stretchEnds(page)]).toEqual([45, { hidden: false, from: String(45 / 120), to: String(55 / 120) }, []]);
+    expect(page.player.loopMarks.value).toEqual({ start: null, end: null });
+  });
+
+  it("with Loop stops autoplay off, repeat a stretch shorter than Advance after until its timer has run, and let a longer one advance at its end marker", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setLoopStopsAutoplay(false);
+    page.player.toggleAutoplay();
+    page.answerRandom(SECOND_VIDEO, SECOND_VIDEO, SECOND_VIDEO);
+    const picks = () => page.requests("/api/random").length;
+    const { video } = page.elements;
+
+    // Normal mode: the repeat in progress finishes once the timer has run, then autoplay goes on.
+    page.playVideo(VIDEO, 120);
+    page.player.setLoopMark("start", 20);
+    page.player.setLoopMark("end", 25);
+    video.currentTime = 25.1;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(20);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(picks()).toBe(0);
+    video.currentTime = 25.1;
+    page.player.videoTimeUpdated();
+    expect(picks()).toBe(1);
+    await settle();
+
+    // Timer mode: the timer advances it mid-repeat.
+    page.store.setAutoplayMode("timer");
+    page.playVideo(VIDEO, 120);
+    page.player.setLoopMark("start", 20);
+    page.player.setLoopMark("end", 25);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(picks()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(picks()).toBe(2);
+    await settle();
+
+    // Normal mode: a longer stretch plays once to its end marker.
+    page.store.setAutoplayMode("normal");
+    page.playVideo(VIDEO, 120);
+    page.player.setLoopMark("start", 20);
+    page.player.setLoopMark("end", 50);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(picks()).toBe(2);
+    video.currentTime = 50.1;
+    page.player.videoTimeUpdated();
+    expect(picks()).toBe(3);
+  });
+
+  it("clear as Loop turns off, and a new item, the same item played again, a photo, and a video before its length is known start without them", () => {
+    const page = setup();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+    page.player.setLoopMark("end", 30);
+    page.player.toggleLoop();
+    expect([page.store.loop.value, page.player.loopMarks.value, page.stretch().hidden, video.loop]).toEqual([false, { start: null, end: null }, true, false]);
+    video.currentTime = 30.1;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(30.1);
+
+    page.player.setLoopMarkHere("start");
+    expect([page.store.loop.value, page.player.loopMarks.value]).toEqual([true, { start: 30.1 / 120, end: null }]);
+    page.playVideo(VIDEO, 120);
+    expect([page.player.loopMarks.value, page.stretch().hidden, video.loop]).toEqual([{ start: null, end: null }, true, true]);
+    page.player.setLoopMark("start", 10);
+    page.playVideo(SECOND_VIDEO, 60);
+    expect(page.player.loopMarks.value).toEqual({ start: null, end: null });
+
+    page.player.toggleLoop();
+    page.play(PHOTO);
+    page.player.setLoopMark("start", 5);
+    page.player.setLoopMarkHere("end");
+    // A new source's length isn't known until its metadata loads.
+    video.duration = Number.NaN;
+    page.play(VIDEO);
+    page.player.setLoopMark("start", 5);
+    expect([page.store.loop.value, page.player.loopMarks.value]).toEqual([false, { start: null, end: null }]);
   });
 });
 

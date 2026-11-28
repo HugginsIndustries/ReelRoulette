@@ -391,6 +391,15 @@ ReelRoulette is a thin-client, API-first system:
   - Raising the volume while muted unmutes and starts from 0.
   - Lowering it while muted changes nothing.
   - Lowering it to 0 while not muted mutes, unmuting then restoring the volume from before that change, which for a slider drag runs from its press to its release, for a two-finger drag from its second finger to its fingers lifting, and is each wheel notch or key step on its own.
+- The scrub bar and the volume slider are drawn by the page in place of the browser's own look (`src/ui/sliderLabel.ts` and the seek row in `src/ui/Player.tsx`):
+  - Each has its own track element under the slider, rounded, from where the thumb's center sits at 0 to where it sits at the end, orange up to the value and a slightly see-through dark gray after it, and the slider draws only its plain orange thumb.
+  - The thumb's center runs from half the thumb's box in from each end (`--thumb-half`), 16 px wide, or 28 px on a touch screen, where the sliders are 32 px tall and reach past the 24 px row, so the row keeps its height.
+  - A mouse or pen over a slider, or dragging it, and a finger on it until it lifts, makes the track 6 px thick and the thumb 16 px, from 4 px and 10 px, around a center that never moves.
+  - A label above the pointer shows the value there, the time on the scrub bar and "{n}%" on the volume slider, kept within the slider's width, and higher for a finger.
+    - It hides as its slider becomes disabled under the pointer, and as each new item starts on the scrub bar, until the pointer moves again, and a new length shows the value under the same point anew.
+  - On the scrub bar, a mouse or pen ahead of the position fills the track light gray up to it.
+  - Both show the pointing hand while they can be dragged, and a disabled one shows the default cursor and is dimmed.
+  - The volume slider has no tooltip, since it would cover the label.
 - The scroll wheel over the player changes the volume by the volume step, a notch at a time, a trackpad's small deltas adding up to a notch per 100 px, and two fingers dragged up or down on it change it a step per 30 px, each showing the controls, working on a photo, where they set the next video's level, and on iOS from the start, and never scrolling or zooming the page, as the player claims its touches (`touch-action: none`) and turns away Safari's pinch gesture.
   - Neither changes the volume where the slider hides.
 - The player and its controls show no tap highlight (`-webkit-tap-highlight-color: transparent`).
@@ -431,7 +440,7 @@ ReelRoulette is a thin-client, API-first system:
   - The header's duration is m:ss, or h:mm:ss from an hour, as the total is.
   - The bar and the time sit the seek row's 12 px gap apart, with no margin on the bar and no minimum width on the time, whose digits are all one width (`tabular-nums`), so it doesn't jitter while playing.
   - The time stays light in both themes, as the player stays dark.
-- Checkboxes, radio buttons, and sliders use the orange accent (`accent-color`) in both themes.
+- Checkboxes, radio buttons, and the Settings tab's sliders use the orange accent (`accent-color`) in both themes; the player's sliders are drawn by the page.
 
 #### Player rating (`src/rating/playerRating.ts`)
 
@@ -474,6 +483,7 @@ ReelRoulette is a thin-client, API-first system:
   - A turns Autoplay on or off.
   - M turns Mute on or off, showing the volume indicator, Muted or the volume unmuting restores.
   - Comma and period step a paused video one frame back and forward, and do nothing while it plays or on a photo, nor forward from its last frame.
+  - I and O set the loop's start and end markers where a video is, turning Loop on, and X clears them, none of them doing anything on a photo or a video that can't play.
   - [ and ] step the volume by the volume step as the scroll wheel does, on a photo too, and not where the slider hides.
   - 1 to 6 open the panel on Library, Tags, Stats, Filter, Randomization, and Settings, T and S on Tags and Settings, and the open tab's key closes it.
   - P shows or hides the panel as its button does.
@@ -549,12 +559,23 @@ ReelRoulette is a thin-client, API-first system:
     - In Timer mode a video repeats a stretch of Advance after seconds, or up to its end when that comes first.
       - The stretch starts at 0 for a new item, where the video is when the stretch starts to apply, such as when Loop is turned on mid-video, and where a seek lands, except that a video at its end, where a seek lands or where it sits as the stretch starts to apply, starts it, and goes back, Advance after seconds before the end, or at 0 for a shorter video.
       - The browser repeats a stretch that is the whole video itself.
-      - The stretch shows faintly behind the scrub bar's track, inset by half the thumb's width so it lines up with the thumb (`#seek-loop` in `#seek-wrap`).
+      - The stretch shows as a faint orange band, 14 px tall, behind the scrub bar's track, in a rounded box over the track's length that clips it, so it lines up with the thumb and rounds at the track's ends (`#seek-loop` in `#seek-wrap`).
   - Off, autoplay goes on with Loop on:
     - A photo advances after Advance after.
     - A video shorter than Advance after repeats until it has run and then advances, at once in Timer mode and once the repeat in progress finishes in Normal mode.
     - A longer video advances at Advance after in Timer mode and at its end in Normal mode.
 - With Autoplay off, Loop repeats a video whole in either mode.
+- Loop markers set a stretch of a video that Loop repeats (`src/playback/loopMarks.ts`, kept by the player):
+  - The scrub bar's menu sets the start or the end at the time under the pointer, and I and O where the video is; setting one turns Loop on.
+  - The scrub bar's menu and X clear them, and so does turning Loop off; another item, the same item played again, and a page refresh start without them.
+  - They stay in order at least a second apart, one set within a second of the other or past it clearing the other, and each at least a second from the video's other end.
+  - With only a start set the stretch runs to the video's end, and with only an end set from its start.
+  - Each shows as an orange line 3 px wide and 18 px tall on top of the scrub bar, and the stretch between them in Timer mode's band, square at a marker.
+  - A marker's line drags it, by a 24 px square around it, or 36 px on a touch screen, with the sideways resize cursor, up to a second from the other, moving only the marker while the video plays on, and keeping the controls shown.
+  - Whenever they change, by the menu, I or O, or the end of a drag, a video outside the stretch, before it or at or after its end, goes to the start marker, and one inside it stays.
+  - While either is set, Loop treats the stretch as the whole video, in place of Timer mode's stretch, which starts where the video is once they clear:
+    - A video that plays up to the end marker, or to its own end after a seek past it, goes back to the start marker, as a repeat, with the video's own `loop` off.
+    - With Loop stops autoplay off and Autoplay on, a stretch shorter than Advance after repeats until it has run, and a longer one plays once to its end marker before autoplay goes on.
 - A repeat only restarts a photo's timer or moves the video back: nothing loads again, shows Loading…, relays a line to `last.log`, or records another play, so a looping photo doesn't flicker and counts one play.
 
 #### Ambient mode
@@ -912,11 +933,11 @@ ReelRoulette is a thin-client, API-first system:
 
 - The browser's own right-click menu is off across the page except in text fields, textareas and text, search, url, tel, email, password, and number inputs, which keep it for copy, paste, and spell check.
 - A part of the page with a menu registers as a surface with the context menu (`addSurface` in `src/ui/menuModel.ts`), and the elements its menu opens on carry the `menu-surface` class, which turns off the browser's long-press callout and, on a touch screen, text selection.
-  - The library grid, whose tiles carry the class, the player's media area, and Auto Tag's results, for its file rows, register themselves.
+  - The library grid, whose tiles carry the class, the player's media area, the scrub bar's wrapper, and Auto Tag's results, for its file rows, register themselves.
   - A component gives the header's now-playing name, the Stats tab's file name, path, and tags, the Tags tab's tags and category headers, the Filter tab's preset rows and sources, the bell's list rows, the popups, and the Settings tab's client and session ids a menu from its groups with `useMenuSurface` (`src/ui/Menu.tsx`).
   - The name's menu and the Stats tab's file name's and path's open through the menus on the playing item, so they close when another item plays.
 - A mouse's right-click anywhere on a surface opens the innermost surface's menu at the pointer, and one where no menu exists opens nothing.
-- A long press with a finger or a pen (`src/ui/longPress.ts`: half a second, started only by the first finger down, so a pinch never starts one, and cancelled by moving 8 px, a second finger, a scroll the browser takes over, or lifting first) opens it where the press began, except on buttons, but those a surface counts as part of it (`pressOn`), as a tag category's header does its name, drag handles, the rating's stars, and the panel's resize handle.
+- A long press with a finger or a pen (`src/ui/longPress.ts`: half a second, started only by the first finger down, so a pinch never starts one, and cancelled by moving 8 px, a second finger, a scroll the browser takes over, or lifting first) opens it where the press began, except on buttons, but those a surface counts as part of it (`pressOn`), as a tag category's header does its name, drag handles, the loop markers, the rating's stars, and the panel's resize handle.
   - The click it ends with is stopped before anything hears it.
   - The right-click Chrome on Android sends for a long press opens nothing more.
 - The menu closes on a scroll outside it, a resize, and the browser tab hiding, and tints the element it acts on while open, unless the surface marks it its own way, as a tile's ring does.
@@ -931,6 +952,7 @@ ReelRoulette is a thin-client, API-first system:
       - Then the file items.
       - Then Delete file…, the last two groups' actions the library menus' on the one item.
   - The picture isn't tinted.
+  - The scrub bar's opens on a video that can play, at the time under the pointer: Set loop start at {time} (`start`) and Set loop end at {time} (`keyboard_tab`), then Clear loop markers (`close`), disabled with "No loop markers to clear" while none is set, and holds the controls as the player's does.
   - The touch that opened it with a long press is neither a tap nor a swipe.
   - The controls' Hide after countdown holds while it is open and starts again as it closes, showing them only when the user closed it with a pick, Escape, or a press outside, though opening it, or its closing on its own, as when another item plays, doesn't show hidden controls.
   - The header's now-playing name's menu holds Show stats, then the file items.

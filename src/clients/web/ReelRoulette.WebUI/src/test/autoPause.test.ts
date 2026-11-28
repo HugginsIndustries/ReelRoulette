@@ -136,7 +136,8 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     photo,
     emptyState: { style: { display: "" } },
     seekSlider: { value: "0", max: "100" },
-    seekStretch: { hidden: true, style: { setProperty() {} } }
+    seekWrap: { style: { setProperty() {} } },
+    seekStretch: { hidden: true, style: { setProperty() {} }, classList: { toggle() {} } }
   } satisfies PlayerElements);
 
   const viewport = fakeViewport(size);

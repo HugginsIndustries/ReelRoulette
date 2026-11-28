@@ -710,7 +710,7 @@ describe("Autoplay mode and Loop stops autoplay", () => {
     expect(hintOf(within(settingsPage()).getByRole("radiogroup", { name: "Autoplay mode", hidden: true }))).toBe("The player's autoplay button turns it on and off.");
     expect(checkbox("Loop stops autoplay").checked).toBe(true);
     expect(hintOf(checkbox("Loop stops autoplay"))).toBe(
-      "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
+      "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances, as does a shorter stretch between loop markers."
     );
   });
 

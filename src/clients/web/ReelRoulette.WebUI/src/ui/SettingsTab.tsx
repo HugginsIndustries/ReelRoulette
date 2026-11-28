@@ -235,7 +235,7 @@ function PlaybackSettings() {
       <Checkbox
         id="settings-loop-stops-autoplay"
         label="Loop stops autoplay"
-        hint="With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
+        hint="With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances, as does a shorter stretch between loop markers."
         checked={store.loopStopsAutoplay.value}
         onChange={store.setLoopStopsAutoplay}
       />

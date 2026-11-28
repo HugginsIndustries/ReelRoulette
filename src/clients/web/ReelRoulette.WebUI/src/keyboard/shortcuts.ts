@@ -26,6 +26,9 @@ export type ShortcutAction =
   | "mute"
   | "frameBack"
   | "frameForward"
+  | "loopStart"
+  | "loopEnd"
+  | "clearLoop"
   | "volumeDown"
   | "volumeUp"
   | PanelTab
@@ -128,6 +131,16 @@ export const SHORTCUT_LINES: readonly ShortcutLine[] = [
       { key: ".", action: "frameForward" }
     ]
   },
+  {
+    keys: ["I", "O"],
+    join: "/",
+    text: "Set the loop's start or end marker where the video is, turning Loop on",
+    bindings: [
+      { key: "i", action: "loopStart" },
+      { key: "o", action: "loopEnd" }
+    ]
+  },
+  { keys: ["X"], text: "Clear the loop markers", bindings: [{ key: "x", action: "clearLoop" }] },
   {
     keys: ["[", "]"],
     join: "/",
@@ -235,7 +248,10 @@ export function shortcutFor(press: KeyPress): ShortcutAction | null {
 
 /** What the shortcuts act on. */
 export interface ShortcutServices {
-  player: Pick<Player, "playOrPause" | "seekBy" | "stepFrame" | "previous" | "next" | "pickRandom" | "toggleFavorite" | "toggleBlacklist" | "toggleAutoplay">;
+  player: Pick<
+    Player,
+    "playOrPause" | "seekBy" | "stepFrame" | "setLoopMarkHere" | "clearLoopMarks" | "previous" | "next" | "pickRandom" | "toggleFavorite" | "toggleBlacklist" | "toggleAutoplay"
+  >;
   audio: Pick<AudioStage, "toggleMute" | "stepVolume" | "volumeShown">;
   panel: Pick<PanelHost, "isOpen" | "tab" | "showTab" | "close" | "toggle">;
   fullscreen: Pick<StageFullscreen, "toggle">;
@@ -289,6 +305,13 @@ export function runShortcut(action: ShortcutAction, services: ShortcutServices):
       return player.stepFrame(-1);
     case "frameForward":
       return player.stepFrame(1);
+    // The player sets and clears the loop markers only on a video whose length is known.
+    case "loopStart":
+      return player.setLoopMarkHere("start");
+    case "loopEnd":
+      return player.setLoopMarkHere("end");
+    case "clearLoop":
+      return player.clearLoopMarks();
     // The volume can't change where its slider hides, as for the scroll wheel.
     case "volumeDown":
     case "volumeUp":
