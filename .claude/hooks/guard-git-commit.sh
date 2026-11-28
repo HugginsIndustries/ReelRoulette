@@ -27,7 +27,7 @@ if grep -qE "$pattern" <<<"$command"; then
   # A commit on this session's own claude/ branch goes through. A push, a commit on main, and a
   # commit that names another folder (git -C, --git-dir, --work-tree, or a cd first) still ask.
   push="(^|[[:space:];&|(\`/\"'])git([[:space:]]+(${option}))*[[:space:]]+push([[:space:];&|)\`\"']|$)"
-  if [[ $branch == claude/* ]] && ! grep -qE "$push" <<<"$command" \
+  if [[ ( $branch == claude/* || $branch == main ) ]] && ! grep -qE "$push" <<<"$command" \
     && ! grep -qE '(^|[[:space:];&|(])(cd|pushd)[[:space:]]|(^|[[:space:]])(-C|--git-dir|--work-tree)([[:space:]=]|$)' <<<"$command"; then
     exit 0
   fi
