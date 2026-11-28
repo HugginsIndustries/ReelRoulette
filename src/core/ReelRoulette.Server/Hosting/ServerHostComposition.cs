@@ -68,7 +68,14 @@ public static class ServerHostComposition
         {
             // No backup is attached, so neither a backup nor rotation runs against these files.
             logger.LogWarning("Running without a library: {Reason}", host.UnavailableMessage);
-            new ServerLogService(appDataRoot, logger).Append("warn", host.UnavailableMessage!);
+            var log = new ServerLogService(appDataRoot, logger);
+            log.Append("warn", host.UnavailableMessage!);
+            if (host.UnavailableDetail != null)
+            {
+                logger.LogWarning("{Detail}", host.UnavailableDetail);
+                log.Append("warn", host.UnavailableDetail);
+            }
+
             return host;
         }
 
@@ -506,10 +513,13 @@ public static class ServerHostComposition
             return Results.Ok(playResponse);
         }
 
+        // A refresh can remove the item after the play read it, so the play answers as for an item no longer there.
         var recorded = operations.RecordPlayback(playResponse!.ItemId);
         if (!recorded.Found)
         {
-            return Results.Json(new { error = "Playback could not be recorded", code = "play_record_failed" }, statusCode: StatusCodes.Status500InternalServerError);
+            return Results.Json(
+                new { error = ItemNotInLibrary, code = LibraryPlaybackService.PlayItemErrorNotFound },
+                statusCode: StatusCodes.Status404NotFound);
         }
 
         state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
@@ -1247,6 +1257,13 @@ public static class ServerHostComposition
         if (string.IsNullOrWhiteSpace(itemId))
         {
             return Results.BadRequest(new { error = "itemId is required" });
+        }
+
+        // The id becomes a file name in the thumbnails folder, so an id holding a separator or a drive, such as a
+        // decoded `\` on Windows, could reach a file outside that folder.
+        if (itemId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            return Results.NotFound();
         }
 
         var file = new FileInfo(refresh.GetThumbnailPath(itemId));

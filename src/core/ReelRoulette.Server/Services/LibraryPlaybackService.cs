@@ -115,11 +115,12 @@ public sealed class LibraryPlaybackService
             _serverLog?.Append("info", $"Random pick memory dropped devices={dropped}.");
         }
 
+        // A refresh can remove the picked item after the eligible query read it.
         var selected = _catalog.Session.ReadPlaybackItem(picked.Item.Id);
         if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
         {
-            error = "Selected item not found.";
-            statusCode = StatusCodes.Status500InternalServerError;
+            error = "The picked file is no longer in the library.";
+            statusCode = StatusCodes.Status404NotFound;
             return false;
         }
 

@@ -259,8 +259,9 @@ Reconnect/resync behavior:
   - A change to the filter or the options keeps it, and a server restart clears it.
   - Each pick drops the memory of every device whose last pick is past the window it was picked with, so a device on null keeps its memory until the server restarts.
   - The answer's `cycle` holds the device's Shuffle cycle numbers after the pick: `picked`, the eligible items picked within the window, `eligible`, and `remaining`, which with `picked` adds up to `eligible`.
-  - `POST /api/random/cycle` takes the same body and answers those numbers as they stand, without picking or changing the memory, with the same 400, 404, and 503 answers as a pick.
+  - `POST /api/random/cycle` takes the same body and answers those numbers as they stand, without picking or changing the memory, with the same 400, unknown-preset 404, and 503 answers as a pick.
   - `POST /api/random/reset` (`{ "clientId"? }`) clears the device's Shuffle memory and its last pick and answers **`204`**; the last 16 picks that Spread by folder and Spread by tags look at stay, so the next pick still skips recent folders.
+  - A pick whose item a refresh removes before the server reads it answers **`404`** with "The picked file is no longer in the library."
   - Each pick writes one `last.log` line naming the options that are on and the window, such as `Random pick options=shuffle,spreadByFolder remember=30d eligible=812 elapsedMs=41.`, without ids or paths.
 
 - **Browser-playable filter:** `onlyBrowserPlayable` true keeps photos and only the videos whose container a browser can play: a file name ending in `.mp4`, `.m4v`, or `.webm`, in any case (`BrowserPlayableContainers` in Core).
@@ -307,7 +308,7 @@ Reconnect/resync behavior:
   - Success returns `PlaybackItemResponse`, the item a random pick's `item` carries (`id` is the full path, `itemId` the catalog item id, and `integratedLoudness` and `peakDb` the loudness scan's integrated loudness in LUFS and true peak in dBTP, or null where it hasn't measured them, which the WebUI's loudness normalization reads, and `rating` the item's rating in stars, from 0.5 to 5 in half-star steps, or null for none, which the WebUI's player shows, also from a history step's answer) and updates play count / last-played server-side with a `playbackRecorded` SSE event—do **not** call `POST /api/record-playback` for the same play start.
   - Blacklist does **not** block this endpoint.
   - Errors use `ErrorResponse` with optional machine-readable `code` (for example `play_item_not_found`, `play_media_missing`, `play_source_disabled`, `play_unsupported_media`, `play_item_id_invalid`, `play_media_unreadable`) and HTTP statuses:
-    - **`404`** (unknown id or missing file).
+    - **`404`** (unknown id or missing file, or, with `play_item_not_found`, an item a refresh removed before its play was counted).
     - **`409`** (disabled source).
     - **`415`** (extension not in the server's supported list, `SupportedMediaExtensions`).
     - **`503`** (the file is there but can't be read, with `play_media_unreadable`, or the server has no library).
@@ -515,6 +516,7 @@ Reconnect/resync behavior:
   - A missing file is reported with its `itemId` and `fullPath`, and that row stays.
   - It publishes one `itemsRemoved` for the items it removed, when it removed any, or `resyncRequired` in its place past 1,000, writes delete files' `last.log` lines named `Duplicate apply`, and takes delete files' admin check, with the same **403** and warning line for any other caller.
 - `POST /api/autotag/scan` — body `scanFullLibrary`. The scan reads catalog rows. `scanFullLibrary: true` scans every item, and `false` scans enabled sources only (zero enabled sources scans nothing). Each matched file carries its `itemId` beside `fullPath`.
+  - A tag matches a file whose name, or path inside its source, contains the tag's name, ignoring case. The source's own folder isn't matched, so a tag named after it doesn't match every file in that source.
 - `POST /api/autotag/apply` returns `applied`, one entry per tag that was newly written, with only the files that gained that tag by item id in `changedItemIds`.
   - When any file gains a tag, it publishes one `itemTagsChanged` event per tag that was newly applied, listing only the files that gained that tag in `resolvedItemIds`, except that one `resyncRequired`, published after them, stands in for every tag's event that would list more than 1,000, and one `tagCatalogChanged` event.
 
@@ -538,6 +540,7 @@ Reconnect/resync behavior:
 - `POST /control/update/check` — query the configured feed; does not download or apply.
 - `POST /control/update/download` — download the update from the last successful check; does not apply.
 - `POST /control/update/apply` — apply a downloaded update and restart the server process (operator UI disconnects).
+- A failed check, download, or apply, the background check's included, writes its error's type and message to `last.log`, which the Operator's log panel shows.
 
 - `GET /control/status` — `ControlStatusResponse`. `libraryState` is `ready`, `newer`, `damaged`, `missing`, or `unreadable`, with the same meanings as the `library_*` error codes, and `libraryMessage` says why there is no library and what to do, or is null when the state is `ready`. The Operator page shows that message. `isHealthy` does not change with the library state.
 - `GET /control/settings`

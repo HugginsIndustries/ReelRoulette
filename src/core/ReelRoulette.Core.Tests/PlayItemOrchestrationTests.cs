@@ -112,6 +112,25 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         Assert.Empty(state.GetReplayAfter(0).Events);
     }
 
+    // A refresh can remove the item after the play read it and before its play is counted.
+    [Fact]
+    public void PlayItem_WhenTheItemLeavesTheLibraryBeforeItsPlayIsCounted_AnswersThatItIsNoLongerThere()
+    {
+        var (_, playback, _, state) = SeedPlayableItem();
+        // The play reads the seeded catalog, and the count a catalog without the item, as after that refresh.
+        var afterRefresh = Path.Combine(_appData, "after-refresh");
+        CatalogSeed.Write(afterRefresh);
+        var operations = new LibraryOperationsService(CatalogOpen.Host(afterRefresh), NullLogger<LibraryOperationsService>.Instance, afterRefresh);
+
+        var result = ServerHostComposition.PlayItem("orch-item", Request("""{"clientId":"client-a"}"""), playback, operations, state, new OperatorTestingService());
+
+        Assert.Equal(StatusCodes.Status404NotFound, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal(ServerHostComposition.ItemNotInLibrary, OpenApiSpec.ErrorReason(result));
+        var body = OpenApiSpec.SerializeAsServer(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorNotFound, body.GetProperty("code").GetString());
+        Assert.Empty(state.GetReplayAfter(0).Events);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_appData))

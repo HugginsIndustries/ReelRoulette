@@ -165,7 +165,15 @@ When the server cannot use its catalog, it keeps running without a library inste
 - An upgrade from an older version that cannot run, for example because another program holds the file, leaves `library.db` unchanged, like a file that cannot be read.
 - An empty `library.db` is created only on a fresh install: no `library.db`, no `library.db.refused*` file, and no `library.db.backup.*` file in `backups/`.
 
-Without a library, `last.log` has a warning with the reason, the Operator page shows it, and `/api/version` and `/control/status` report it in `libraryState` and `libraryMessage`. Library API routes answer 503 with that message. Catalog backups and refresh do not run, and settings, logs, restart, stop, and in-app update keep working.
+Without a library:
+
+- `last.log` has a warning with the reason.
+- When an upgrade or the read of the schema version failed, a second warning follows with the error.
+- The Operator page shows the reason.
+- `/api/version` and `/control/status` report it in `libraryState` and `libraryMessage`.
+- Library API routes answer 503 with that message.
+- Catalog backups and refresh do not run.
+- Settings, logs, restart, stop, and in-app update keep working.
 
 Catalog backup rotation deletes only valid current-version backups beyond the backup count, oldest first. Backups at another schema version, such as backups from before an upgrade, and files it does not recognize stay in `backups/` until you remove them by hand, and they count toward neither the backup count nor the time between backups.
 

@@ -274,6 +274,40 @@ public sealed class LibraryCatalogMigrationTests
     }
 
     [Fact]
+    public void ServerStart_FailedMigration_WritesTheReasonAndItsErrorToLastLog()
+    {
+        using var dir = new TempDirectory();
+        SeedSchema2(dir.Path);
+        var databasePath = Path.Combine(dir.Path, "library.db");
+        LibraryCatalogStore.BeforeMigrationCommit = path =>
+        {
+            if (path == databasePath)
+            {
+                throw new IOException("Interrupted before commit.");
+            }
+        };
+        LibraryCatalogHost host;
+        try
+        {
+            host = CatalogOpen.ServerHost(dir.Path);
+        }
+        finally
+        {
+            LibraryCatalogStore.BeforeMigrationCommit = null;
+        }
+
+        Assert.False(host.HasLibrary);
+        Assert.Equal(LibraryCatalogStore.UnreadableMessage, host.UnavailableMessage);
+        var lines = File.ReadAllLines(Path.Combine(dir.Path, "last.log"));
+        Assert.Collection(
+            lines,
+            line => Assert.EndsWith($"[warn] {LibraryCatalogStore.UnreadableMessage}", line),
+            line => Assert.EndsWith(
+                $"[warn] Library upgrade from schema version {LibraryCatalogStore.OldestUpgradableSchemaVersion} failed. IOException: Interrupted before commit.",
+                line));
+    }
+
+    [Fact]
     public void Open_Schema2CatalogWithASchema2Previous_RemovesThePreviousBeforeMigrating()
     {
         using var dir = new TempDirectory();

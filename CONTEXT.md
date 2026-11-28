@@ -41,7 +41,7 @@ ReelRoulette is a thin-client, API-first system:
 - Operator testing mode supports deterministic fault simulation (version/capability mismatch, API unavailable, media missing, SSE disconnect).
 - mDNS LAN hostname advertisement for WebUI when enabled.
 - `REELROULETTE_DATA_DIR` moves the server's settings, catalog, backups, `last.log`, and thumbnails (`<folder>/thumbnails`) to one folder on every OS; unset, the server uses `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette/thumbnails`. Server-starting verification scripts and the core test run set it to a temporary folder.
-- `last.log` lines from the server and from `POST /api/logs/client` go through one writer under a process-wide lock, one line per entry. Relayed WebUI lines carry no file paths or file names; the server's own source import and backup lines still show paths, and a failed refresh's error line its exception, whose message can name a file.
+- `last.log` lines from the server and from `POST /api/logs/client` go through one writer under a process-wide lock, one line per entry. Relayed WebUI lines carry no file paths or file names; the server's own source import and backup lines still show paths, and a failed refresh's and a failed library upgrade's error lines their exception, whose message can name a file.
 - When the server starts stopping, it ends open event streams and cuts media responses still being sent, so stop, restart, and update apply do not wait for connected clients.
 - Host-UI abstraction keeps server runtime tray-agnostic:
   - Uses a cross-platform Avalonia tray host when available (lifecycle/refresh/operator shortcuts). The tray runs until the server shuts it down, always on the tray's UI thread. If the tray ends without that, `last.log` records it and the server keeps running.
@@ -72,7 +72,7 @@ ReelRoulette is a thin-client, API-first system:
   - A database at a schema version before 2, or one whose schema or revision row shows it is not a database or is corrupt, is moved aside to `library.db.refused`.
   - An empty database is created only when there is no `library.db`, no `library.db.refused*` file, and no `library.db.backup.*` file.
   - Otherwise the server runs without a library:
-    - `last.log` gets a warning with the reason.
+    - `last.log` gets a warning with the reason, and a second one with the error when an upgrade or the read of the schema version failed.
     - `/control/status` and `/api/version` report it in `libraryState` and `libraryMessage`.
     - The Operator page shows it.
     - Every `/api` route except version, capabilities, pairing, web runtime, backup and refresh settings, and client log relay answers 503 with it.

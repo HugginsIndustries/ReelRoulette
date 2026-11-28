@@ -860,8 +860,12 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       (events || []).forEach(evt => {
         const tr = document.createElement("tr");
         const ts = evt.timestampUtc ? new Date(evt.timestampUtc).toLocaleTimeString() : "-";
-        tr.innerHTML =
-          `<td>${ts}</td><td>${evt.method || "-"}</td><td>${evt.path || "-"}</td><td>${evt.statusCode ?? "-"}</td><td>${evt.eventType || "-"}</td>`;
+        // Any device can choose a request's path, so every cell is text, never markup.
+        [ts, evt.method || "-", evt.path || "-", evt.statusCode ?? "-", evt.eventType || "-"].forEach(value => {
+          const td = document.createElement("td");
+          td.textContent = String(value);
+          tr.appendChild(td);
+        });
         body.appendChild(tr);
       });
     }
@@ -1048,10 +1052,10 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       const restartRequired = hasRuntimeDelta(before, updated);
       if (restartRequired) {
         const next = buildNextOperatorUrls(updated);
-        const links = [
-          `<a href="${next.local}">${next.local}</a>`,
-          next.lan ? `<a href="${next.lan}">${next.lan}</a>` : null
-        ].filter(Boolean).join(" | ");
+        const links = [next.local, next.lan]
+          .filter(Boolean)
+          .map(url => `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`)
+          .join(" | ");
         setSettingsStatus(`Settings saved. <strong>Restart required</strong> for changes to take effect. Next operator URL(s): ${links}`);
       } else {
         setSettingsStatus("Settings saved. No restart required.");
@@ -1087,7 +1091,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 
       const result = response.result || {};
       if (!result.accepted) {
-        const errors = (result.errors || []).join("<br />");
+        const errors = (result.errors || []).map(escapeHtml).join("<br />");
         setControlStatus(`Control settings not applied: ${errors || "Validation failed."}`, true);
         return;
       }
@@ -1105,7 +1109,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       await Promise.all([loadControlSettings(), loadStartupLaunchSetting(), refreshStatus()]);
       const controlMessage = result.message || "Control settings applied.";
       const startupMessage = startupResult.message || "Launch Server on Startup updated.";
-      setControlStatus(`${controlMessage}<br />${startupMessage}`);
+      setControlStatus(`${escapeHtml(controlMessage)}<br />${escapeHtml(startupMessage)}`);
     }
 
     async function restartRuntime() {
@@ -1128,8 +1132,8 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       document.getElementById("updateStatusLine").textContent = err.message || String(err);
     }));
     document.getElementById("refreshStatus").addEventListener("click", () => refreshStatus().catch(err => setStatus(err.message)));
-    document.getElementById("saveWebSettings").addEventListener("click", () => saveWebRuntimeSettings().catch(err => setSettingsStatus(err.message, true)));
-    document.getElementById("saveControlSettings").addEventListener("click", () => saveControlSettings().catch(err => setControlStatus(err.message, true)));
+    document.getElementById("saveWebSettings").addEventListener("click", () => saveWebRuntimeSettings().catch(err => setSettingsStatus(escapeHtml(err.message), true)));
+    document.getElementById("saveControlSettings").addEventListener("click", () => saveControlSettings().catch(err => setControlStatus(escapeHtml(err.message), true)));
     document.getElementById("tokenGateForm").addEventListener("submit", event => submitControlToken(event).catch(err => setTokenGateStatus(err.message || String(err), true)));
     document.getElementById("restartRuntime").addEventListener("click", () => restartRuntime().catch(err => setStatus(err.message)));
     document.getElementById("stopRuntime").addEventListener("click", () => stopRuntime().catch(err => setStatus(err.message)));
@@ -1339,6 +1343,7 @@ file sealed class StartupLaunchUpdateRequest
 file sealed class RestartCoordinator
 {
     private readonly ILogger<RestartCoordinator> _logger;
+    private readonly ServerLogService _serverLog;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly CoreSettingsService _settings;
     private readonly ServerRuntimeOptions _runtimeOptions;
@@ -1346,11 +1351,13 @@ file sealed class RestartCoordinator
 
     public RestartCoordinator(
         ILogger<RestartCoordinator> logger,
+        ServerLogService serverLog,
         IHostApplicationLifetime lifetime,
         CoreSettingsService settings,
         ServerRuntimeOptions runtimeOptions)
     {
         _logger = logger;
+        _serverLog = serverLog;
         _lifetime = lifetime;
         _settings = settings;
         _runtimeOptions = runtimeOptions;
@@ -1379,7 +1386,12 @@ file sealed class RestartCoordinator
                     }
                     else
                     {
-                        _logger.LogWarning("Replacement server process launch failed; restart will behave like stop-only.");
+                        _logger.LogWarning(
+                            "Replacement server process launch failed ({Message}); restart will behave like stop-only.",
+                            launchMessage);
+                        _serverLog.Append(
+                            "warn",
+                            $"Replacement server process launch failed ({launchMessage}); restart will behave like stop-only.");
                     }
                 });
             }

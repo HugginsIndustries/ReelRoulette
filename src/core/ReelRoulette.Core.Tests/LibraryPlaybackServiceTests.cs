@@ -1264,11 +1264,37 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Equal(LibraryPlaybackService.PlayItemErrorInvalidId, code);
     }
 
+    // A refresh can remove the picked item after the eligible query read it.
+    [Fact]
+    public void TrySelectRandom_WhenThePickedItemLeavesTheLibraryDuringThePick_SaysItIsNoLongerThere()
+    {
+        var host = OpenCatalog();
+        InsertItem(host, "a", "on", "/media/a.mp4");
+        var playback = CreateService(host, new RemovingRandom(() => host.Session.DeleteItem("a")));
+
+        var ok = playback.TrySelectRandom(Body<RandomRequest>("""{"filterState":{},"clientId":"device"}"""), [], out var response, out var statusCode, out var error);
+
+        Assert.False(ok);
+        Assert.Null(response);
+        Assert.Equal(StatusCodes.Status404NotFound, statusCode);
+        Assert.Equal("The picked file is no longer in the library.", error);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
         {
             Directory.Delete(_tempDir, recursive: true);
+        }
+    }
+
+    /// <summary>Runs <paramref name="onRoll"/> as the pick rolls, after the eligible query and before the picked item is read.</summary>
+    private sealed class RemovingRandom(Action onRoll) : Random
+    {
+        public override double NextDouble()
+        {
+            onRoll();
+            return 0;
         }
     }
 

@@ -30,6 +30,9 @@ public sealed class LibraryCatalogHost
     /// <summary>Why there is no library, or null when there is one.</summary>
     public string? UnavailableMessage { get; }
 
+    /// <summary>The error behind <see cref="UnavailableMessage"/>, when the open caught one, for <c>last.log</c>.</summary>
+    public string? UnavailableDetail { get; private init; }
+
     public bool HasLibrary => _session != null;
 
     /// <summary>The library state as the control status reports it.</summary>
@@ -68,6 +71,9 @@ public sealed class LibraryCatalogHost
             };
         }
 
-        return new LibraryCatalogHost(null, result.Status, result.Message ?? LibraryCatalogStore.RefusedMessage);
+        return new LibraryCatalogHost(null, result.Status, result.Message ?? LibraryCatalogStore.RefusedMessage)
+        {
+            UnavailableDetail = result.FailureDetail
+        };
     }
 }

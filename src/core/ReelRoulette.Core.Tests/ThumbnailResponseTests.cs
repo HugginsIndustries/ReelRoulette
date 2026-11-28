@@ -94,6 +94,22 @@ public sealed class ThumbnailResponseTests : IDisposable
         Assert.Equal(StatusCodes.Status404NotFound, response.StatusCode);
     }
 
+    // On Windows the route decodes %5C to a backslash, so an id can climb out of the thumbnails folder or name a drive.
+    [Fact]
+    public async Task AnIdThatNamesAFileOutsideTheThumbnailsFolderIsNotFound()
+    {
+        var outside = Path.Combine(_appData, "outside");
+        File.WriteAllBytes(outside + ".jpg", [1, 2, 3]);
+
+        foreach (var itemId in new[] { "../outside", "..\\outside", outside })
+        {
+            var response = await SendAsync(itemId, version: null);
+
+            Assert.True(response.StatusCode == StatusCodes.Status404NotFound, $"{itemId} answered {response.StatusCode}");
+            Assert.Empty(Body(response));
+        }
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_appData))

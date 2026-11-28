@@ -85,11 +85,15 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Add and Remove on a tag that changes nothing:** In the WebUI's Tags tab, Add is unavailable on a tag every file being edited already has, and Remove on one none of them has, with the reason in its tooltip, so a tap on one no longer makes Save fail with "The tags were already that way."
 - **Auto Tag's Apply is fast:** Auto Tag's Apply in the WebUI now takes about a second even when it tags every file of a 49,000-item library.
 - **Removing old thumbnails no longer floods devices:** When a library refresh removes the thumbnails of many files that left the library, it now sends connected devices a progress update at most every half second instead of one for each thumbnail, so a device that reconnects afterwards no longer reloads everything.
-- **Failed refreshes reach the server's log:** A library refresh that fails now writes its error to `last.log` itself, so it is recorded even when no device is connected.
+- **Failures reach the server's log:** A library refresh that fails now writes its error to `last.log` itself, so it is recorded even when no device is connected. A failed update check, download, or install also writes its error there, where the Operator's update messages point, and so does a library that couldn't be upgraded to the new version.
+- **Auto Tag matches inside the source:** Auto Tag in the WebUI matches a tag's name only against each file's name and its path inside its source, so a tag named after a source's own folder, or a folder above it such as the share's name, no longer matches every file in that source.
+- **A file removed while it starts playing:** When a library refresh removes a file just as it is played, the WebUI now skips it, or says the media wasn't found, and a random pick says the picked file is no longer in the library.
 
 ### Security
 
 - **Requests through a proxy:** A reverse proxy on the server machine, such as Tailscale Serve, no longer passes on the server machine's trust to every device that uses it. Through a proxy, each device pairs once with the default auth mode, the Operator asks for the control token, and sign-in cookies are marked secure.
+- **Request paths in the Operator:** The Operator's API events table shows each request's path as text, so a device that can reach the server can no longer plant a script there that would run when the Operator is opened on the server machine.
+- **Thumbnails on Windows servers:** A thumbnail request can no longer read other JPEG files on a Windows server through a crafted item id.
 
 ---
 

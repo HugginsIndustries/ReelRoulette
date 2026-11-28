@@ -4211,7 +4211,11 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `filterState` is omitted or null and no preset has the `presetId` id. `all-media` never returns 404. */
+            /**
+             * @description `filterState` is omitted or null and no preset has the `presetId` id. `all-media` never returns 404.
+             *     Also returned when the picked item leaves the library before the server reads it, such as when a
+             *     refresh removes it during the pick.
+             */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4366,7 +4370,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unknown item id (code play_item_not_found) or media missing on disk / testing simulation (code play_media_missing). */
+            /** @description Unknown item id (code play_item_not_found), including an item a refresh removed before its play was counted, or media missing on disk / testing simulation (code play_media_missing). */
             404: {
                 headers: {
                     [name: string]: unknown;

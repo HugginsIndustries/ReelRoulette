@@ -950,14 +950,9 @@ public sealed class LibraryOperationsService
             return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(item.RelativePath) &&
-            item.RelativePath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return !string.IsNullOrWhiteSpace(item.FullPath) &&
-               item.FullPath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase);
+        // The path inside the source only: the source's own folder would match every file in it.
+        return !string.IsNullOrWhiteSpace(item.RelativePath) &&
+               item.RelativePath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ItemHasTag(CatalogAutoTagScanItem item, string tagName) =>

@@ -1803,6 +1803,48 @@ public sealed class LibraryOperationsServiceTests
         }
     }
 
+    // A tag named after the source's own folder, or one above it, would otherwise match every file in the source.
+    [Fact]
+    public void ScanAutoTags_MatchesTheFileNameAndThePathInsideTheSource_NotTheSourceFolder()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("videos", "/nas/media/Videos")],
+                tags: [new SeedTag("media"), new SeedTag("Videos"), new SeedTag("Holiday"), new SeedTag("beach")],
+                items:
+                [
+                    new SeedItem("plain", "/nas/media/Videos/plain.mp4")
+                    {
+                        SourceId = "videos",
+                        RelativePath = "plain.mp4"
+                    },
+                    new SeedItem("nested", "/nas/media/Videos/Holiday/beach.mp4")
+                    {
+                        SourceId = "videos",
+                        RelativePath = "Holiday/beach.mp4"
+                    }
+                ]);
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false });
+
+            Assert.Equal(
+                ["beach: nested", "Holiday: nested"],
+                response.Rows.SelectMany(row => row.Files.Select(file => $"{row.TagName}: {file.ItemId}")).ToArray());
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public void ScanDuplicates_HonorsIntegerFingerprintStatus()
     {

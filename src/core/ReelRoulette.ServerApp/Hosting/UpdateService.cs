@@ -27,6 +27,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
     internal const string PublicFeedBase = "https://f004.backblazeb2.com/file/hugginsindustries-releases";
 
     private readonly ILogger<UpdateService> _logger;
+    private readonly ServerLogService _serverLog;
     private readonly CoreSettingsService _settings;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly object _stateLock = new();
@@ -41,10 +42,12 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
 
     public UpdateService(
         ILogger<UpdateService> logger,
+        ServerLogService serverLog,
         CoreSettingsService settings,
         IHostApplicationLifetime lifetime)
     {
         _logger = logger;
+        _serverLog = serverLog;
         _settings = settings;
         _lifetime = lifetime;
     }
@@ -63,7 +66,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Immediate update check after dev channel change failed.");
+            LogFailure(LogLevel.Warning, "Immediate update check after dev channel change failed.", ex);
         }
     }
 
@@ -172,9 +175,9 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Server update check failed.");
             if (VelopackUpdateFeedExceptions.IsMissingReleaseFeed(ex))
             {
+                _logger.LogWarning(ex, "Server update check failed.");
                 lock (_stateLock)
                 {
                     _velopackInstalled = true;
@@ -188,6 +191,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
                 return ToActionResult(true, GetStatus(), "No releases available on this channel.");
             }
 
+            LogFailure(LogLevel.Warning, "Server update check failed.", ex);
             lock (_stateLock)
             {
                 _phase = ServerUpdatePhases.CheckFailed;
@@ -291,7 +295,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Server update download failed.");
+            LogFailure(LogLevel.Warning, "Server update download failed.", ex);
             lock (_stateLock)
             {
                 _phase = ServerUpdatePhases.UpdateAvailable;
@@ -372,7 +376,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Server update apply failed after operator confirmation.");
+                LogFailure(LogLevel.Error, "Server update apply failed after operator confirmation.", ex);
                 lock (_stateLock)
                 {
                     _phase = ServerUpdatePhases.UpdateReady;
@@ -386,6 +390,16 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             true,
             GetStatus(),
             "Restarting to apply update. The operator UI will disconnect.");
+    }
+
+    /// <summary>
+    /// Logs a failed update step to the console and to <c>last.log</c>, which the Operator's log panel shows and the
+    /// failure's message points to.
+    /// </summary>
+    private void LogFailure(LogLevel level, string message, Exception ex)
+    {
+        _logger.Log(level, ex, "{Message}", message);
+        _serverLog.Append(level == LogLevel.Error ? "error" : "warn", $"{message} {ex.GetType().Name}: {ex.Message}");
     }
 
     private ServerUpdateStatus BuildStatusLocked()
@@ -459,11 +473,13 @@ public sealed class UpdateHostedService : BackgroundService
     internal static readonly TimeSpan CheckInterval = TimeSpan.FromHours(4);
 
     private readonly ILogger<UpdateHostedService> _logger;
+    private readonly ServerLogService _serverLog;
     private readonly UpdateService _updateService;
 
-    public UpdateHostedService(ILogger<UpdateHostedService> logger, UpdateService updateService)
+    public UpdateHostedService(ILogger<UpdateHostedService> logger, ServerLogService serverLog, UpdateService updateService)
     {
         _logger = logger;
+        _serverLog = serverLog;
         _updateService = updateService;
     }
 
@@ -493,6 +509,7 @@ public sealed class UpdateHostedService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Server update check failed.");
+                _serverLog.Append("warn", $"Server update check failed. {ex.GetType().Name}: {ex.Message}");
             }
 
             try

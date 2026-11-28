@@ -84,6 +84,13 @@ public sealed class LibraryCatalogOpenResult
 {
     public LibraryCatalogOpenStatus Status { get; init; }
     public string? Message { get; init; }
+
+    /// <summary>
+    /// The error behind an unreadable catalog, when the open caught one, for <c>last.log</c>. Users see
+    /// <see cref="Message"/>.
+    /// </summary>
+    public string? FailureDetail { get; init; }
+
     public LibraryCatalogSession? Session { get; init; }
 
     /// <summary>The schema version this open migrated the catalog from, or null when it was current.</summary>
@@ -391,7 +398,7 @@ public static class LibraryCatalogStore
     /// </summary>
     private static LibraryCatalogOpenResult OpenUsable(string databasePath)
     {
-        int? version;
+        int? version = null;
         var stopwatch = Stopwatch.StartNew();
         try
         {
@@ -405,7 +412,15 @@ public static class LibraryCatalogStore
         }
         catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
         {
-            return Unavailable(LibraryCatalogOpenStatus.Unreadable, UnreadableMessage);
+            var failed = version is int from
+                ? $"Library upgrade from schema version {from} failed."
+                : "Library schema version could not be read.";
+            return new LibraryCatalogOpenResult
+            {
+                Status = LibraryCatalogOpenStatus.Unreadable,
+                Message = UnreadableMessage,
+                FailureDetail = $"{failed} {ex.GetType().Name}: {ex.Message}"
+            };
         }
 
         return new LibraryCatalogOpenResult
