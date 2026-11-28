@@ -1,5 +1,6 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
+import { RECENT_MESSAGES_KEY } from "../notifications/notifications";
 import { AMBIENT_KEY, AMBIENT_TUNING_KEY, DEFAULT_AMBIENT_TUNING, readAmbientTuning, type AmbientTuning } from "../playback/ambient";
 import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "../playback/autoPause";
 import { BOOST_LIMIT_RANGE, MANUAL_TARGET_RANGE } from "../playback/loudnessNormalization";
@@ -125,8 +126,9 @@ export interface Settings {
   readonly layoutMeasurements: ReadonlySignal<boolean>;
   setLayoutMeasurements(on: boolean): void;
   /**
-   * Reset this device's settings: asks first, then clears every setting on this device except the Developer ones and
-   * reloads the page, since each part reads its settings once, as the page starts. Cancel changes nothing.
+   * Reset this device's settings: asks first, then clears every setting on this device except the Developer ones,
+   * keeping the bell's messages, which aren't settings, and reloads the page, since each part reads its settings once,
+   * as the page starts. Cancel changes nothing.
    */
   resetDevice(): Promise<void>;
 }
@@ -203,7 +205,7 @@ export function createSettings(options: SettingsOptions): Settings {
       if (!(await dialogs.confirm({ message: RESET_DEVICE_QUESTION, confirmLabel: "Reset", danger: true }))) {
         return;
       }
-      device.clear((key) => key.startsWith(DEVELOPER_KEY_PREFIX));
+      device.clear((key) => key.startsWith(DEVELOPER_KEY_PREFIX) || key === RECENT_MESSAGES_KEY);
       reloadPage();
     }
   };

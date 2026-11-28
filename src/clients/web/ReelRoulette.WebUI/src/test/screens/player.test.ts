@@ -3208,7 +3208,7 @@ describe("page structure", () => {
     expect(records).toHaveLength(0);
   });
 
-  it("adds no browser storage keys but its buttons' state on this device", async () => {
+  it("adds no browser storage keys but its buttons' state and the bell's messages on this device", async () => {
     const server = serverPicking(VIDEO_ITEM, PHOTO_ITEM);
     server.on("POST", "/api/favorite", flagAnswer);
     await mountAndPlay(server);
@@ -3221,7 +3221,13 @@ describe("page structure", () => {
     await click(button("Next"));
     await click(button("Previous"));
 
-    expect(storageKeys(localStorage)).toEqual(["rr_clientId", "rr_device.player.autoplay", "rr_device.player.loop", "rr_device.player.muted"]);
+    expect(storageKeys(localStorage)).toEqual([
+      "rr_clientId",
+      "rr_device.notifications.recent",
+      "rr_device.player.autoplay",
+      "rr_device.player.loop",
+      "rr_device.player.muted"
+    ]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
   });
 });

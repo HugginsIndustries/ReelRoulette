@@ -7,8 +7,10 @@ import {
   POPUP_LEAVE_MS,
   POPUP_SETTINGS_KEY,
   readPopupSettings,
+  RECENT_MESSAGES_KEY,
   SAMPLE_POPUP_KEY,
-  SHOW_SECONDS_KEY
+  SHOW_SECONDS_KEY,
+  type Notifications
 } from "../notifications/notifications";
 import { createDeviceStore } from "../state/deviceStore";
 import { memoryStorage } from "./memoryStorage";
@@ -27,6 +29,18 @@ function setup(saved?: unknown) {
   const notes = createNotifications({ relay: (line) => relayed.push(line), device: memoryDevice(saved), inFullscreen });
   const shown = () => notes.popups.value.filter((popup) => !popup.leaving).map((popup) => popup.entry.text);
   return { notes, relayed, inFullscreen, shown };
+}
+
+/** One device's storage, with popup settings kept, where each `page()` starts the notifications as a page that loads does. */
+function keptDevice(saved?: unknown) {
+  const values = new Map<string, string>();
+  if (saved !== undefined) {
+    values.set(`rr_device.${POPUP_SETTINGS_KEY}`, JSON.stringify(saved));
+  }
+  const device = createDeviceStore(memoryStorage(values));
+  const page = () => createNotifications({ relay: () => {}, device, inFullscreen: signal(false) });
+  const kept = () => JSON.parse(values.get(`rr_device.${RECENT_MESSAGES_KEY}`) ?? "null");
+  return { values, page, kept };
 }
 
 describe("notifications", () => {
@@ -233,6 +247,114 @@ describe("notifications", () => {
 
     notes.clear();
     expect(notes.entries.value).toEqual([]);
+  });
+
+  it("keeps the list on this device with each message's read state, so the next page shows it and the badge counts it", () => {
+    const { values, page, kept } = keptDevice({ kinds: { devices: false } });
+    const first = page();
+    expect(values.has(`rr_device.${RECENT_MESSAGES_KEY}`)).toBe(false);
+
+    first.notify({ kind: "devices", text: "Blacklisted on another device", detail: "clip.mp4" });
+    vi.advanceTimersByTime(60_000);
+    first.notify({ kind: "refresh", text: "Library refresh failed", detail: "Couldn't read the source.", warning: true });
+    first.record("Saving presets failed.");
+    first.preview();
+    const at = new Date(2026, 9, 13, 10, 0, 0).getTime();
+    expect(kept()).toEqual([
+      { kind: "notice", icon: "error", text: "Saving presets failed.", detail: "", warning: false, time: at + 60_000, unread: false },
+      { kind: "refresh", icon: "warning", text: "Library refresh failed", detail: "Couldn't read the source.", warning: true, time: at + 60_000, unread: false },
+      { kind: "devices", icon: "devices", text: "Blacklisted on another device", detail: "clip.mp4", warning: false, time: at, unread: true }
+    ]);
+
+    const second = page();
+    const withoutIds = (notes: Notifications) => notes.entries.value.map(({ id: _id, ...entry }) => entry);
+    expect(withoutIds(second)).toEqual(withoutIds(first));
+    expect(second.unread.value).toBe(1);
+  });
+
+  it("keeps the list as it opens, without the highlight, and as Dismiss and Clear take messages out", () => {
+    const { page, kept } = keptDevice({ popups: false });
+    const first = page();
+    for (const text of ["One", "Two", "Three"]) {
+      first.notify({ kind: "actions", text });
+    }
+    first.openList();
+    expect(first.entries.value.map((entry) => entry.highlight)).toEqual([true, true, true]);
+    expect(kept().map((entry: Record<string, unknown>) => [entry.text, entry.unread, "highlight" in entry])).toEqual([
+      ["Three", false, false],
+      ["Two", false, false],
+      ["One", false, false]
+    ]);
+
+    const second = page();
+    expect(second.entries.value.map((entry) => [entry.text, entry.unread, entry.highlight])).toEqual([
+      ["Three", false, false],
+      ["Two", false, false],
+      ["One", false, false]
+    ]);
+    expect(second.unread.value).toBe(0);
+
+    second.removeEntry(second.entries.value.find((entry) => entry.text === "Two")!.id);
+    expect(kept().map((entry: Record<string, unknown>) => entry.text)).toEqual(["Three", "One"]);
+    second.clear();
+    expect(kept()).toEqual([]);
+    expect(page().entries.value).toEqual([]);
+  });
+
+  it("gives the kept messages ids of the page's own, so none shares one with a new message", () => {
+    const { page } = keptDevice({ popups: false });
+    const first = page();
+    first.notify({ kind: "actions", text: "One" });
+    first.notify({ kind: "actions", text: "Two" });
+
+    const second = page();
+    second.notify({ kind: "actions", text: "Three" });
+    expect(new Set(second.entries.value.map((entry) => entry.id)).size).toBe(3);
+  });
+
+  it("keeps the last 50 for the next page, and the badge counts only the unread messages the list keeps", () => {
+    const { page, kept } = keptDevice({ popups: false });
+    const first = page();
+    for (let i = 0; i < NOTIFICATIONS_KEPT + 5; i++) {
+      first.notify({ kind: "actions", text: `Message ${i}` });
+    }
+    expect(first.unread.value).toBe(NOTIFICATIONS_KEPT);
+    expect(kept()).toHaveLength(NOTIFICATIONS_KEPT);
+
+    const second = page();
+    expect(second.entries.value).toHaveLength(NOTIFICATIONS_KEPT);
+    expect([second.entries.value[0]!.text, second.entries.value.at(-1)!.text]).toEqual([`Message ${NOTIFICATIONS_KEPT + 4}`, "Message 5"]);
+    expect(second.unread.value).toBe(NOTIFICATIONS_KEPT);
+  });
+
+  it("reads the kept list, leaving out a message whose fields don't check, and nothing from a value that isn't a list", () => {
+    const { values, page } = keptDevice();
+    const key = `rr_device.${RECENT_MESSAGES_KEY}`;
+    const good = { kind: "actions", icon: "check_circle", text: "Filters applied.", detail: "", warning: false, time: Date.now(), unread: true };
+    const { icon: _icon, ...noIcon } = good;
+    values.set(
+      key,
+      JSON.stringify([
+        good,
+        { ...good, kind: "sample" },
+        noIcon,
+        { ...good, text: 3 },
+        { ...good, detail: null },
+        { ...good, warning: "yes" },
+        { ...good, time: "10:00" },
+        { ...good, unread: 1 },
+        null,
+        "Paired.",
+        { ...good, kind: "notice", text: "Saving presets failed." }
+      ])
+    );
+    expect(page().entries.value.map((entry) => entry.text)).toEqual(["Filters applied.", "Saving presets failed."]);
+
+    values.set(key, JSON.stringify(Array.from({ length: NOTIFICATIONS_KEPT + 5 }, (_, i) => ({ ...good, text: `Message ${i}` }))));
+    expect(page().entries.value).toHaveLength(NOTIFICATIONS_KEPT);
+
+    values.set(key, JSON.stringify({ entries: [good] }));
+    expect(page().entries.value).toEqual([]);
   });
 
   it("has Show seconds off by default, and keeps it on this device apart from the popup settings", () => {

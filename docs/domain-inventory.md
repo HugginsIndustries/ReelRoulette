@@ -376,7 +376,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the seek step as `player.seekStep`, 1, 5, or 10 seconds and 5 by default.
     - Show layout measurements as `developer.layoutMeasurements`, off by default.
     - the requests to show the popup settings, which the bell's list makes, and the keyboard shortcuts, which H makes.
-    - Reset this device's settings, which asks first in the in-app dialog, then clears every per-device setting except the `developer.` ones and reloads the page, with the browser's own reload unless one is given.
+    - Reset this device's settings, which asks first in the in-app dialog, then clears every per-device setting except the `developer.` ones, keeping the bell's messages under `notifications.recent`, and reloads the page, with the browser's own reload unless one is given.
     - the whole-number and number field rules, with Advance after's 1 to 3600 seconds, Hide after's 1 to 30 seconds, loudness normalization's Manual target, -50 to -10 LUFS, and its boost limit, a whole number from 0 to 24 dB, each problem saying what the field takes, an emptied field included.
 - `src/clients/web/ReelRoulette.WebUI/src/settings/theme.ts`
   - the theme: the choices System, Dark, and Light, the theme a choice gives with the system's scheme, each theme's `theme-color` and installed iOS app status bar style, applying a theme as the root element's `theme-dark` or `theme-light` class and those two metas, and following a choice, and the system's scheme while it is System.
@@ -435,7 +435,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - each relays its text, or a log text that leaves out a file or preset name, to `last.log`, pops up if the popup settings allow, at most three at once, the cap never closing a warning, one with the same key replacing the one showing, a warning staying until closed, and the time pausing while a pointer or its menu holds it, with a floor.
     - the list keeps it, the last 50, with in-app notices kept unmarked, until Clear or its menu's Dismiss takes it out.
     - a quiet one, as an automatic refresh with no library changes, goes only to the list, unmarked and uncounted.
-  - The badge's count of what didn't pop up, the list's open state, and the popup settings, read per device from `notifications.popups` with each field falling back to its default, which a change merges into and keeps whole.
+  - The list kept per device as `notifications.recent`, with whether each message is unread but not its id or the open list's mark, read as the page starts with each message's fields checked, and written as a message joins it, the list opens, Clear empties it, or Dismiss takes one out.
+  - The badge's count of the kept messages that didn't pop up, the list's open state, and the popup settings, read per device from `notifications.popups` with each field falling back to its default, which a change merges into and keeps whole.
   - Show seconds, for the list's times, read per device from `notifications.showSeconds`, apart from the popup settings.
   - nothing pops up while the list is open, and entering fullscreen closes the popups while Show in fullscreen is off.
   - The sample popup, key `preview`, shows for the popup time and never reaches the list, the badge, or `last.log`.
@@ -522,7 +523,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the library after the player, so the player handles an item-state event first.
 - `src/clients/web/ReelRoulette.WebUI/src/state/deviceStore.ts`
   - the per-device store:
-    - what the WebUI remembers on this device across a page refresh, one `localStorage` entry per setting as JSON under `rr_device.`, read with a fallback for a value missing, unreadable, or not accepted, with the shared checks that accept a true or false setting and a record of fields, written best effort, and cleared except the settings a check keeps, for Reset this device's settings, which keeps those under `developer.`, the prefix every Developer setting's key starts with.
+    - what the WebUI remembers on this device across a page refresh, one `localStorage` entry per setting as JSON under `rr_device.`, read with a fallback for a value missing, unreadable, or not accepted, with the shared checks that accept a true or false setting and a record of fields, written best effort, and cleared except the settings a check keeps, for Reset this device's settings, which keeps those under `developer.`, the prefix every Developer setting's key starts with, and the bell's messages.
     - `browserStorage`, the browser's `localStorage` or `sessionStorage`, or none where the page can't reach it, which the store and the client and session ids use.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts`
   - playback:

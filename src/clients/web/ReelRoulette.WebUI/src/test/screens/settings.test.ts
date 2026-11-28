@@ -1626,6 +1626,25 @@ describe("the Developer section", () => {
     expect(checkbox(DONT_RECORD_PLAYS).checked).toBe(true);
     expect(checkbox(LAYOUT_MEASUREMENTS).checked).toBe(true);
   });
+
+  it("Reset keeps the bell's messages, which aren't settings", async () => {
+    stubClipboard();
+    const page = await mount();
+    await openSettings();
+    rightClick(within(settingsPage()).getByText(page.clientId()));
+    await settle();
+    fireEvent.click(menuItemIn(contextMenuShown()!, "Copy"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Client ID copied."]));
+
+    await click(resetButton());
+    await click(confirmationButton("Reset"));
+    expect(Object.keys(localStorage)).toContain("rr_device.notifications.recent");
+    page.unmount();
+
+    await mount();
+    await click(document.getElementById("notify-btn")!);
+    expect([...document.querySelectorAll("#notify-list .notify-entry .notify-text")].map((text) => text.textContent)).toEqual(["Client ID copied."]);
+  });
 });
 
 /** The theme on the page: the root element's theme class, and the `theme-color` and status bar style metas. */

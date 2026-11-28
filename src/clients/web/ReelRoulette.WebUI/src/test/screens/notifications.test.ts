@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
+import { render } from "preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POPUP_SETTINGS_KEY, SHOW_SECONDS_KEY, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
 import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
@@ -65,6 +66,14 @@ async function click(element: Element): Promise<void> {
 async function notify(services: AppServices, request: NotifyRequest): Promise<void> {
   services.notifications.notify(request);
   await flush();
+}
+
+/** Takes the page away as a reload does, leaving this device's storage for the page that mounts next. */
+function unmountPage(): void {
+  for (const root of document.querySelectorAll<HTMLElement>("#app")) {
+    render(null, root);
+    root.remove();
+  }
 }
 
 function stage(): HTMLElement {
@@ -727,6 +736,54 @@ describe("the list", () => {
     expect(emptyText().hidden).toBe(false);
     expect(listButton("Clear").disabled).toBe(true);
     expect(list().hidden).toBe(false);
+  });
+
+  it("keeps Recent on this device through a reload, with each message's time and mark, and the badge counts what didn't pop up", async () => {
+    useFakeClock();
+    vi.setSystemTime(new Date(2026, 9, 13, 14, 5, 0));
+    keepSettings({ kinds: { devices: false } });
+    const first = await mountWithServices();
+    await notify(first, { kind: "devices", text: "Blacklisted on another device", detail: "holiday clip.mp4" });
+    await wait(3 * 60_000);
+    await notify(first, { kind: "actions", text: "Filters applied." });
+    unmountPage();
+
+    await mountWithServices();
+    expect(badge().textContent).toBe("1");
+    await click(bell());
+    expect(rows("recent")).toEqual([
+      { text: "Filters applied.", time: "14:08", detail: null, classes: [] },
+      { text: "Blacklisted on another device", time: "14:05", detail: "holiday clip.mp4", classes: ["is-unread"] }
+    ]);
+    unmountPage();
+
+    // Seen once, it is neither marked nor counted after the next reload.
+    await mountWithServices();
+    expect(badge().hidden).toBe(true);
+    await click(bell());
+    expect(rows("recent").map((row) => row.classes)).toEqual([[], []]);
+  });
+
+  it("keeps what Dismiss and Clear take out of Recent out after a reload", async () => {
+    keepSettings({ popups: false });
+    const first = await mountWithServices();
+    for (const text of ["One", "Two", "Three"]) {
+      await notify(first, { kind: "actions", text });
+    }
+    await click(bell());
+    await pick(await openMenuOn(entryRow("Two")), "Dismiss");
+    unmountPage();
+
+    await mountWithServices();
+    await click(bell());
+    expect(rows("recent").map((row) => row.text)).toEqual(["Three", "One"]);
+    await click(listButton("Clear"));
+    unmountPage();
+
+    await mountWithServices();
+    await click(bell());
+    expect(rows("recent")).toEqual([]);
+    expect(emptyText().hidden).toBe(false);
   });
 
   it("closes on its Close, the bell, and Escape, which it keeps from the browser, leaving focus on the page", async () => {

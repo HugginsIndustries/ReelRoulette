@@ -143,6 +143,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own.
 - [ ] On the iPad, a long press on a file in Auto Tag's results opens its menu over Auto Tag, and Copy path copies the path and says so over Auto Tag.
 - [ ] In Firefox on the desktop, a refresh started from the tray shows its stage's progress in the bell's list, and when it finishes pops up "No changes" or what it changed.
+- [ ] After an in-app update between two dev releases that both have the update notice, a page left open in Firefox on the desktop, in the iPad's installed app, and in the Android phone's installed app shows the notice, and a tap reloads it onto the new version with the bell's messages still listed.
 
 ## Release Flow
 

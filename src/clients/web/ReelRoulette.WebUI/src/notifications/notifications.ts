@@ -1,4 +1,4 @@
-import { effect, signal, type ReadonlySignal } from "@preact/signals";
+import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
 import { isBoolean, isRecord, type DeviceStore } from "../state/deviceStore";
 
 /** The kinds of one-off message, each of which the popup settings can turn off. */
@@ -45,6 +45,9 @@ export const POPUP_SETTINGS_KEY = "notifications.popups";
 /** The per-device store's key for Show seconds, kept apart from the popup settings, which Show popups turns off. */
 export const SHOW_SECONDS_KEY = "notifications.showSeconds";
 
+/** The per-device store's key for the list's messages, which Reset this device's settings keeps, since they aren't settings. */
+export const RECENT_MESSAGES_KEY = "notifications.recent";
+
 /** A change to the popup settings: the settings it names, and the kinds it names, each in turn. */
 export type PopupSettingsChange = Partial<Omit<PopupSettings, "kinds">> & { kinds?: Partial<Record<NotificationKind, boolean>> };
 
@@ -56,7 +59,7 @@ export function samplePopupDetail(seconds: number): string {
   return `For ${seconds} seconds, unless you point at one or close it.`;
 }
 
-/** How many messages the list keeps, for the page's life. */
+/** How many messages the list keeps, on this device across reloads. */
 export const NOTIFICATIONS_KEPT = 50;
 
 /** How many popups show at once. */
@@ -86,6 +89,11 @@ export interface NotificationEntry {
   /** The list marks it as one that didn't pop up, while the list is open. */
   highlight: boolean;
 }
+
+/** A message as this device keeps it: without its id, which each page gives anew, or the highlight, which lasts only while the list is open. */
+type KeptEntry = Omit<NotificationEntry, "id" | "highlight">;
+
+const KEPT_KINDS: readonly NotificationEntry["kind"][] = [...NOTIFICATION_KINDS, "notice"];
 
 /** A popup showing, or fading as it closes. */
 export interface Popup {
@@ -122,13 +130,13 @@ export interface NotifyRequest {
 
 /**
  * The page's one-off messages, which pop up briefly as the popup settings allow, and the list behind the player's bell,
- * which keeps every one of them and every in-app notice. Lasting states show on the player's indicator instead, and
- * the list's Now shows them; field problems show in their fields.
+ * which keeps every one of them and every in-app notice, on this device across reloads. Lasting states show on the
+ * player's indicator instead, and the list's Now shows them; field problems show in their fields.
  */
 export interface Notifications {
   /** The messages kept, newest first. */
   readonly entries: ReadonlySignal<readonly NotificationEntry[]>;
-  /** The one-off messages that didn't pop up since the list was last open, which the bell's badge counts. */
+  /** The messages kept that didn't pop up since the list was last open, which the bell's badge counts. */
   readonly unread: ReadonlySignal<number>;
   /** The popups showing, oldest first, so the newest sits nearest the edge they come from. */
   readonly popups: ReadonlySignal<readonly Popup[]>;
@@ -167,7 +175,7 @@ export interface Notifications {
 export interface NotificationsOptions {
   /** Sends a message's text to `last.log` as a `status=` line. */
   relay: (logText: string) => void;
-  /** Where the popup settings and Show seconds are kept. */
+  /** Where the popup settings, Show seconds, and the list's messages are kept. */
   device: DeviceStore;
   /** The stage is in fullscreen, native or pseudo. */
   inFullscreen: ReadonlySignal<boolean>;
@@ -192,6 +200,24 @@ export function readPopupSettings(device: DeviceStore): PopupSettings {
   };
 }
 
+function isKeptEntry(value: unknown): value is KeptEntry {
+  return (
+    isRecord(value) &&
+    KEPT_KINDS.includes(value.kind as NotificationEntry["kind"]) &&
+    typeof value.icon === "string" &&
+    typeof value.text === "string" &&
+    typeof value.detail === "string" &&
+    typeof value.warning === "boolean" &&
+    Number.isFinite(value.time) &&
+    typeof value.unread === "boolean"
+  );
+}
+
+/** The list's messages kept on this device, newest first, leaving out any whose fields don't check. */
+function readRecentMessages(device: DeviceStore): KeptEntry[] {
+  return device.read<unknown[]>(RECENT_MESSAGES_KEY, [], Array.isArray).filter(isKeptEntry).slice(0, NOTIFICATIONS_KEPT);
+}
+
 /** A popup's time: what it has left, whether it is counting down, and what holds it paused. */
 interface PopupTime {
   remaining: number;
@@ -202,19 +228,28 @@ interface PopupTime {
 }
 
 export function createNotifications(options: NotificationsOptions): Notifications {
-  const entries = signal<readonly NotificationEntry[]>([]);
-  const unread = signal(0);
+  let lastId = 0;
+  // The kept messages take ids from this page's counter, which keys the list's rows and the popups.
+  const entries = signal<readonly NotificationEntry[]>(readRecentMessages(options.device).map((kept) => ({ ...kept, id: ++lastId, highlight: false })));
+  const unread = computed(() => entries.value.filter((entry) => entry.unread).length);
   const popups = signal<readonly Popup[]>([]);
   const listOpen = signal(false);
   const settings = signal(readPopupSettings(options.device));
   const showSeconds = signal(options.device.read(SHOW_SECONDS_KEY, false, isBoolean));
   const times = new Map<number, PopupTime>();
-  let lastId = 0;
 
   const showing = (): readonly Popup[] => popups.peek().filter((popup) => !popup.leaving);
 
+  function keep(): void {
+    options.device.write(
+      RECENT_MESSAGES_KEY,
+      entries.peek().map(({ kind, icon, text, detail, warning, time, unread }): KeptEntry => ({ kind, icon, text, detail, warning, time, unread }))
+    );
+  }
+
   function add(entry: NotificationEntry): void {
     entries.value = [entry, ...entries.peek()].slice(0, NOTIFICATIONS_KEPT);
+    keep();
   }
 
   function run(id: number): void {
@@ -318,7 +353,6 @@ export function createNotifications(options: NotificationsOptions): Notification
       hasRoom(key);
     if (!pops && !open && !request.quiet) {
       entry.unread = true;
-      unread.value = unread.peek() + 1;
     }
     add(entry);
     if (pops) {
@@ -345,7 +379,7 @@ export function createNotifications(options: NotificationsOptions): Notification
       return;
     }
     entries.value = entries.peek().map((entry) => ({ ...entry, highlight: entry.unread, unread: false }));
-    unread.value = 0;
+    keep();
     listOpen.value = true;
   }
 
@@ -387,11 +421,12 @@ export function createNotifications(options: NotificationsOptions): Notification
 
     clear() {
       entries.value = [];
-      unread.value = 0;
+      keep();
     },
 
     removeEntry(id) {
       entries.value = entries.peek().filter((entry) => entry.id !== id);
+      keep();
     },
 
     dismiss,

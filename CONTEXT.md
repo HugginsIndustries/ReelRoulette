@@ -303,7 +303,7 @@ ReelRoulette is a thin-client, API-first system:
   - Skipped files ("Skipped a file this browser can't play." or "Skipped a missing file.", with the file name on the second line).
   - Connection ("Reconnected." when Reconnecting… ends, unless the server comes back failing the compatibility check, and a further library page that fails).
 - The bell (`notifications`), at the player's top left, shows and hides with its corner buttons.
-  - Its badge counts the one-off messages that didn't pop up since the list was last open, except an automatic refresh with no library changes, "9+" past nine, which its accessible name gives as "Notifications, {n} unread".
+  - Its badge counts the one-off messages in the list that didn't pop up since the list was last open, except an automatic refresh with no library changes, "9+" past nine, which its accessible name gives as "Notifications, {n} unread".
   - It is orange while it has unread messages and while its list is open.
   - A press opens the list under it, lined up with the bell's left edge in the window's left half and its right edge otherwise, starts no random pick, and keeps the player's controls shown while the list is open.
 - The list, inside the fullscreen stage, shows:
@@ -312,6 +312,7 @@ ReelRoulette is a thin-client, API-first system:
     - A refresh before its first stage, or in a stage that hasn't counted any work, has no second line, so "0 of 0" never shows.
     - The update notice's second line reads "The server has a newer version. Reloading the page loads it.", and a tap on its row reloads the page as a tap on the indicator does, asking first while the Filter or Tags tab holds unsaved changes.
   - Recent, the last 50 messages, newest first, each with its time in 24-hour time: "HH:MM" for a message from today and "MM-DD HH:MM" for one from another day.
+    - The device keeps them across reloads as `notifications.recent`, with whether each is unread, so the badge counts the same after a reload.
     - With Show seconds on, the times read "HH:MM:SS" and "MM-DD HH:MM:SS".
     - The list works out the day each time it renders, so a message from before midnight gains its date at the list's next render.
   - Messages that didn't pop up show marked, except an automatic refresh with no library changes, and in-app notices show unmarked with the `error` icon and aren't counted.
@@ -724,7 +725,7 @@ ReelRoulette is a thin-client, API-first system:
     - A box at the bottom left of what shows on screen, 8 px inside the safe areas and keeping its size through a pinch, with the pixel ratio, the layout (overlay, or beside the player on its side, and short screen), the safe-area insets, the Library controls' width against their 520 px breakpoint, the pointer (mouse or touch), whether it runs as the installed app or in a browser tab, and the visible area while a pinch or the on-screen keyboard shrinks it.
     - While it is off nothing renders and nothing is observed.
   - Reset this device's settings, with the hint "Puts every other setting on this device back to its default and reloads. The Developer settings stay.", asks first in the in-app dialog with a red Reset, then clears every per-device setting except the `developer.` ones and reloads the page.
-    - The client id, the session id, and pairing stay.
+    - The client id, the session id, pairing, and the bell's messages stay.
 - A line below the sections says "Settings apply at once and are kept on this device."
 
 #### Tag editor

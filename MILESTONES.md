@@ -141,7 +141,7 @@ Last milestone completed: M12n4
 
 ### M12n2 - WebUI Update Notice
 
-- **Status**: 🚧 In Progress
+- **Status**: ✅ Complete
 - **Goal**: When the server serves a newer build of ReelRoulette, the player's indicator and the bell's list say so until a tap reloads the page, the bell's messages survive the reload, and every time and date the app shows reads in 24-hour time and ISO dates.
 - **Depends on**: WebUI Notifications, whose indicator and bell's list this milestone adds to, and WebUI Developer Settings, whose page reload the notice's tap uses and whose reset this milestone keeps the bell's messages through.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -175,7 +175,7 @@ Last milestone completed: M12n4
 | Build check | ✅ Complete | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
 | Reload notice | ✅ Complete | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
 | Times and dates | ✅ Complete | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
-| Kept messages | ⏳ Planned | The bell's Recent list kept per device across reloads, up to its 50 messages with their read state, with Clear emptying it and the reset keeping it. |
+| Kept messages | ✅ Complete | The bell's Recent list kept per device across reloads, up to its 50 messages with their read state, with Clear emptying it and the reset keeping it. |
 
 #### Mockup slice
 
@@ -483,6 +483,21 @@ Last milestone completed: M12n4
 - Reset this device's settings keeps the bell's messages, in Settings screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- The bell's Recent list is kept as `notifications.recent` (`RECENT_MESSAGES_KEY` in `src/notifications/notifications.ts`), each message with its kind, icon, text, second line, warning, time, and unread, without its id or the open list's highlight.
+- The page reads it as it starts, leaving out a message whose fields don't check or whose kind isn't one of the five kinds or a notice, up to 50, and gives each kept message an id from the page's counter, so a new message never shares one.
+- One `keep()` writes the list as a message or a notice joins it, as it opens, as Clear empties it, and as Dismiss takes one out; closing the list, which only clears the highlight, writes nothing, and nothing is written until a message joins the list or the list opens.
+- The badge's `unread` is computed from the kept messages marked unread, in place of its own counter, so it counts the same after a reload and no longer counts an unread message the 50-message cap has pushed out.
+- Reset this device's settings keeps `notifications.recent` beside the `developer.` keys (`resetDevice` in `src/settings/settings.ts`), and its question and hint stay as they are, since messages aren't settings, as the mockup has them.
+- Of the screen tests that expect exact storage keys, only the player test of which keys a session writes failed, since Favorite sends a message, and it now allows `notifications.recent` (measured).
+- The notifications tests check the kept list across a new start on the same device, the four writes, the new ids, the field check, the cap on reading, and the badge's count; the notifications screen tests check Recent, its times and marks, and the badge after a reload, and Dismiss and Clear after one; the Settings screen test checks that a real message survives Reset into the next page.
+- The notifications screen tests take the page away with a helper of their own that leaves storage, so the shared screen harness didn't change.
+- Broken one at a time, each guarded piece failed its tests: each of the four writes, the field check, the kind check, the cap on reading, the new ids, the badge's count, and the reset's keep (measured).
+- The mockup needed no change: it already keeps the list with each message's read state, writes it at the same four points, counts its badge from the kept unread messages, and keeps the list through its reset, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 98 test files and 2571 tests (measured).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the kept list, the badge's count, and the reset keeping it.
 
 #### Release checks
 
