@@ -1,9 +1,10 @@
-import { useRef } from "preact/hooks";
-import { autoTagFileChecked, type AutoTagResults, type AutoTagRowView } from "../tags/autoTagModel";
+import { useLayoutEffect, useRef } from "preact/hooks";
+import { autoTagFileChecked, shownAutoTagFile, type AutoTagResults, type AutoTagRowView } from "../tags/autoTagModel";
 import type { TagEditorView } from "../tags/tagEditor";
 import { useApp } from "./appContext";
 import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
+import { Popups } from "./Notifications";
 
 /**
  * Auto Tag, over the whole page while it shows. It is rendered in the stage, beside the in-app dialogs, so it covers
@@ -16,11 +17,30 @@ export function AutoTag() {
 
 /**
  * Auto Tag's in-app dialog. Escape, or the browser closing it, does what the X does, which waits while a scan runs. It
- * has no outside to click. Focus starts on the X.
+ * has no outside to click. Focus starts on the X. A file row's menu and the popups show inside it, and Escape closes a
+ * menu first.
  */
 function AutoTagDialog({ view }: { view: TagEditorView | null }) {
-  const { tagEditor } = useApp();
+  const { tagEditor, tagMenus, contextMenu } = useApp();
   const close = useRef<HTMLButtonElement>(null);
+  const results = useRef<HTMLDivElement>(null);
+
+  // One surface for every file row, which can number thousands, finding the row under the press, as the library grid
+  // does for its tiles.
+  useLayoutEffect(
+    () =>
+      contextMenu.addSurface({
+        element: results.current!,
+        menuAt(target) {
+          const row = target.closest<HTMLElement>(".autotag-file");
+          const shown = tagEditor.view.peek()?.results;
+          const file = row && shown ? shownAutoTagFile(shown, row.dataset.itemId) : null;
+          return row && file ? { row, file } : null;
+        },
+        open: ({ row, file }, point) => contextMenu.open({ point, target: row, groups: tagMenus.autoTagFileGroups(file) })
+      }),
+    []
+  );
   const autoTag = view?.autoTag;
   const scanning = autoTag?.scanning ?? false;
   return (
@@ -49,13 +69,14 @@ function AutoTagDialog({ view }: { view: TagEditorView | null }) {
       </div>
       <div class="autotag-progress" id="autotag-progress" hidden={!scanning}></div>
       <div class="autotag-status" id="autotag-status">{autoTag?.status ?? ""}</div>
-      <div class="autotag-results themed-scrollbar" id="autotag-results">
+      <div class="autotag-results themed-scrollbar" id="autotag-results" ref={results}>
         {view ? <Results results={view.results} /> : null}
       </div>
       <div class="autotag-footer">
         <button class="btn" type="button" id="autotag-cancel" disabled={scanning} onClick={() => tagEditor.cancelAutoTag()}>Cancel</button>
         <button class="btn" type="button" id="autotag-apply" disabled={!view?.autoTagApplyPending} onClick={() => tagEditor.applyAutoTag()}>Apply</button>
       </div>
+      <Popups inAutoTag />
     </Dialog>
   );
 }
@@ -93,7 +114,7 @@ function ResultRow({ entry }: { entry: AutoTagRowView }) {
       {row.expanded ? (
         <div class="autotag-files">
           {entry.files.map((file) => (
-            <label key={file.itemId} class="autotag-file">
+            <label key={file.itemId} class="autotag-file menu-surface" data-item-id={file.itemId}>
               <input type="checkbox" checked={autoTagFileChecked(file)} disabled={!file.needsChange} title={file.needsChange ? undefined : "Already has this tag"} onChange={(event) => tagEditor.checkFile(row.rowId, file.itemId, event.currentTarget.checked)} />
               <span title={file.fullPath || ""}>{file.displayPath || file.fullPath || ""}</span>
             </label>

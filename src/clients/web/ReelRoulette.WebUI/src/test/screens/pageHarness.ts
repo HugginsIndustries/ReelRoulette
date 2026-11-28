@@ -842,6 +842,36 @@ export function removeClipboard(): void {
   stubProperty(restores, window.navigator, "clipboard", { value: undefined });
 }
 
+export interface ExecCopy {
+  commands: string[];
+  /** The field's value, selection, the id of the element it sits in, and whether it had focus, when the copy ran. */
+  fields: Array<{ value: string; selected: string; parentId: string; focused: boolean }>;
+}
+
+/**
+ * Stands in for `document.execCommand`, which happy-dom lacks, answering `result`, until the page is reset, and records
+ * each copy and the hidden field it copied from.
+ */
+export function stubExecCommand(result: boolean): ExecCopy {
+  const copy: ExecCopy = { commands: [], fields: [] };
+  stubProperty(restores, document, "execCommand", {
+    value(command: string) {
+      copy.commands.push(command);
+      const field = document.querySelector("textarea");
+      if (field) {
+        copy.fields.push({
+          value: field.value,
+          selected: field.value.slice(field.selectionStart ?? 0, field.selectionEnd ?? 0),
+          parentId: field.parentElement?.id ?? "",
+          focused: document.activeElement === field
+        });
+      }
+      return result;
+    }
+  });
+  return copy;
+}
+
 /**
  * Where the context menu was placed, `{ left, top }`, with its stubbed size, after checking that it sits wholly
  * inside the window with at least 8 px to spare.

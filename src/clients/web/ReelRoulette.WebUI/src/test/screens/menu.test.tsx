@@ -145,6 +145,26 @@ describe("the context menu", () => {
     expect(onClose.mock.calls).toEqual([[true], [true], [true]]);
   });
 
+  it("shows inside the open dialog its element is in, taking Escape before it, and leaves Escape to a dialog it isn't in", () => {
+    const dialog = document.body.appendChild(document.createElement("dialog"));
+    dialog.setAttribute("open", "");
+    const row = dialog.appendChild(document.createElement("div"));
+    const dialogKeys = vi.fn();
+    dialog.addEventListener("keydown", dialogKeys);
+    const { contextMenu } = openOn(row);
+    expect(dialog.contains(document.getElementById("context-menu"))).toBe(true);
+    act(() => void fireEvent.keyDown(dialog, { key: "Escape" }));
+    expect(contextMenu.isOpen.peek()).toBe(false);
+    expect(dialogKeys).not.toHaveBeenCalled();
+
+    act(() => contextMenu.open({ point: { x: 10, y: 10 }, groups: [[{ label: "Rate…", icon: "star", onPick: () => {} }]] }));
+    expect(dialog.contains(document.getElementById("context-menu"))).toBe(false);
+    act(() => void fireEvent.keyDown(dialog, { key: "Escape" }));
+    expect(contextMenu.isOpen.peek()).toBe(true);
+    expect(dialogKeys).toHaveBeenCalledTimes(1);
+    dialog.remove();
+  });
+
   it("tints the element it acts on while it is open", () => {
     const row = document.body.appendChild(document.createElement("div"));
     const { contextMenu } = openOn(row);

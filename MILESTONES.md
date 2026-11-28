@@ -831,7 +831,7 @@ Last milestone completed: M12n1
 
 ### M12n4 - WebUI Context Menus
 
-- **Status**: 🚧 In Progress
+- **Status**: ✅ Complete
 - **Goal**: A right-click, or a long press on a touch screen, opens an app-styled menu of actions on the player, the now-playing name, tags, categories, presets, sources, notifications, and file paths across the WebUI, in place of the browser's own menu.
 - **Depends on**: WebUI Multi-Select and Bulk Actions, whose shared context menu, item list, and delete action the menus here use.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -863,7 +863,7 @@ Last milestone completed: M12n1
 | Player | ✅ Complete | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
 | Tags tab | ✅ Complete | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
 | Filter tab | ✅ Complete | Menus on the Filter tab's preset rows and sources. |
-| Notifications, Auto Tag, and Settings | ⏳ Planned | Menus on the bell's list entries, the popups, Auto Tag's file rows, and the Settings tab's diagnostics IDs, and the unused notification code removed. |
+| Notifications, Auto Tag, and Settings | ✅ Complete | Menus on the bell's list entries, the popups, Auto Tag's file rows, and the Settings tab's diagnostics IDs, and the unused notification code removed. |
 
 #### Mockup slice
 
@@ -1171,10 +1171,40 @@ Last milestone completed: M12n1
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
+**Evidence**
+
+- `src/notifications/notificationMenus.ts` builds the menus on the bell's list rows and the popups, which `EntryRow` and `Toast` (`src/ui/Notifications.tsx`) register through `useMenuSurface`, with the `menu-surface` class.
+- The notifications gained `removeEntry`, the one way a message's Dismiss takes it out of the list, so the Kept messages slice can write the kept list there.
+- A popup's `hold` names what holds it, the pointer or its menu, so its time stays paused while either does.
+- Auto Tag's results are one surface for every file row (`src/ui/AutoTag.tsx`), as the library grid is for its tiles, since an expanded row can list thousands of files; `shownAutoTagFile` (`src/tags/autoTagModel.ts`) finds the file a row shows, and `autoTagFileGroups` (`src/tags/tagMenus.ts`) gives it the file items without Copy name.
+- The Settings tab's client and session ids register through `useMenuSurface` (`CopiedValue` in `src/ui/SettingsTab.tsx`).
+- Every copy goes through `src/ui/copyText.ts`, which took `fileLocation.ts`'s copy and puts its hidden field in the open dialog the menu shows in, or else in the fullscreen stage.
+- The context menu renders inside the open dialog its element is in, through a portal, and hears Escape from the window before anything else, so it takes Escape before the bell's list or Auto Tag, while a dialog it isn't in takes it (`ContextMenuHost` in `src/ui/Menu.tsx`); it now handles its own press outside, in place of `useLightDismiss`.
+- The bell's list counts a press in the context menu as inside it, through `inContextMenu` (`src/ui/Menu.tsx`).
+- Planning measured that a press in a menu opened over the bell's list closed the list, and that Escape closed both.
+- Beyond the Scope, with the advisor's approval, the popups render inside Auto Tag while it is open, as the mockup shows them over it: Auto Tag's modal sits in the browser's top layer, which hid every popup, a copy's included.
+- That also fixes Auto Tag Apply's own popup, which was hidden behind Auto Tag before.
+- A popup showing as Auto Tag opens or closes plays its entry animation again as it moves, which the advisor accepted.
+- Planning kept the test that called `dismissAll`, with the advisor's approval, since it is the only screen test of the popup settings' defaults, and it closes each popup with its own Dismiss.
+- The screen tests' `stubExecCommand` moved into `pageHarness.ts`, which the Stats and Auto Tag tests share.
+- Notifications screen tests cover a message's and a lasting state's menus, the list staying open through a menu's press and pick, Escape closing the menu before the list, a popup's menu and its held time, and the long presses; notifications tests cover the two holds and `removeEntry`.
+- Tags screen tests cover an Auto Tag file row's menu inside Auto Tag, its copy and its hidden field there, Show in File Manager while the server lists it, Escape closing the menu before Auto Tag, the long press, and the popups inside Auto Tag; Settings screen tests cover the ids' menus; menu tests cover the menu inside a dialog and Escape.
+- Breaking the list's check of the menu, the window's Escape, the dialog's Escape, the portal, the field's place, the popup's menu hold, the holds' independence, `removeEntry`, the lasting state's missing Dismiss, the copied second line, the popups inside Auto Tag, the Auto Tag row's tint, the ids-only menus, and the list rows' surface, each from a copy under `artifacts/scratch/`, failed 2, 1, 2, 4, 1, 1, 2, 2, 2, 3, 1, 1, 1, and 4 tests (measured).
+- `npm run verify` passes, with 2,550 tests in 98 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- Deviation from the mockup, for a technical reason: the app's popups sit inside Auto Tag while it is open, at the window's edge, since Auto Tag's modal fills the window from the browser's top layer, where the mockup kept them over the player column.
+- The mockup now moves its popups into Auto Tag while it is open, at the window's edge too; it already showed the menus and Escape closing a menu first.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages after that change.
+- After review, a long press that opens a popup's menu ends the swipe it started, so sliding on leaves the popup in place under its menu, in a notifications screen test.
+- After review, a popup that renders anew as Auto Tag opens or closes lets go of a resting mouse's hold, which otherwise kept it paused for good, in a Tags screen test.
+- Dropping each of those two fixes, from a copy under `artifacts/scratch/`, failed 1 test each (measured).
+- After review, `npm run verify` passes, with 2,563 tests in 98 files on the branch with main merged (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the menus, the shared copy, and the popups inside Auto Tag, and the testing checklist's Release Specific section has the milestone's release checks.
+
 #### Release checks
 
 - Manual: In Firefox on the desktop, right-clicking the player, a tag, a preset, and a notification opens the app's menu, and right-clicking in the library search opens Firefox's own.
 - Manual: On the iPad and the Android phone, a long press on the player's picture and on a tag opens the app's menu with no callout or menu of the browser's own.
+- Manual: On the iPad, a long press on a file in Auto Tag's results opens its menu over Auto Tag, and Copy path copies the path and says so over Auto Tag.
 
 #### Not included
 

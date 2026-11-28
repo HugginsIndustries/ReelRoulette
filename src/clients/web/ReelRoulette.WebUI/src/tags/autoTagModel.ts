@@ -53,6 +53,20 @@ export function autoTagFileChecked(file: AutoTagFile): boolean {
   return !file.needsChange || file.selected;
 }
 
+/** The file with `itemId` among the rows the results area shows, or null where none shows it. */
+export function shownAutoTagFile(results: AutoTagResults, itemId: string | undefined): AutoTagFile | null {
+  if (results.kind !== "rows" || !itemId) {
+    return null;
+  }
+  for (const { files } of results.rows) {
+    const file = files.find((candidate) => candidate.itemId === itemId);
+    if (file) {
+      return file;
+    }
+  }
+  return null;
+}
+
 /** The scan's rows, unselected and collapsed. A tag with no files is left out. */
 export function autoTagRowsFromScan(response: unknown): AutoTagRow[] {
   const rowsIn = (response as { rows?: unknown } | null)?.rows;

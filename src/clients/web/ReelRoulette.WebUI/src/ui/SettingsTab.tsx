@@ -26,7 +26,9 @@ import { WEBUI_API_VERSION } from "../state/serverCompatibility";
 import type { EventStreamState } from "../state/serverConnection";
 import type { FieldProblem } from "../validation/fieldValidation";
 import { useApp } from "./appContext";
+import type { CopyWords } from "./copyText";
 import { SettingTextField } from "./FieldValidation";
+import { useMenuSurface } from "./Menu";
 import { Checkbox, Choices, OptionList, Section, type Choice } from "./SettingControls";
 
 const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
@@ -812,9 +814,16 @@ const EVENT_STREAM_STATE_LABELS: Record<EventStreamState, string> = {
   stopped: "Stopped"
 };
 
+/** What Copy on a diagnostics ID says, by the ID's row. */
+const ID_COPIES: Readonly<Record<string, CopyWords>> = {
+  Client: { copied: "Client ID copied.", failed: "Couldn't copy the client ID.", key: "copy" },
+  Session: { copied: "Session ID copied.", failed: "Couldn't copy the session ID.", key: "copy" }
+};
+
 /**
  * What identifies this page in `last.log`, shown in full, the server's and the app's versions, the server's address,
- * and the event stream's state, last event number, and resyncs since the page loaded.
+ * and the event stream's state, last event number, and resyncs since the page loaded. The client and session IDs each
+ * have a menu with Copy.
  */
 function Diagnostics() {
   const { store, config, connection } = useApp();
@@ -838,11 +847,19 @@ function Diagnostics() {
       {rows.map(([term, value]) => (
         <Fragment key={term}>
           <dt>{term}</dt>
-          <dd>{value}</dd>
+          {ID_COPIES[term] ? <CopiedValue value={value} words={ID_COPIES[term]} /> : <dd>{value}</dd>}
         </Fragment>
       ))}
     </dl>
   );
+}
+
+/** A diagnostics value with a menu that copies it. */
+function CopiedValue({ value, words }: { value: string; words: CopyWords }) {
+  const { copyText } = useApp();
+  const element = useRef<HTMLElement>(null);
+  useMenuSurface(element, () => [[{ label: "Copy", icon: "content_copy", onPick: (item) => void copyText(value, words, item) }]]);
+  return <dd class="menu-surface" ref={element}>{value}</dd>;
 }
 
 /**

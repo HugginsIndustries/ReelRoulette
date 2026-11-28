@@ -9,15 +9,21 @@ import {
   FakeServer,
   IPHONE_USER_AGENT,
   buttonIn,
+  contextMenuShown,
   currentStyle,
   dialogWith,
+  fingerPress,
   json,
+  menuItemIn,
+  menuLabels,
   mountPage,
   pageReady,
   pressKey,
   randomAnswer,
   resetPage,
+  rightClick,
   setViewport,
+  stubClipboard,
   stubCoarsePointer,
   stubFullscreenApi,
   stubLayoutSize,
@@ -126,7 +132,8 @@ function rows(name: "now" | "recent"): Row[] {
     text: row.querySelector(".notify-text")!.textContent ?? "",
     time: row.querySelector(".notify-time")!.textContent ?? "",
     detail: row.querySelector(".notify-detail")?.textContent ?? null,
-    classes: [...row.classList].filter((name) => name !== "notify-entry")
+    // The classes that show a state, leaving out the row's own and the one every surface with a menu has.
+    classes: [...row.classList].filter((name) => name !== "notify-entry" && name !== "menu-surface")
   }));
 }
 
@@ -849,8 +856,7 @@ describe("the popup settings", () => {
     for (const kind of ["actions", "devices", "refresh", "skips", "connection"] as const) {
       await notify(services, { kind, text: `A ${kind} message` });
       expect(toastTexts()).toContain(`A ${kind} message`);
-      services.notifications.dismissAll();
-      await flush();
+      await click(dismissButton(toasts()[0]!));
     }
 
     await click(document.getElementById("fullscreen-btn")!);
@@ -951,5 +957,178 @@ describe("the popup settings", () => {
     expect(stage().classList.contains("fullscreen-pseudo")).toBe(false);
     await notify(services, { kind: "actions", text: "Added to favorites" });
     expect(toastTexts()).toEqual(["Added to favorites"]);
+  });
+});
+
+/** The list's row under Recent or Now whose text reads `text`. */
+function entryRow(text: string): HTMLElement {
+  return within(list()).getByText(text).closest<HTMLElement>(".notify-entry")!;
+}
+
+/** Right-clicks `element` and answers the menu it opens. */
+async function openMenuOn(element: Element): Promise<HTMLElement> {
+  expect(rightClick(element)).toBe(false);
+  await flush();
+  const menu = contextMenuShown();
+  if (!menu) {
+    throw new Error("No menu opened.");
+  }
+  return menu;
+}
+
+/** Presses and clicks `label` in `menu`, as a mouse does. */
+async function pick(menu: HTMLElement, label: string): Promise<void> {
+  const item = menuItemIn(menu, label);
+  fireEvent.pointerDown(item, { pointerType: "mouse", pointerId: 1, isPrimary: true, button: 0 });
+  fireEvent.click(item);
+  await flush();
+}
+
+describe("the list's menus", () => {
+  it("give a message Copy text, which copies it with its second line, and Dismiss, which takes only it out, keeping the list open", async () => {
+    const writeText = stubClipboard();
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Added to favorites", detail: "holiday clip.mp4" });
+    await notify(services, { kind: "actions", text: "Filters applied." });
+    await click(bell());
+    expect(entryRow("Added to favorites").classList.contains("menu-surface")).toBe(true);
+
+    const menu = await openMenuOn(entryRow("Added to favorites"));
+    expect(menuLabels(menu)).toEqual(new Set(["Copy text", "Dismiss"]));
+    expect(entryRow("Added to favorites").classList.contains("is-menu-target")).toBe(true);
+    await pick(menu, "Copy text");
+    expect(writeText.mock.calls).toEqual([["Added to favorites\nholiday clip.mp4"]]);
+    expect(list().hidden).toBe(false);
+    // The list is open, so the copy's message joins it without a popup.
+    await waitFor(() => expect(rows("recent").map((row) => row.text)).toEqual(["Text copied.", "Filters applied.", "Added to favorites"]));
+    expect(toastTexts()).not.toContain("Text copied.");
+
+    await pick(await openMenuOn(entryRow("Filters applied.")), "Copy text");
+    expect(writeText.mock.calls.at(-1)).toEqual(["Filters applied."]);
+
+    await pick(await openMenuOn(entryRow("Filters applied.")), "Dismiss");
+    expect(rows("recent").map((row) => row.text)).toEqual(["Text copied.", "Text copied.", "Added to favorites"]);
+    expect(list().hidden).toBe(false);
+    expect(contextMenuShown()).toBeNull();
+  });
+
+  it("give a lasting state under Now only Copy text, which copies its text and second line", async () => {
+    const writeText = stubClipboard();
+    const { store } = await mountWithServices();
+    store.reconnecting.value = true;
+    await click(bell());
+
+    const menu = await openMenuOn(entryRow("Reconnecting…"));
+    expect(menuLabels(menu)).toEqual(new Set(["Copy text"]));
+    await pick(menu, "Copy text");
+    expect(writeText.mock.calls).toEqual([[`Reconnecting…\n${RECONNECTING_DETAIL}`]]);
+    expect(list().hidden).toBe(false);
+  });
+
+  it("close on Escape before the list, which the next Escape closes, and with the list on a press outside both", async () => {
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Filters applied." });
+    await click(bell());
+
+    await openMenuOn(entryRow("Filters applied."));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flush();
+    expect([contextMenuShown(), list().hidden]).toEqual([null, false]);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flush();
+    expect(list().hidden).toBe(true);
+
+    await click(bell());
+    await openMenuOn(entryRow("Filters applied."));
+    fireEvent.pointerDown(mediaArea(), { pointerType: "mouse", pointerId: 1, isPrimary: true, button: 0 });
+    await flush();
+    expect([contextMenuShown(), list().hidden]).toEqual([null, true]);
+  });
+});
+
+describe("a popup's menu", () => {
+  it("copies its text and dismisses it", async () => {
+    const writeText = stubClipboard();
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Added to favorites", detail: "holiday clip.mp4" });
+    const [toast] = toasts();
+    expect(toast!.classList.contains("menu-surface")).toBe(true);
+
+    const menu = await openMenuOn(toast!);
+    expect(menuLabels(menu)).toEqual(new Set(["Copy text", "Dismiss"]));
+    expect(toast!.classList.contains("is-menu-target")).toBe(true);
+    await pick(menu, "Copy text");
+    expect(writeText.mock.calls).toEqual([["Added to favorites\nholiday clip.mp4"]]);
+    await waitFor(() => expect(toastTexts()).toEqual(["Added to favorites", "Text copied."]));
+
+    await pick(await openMenuOn(toast!), "Dismiss");
+    expect(toastTexts()).toEqual(["Text copied."]);
+  });
+
+  it("holds its time while open, even once the mouse leaves it, and lets it run on once it closes", async () => {
+    useFakeClock();
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Filters applied." });
+    const [toast] = toasts();
+    await wait(1_000);
+
+    pointer("pointerenter", toast!, { pointerType: "mouse" });
+    await openMenuOn(toast!);
+    pointer("pointerleave", toast!, { pointerType: "mouse" });
+    await wait(20_000);
+    expect(toastTexts()).toEqual(["Filters applied."]);
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+    await wait(3_999);
+    expect(toastTexts()).toEqual(["Filters applied."]);
+    await wait(1);
+    expect(toastTexts()).toEqual([]);
+  });
+});
+
+describe("a long press with a finger", () => {
+  it("ends a popup's swipe as its menu opens, so sliding on leaves the popup in place under its menu", async () => {
+    useFakeClock();
+    const services = await mountWithServices();
+    await notify(services, { kind: "actions", text: "Filters applied." });
+    const [toast] = toasts();
+
+    fireEvent.pointerDown(toast!, { pointerType: "touch", pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 10 });
+    await wait(500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy text", "Dismiss"]));
+    windowPointer("pointermove", 300);
+    expect(toast!.style.transform).toBe("");
+    windowPointer("pointerup", 300);
+    await flush();
+    expect(toasts()).toEqual([toast]);
+    expect(contextMenuShown()).not.toBeNull();
+  });
+
+  it("opens a popup's, a message's, and the update notice's menus, without dismissing, swiping, or reloading", async () => {
+    useFakeClock();
+    const reloadPage = vi.fn<() => void>();
+    const services = await mountWithServices(new FakeServer(), { reloadPage });
+    await notify(services, { kind: "actions", text: "Filters applied." });
+
+    const [toast] = toasts();
+    await fingerPress(toast!, 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy text", "Dismiss"]));
+    expect(toastTexts()).toEqual(["Filters applied."]);
+    expect(toast!.style.transform).toBe("");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flush();
+
+    services.store.differentBuild.value = true;
+    await click(bell());
+    await fingerPress(entryRow("ReelRoulette updated · Tap to reload"), 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy text"]));
+    expect(reloadPage).not.toHaveBeenCalled();
+
+    await fingerPress(entryRow("Filters applied."), 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy text", "Dismiss"]));
+    expect(entryRow("Filters applied.").classList.contains("is-menu-target")).toBe(true);
+    expect(list().hidden).toBe(false);
   });
 });

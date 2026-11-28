@@ -1,7 +1,6 @@
-import { Fragment, type RefObject } from "preact";
+import { createPortal, Fragment, type RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
-import { useLightDismiss } from "./LightDismiss";
 import { MENU_TARGET_CLASS, type ContextMenuView, type MenuGroups } from "./menuModel";
 import { placeAtPoint } from "./placement";
 
@@ -49,41 +48,61 @@ export function Menu({ id, class: extraClass, hidden, groups, onClose }: MenuPro
   );
 }
 
+/** The context menu's own element, while it shows. */
+const CONTEXT_MENU_ID = "context-menu";
+
+/** Whether `target` is in the context menu, as a press that keeps a popover the menu opened over open is. */
+export function inContextMenu(target: Node | null): boolean {
+  return target instanceof Element && !!target.closest(`#${CONTEXT_MENU_ID}`);
+}
+
 /**
  * The context menu that shows, at its point, below and to the right of it, or on its other side where it would cross
  * the window's edge, kept inside the window. It closes on a press outside it, which still does what it does, on
  * Escape, on a pick, before the item's action, and on a scroll outside it, a resize, and the browser tab hiding, so it
- * never stays where its element no longer is. The element it acts on is tinted while it is open. It renders in the
- * fullscreen stage, so it shows in fullscreen and nothing it opens over clips it.
+ * never stays where its element no longer is. Escape comes to it before anything else, such as the bell's list it
+ * opened over, except a dialog it doesn't show in. The element it acts on is tinted while it is open. It renders in the
+ * fullscreen stage, so it shows in fullscreen and nothing it opens over clips it, or in the open dialog its element is
+ * in, such as Auto Tag, since the page outside a modal dialog takes no presses.
  */
 export function ContextMenuHost() {
   const { contextMenu } = useApp();
   const view = contextMenu.view.value;
   const host = useRef<HTMLDivElement>(null);
 
-  useLightDismiss({
-    open: contextMenu.isOpen,
-    keepsOpen: (target) => !!target && !!host.current?.contains(target),
-    onPressOutside: contextMenu.dismiss,
-    onEscape: contextMenu.dismiss
-  });
-
   const open = view !== null;
   useLayoutEffect(() => {
     if (!open) {
       return;
     }
-    const close = contextMenu.close;
+    const { close, dismiss } = contextMenu;
+    const outside = (target: EventTarget | null) => !(target instanceof Node && host.current?.contains(target));
+    const onPointerDown = (event: PointerEvent) => {
+      if (outside(event.target)) dismiss();
+    };
+    // Heard from the window, before the page hears it, so a popover the menu opened over, such as the bell's list,
+    // stays open, and so does the dialog it shows in. A dialog it doesn't show in, which opened over it, takes Escape.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (Array.from(document.querySelectorAll("dialog[open]")).some((dialog) => !dialog.contains(host.current))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dismiss();
+    };
     const onScroll = (event: Event) => {
-      if (!(event.target instanceof Node && host.current?.contains(event.target))) close();
+      if (outside(event.target)) close();
     };
     const onVisibilityChange = () => {
       if (document.hidden) close();
     };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", close);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", close);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -114,11 +133,13 @@ export function ContextMenuHost() {
   if (!view) {
     return null;
   }
-  return (
-    <div id="context-menu" class="context-menu" ref={host}>
+  const menu = (
+    <div id={CONTEXT_MENU_ID} class="context-menu" ref={host}>
       <Menu groups={view.groups} onClose={contextMenu.dismiss} />
     </div>
   );
+  const dialog = view.target?.closest("dialog[open]");
+  return dialog ? createPortal(menu, dialog) : menu;
 }
 
 export interface MenuSurfaceOptions {

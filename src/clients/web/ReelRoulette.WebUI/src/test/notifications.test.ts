@@ -122,10 +122,10 @@ describe("notifications", () => {
     notes.notify({ kind: "actions", text: "Filters applied." });
     const id = notes.popups.value[0]!.id;
     vi.advanceTimersByTime(2_000);
-    notes.hold(id, true);
+    notes.hold(id, "pointer", true);
     vi.advanceTimersByTime(20_000);
     expect(shown()).toEqual(["Filters applied."]);
-    notes.hold(id, false);
+    notes.hold(id, "pointer", false);
     // It had 3 seconds left when the pointer came.
     vi.advanceTimersByTime(2_999);
     expect(shown()).toEqual(["Filters applied."]);
@@ -138,12 +138,46 @@ describe("notifications", () => {
     notes.notify({ kind: "actions", text: "Filters applied." });
     const id = notes.popups.value[0]!.id;
     vi.advanceTimersByTime(4_900);
-    notes.hold(id, true);
-    notes.hold(id, false);
+    notes.hold(id, "pointer", true);
+    notes.hold(id, "pointer", false);
     vi.advanceTimersByTime(799);
     expect(shown()).toEqual(["Filters applied."]);
     vi.advanceTimersByTime(1);
     expect(shown()).toEqual([]);
+  });
+
+  it("keeps a popup's time paused while its menu is open, after the pointer leaves, and runs it once nothing holds it", () => {
+    const { notes, shown } = setup();
+    notes.notify({ kind: "actions", text: "Filters applied." });
+    const id = notes.popups.value[0]!.id;
+    vi.advanceTimersByTime(1_000);
+    notes.hold(id, "pointer", true);
+    notes.hold(id, "menu", true);
+    notes.hold(id, "pointer", false);
+    vi.advanceTimersByTime(20_000);
+    expect(shown()).toEqual(["Filters applied."]);
+
+    // Letting go of a hold it doesn't have changes nothing.
+    notes.hold(id, "pointer", false);
+    vi.advanceTimersByTime(20_000);
+    expect(shown()).toEqual(["Filters applied."]);
+
+    notes.hold(id, "menu", false);
+    vi.advanceTimersByTime(3_999);
+    expect(shown()).toEqual(["Filters applied."]);
+    vi.advanceTimersByTime(1);
+    expect(shown()).toEqual([]);
+  });
+
+  it("takes one message out of the list, leaving the others", () => {
+    const { notes } = setup();
+    notes.notify({ kind: "actions", text: "One" });
+    notes.notify({ kind: "actions", text: "Two" });
+    notes.notify({ kind: "actions", text: "Three" });
+    notes.openList();
+    const two = notes.entries.value.find((entry) => entry.text === "Two")!;
+    notes.removeEntry(two.id);
+    expect(notes.entries.value.map((entry) => entry.text)).toEqual(["Three", "One"]);
   });
 
   it("pops nothing up while the list is open, closes a popup with a new message's key, and marks what didn't pop up", () => {

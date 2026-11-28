@@ -274,9 +274,10 @@ ReelRoulette is a thin-client, API-first system:
   - At most three show, newest nearest the edge, and a fourth closes the oldest that isn't a warning, so while three warnings show nothing new pops up.
   - A popup with the same key, such as a second favorite change, replaces the one showing in its place and starts its time over.
   - A popup closes after the popup time, 5 seconds by default, with a 160 ms fade, and a warning stays until it is closed.
-  - A mouse or pen over a popup pauses its time, a paused popup keeping at least 0.8 seconds.
+  - A mouse or pen over a popup pauses its time, and so does its menu while it is open, a paused popup keeping at least 0.8 seconds.
   - A touch doesn't pause it, and a swipe past 64 px to either side closes it.
   - Popups show over the overlay panel and in fullscreen while Show in fullscreen is on, take no focus, take the pointer only on their own boxes, and don't move under reduced motion.
+  - While Auto Tag is open they show inside it, over it, at the window's edge, clear of the home indicator at the bottom.
   - Their settings, whether popups show, for which kinds, at which of six positions, whether in fullscreen, and for 3, 5, or 10 seconds, are read per device from `notifications.popups`, each falling back to its default (on, every kind, bottom center, in fullscreen, 5 seconds).
   - The Settings tab's Notifications section sets them, each applying at once to the next message, and the position to the popups showing too.
   - Changing the position or the time shows a sample popup, "Popups show here." with "For {n} seconds, unless you point at one or close it.", which a second one replaces, and which the list never keeps, the badge never counts, and `last.log` never gets.
@@ -314,9 +315,10 @@ ReelRoulette is a thin-client, API-first system:
     - With Show seconds on, the times read "HH:MM:SS" and "MM-DD HH:MM:SS".
     - The list works out the day each time it renders, so a message from before midnight gains its date at the list's next render.
   - Messages that didn't pop up show marked, except an automatic refresh with no library changes, and in-app notices show unmarked with the `error` icon and aren't counted.
-  - Clear empties Recent.
+  - Clear empties Recent, and a message's menu dismisses only it.
   - While the list is open nothing pops up, and a popup showing with a new message's key closes.
-  - The list closes on its Close, the bell, Escape, which comes to it before the stage except while an in-app dialog is open, a press outside it, and the panel opening.
+  - The list closes on its Close, the bell, Escape, which comes to it before the stage except while an in-app dialog is open, a press outside it, which a press in a menu opened from it isn't, and the panel opening.
+  - A menu opened from it takes Escape first.
   - However it closes, focus inside it goes to the page.
   - Notification settings, at its foot, closes it and opens the Settings tab at Show popups, with Popup settings open.
 
@@ -698,7 +700,7 @@ ReelRoulette is a thin-client, API-first system:
 - Panel has Side, Left or Right, and Auto-Pause, Responsive, Always, or Never, each choice named by its title, with its line under it.
 - Keyboard shortcuts, a section that opens and closes from its heading with a chevron and starts closed on each page load, lists each shortcut's keys and what they do, from the table the shortcuts are bound by, Esc's as "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen", with the hint "Shortcuts do nothing while you type in a text field."
 - Diagnostics shows:
-  - The client id, the session id, the client type, and the device name in full.
+  - The client id, the session id, the client type, and the device name in full, the ids each with a menu whose Copy copies it.
   - The server's version with its API version, as "0.15.0 (API 2)", from the last version check the server answered, a server that fails the compatibility check included, or "Unknown" before one answers.
   - The server's address, the runtime config's `apiBaseUrl`.
   - The app's version with the API version it speaks, labeled ReelRoulette, as "0.15.0 (API 2)".
@@ -779,6 +781,7 @@ ReelRoulette is a thin-client, API-first system:
   - Held changes on a tag no file has, such as an add, don't follow another client's rename or delete.
 - With View all matches, files that already have the tag show checked and disabled and are never sent.
   - Each scan starts with nothing checked, and Select all checks every file without its tag.
+- A file row's menu, with Copy path and Show in File Manager, shows inside Auto Tag, and Escape closes it before Auto Tag.
 - A scan that fails shows "Scan failed: {why}", or "Scan failed." when the server refused it without a reason, in Auto Tag's status, and relays it with its status, with its results as before any scan.
   - A scan's summary always replaces "Scanning…".
 - Its results show "Scan to find files whose names contain a tag's name." before any scan and "No file names contain any tag's name." after one that finds nothing, and the count columns line up under their headers.
@@ -908,14 +911,16 @@ ReelRoulette is a thin-client, API-first system:
 
 - The browser's own right-click menu is off across the page except in text fields, textareas and text, search, url, tel, email, password, and number inputs, which keep it for copy, paste, and spell check.
 - A part of the page with a menu registers as a surface with the context menu (`addSurface` in `src/ui/menuModel.ts`), and the elements its menu opens on carry the `menu-surface` class, which turns off the browser's long-press callout and, on a touch screen, text selection.
-  - The library grid, whose tiles carry the class, and the player's media area register themselves.
-  - A component gives the header's now-playing name, the Stats tab's file name, path, and tags, the Tags tab's tags and category headers, and the Filter tab's preset rows and sources a menu from its groups with `useMenuSurface` (`src/ui/Menu.tsx`).
+  - The library grid, whose tiles carry the class, the player's media area, and Auto Tag's results, for its file rows, register themselves.
+  - A component gives the header's now-playing name, the Stats tab's file name, path, and tags, the Tags tab's tags and category headers, the Filter tab's preset rows and sources, the bell's list rows, the popups, and the Settings tab's client and session ids a menu from its groups with `useMenuSurface` (`src/ui/Menu.tsx`).
   - The name's menu and the Stats tab's file name's and path's open through the menus on the playing item, so they close when another item plays.
 - A mouse's right-click anywhere on a surface opens the innermost surface's menu at the pointer, and one where no menu exists opens nothing.
 - A long press with a finger or a pen (`src/ui/longPress.ts`: half a second, started only by the first finger down, so a pinch never starts one, and cancelled by moving 8 px, a second finger, a scroll the browser takes over, or lifting first) opens it where the press began, except on buttons, but those a surface counts as part of it (`pressOn`), as a tag category's header does its name, drag handles, the rating's stars, and the panel's resize handle.
   - The click it ends with is stopped before anything hears it.
   - The right-click Chrome on Android sends for a long press opens nothing more.
 - The menu closes on a scroll outside it, a resize, and the browser tab hiding, and tints the element it acts on while open, unless the surface marks it its own way, as a tile's ring does.
+  - It renders in the fullscreen stage, or inside the open dialog the element it acts on is in, as Auto Tag's file rows are, since the page outside a modal dialog takes no presses.
+  - It hears Escape from the window before anything else, so the first Escape closes only the menu and leaves the bell's list it opened over or the dialog it shows in open, while a dialog it doesn't show in takes Escape.
   - The tint's rule comes last in the stylesheet, so it shows over an element's own shadow, such as a green or orange tag's ring.
 - The menus on the playing item (`src/playback/playingItemMenus.ts`) close when another item plays.
   - The player's opens on its picture, not on its controls, its seek row, or the rating's stars, and with nothing playing none opens.
@@ -946,8 +951,18 @@ ReelRoulette is a thin-client, API-first system:
   - A source's holds Only this source (`filter_alt`), which checks it and unchecks the other enabled sources until Apply, a source turned off on the server keeping its check.
     - The only enabled source checked has no menu.
     - On a source turned off on the server it is disabled with "This source is turned off on the server".
+- The menus on notifications (`src/notifications/notificationMenus.ts`):
+  - A message in the bell's list holds Copy text (`content_copy`) and Dismiss (`close`), which takes only it out of the list.
+  - A lasting state under Now, the update notice's row included, holds only Copy text.
+  - A popup's holds Copy text and Dismiss, which closes it, and its time holds while the menu is open, as it does while a mouse or pen points at it, and runs on once neither holds it.
+  - A long press that opens a popup's menu ends its swipe, so sliding on leaves the popup in place.
+  - Copy text copies the message, with its second line on a line of its own, saying "Text copied." or "Couldn't copy the text.".
+  - A menu opened from the list keeps it open while it is used.
+- An Auto Tag file row's menu holds Copy path and Show in File Manager, the file items without Copy name, with the file's name, the last part of its path, as the popups' second line.
+- The Settings tab's client and session ids each have a menu with Copy (`content_copy`), saying "Client ID copied." or "Session ID copied.", or "Couldn't copy the client ID." or "Couldn't copy the session ID.".
+- Every copy goes through one helper (`src/ui/copyText.ts`), which copies with the Clipboard API where the browser has it, and otherwise, as over plain HTTP from another device, or when the Clipboard API refuses, from a hidden read-only text field with `document.execCommand('copy')`, placed in the open dialog the menu shows in, or else in the fullscreen stage, and says so in a Your actions popup, or in the notice when it can't.
 - The file items (`src/library/fileLocation.ts`) are:
-  - Copy name (`content_copy`) and Copy path (`content_copy`), which copy with the Clipboard API where the browser has it, and otherwise, as over plain HTTP from another device, or when the Clipboard API refuses, from a hidden read-only text field in the fullscreen stage with `document.execCommand('copy')`, saying "Name copied." or "Path copied." with the file's name as the popup's second line, or "Couldn't copy the name." or "Couldn't copy the path." in the notice.
+  - Copy name (`content_copy`) and Copy path (`content_copy`), saying "Name copied." or "Path copied." with the file's name as the popup's second line, or "Couldn't copy the name." or "Couldn't copy the path." in the notice.
   - Show in File Manager (`folder_open`), shown while the last version check listed `api.showInFileManager`, which the server lists only for a browser on the server machine while it has a desktop, which asks the server to open its file manager at the file and says "Opened in the file manager.", and whose refusal shows "Show in File Manager failed: {the server's reason}", or "Show in File Manager failed." without one, in the notice.
 
 #### In-app dialogs

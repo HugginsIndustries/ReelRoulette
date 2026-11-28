@@ -97,6 +97,9 @@ export interface Popup {
   leaving: boolean;
 }
 
+/** What holds a popup's time: a mouse or pen pointing at it, or its menu being open. */
+export type PopupHold = "pointer" | "menu";
+
 export interface NotifyRequest {
   kind: NotificationKind;
   text: string;
@@ -141,15 +144,14 @@ export interface Notifications {
   /** Opens the list: the messages that didn't pop up show marked, and the badge empties. */
   openList(): void;
   closeList(): void;
-  toggleList(): void;
   /** Empties the list. */
   clear(): void;
+  /** Takes one message out of the list, as its menu's Dismiss does. */
+  removeEntry(id: number): void;
   /** Closes a popup, with its fade, or at once. */
   dismiss(id: number, atOnce?: boolean): void;
-  /** Closes every popup at once. */
-  dismissAll(): void;
-  /** A mouse or pen points at a popup: its time pauses while it does. */
-  hold(id: number, held: boolean): void;
+  /** Holds a popup's time, or lets it go: it pauses while anything holds it, and runs again once nothing does. */
+  hold(id: number, by: PopupHold, held: boolean): void;
   /**
    * Changes the popup settings, keeps them on this device, and applies them at once: the popups' position, and for the
    * next message, whether and for which kinds popups show, in fullscreen too, and for how long. Popups showing stay.
@@ -190,12 +192,12 @@ export function readPopupSettings(device: DeviceStore): PopupSettings {
   };
 }
 
-/** A popup's time: what it has left, whether it is counting down, and whether the pointer holds it paused. */
+/** A popup's time: what it has left, whether it is counting down, and what holds it paused. */
 interface PopupTime {
   remaining: number;
   running: boolean;
   started: number;
-  held: boolean;
+  holds: Set<PopupHold>;
   timer: ReturnType<typeof setTimeout> | undefined;
 }
 
@@ -217,7 +219,7 @@ export function createNotifications(options: NotificationsOptions): Notification
 
   function run(id: number): void {
     const time = times.get(id);
-    if (!time || time.remaining === 0 || time.held) {
+    if (!time || time.remaining === 0 || time.holds.size > 0) {
       return;
     }
     time.started = Date.now();
@@ -238,7 +240,7 @@ export function createNotifications(options: NotificationsOptions): Notification
   }
 
   function startTime(id: number, warning: boolean): void {
-    const time = times.get(id) ?? { remaining: 0, running: false, started: 0, held: false, timer: undefined };
+    const time = times.get(id) ?? { remaining: 0, running: false, started: 0, holds: new Set<PopupHold>(), timer: undefined };
     times.set(id, time);
     clearTimeout(time.timer);
     time.running = false;
@@ -383,35 +385,26 @@ export function createNotifications(options: NotificationsOptions): Notification
     openList,
     closeList,
 
-    toggleList() {
-      if (listOpen.peek()) {
-        closeList();
-      } else {
-        openList();
-      }
-    },
-
     clear() {
       entries.value = [];
       unread.value = 0;
     },
 
-    dismiss,
-
-    dismissAll() {
-      showing().forEach((popup) => dismiss(popup.id, true));
+    removeEntry(id) {
+      entries.value = entries.peek().filter((entry) => entry.id !== id);
     },
 
-    hold(id, held) {
+    dismiss,
+
+    hold(id, by, held) {
       const time = times.get(id);
       if (!time) {
         return;
       }
       if (held) {
-        time.held = true;
+        time.holds.add(by);
         pause(id);
-      } else if (time.held) {
-        time.held = false;
+      } else if (time.holds.delete(by)) {
         run(id);
       }
     },

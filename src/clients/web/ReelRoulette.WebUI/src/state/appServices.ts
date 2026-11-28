@@ -7,6 +7,7 @@ import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createFilterMenus, type FilterMenus } from "../filter/filterMenus";
 import { createFileLocation } from "../library/fileLocation";
 import { createLibrary, type Library } from "../library/library";
+import { createNotificationMenus, type NotificationMenus } from "../notifications/notificationMenus";
 import { createNotifications, type Notifications } from "../notifications/notifications";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
 import { createAmbient, type Ambient } from "../playback/ambient";
@@ -28,6 +29,7 @@ import { createTagCatalog } from "../tags/tagCatalog";
 import { createTagEditor, type TagEditor } from "../tags/tagEditor";
 import { createTagMenus, type TagMenus } from "../tags/tagMenus";
 import type { RuntimeConfig } from "../types/runtimeConfig";
+import { createCopyText, type CopyText } from "../ui/copyText";
 import { createContextMenu, type ContextMenu } from "../ui/menuModel";
 import { createAppApi, type AppApi } from "./appApi";
 import { createAppStore, type AppStore } from "./appStore";
@@ -90,12 +92,16 @@ export interface AppServices {
   notifications: Notifications;
   /** The context menu that shows at a point, one at a time, such as a library tile's. */
   contextMenu: ContextMenu;
+  /** Copies text from a menu item and says so in a popup, as the menus' Copy items do. */
+  copyText: CopyText;
   /** The menus on the playing item: the player's picture's, the header's now-playing name's, and the Stats tab's. */
   playingMenus: PlayingItemMenus;
   /** The menus on tags: the Tags tab's tags' and categories', and the Stats tab's tags'. */
   tagMenus: TagMenus;
   /** The menus on the Filter tab's preset rows and sources. */
   filterMenus: FilterMenus;
+  /** The menus on the bell's list entries and the popups. */
+  notificationMenus: NotificationMenus;
   /** The Settings tab's settings that nothing else keeps. */
   settings: Settings;
 }
@@ -141,8 +147,9 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     record: (message) => notifications.record(message)
   });
   const controlAccess = createControlAccess({ api, dialogs });
+  const copyText = createCopyText({ dialogs, notifications });
   // Copy name, Copy path, and Show in File Manager, in the menus that act on a file.
-  const fileLocation = createFileLocation({ api, dialogs, notifications, capabilities: store.serverCapabilities });
+  const fileLocation = createFileLocation({ api, dialogs, notifications, copyText, capabilities: store.serverCapabilities });
   const connection = createServerConnection({
     sseUrl: config.sseUrl,
     pairToken: config.pairToken,
@@ -238,8 +245,9 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     fileLocation,
     contextMenu
   });
-  const tagMenus = createTagMenus({ tagEditor, filterDialog });
+  const tagMenus = createTagMenus({ tagEditor, filterDialog, fileLocation });
   const filterMenus = createFilterMenus({ filterDialog, store });
+  const notificationMenus = createNotificationMenus({ notifications, copyText });
   const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
   const settings = createSettings({ device, dialogs, reloadPage });
   const ambient = createAmbient({
@@ -341,9 +349,11 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     },
     notifications,
     contextMenu,
+    copyText,
     playingMenus,
     tagMenus,
     filterMenus,
+    notificationMenus,
     settings
   };
 }

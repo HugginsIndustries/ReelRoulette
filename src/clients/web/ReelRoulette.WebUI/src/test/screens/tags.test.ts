@@ -6,6 +6,7 @@ import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
 import { noTagNamed } from "../serverReasons";
 import {
   closeNotices,
+  COMPATIBLE_VERSION,
   contextMenuShown,
   currentStyle,
   FakeServer,
@@ -20,7 +21,10 @@ import {
   pointerDown,
   pointerMove,
   pointerUp,
+  popupsShown,
   randomAnswer,
+  removeClipboard,
+  REQUIRED_CAPABILITIES,
   resetPage,
   rightClick,
   selectedPresetLabel,
@@ -28,6 +32,8 @@ import {
   tapPage,
   unauthorizedLogLine,
   status,
+  stubClipboard,
+  stubExecCommand,
   stubLayoutSize,
   stubRowLayout,
   stubScroller,
@@ -2849,5 +2855,133 @@ describe("server events", () => {
     expect(openNotices()).toEqual([]);
     expect(relayedLines("Tag")).toEqual([]);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+  });
+});
+
+describe("Auto Tag's file rows", () => {
+  const SHOW_BEACH_A = "/api/show-in-file-manager/item-1";
+
+  function fileRow(tagName: string, displayPath: string): HTMLElement {
+    return fileCheck(tagName, displayPath).closest<HTMLElement>(".autotag-file")!;
+  }
+
+  /** Right-clicks a file row and answers the menu it opens. */
+  async function openFileMenu(tagName: string, displayPath: string): Promise<HTMLElement> {
+    expect(rightClick(fileRow(tagName, displayPath))).toBe(false);
+    await settle();
+    const menu = contextMenuShown();
+    if (!menu) {
+      throw new Error("No menu opened.");
+    }
+    return menu;
+  }
+
+  /** Opens Auto Tag after a scan with beach's files listed, with or without the server offering Show in File Manager. */
+  async function showBeachFiles(options: { fileManager: boolean }): Promise<FakeServer> {
+    const { server } = await mountTags({
+      setup(fake) {
+        if (options.fileManager) {
+          fake.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [...REQUIRED_CAPABILITIES, "api.showInFileManager"] }));
+        }
+        fake.on("POST", SHOW_BEACH_A, () => status(204));
+      }
+    });
+    await openEditor();
+    await openAutoTag();
+    await scan();
+    await expand("beach");
+    return server;
+  }
+
+  it("have a menu inside Auto Tag whose Copy path copies the file's path and Show in File Manager opens it, each saying so over Auto Tag", async () => {
+    const writeText = stubClipboard();
+    const server = await showBeachFiles({ fileManager: true });
+    expect(fileRow("beach", "beach a.mp4").classList.contains("menu-surface")).toBe(true);
+
+    const menu = await openFileMenu("beach", "beach a.mp4");
+    expect(autoTag().contains(menu)).toBe(true);
+    expect(menuLabels(menu)).toEqual(new Set(["Copy path", "Show in File Manager"]));
+    expect(fileRow("beach", "beach a.mp4").classList.contains("is-menu-target")).toBe(true);
+
+    fireEvent.click(menuItemIn(menu, "Copy path"));
+    await settle();
+    expect(writeText.mock.calls).toEqual([["C:\\media\\beach a.mp4"]]);
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | beach a.mp4"]));
+    expect(autoTag().contains(document.getElementById("toasts"))).toBe(true);
+
+    fireEvent.click(menuItemIn(await openFileMenu("beach", "beach a.mp4"), "Show in File Manager"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Opened in the file manager. | beach a.mp4"]));
+    expect(server.requests("POST", SHOW_BEACH_A)).toHaveLength(1);
+    expect(findAutoTag()).not.toBeNull();
+  });
+
+  it("leave out Show in File Manager while the server doesn't list it", async () => {
+    await showBeachFiles({ fileManager: false });
+    expect(menuLabels(await openFileMenu("beach", "beach b.mp4"))).toEqual(new Set(["Copy path"]));
+  });
+
+  it("copy from a hidden field inside Auto Tag without the Clipboard API, since the page outside it takes no focus", async () => {
+    removeClipboard();
+    const execCopy = stubExecCommand(true);
+    await showBeachFiles({ fileManager: false });
+
+    fireEvent.click(menuItemIn(await openFileMenu("beach", "beach a.mp4"), "Copy path"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | beach a.mp4"]));
+    expect(execCopy.fields).toEqual([{ value: "C:\\media\\beach a.mp4", selected: "C:\\media\\beach a.mp4", parentId: "autotag", focused: true }]);
+  });
+
+  it("close their menu on Escape before Auto Tag, which the next Escape closes", async () => {
+    await showBeachFiles({ fileManager: false });
+    await openFileMenu("beach", "beach a.mp4");
+
+    fireEvent.keyDown(autoTag(), { key: "Escape" });
+    await settle();
+    expect(contextMenuShown()).toBeNull();
+    expect(findAutoTag()).not.toBeNull();
+
+    fireEvent.keyDown(autoTag(), { key: "Escape" });
+    await settle();
+    expect(findAutoTag()).toBeNull();
+  });
+
+  it("open their menu on a long press, which leaves the file's box as it was", async () => {
+    await showBeachFiles({ fileManager: false });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    await fingerPress(fileRow("beach", "beach a.mp4"), 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy path"]));
+    expect(fileCheck("beach", "beach a.mp4").checked).toBe(false);
+  });
+
+  it("let a popup the mouse rests on inside Auto Tag run its time again once Auto Tag closes", async () => {
+    stubClipboard();
+    await showBeachFiles({ fileManager: false });
+    const copyPath = menuItemIn(await openFileMenu("beach", "beach a.mp4"), "Copy path");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fireEvent.click(copyPath);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(popupsShown()).toEqual(["Path copied. | beach a.mp4"]);
+
+    document.querySelector("#toasts .toast")!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(popupsShown()).toEqual(["Path copied. | beach a.mp4"]);
+
+    fireEvent.keyDown(autoTag(), { key: "Escape" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(findAutoTag()).toBeNull();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(popupsShown()).toEqual([]);
+  });
+
+  it("leave the popups inside Auto Tag only while it is open", async () => {
+    stubClipboard();
+    await showBeachFiles({ fileManager: false });
+    fireEvent.click(menuItemIn(await openFileMenu("beach", "beach a.mp4"), "Copy path"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | beach a.mp4"]));
+
+    await press(autoTagButton("Close"));
+    expect(findAutoTag()).toBeNull();
+    expect(popupsShown()).toEqual(["Path copied. | beach a.mp4"]);
+    expect(document.getElementById("toasts")!.parentElement!.classList.contains("player-col")).toBe(true);
   });
 });

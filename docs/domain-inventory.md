@@ -187,9 +187,10 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - pairing prompt, labeled "Pairing token", whose Pair is disabled while the token is empty, and now playing, whose file name opens the panel on the Stats tab with a click, with the full name, then "Show stats", as its tooltip, and its menu, through the playing item's menus, with a right-click or a long press; its `is-pairing` class while the server asks for pairing keeps it showing on a phone on its side.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Notifications.tsx`
   - the player's bell, with its badge and its accessible name counting what didn't pop up, orange while it has unread messages or its list is open, which opens the list under it or closes it.
-  - the popups, at the edge and side the popup settings say, each a card with its icon, message, second line, and Dismiss, paused while a mouse or pen points at it, and closed by a swipe past 64 px on a touch screen.
-  - the list, lined up with the bell, showing Now from `src/state/lastingStates.ts`, whose update notice's row takes a tap that asks the services to reload for the update, and Recent with their times, worked out against the day each time it renders and with seconds while Show seconds is on, with Clear and Close, which takes Escape before the stage except while an in-app dialog is open, and closes on a press outside it, and Notification settings at its foot, which closes it, opens the Settings tab, and asks the settings service to show the popup settings.
+  - the popups, at the edge and side the popup settings say, each a card with its icon, message, second line, and Dismiss, paused while a mouse or pen points at it or its menu is open, and closed by a swipe past 64 px on a touch screen; while Auto Tag is open, the host inside it renders them and the one beside the player renders nothing.
+  - the list, lined up with the bell, showing Now from `src/state/lastingStates.ts`, whose update notice's row takes a tap that asks the services to reload for the update, and Recent with their times, worked out against the day each time it renders and with seconds while Show seconds is on, with Clear and Close, which takes Escape before the stage except while an in-app dialog is open, and closes on a press outside it, which a press in the context menu isn't, and Notification settings at its foot, which closes it, opens the Settings tab, and asks the settings service to show the popup settings.
   - However the list closes, focus inside it goes to the page.
+  - Each list row and popup has a menu from `src/notifications/notificationMenus.ts`.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Stage.tsx`
   - the fullscreen stage, holding the player with its popups, the side panel, the list behind the bell, the context menu, Auto Tag, the in-app dialogs' host, and Show layout measurements' figures, each in its error boundary, which stay inside the stage so they show in fullscreen.
   - The panel's side, where it goes (`data-side` and `data-panel-mode`), its width (`--panel-width`), `covers-player` while the overlay panel is open, and the pseudo-fullscreen class are set on the stage, and `is-narrow` on the player column while the player is narrower than 600 px, as they change, without rendering the stage again.
@@ -300,7 +301,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - Notifications' Show seconds, a checkbox with its hint outside Popup settings, kept by the notifications service.
     - Panel's Side and Auto-Pause, radio buttons named by their choice, with its line under it.
     - Keyboard shortcuts, a `details` section closed at first that opens from its heading, listing the shortcuts' table with each key as a `kbd`, which a request from H opens and scrolls to.
-    - Diagnostics, the client and session ids, client type, and device name in full, the server's version with its API version, or "Unknown" before a version check answers, the server's address, the app's version with its API version, labeled ReelRoulette, and the event stream's state, last event number, or "None" before the first event, and resyncs since the page loaded, from the server connection.
+    - Diagnostics, the client and session ids, each with a menu whose Copy copies it, client type, and device name in full, the server's version with its API version, or "Unknown" before a version check answers, the server's address, the app's version with its API version, labeled ReelRoulette, and the event stream's state, last event number, or "None" before the first event, and resyncs since the page loaded, from the server connection.
     - Developer's Don't record plays on this device, a checkbox with its hint, kept by the store, Show layout measurements, a checkbox with its hint, kept by the settings, and Reset this device's settings, a button with its hint, which the settings carry out.
     - the line saying settings apply at once and are kept on this device.
   - Each setting applies as it changes, with no Save.
@@ -388,6 +389,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - Auto Tag, over the whole page: the in-app dialog with its own class and no outside to click, rendered in the stage, with its X, Scan full library and View all matches, Select all, Deselect all, Scan Files, progress, status, results, Cancel, and Apply.
   - Escape or the browser's cancel or close does what the X does, which waits while a scan runs, and focus starts on the X.
   - The results show a placeholder before any scan and another after one that found nothing, and the header and every row share one column template; with View all matches, a file that already has the tag shows checked and disabled.
+  - The results are one menu surface for every file row, which finds the row under the press, and the popups show inside it while it is open.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/FieldValidation.tsx`
   - the field validation pattern's components:
     - a field's red icon inside it on the right and its tooltip, placed beside the icon and kept inside the window, shown while the pointer is on the icon, after a tap on it, or while the field has focus.
@@ -408,7 +410,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the host that shows the control-token prompt, a name dialog with a password field and Continue, and the service's confirmations and notices.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Menu.tsx`
   - the app's menu list: items with an icon at their left and a label, red for a destructive action, or disabled with their reason as their tooltip, in groups with a rule between them, a pick closing the menu before its action runs; its container places it.
-  - the context menu's host, in the fullscreen stage: the menu showing, at its point, below and to the right of it or on its other side where it would cross the window's edge, kept 8 px inside the window, closed on a press outside it, Escape, a pick, a scroll outside it, a resize, or the browser tab hiding, and the element it acts on tinted while it is open.
+  - the context menu's host, in the fullscreen stage, or in the open dialog the element it acts on is in: the menu showing, at its point, below and to the right of it or on its other side where it would cross the window's edge, kept 8 px inside the window, closed on a press outside it, Escape, heard from the window before anything else unless a dialog it isn't in is open, a pick, a scroll outside it, a resize, or the browser tab hiding, and the element it acts on tinted while it is open.
+  - `inContextMenu`: whether a press landed in the context menu, so a popover it opened over, such as the bell's list, stays open.
   - `useMenuSurface`: gives a component's element a menu from the groups it gives at the press, tinting the element, with none while it gives null, the buttons a long press still opens it on, and an open in place of the context menu's own, which the menus on the playing item use to close it when another item plays.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/menuModel.ts`
   - the menu item type, whose action gets the item's own button, and the app's one context menu: its items, its point, the element it acts on, and what to do once it closes, told whether the user closed it, opening one closing the one before; and the surfaces with a menu, each an element, what a press in it opens the menu on, how to open it, and the buttons inside it that a long press still opens it on, the innermost one under a press winning.
@@ -425,10 +428,12 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/dialogs/dialogs.ts`
   - the "Discard changes?" confirmation, with a red Discard, that the Tags tab and the update notice's reload ask.
   - the page's confirmations and notices: each one asked for opens above the last and settles with its answer, a notice that offers an action settling true for it and false for OK, and a notice's text is relayed to `last.log` as a popup's is and kept in the list behind the bell. A notice whose message is already open doesn't open again; it is still relayed, and settles when the one showing closes.
+- `src/clients/web/ReelRoulette.WebUI/src/notifications/notificationMenus.ts`
+  - the menus on the bell's list rows and the popups: Copy text, which copies the message with its second line on a line of its own, and Dismiss, which takes a message out of the list or closes a popup, which a lasting state's row leaves out.
 - `src/clients/web/ReelRoulette.WebUI/src/notifications/notifications.ts`
   - the page's one-off messages:
-    - each relays its text, or a log text that leaves out a file or preset name, to `last.log`, pops up if the popup settings allow, at most three at once, the cap never closing a warning, one with the same key replacing the one showing, a warning staying until closed, and the time pausing while held, with a floor.
-    - the list keeps it, the last 50, with in-app notices kept unmarked.
+    - each relays its text, or a log text that leaves out a file or preset name, to `last.log`, pops up if the popup settings allow, at most three at once, the cap never closing a warning, one with the same key replacing the one showing, a warning staying until closed, and the time pausing while a pointer or its menu holds it, with a floor.
+    - the list keeps it, the last 50, with in-app notices kept unmarked, until Clear or its menu's Dismiss takes it out.
     - a quiet one, as an automatic refresh with no library changes, goes only to the list, unmarked and uncounted.
   - The badge's count of what didn't pop up, the list's open state, and the popup settings, read per device from `notifications.popups` with each field falling back to its default, which a change merges into and keeps whole.
   - Show seconds, for the list's times, read per device from `notifications.showSeconds`, apart from the popup settings.
@@ -443,7 +448,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/ui/reducedMotion.ts`
   - whether the system asks for reduced motion, for the field validation pattern's fades and the library grid's tile moves.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/LightDismiss.ts`
-  - closing a popover, the bell's list, the rating's popover, the Selection actions menu, or the context menu, on a press outside it, which still does what it does, and on Escape, which it takes before the stage except while an in-app dialog is open, both heard from the page in the capture phase.
+  - closing a popover, the bell's list, the rating's popover, or the Selection actions menu, on a press outside it, which still does what it does, and on Escape, which it takes before the stage except while an in-app dialog is open, both heard from the page in the capture phase.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Reorder.tsx`
   - reordering by drag handle, which the tag editor's categories and the Filter tab's presets use: a drag starts on the handle only, once the pointer has moved a few pixels, and the dragged row shows lifted, follows the pointer within the list, and is measured after it shows lifted, so a dragged category's tags are already hidden.
   - The rows it passes slide out of its way by transforms, the rows stay where they are in the page until the drop, whatever scrolls the list scrolls near its edges, the dragged row is placed again whenever the list scrolls, and the move is set on the drop.
@@ -751,7 +756,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - Another client's rename or delete of a tag no file has comes only as `tagCatalogChanged`, without the old name, and reaches none of those.
   - Nothing loads, saves, or scans while the server fails the compatibility check or runs without a library, and while the tab shows it loads once the server is ready, keeping its changes.
 - `src/clients/web/ReelRoulette.WebUI/src/tags/tagMenus.ts`
-  - the menus on tags: a Tags tab tag's, with Filter by this tag, shown while the Filter tab's filter doesn't include the tag and disabled with its reason until Save has given the tag its name, then Edit… and Delete…; a category's, with New tag in this category, then Edit… and Delete…, which Uncategorized's leaves out; and a Stats tab tag's, with Filter by this tag, or none while the filter includes it.
+  - the menus on tags: a Tags tab tag's, with Filter by this tag, shown while the Filter tab's filter doesn't include the tag and disabled with its reason until Save has given the tag its name, then Edit… and Delete…; a category's, with New tag in this category, then Edit… and Delete…, which Uncategorized's leaves out; a Stats tab tag's, with Filter by this tag, or none while the filter includes it; and an Auto Tag file row's, with Copy path and Show in File Manager.
 - `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditorModel.ts`
   - the categories that have tags, by sort order and then name, each with its tags, which the Filter and Randomization tabs list.
   - the catalog with pending edits applied (category order, Uncategorized last only while a tag has none, renamed tags renamed on the items), the model as a save of the changes leaves it.
@@ -760,7 +765,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - category options, the Edit Tag, category, and new tag name problems, order moves.
   - the save plan's input, Auto Tag's apply as a save step, and each save step's request.
 - `src/clients/web/ReelRoulette.WebUI/src/tags/autoTagModel.ts`
-  - Auto Tag rows from the scan, the rows and files shown with and without View all matches, the results with their placeholders and each row's box, where a file that has the tag counts as checked, the summary and status, selection, which only a file without the tag can take, whether Apply has work, the assignments it sends, the rows once Apply has sent them and once the server refuses it, and whether a scan's tag has left the catalog.
+  - Auto Tag rows from the scan, the rows and files shown with and without View all matches, the results with their placeholders and each row's box, where a file that has the tag counts as checked, the summary and status, selection, which only a file without the tag can take, whether Apply has work, the assignments it sends, the rows once Apply has sent them and once the server refuses it, whether a scan's tag has left the catalog, and the file a row shows, which its menu acts on.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
   - the Library tab's loading, error, and empty messages, with the timeout message for a load answered 408 or 504 and nothing for a 401, and the message for a search or filter that matches nothing.
 - `src/clients/web/ReelRoulette.WebUI/src/library/keptSources.ts`
@@ -780,9 +785,11 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - Delete files…, after the control access check and its confirmation, which ends selection when it acts on the selection, so its answer never ends a later one (`POST /api/library/delete-files`), shows a notice for files that couldn't be deleted, and moves the player on, as Next does, when it deleted the playing item.
     - on one item, Copy path and Show in File Manager through `fileLocation.ts`.
   - Each says what it did in a Your actions popup with the count the server answered, under one key, and a failure shows in the notice.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/copyText.ts`
+  - every menu's copy: with the Clipboard API where the browser has it and otherwise, as over plain HTTP from another device, or when it refuses, from a hidden read-only text field with `document.execCommand('copy')`, placed in the open dialog the menu shows in or else in the fullscreen stage, saying so in a Your actions popup or, when it can't, in the notice.
 - `src/clients/web/ReelRoulette.WebUI/src/library/fileLocation.ts`
   - a menu's file items:
-    - Copy name and Copy path, with the Clipboard API where the browser has it and otherwise, as over plain HTTP from another device, or when it refuses, from a hidden read-only text field in the fullscreen stage, where every menu renders, with `document.execCommand('copy')`.
+    - Copy name and Copy path, through `src/ui/copyText.ts`.
     - Show in File Manager, `POST /api/show-in-file-manager/{itemId}`, offered while the server lists `api.showInFileManager`, whose refusal shows in the notice with the server's reason.
   - Each pops up as Your actions with the file name as the second line, which `last.log` never gets.
   - the menus' items, one list for both: each with its icon, the favorite and blacklist adds and removes only while they would change something, from a summary of what the menu acts on, or all four without one, Clear playback stats… disabled with its reason while nothing has stats to clear, and Delete file… for one item; and the summary of loaded tiles.

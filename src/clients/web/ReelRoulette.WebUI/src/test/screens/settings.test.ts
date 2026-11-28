@@ -7,20 +7,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   API_BASE_URL,
   COMPATIBLE_VERSION,
+  contextMenuShown,
   currentStyle,
   DESKTOP_USER_AGENT,
   FakeServer,
+  fingerPress,
   flagAnswer,
   IPHONE_USER_AGENT,
   json,
+  menuItemIn,
+  menuLabels,
   mountPage,
   pageReady,
   popupsShown,
   randomAnswer,
   resetPage,
+  rightClick,
   setViewport,
   settle,
   stubCanvas,
+  stubClipboard,
   stubColorScheme,
   stubElementProperty,
   stubLayoutSize,
@@ -1306,6 +1312,48 @@ describe("Auto-Pause", () => {
 });
 
 describe("Diagnostics", () => {
+  /** Diagnostics' value beside `term`. */
+  function diagnosticValue(term: string): HTMLElement {
+    const found = Array.from(settingsPage().querySelectorAll("dl.diag dt")).find((candidate) => candidate.textContent === term);
+    return found!.nextElementSibling as HTMLElement;
+  }
+
+  it("gives the client and session ids a menu whose Copy copies the id and says so, and no other row a menu", async () => {
+    const writeText = stubClipboard();
+    const page = await mount();
+    await openSettings();
+
+    for (const [term, id, message] of [
+      ["Client", page.clientId(), "Client ID copied."],
+      ["Session", page.sessionId(), "Session ID copied."]
+    ] as const) {
+      expect(diagnosticValue(term).classList.contains("menu-surface")).toBe(true);
+      expect(rightClick(diagnosticValue(term))).toBe(false);
+      await settle();
+      const menu = contextMenuShown()!;
+      expect(menuLabels(menu)).toEqual(new Set(["Copy"]));
+      expect(diagnosticValue(term).classList.contains("is-menu-target")).toBe(true);
+      fireEvent.click(menuItemIn(menu, "Copy"));
+      await waitFor(() => expect(popupsShown()).toEqual([message]));
+      expect(writeText.mock.calls.at(-1)).toEqual([id]);
+    }
+
+    for (const term of ["Client type", "Device name", "Server", "Server address", "ReelRoulette", "Event stream", "Last event", "Resyncs"]) {
+      rightClick(diagnosticValue(term));
+      await settle();
+      expect(contextMenuShown()).toBeNull();
+    }
+  });
+
+  it("opens an id's menu on a long press with a finger", async () => {
+    await mount();
+    await openSettings();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    await fingerPress(diagnosticValue("Session"), 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Copy"]));
+  });
+
   for (const [browser, userAgent, clientType, prefix] of [
     ["a desktop browser", DESKTOP_USER_AGENT, "web", "Web Browser"],
     ["a phone", IPHONE_USER_AGENT, "mobile-web", "Mobile Browser"]

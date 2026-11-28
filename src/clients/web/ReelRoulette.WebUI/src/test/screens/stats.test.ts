@@ -26,6 +26,7 @@ import {
   removeClipboard,
   resetPage,
   stubClipboard,
+  stubExecCommand,
   rightClick,
   settle,
   STARS_LEFT,
@@ -748,31 +749,6 @@ function relayedFile(server: FakeServer): boolean {
   return server.logLines().some((line) => line.includes("holiday clip") || line.includes("C:\\media"));
 }
 
-interface ExecCopy {
-  commands: string[];
-  /** The field's value, selection, and place when the copy ran. */
-  fields: Array<{ value: string; selected: string; inStage: boolean; focused: boolean }>;
-}
-
-/** Stands in for `document.execCommand`, which happy-dom lacks, answering `result`. */
-function stubExecCommand(result: boolean): ExecCopy {
-  const copy: ExecCopy = { commands: [], fields: [] };
-  (document as unknown as { execCommand: (command: string) => boolean }).execCommand = (command: string) => {
-    copy.commands.push(command);
-    const field = document.querySelector("textarea");
-    if (field) {
-      copy.fields.push({
-        value: field.value,
-        selected: field.value.slice(field.selectionStart ?? 0, field.selectionEnd ?? 0),
-        inStage: field.parentElement === document.getElementById("fullscreen-stage"),
-        focused: document.activeElement === field
-      });
-    }
-    return result;
-  };
-  return copy;
-}
-
 const PATH = "C:\\media\\holiday clip.mp4";
 
 describe("Stats tab's file menus", () => {
@@ -781,7 +757,6 @@ describe("Stats tab's file menus", () => {
   });
 
   afterEach(() => {
-    delete (document as unknown as Record<string, unknown>).execCommand;
     vi.unstubAllGlobals();
   });
 
@@ -909,7 +884,7 @@ describe("Stats tab's file menus", () => {
     await pickOn(filePath(), "Copy path");
     await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
     expect(execCopy.commands).toEqual(["copy"]);
-    expect(execCopy.fields).toEqual([{ value: PATH, selected: PATH, inStage: true, focused: true }]);
+    expect(execCopy.fields).toEqual([{ value: PATH, selected: PATH, parentId: "fullscreen-stage", focused: true }]);
     expect(document.querySelector("textarea")).toBeNull();
     expect(openNotices()).toEqual([]);
     expect(relayedFile(server)).toBe(false);
@@ -925,7 +900,7 @@ describe("Stats tab's file menus", () => {
     expect(contextMenuShown()).toBeNull();
     refuse(new Error("Write permission denied."));
     await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
-    expect(execCopy.fields).toEqual([{ value: PATH, selected: PATH, inStage: true, focused: true }]);
+    expect(execCopy.fields).toEqual([{ value: PATH, selected: PATH, parentId: "fullscreen-stage", focused: true }]);
     expect(document.querySelector("textarea")).toBeNull();
   });
 

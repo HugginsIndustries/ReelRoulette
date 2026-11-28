@@ -1515,6 +1515,9 @@ body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .player-col.is
    indicator. */
 .stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] { bottom: 112px; }
 .player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
+/* While Auto Tag is open the popups sit inside it, at the window's edge, clear of the home indicator, as the app's do,
+   whose Auto Tag covers the page from the browser's top layer. */
+.autotag-overlay > .toasts[data-pos^="bottom"] { bottom: max(12px, env(safe-area-inset-bottom)); }
 .pair-label { white-space: nowrap; }
 body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
 /* While the server asks for pairing, the Filter tab's load answers 401, and while it fails the compatibility check or
@@ -7312,9 +7315,13 @@ function renderAutoTag() {
 }
 // A file row's menu: Copy path and Show in File Manager. It shows over Auto Tag, and Escape closes it first.
 contextMenu.add(".autotag-file", (line) => [fileGroup(ITEMS[Number(line.dataset.id)], { name: false })]);
+// The popups move into Auto Tag while it is open, so they show over it at the window's edge, and back beside the player
+// as it closes.
+const toastsHome = $("toasts").parentElement;
 function openAutoTag() {
   state.autoTag = true;
   $("autotag").hidden = false;
+  $("autotag").append($("toasts"));
   syncAutoPause();
   renderAutoTag();
 }
@@ -7322,6 +7329,7 @@ function closeAutoTag() {
   if (autoTag.scanning) return;
   state.autoTag = false;
   $("autotag").hidden = true;
+  toastsHome.append($("toasts"));
   syncAutoPause();
 }
 $("open-autotag").addEventListener("click", openAutoTag);

@@ -14,6 +14,7 @@ import { memoryStorage } from "./memoryStorage";
 import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 import { createTagCatalog } from "../tags/tagCatalog";
+import { createCopyText } from "../ui/copyText";
 import { createContextMenu } from "../ui/menuModel";
 import { REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
@@ -207,7 +208,13 @@ function setup(options: { storage?: DeviceStorage } = {}) {
     dialogs,
     notifications,
     controlAccess: { ensure: () => Promise.resolve(true) },
-    fileLocation: createFileLocation({ api, dialogs, notifications, capabilities: store.serverCapabilities }),
+    fileLocation: createFileLocation({
+      api,
+      dialogs,
+      notifications,
+      copyText: createCopyText({ dialogs, notifications }),
+      capabilities: store.serverCapabilities
+    }),
     panel,
     device: createDeviceStore(options.storage ?? null),
     tagCatalog: createTagCatalog({ api, connection }),

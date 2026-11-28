@@ -1146,6 +1146,9 @@ html.theme-light .ambient canvas {
 .toasts[data-pos^="top"] { top: 64px; flex-direction: column-reverse; }
 .toasts[data-pos$="left"] { align-items: flex-start; }
 .toasts[data-pos$="right"] { align-items: flex-end; }
+/* Inside Auto Tag, which covers the page from the browser's top layer, they sit at the window's edge, clear of the home
+   indicator. */
+.autotag-overlay > .toasts[data-pos^="bottom"] { bottom: max(12px, var(--safe-area-bottom)); }
 .toast {
   pointer-events: auto;
   width: min(400px, 100%);
