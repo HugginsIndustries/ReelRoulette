@@ -17,7 +17,7 @@ target=$(jq -r '[.tool_input.command, .tool_input.file_path, .tool_input.path, .
                  ((.tool_input.path // "") + "/" + (.tool_input.pattern // ""))]
                 | map(select(. != null and . != "" and . != "/")) | join(" ")' <<<"$input")
 # The app's side-session notes folder holds sessions' notes, not ReelRoulette data.
-if ! grep -q 'side-session-notes/.*\.\.' <<<"$target"; then
+if ! grep -qE 'side-session-notes/[^[:space:]]*\.\.' <<<"$target"; then
   target=$(sed -E 's#(~|/home/[^/[:space:]]+)/\.config/Claude/side-session-notes[^[:space:]]*##g' <<<"$target")
 fi
 
