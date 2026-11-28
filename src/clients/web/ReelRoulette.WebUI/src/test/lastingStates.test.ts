@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppStore } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
-import { activeLastingStates, createPlayerIndicator, LASTING_STATE_ORDER, NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
+import { activeLastingStates, createPlayerIndicator, LASTING_STATE_ORDER, NO_LIBRARY_PLAY_NOTICE, noLibraryText, UPDATE_DETAIL } from "../state/lastingStates";
 
 function setup() {
   const relayed: string[] = [];
@@ -14,9 +14,10 @@ function setup() {
   return { store, indicator, relayed };
 }
 
-/** Turns on every lasting state but the ones named. */
+/** Turns on what every lasting state shows for, though the update notice is off while Reconnecting… shows. */
 function activateAll(store: ReturnType<typeof setup>["store"]): void {
   store.reconnecting.value = true;
+  store.differentBuild.value = true;
   store.compatibilityBlocked.value = true;
   store.libraryState.value = "newer";
   store.loading.hold("pick");
@@ -35,6 +36,7 @@ describe("lasting states", () => {
 
   it.each([
     ["reconnecting", (store: ReturnType<typeof setup>["store"]) => (store.reconnecting.value = true), "Reconnecting…", "sync"],
+    ["update", (store: ReturnType<typeof setup>["store"]) => (store.differentBuild.value = true), "ReelRoulette updated · Tap to reload", "refresh"],
     ["incompatible", (store: ReturnType<typeof setup>["store"]) => (store.compatibilityBlocked.value = true), "Server not compatible", "sync_problem"],
     ["nolibrary", (store: ReturnType<typeof setup>["store"]) => (store.libraryState.value = "damaged"), "Running without a library", "warning"],
     [
@@ -62,13 +64,14 @@ describe("lasting states", () => {
   it("shows the first active state in the precedence order, so it never alternates", () => {
     const { store, indicator } = setup();
     activateAll(store);
-    expect(activeLastingStates(store).map((state) => state.id)).toEqual(LASTING_STATE_ORDER);
-    expect(LASTING_STATE_ORDER).toEqual(["reconnecting", "incompatible", "nolibrary", "loading", "refresh"]);
+    expect(activeLastingStates(store).map((state) => state.id)).toEqual(["reconnecting", "incompatible", "nolibrary", "loading", "refresh"]);
+    expect(LASTING_STATE_ORDER).toEqual(["reconnecting", "update", "incompatible", "nolibrary", "loading", "refresh"]);
 
     const shown: string[] = [];
     for (const id of LASTING_STATE_ORDER) {
       shown.push(indicator.value!.id);
       if (id === "reconnecting") store.reconnecting.value = false;
+      if (id === "update") store.differentBuild.value = false;
       if (id === "incompatible") store.compatibilityBlocked.value = false;
       if (id === "nolibrary") store.libraryState.value = "ready";
       if (id === "loading") store.loading.release("pick");
@@ -89,6 +92,42 @@ describe("lasting states", () => {
       ["refresh", false, true, true]
     ]);
     expect(activeLastingStates(store).at(-1)!.progress).toBe("(40%)");
+  });
+
+  it("shows the update notice while the server serves a different build, not while Reconnecting… shows, and before Server not compatible", () => {
+    const { store, indicator } = setup();
+    store.differentBuild.value = true;
+    expect(activeLastingStates(store)).toEqual([
+      {
+        id: "update",
+        icon: "refresh",
+        title: "ReelRoulette updated · Tap to reload",
+        progress: null,
+        warning: false,
+        spins: false,
+        followsControls: false,
+        detail: "The server has a newer version. Reloading the page loads it.",
+        reloads: true
+      }
+    ]);
+    expect(UPDATE_DETAIL).toBe("The server has a newer version. Reloading the page loads it.");
+
+    store.reconnecting.value = true;
+    expect(activeLastingStates(store).map((state) => state.id)).toEqual(["reconnecting"]);
+    store.reconnecting.value = false;
+    expect(indicator.value!.id).toBe("update");
+
+    // While the server also fails the compatibility check, the list shows both and the indicator the notice.
+    store.compatibilityBlocked.value = true;
+    expect(activeLastingStates(store).map((state) => state.id)).toEqual(["update", "incompatible"]);
+    expect(indicator.value!.id).toBe("update");
+  });
+
+  it("lets only the update notice reload the page with a tap", () => {
+    const { store } = setup();
+    activateAll(store);
+    store.reconnecting.value = false;
+    expect(activeLastingStates(store).filter((state) => state.reloads).map((state) => state.id)).toEqual(["update"]);
   });
 
   it("gives the server's states a second line for the list's Now: the reconnect's, and the server's own messages", () => {

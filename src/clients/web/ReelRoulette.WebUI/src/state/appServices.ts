@@ -2,7 +2,7 @@ import { computed, type ReadonlySignal } from "@preact/signals";
 import { createControlAccess, type ControlAccess } from "../api/controlAccess";
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
 import { unauthorizedLogText } from "../api/serverRequest";
-import { createDialogs, type Dialogs } from "../dialogs/dialogs";
+import { createDialogs, DISCARD_CHANGES, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createFileLocation } from "../library/fileLocation";
 import { createLibrary, type Library } from "../library/library";
@@ -79,6 +79,12 @@ export interface AppServices {
   unsaved: ReadonlySignal<UnsavedTabs>;
   /** The lasting state the player's indicator shows, or null. */
   indicator: ReadonlySignal<LastingState | null>;
+  /**
+   * The update notice's tap, on the player's indicator or its row in the bell's Now: reloads the page onto the server's
+   * build, after asking "Discard changes?" while the Filter or Tags tab holds unsaved changes, which a reload loses.
+   * Cancel leaves the page as it was.
+   */
+  reloadForUpdate(): Promise<void>;
   /** The one-off messages' popups and the list behind the player's bell. */
   notifications: Notifications;
   /** The context menu that shows at a point, one at a time, such as a library tile's. */
@@ -92,11 +98,15 @@ export interface AppServices {
 }
 
 export interface AppServicesOptions {
-  /** Reloads the page, as Reset this device's settings does once it has cleared them: the browser's own unless set. */
+  /**
+   * Reloads the page, as Reset this device's settings does once it has cleared them and the update notice's tap does:
+   * the browser's own unless set.
+   */
   reloadPage?: () => void;
 }
 
 export function createAppServices(config: RuntimeConfig, options: AppServicesOptions = {}): AppServices {
+  const reloadPage = options.reloadPage ?? (() => window.location.reload());
   const device = createDeviceStore(browserStorage("localStorage"));
   const api = createAppApi(config.apiBaseUrl, {
     onUnauthorized(route) {
@@ -227,7 +237,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
   });
   const tagMenus = createTagMenus({ tagEditor, filterDialog });
   const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
-  const settings = createSettings({ device, dialogs, reloadPage: options.reloadPage });
+  const settings = createSettings({ device, dialogs, reloadPage });
   const ambient = createAmbient({
     enabled: settings.ambient,
     tuning: settings.ambientTuning,
@@ -291,6 +301,10 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
       panel.startRememberedTab();
     }
   });
+  const unsaved = computed(() => ({
+    filter: filterDialog.view.value?.unsaved ?? false,
+    tags: tagEditor.view.value?.savePending ?? false
+  }));
   return {
     config,
     store,
@@ -312,11 +326,15 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     tagEditor,
     statsTab,
     randomization,
-    unsaved: computed(() => ({
-      filter: filterDialog.view.value?.unsaved ?? false,
-      tags: tagEditor.view.value?.savePending ?? false
-    })),
+    unsaved,
     indicator: createPlayerIndicator(store),
+    async reloadForUpdate() {
+      const held = unsaved.peek();
+      if ((held.filter || held.tags) && !(await dialogs.confirm(DISCARD_CHANGES))) {
+        return;
+      }
+      reloadPage();
+    },
     notifications,
     contextMenu,
     playingMenus,

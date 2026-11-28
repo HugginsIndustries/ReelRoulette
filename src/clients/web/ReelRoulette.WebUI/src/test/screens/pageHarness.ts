@@ -3,11 +3,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, waitFor } from "@testing-library/preact";
 import type { Window as HappyDomWindow } from "happy-dom";
+import { h, render } from "preact";
 import { vi, type Mock } from "vitest";
 import { unauthorizedLogText } from "../../api/serverRequest";
 import { statusLogLine, type RelayLogCurrentItem } from "../../logging/relayLogLines";
 import { renderApp } from "../../shell";
+import { createAppServices, type AppServices } from "../../state/appServices";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
+import { App } from "../../ui/App";
 import { stubMatchingMediaQuery, stubProperty, stubResizeObserver, type FakeResizeObservers, type Restores } from "../stubs";
 export { randomAnswer } from "../randomAnswer";
 
@@ -509,11 +512,7 @@ export function stubReadOnlyVolume(): void {
  */
 export async function tapPage(): Promise<void> {
   fireEvent.pointerUp(document.body, { pointerId: 1, button: 0, pointerType: "touch" });
-  if (vi.isFakeTimers()) {
-    await vi.advanceTimersByTimeAsync(0);
-  } else {
-    await settle();
-  }
+  await flush();
 }
 
 /** Makes the page's tab read as hidden or shown, as `document.hidden` says. Returns a function that changes it. */
@@ -1176,6 +1175,34 @@ export function mountPage(options: MountOptions = {}): MountedPage {
   };
 }
 
+export interface ServicesMountOptions {
+  /** Stands in for the page's reload, as Reset this device's settings and the update notice's tap do: none unless set. */
+  reloadPage?: () => void;
+  /** Connects to the server, as a page does, in place of leaving every lasting state and message to the test. */
+  connect?: boolean;
+}
+
+/**
+ * Mounts the page with services the test holds. Unless it connects, it doesn't connect to the server, so a test sends
+ * messages and sets the lasting states on the store itself and nothing the connection does changes them.
+ */
+export async function mountWithServices(server = new FakeServer(), options: ServicesMountOptions = {}): Promise<AppServices> {
+  vi.stubGlobal("fetch", server.fetch);
+  vi.stubGlobal("EventSource", FakeEventSource);
+  stubWebAudio();
+  const root = document.createElement("div");
+  root.id = "app";
+  document.body.appendChild(root);
+  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL }, { reloadPage: options.reloadPage ?? (() => {}) });
+  if (!options.connect) {
+    services.connection.start = () => {};
+  }
+  render(h(App, { services }), root);
+  mounted.push(() => render(null, root));
+  await flush();
+  return services;
+}
+
 /**
  * Waits until the page has found the server ready, which its relayed "Ready (API …)" line shows, since no status line
  * says so.
@@ -1192,6 +1219,15 @@ export async function pageReady(server: FakeServer): Promise<void> {
 export async function settle(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+/** Lets fetch replies and the renders they cause finish, with real or fake timers. */
+export async function flush(): Promise<void> {
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(0);
+  } else {
+    await settle();
   }
 }
 

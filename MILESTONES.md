@@ -173,7 +173,7 @@ Last milestone completed: M12n1
 | Mockup | ✅ Complete | The update notice on the indicator and in the bell's Now section with its tap and the discard question, the notice in the admin view after Apply & Restart, the bell's new times and Show seconds, the bell's messages kept across reloads, and every time and date in the mockup in 24-hour time and ISO dates, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Dev server | ✅ Complete | `run-server.ps1` serving a copy of the WebUI it builds at startup from a gitignored folder of its own, so another build changes nothing the running server serves until it restarts. |
 | Build check | ✅ Complete | After every version check that gets an answer, the page's script and stylesheet names compared with a fresh `index.html`, with a `last.log` line, and no "Reconnected." popup when a restarted server comes back incompatible. |
-| Reload notice | ⏳ Planned | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
+| Reload notice | ✅ Complete | The notice as a lasting state on the indicator and in the bell's Now section, its tap and its Now row reloading the page, and "Discard changes?" first while the Filter or Tags tab holds unsaved changes. |
 | Times and dates | ⏳ Planned | Shared 24-hour and ISO formatters, the bell's "HH:MM" and "MM-DD HH:MM" times, Show seconds, and the Stats tab's exact times through the formatters. |
 | Kept messages | ⏳ Planned | The bell's Recent list kept per device across reloads, up to its 50 messages with their read state, with Clear emptying it and the reset keeping it. |
 
@@ -381,6 +381,19 @@ Last milestone completed: M12n1
 - With unsaved Filter or Tags changes, a tap asks "Discard changes?" first, Discard reloads, and Cancel doesn't, in player and notifications screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check in Firefox on the desktop: after `run-server.ps1` runs again with a WebUI change, the open page shows the notice, and a click reloads it.
+
+**Evidence**
+
+- The notice is the `update` lasting state, after Reconnecting… and before Server not compatible, active while the store's `differentBuild` is on and Reconnecting… doesn't show, and `LastingState`'s `reloads` marks it as the one state whose tap reloads the page (`src/state/lastingStates.ts`).
+- The app services' `reloadForUpdate` asks "Discard changes?" while the Filter or Tags tab holds unsaved changes, then reloads through the page reload the services resolve once and also pass to the settings' reset (`src/state/appServices.ts`).
+- The question is one shared request, `DISCARD_CHANGES` in `src/dialogs/dialogs.ts`, which the Tags tab's Edit tags… question uses too, with the same wording.
+- The indicator takes a tap while it shows the notice (`takes-tap`) and stops the click there, and the player's touch listeners and its menu leave it out, as the mockup does (`src/ui/Player.tsx`).
+- The notice's Now row takes a tap through the list row's `onTap` (`src/ui/Notifications.tsx`).
+- The screen tests' copies of `mountWithServices` in the player, notifications, and dialogs tests, and of `flush` in the player, notifications, library, and header tests, are one each in `pageHarness.ts`, where the mount takes a stand-in for the page's reload and connects only when asked.
+- Broken one at a time, each guarded piece failed its tests: the notice while Reconnecting… shows, its place in the order, the indicator taking the pointer while it shows the notice, the click stopping at the indicator, the touch skip, the menu's exclusion, the Discard question, the Tags tab's part in it, and the Now row's tap (measured).
+- The mockup needed no change: it already shows the notice, both taps, the Discard question, and the player's touch and menu leaving the notice out as shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, with 98 test files and 2516 tests (measured).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the notice, its place in the order, its taps, and the shared question.
 
 #### Times and dates slice
 

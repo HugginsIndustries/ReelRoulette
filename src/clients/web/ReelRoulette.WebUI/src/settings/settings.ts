@@ -135,13 +135,12 @@ export interface SettingsOptions {
   device: DeviceStore;
   /** The in-app dialogs, for the reset's question. */
   dialogs: Pick<Dialogs, "confirm">;
-  /** Reloads the page, which ends a reset: the browser's own reload unless a test replaces it. */
-  reloadPage?: () => void;
+  /** Reloads the page, which ends a reset. */
+  reloadPage: () => void;
 }
 
 export function createSettings(options: SettingsOptions): Settings {
-  const { device, dialogs } = options;
-  const reloadPage = options.reloadPage ?? (() => window.location.reload());
+  const { device, dialogs, reloadPage } = options;
   const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
   const theme = signal(device.read(THEME_KEY, DEFAULT_THEME_CHOICE, isThemeChoice));
   const ambient = signal(device.read(AMBIENT_KEY, true, isBoolean));

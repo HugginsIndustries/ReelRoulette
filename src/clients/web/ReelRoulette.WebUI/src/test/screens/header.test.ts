@@ -19,6 +19,7 @@ import {
   resetPage,
   stubClipboard,
   rightClick,
+  flush,
   settle,
   status
 } from "./pageHarness";
@@ -130,15 +131,6 @@ describe("the now-playing name's menu", () => {
 
   function statsTabShown(): boolean {
     return !(document.getElementById("panel") as HTMLElement).hidden && !(document.getElementById("panel-page-stats") as HTMLElement).hidden;
-  }
-
-  /** Lets fetch replies and renders finish, with real or fake timers. */
-  async function flush(): Promise<void> {
-    if (vi.isFakeTimers()) {
-      await vi.advanceTimersByTimeAsync(0);
-    } else {
-      await settle();
-    }
   }
 
   async function pick(label: string): Promise<void> {

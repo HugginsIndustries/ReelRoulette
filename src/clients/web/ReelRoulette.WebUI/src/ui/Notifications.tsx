@@ -152,11 +152,13 @@ interface ListRow {
   detail: string | null;
   time: string;
   className: string;
+  /** What a tap on the row does, as the update notice's reload, or null where it takes none. */
+  onTap: (() => void) | null;
 }
 
 function EntryRow({ row }: { row: ListRow }) {
   return (
-    <li class={row.className}>
+    <li class={row.onTap ? `${row.className} is-action` : row.className} onClick={row.onTap ?? undefined}>
       <span class="material-symbol-icon">{row.icon}</span>
       <span class="notify-text">{row.text}</span>
       <span class="notify-time">{row.time}</span>
@@ -173,13 +175,14 @@ function entryClass(entry: NotificationEntry): string {
 
 /**
  * The list under the bell, inside the fullscreen stage so it shows in fullscreen and pseudo-fullscreen. Now shows each
- * active lasting state with its full text, and Recent the messages kept, newest first, with their times. It lines up
- * with the bell's left edge, or its right edge when the bell is in the right half of the window. It closes on its Close,
- * the bell, Escape, a press outside it, or the panel opening; Escape comes to it before anything else, except while an
- * in-app dialog is open. Its Notification settings opens the Settings tab at Show popups with Popup settings open.
+ * active lasting state with its full text, the update notice's row taking a tap that reloads the page, and Recent the
+ * messages kept, newest first, with their times. It lines up with the bell's left edge, or its right edge when the bell
+ * is in the right half of the window. It closes on its Close, the bell, Escape, a press outside it, or the panel
+ * opening; Escape comes to it before anything else, except while an in-app dialog is open. Its Notification settings
+ * opens the Settings tab at Show popups with Popup settings open.
  */
 export function NotificationList() {
-  const { notifications, store, panel, settings } = useApp();
+  const { notifications, store, panel, settings, reloadForUpdate } = useApp();
   const list = useRef<HTMLElement>(null);
   const open = notifications.listOpen.value;
 
@@ -233,7 +236,8 @@ export function NotificationList() {
         text: lastingStateText(state),
         detail: state.detail,
         time: "",
-        className: state.warning ? "notify-entry is-warning" : "notify-entry"
+        className: state.warning ? "notify-entry is-warning" : "notify-entry",
+        onTap: state.reloads ? () => void reloadForUpdate() : null
       }))
     : [];
   const entries = notifications.entries.value;
@@ -245,7 +249,8 @@ export function NotificationList() {
         text: entry.text,
         detail: entry.detail || null,
         time: messageTime(entry.time, at),
-        className: entryClass(entry)
+        className: entryClass(entry),
+        onTap: null
       }))
     : [];
 

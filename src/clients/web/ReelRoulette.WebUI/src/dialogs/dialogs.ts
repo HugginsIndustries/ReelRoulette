@@ -9,6 +9,9 @@ export interface ConfirmRequest {
   danger?: boolean;
 }
 
+/** The question asked before something drops unsaved changes, such as the Tags tab's held for other items. */
+export const DISCARD_CHANGES: ConfirmRequest = { message: "Discard changes?", confirmLabel: "Discard", danger: true };
+
 /** A confirmation or a notice that is showing. A notice may offer one action beside its OK. */
 export type OpenDialog =
   | { id: number; kind: "confirm"; message: string; confirmLabel: string; danger: boolean }

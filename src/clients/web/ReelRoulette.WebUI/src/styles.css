@@ -899,7 +899,7 @@ html.theme-light .ambient canvas {
    the bar, so that width may change between items with different time formats. */
 #time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); font-variant-numeric: tabular-nums; }
 /* The player's indicator: one lasting state at a time, such as Reconnecting…, at the top center, a pill shown only
-   while a state does, which doesn't catch clicks. At the top, centered, it stays clear of the corner buttons on both
+   while a state does, which doesn't catch clicks except while it shows the update notice. At the top, centered, it stays clear of the corner buttons on both
    sides, which take the last 212 px at the right, or 160 px while the panel is on the left, and a long state ends in
    an ellipsis instead. On a narrow player it sits below the corner buttons. A library refresh's progress shows only
    while the player's controls do. */
@@ -929,6 +929,7 @@ html.theme-light .ambient canvas {
 .player-indicator-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-block: 0.15em; margin-block: -0.15em; }
 .player-indicator .material-symbol-icon.spins { animation: player-indicator-spin 1.2s linear infinite; }
 .player-indicator.is-warning .material-symbol-icon { color: var(--huggins-orange); }
+.player-indicator.takes-tap { pointer-events: auto; cursor: pointer; }
 .media-container:not(.controls-visible) .player-indicator.follows-controls { opacity: 0; }
 .fullscreen-stage[data-side="left"] .player-indicator { max-width: calc(100% - 336px); }
 /* A player narrower than 600 px, which the page measures and marks on the player column. After the panel's side, which
@@ -1117,6 +1118,11 @@ html.theme-light .ambient canvas {
 .notify-entry > .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); grid-row: span 2; align-self: start; }
 .notify-entry.is-error > .material-symbol-icon, .notify-entry.is-warning > .material-symbol-icon { color: var(--error); }
 .notify-entry.is-unread { background: color-mix(in srgb, var(--huggins-orange) 10%, transparent); }
+/* A row that takes a tap, as the update notice's in Now does. */
+.notify-entry.is-action { cursor: pointer; }
+@media (hover: hover) {
+  .notify-entry.is-action:hover { background: rgba(127, 127, 127, 0.12); }
+}
 .notify-text { min-width: 0; overflow-wrap: anywhere; }
 .notify-time { font-size: 0.78rem; color: var(--muted-fg); white-space: nowrap; align-self: start; padding-top: 2px; }
 .notify-detail { grid-column: 2 / 4; font-size: 0.84rem; color: var(--muted-fg); overflow-wrap: anywhere; }

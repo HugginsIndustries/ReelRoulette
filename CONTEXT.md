@@ -197,6 +197,7 @@ ReelRoulette is a thin-client, API-first system:
 
 - Runtime-config bootstrap, direct API/SSE integration, and compatibility/capability checks of `/api/version` at startup, each time the event stream opens, or fails while the server doesn't ask for pairing, and every 3 seconds while the stream is open and the last check didn't reach the server, one at a time, each given up after 10 seconds.
   - After each check the server answers, a 401 and a failed compatibility check included, the page fetches `/index.html` uncached and compares the `/assets/` addresses of its module script and stylesheets with those its own page loaded when it started: different addresses mean the server serves a different build, which the store keeps as `differentBuild` until the page reloads, with one `last.log` line naming both script files and no fetch after it.
+    - A different build shows as the update notice on the player's indicator and in the bell's Now.
     - A fetch that fails or isn't answered 200, an `index.html` that loads no module script from `/assets/`, and a page without one of its own, as on Vite's dev server, change nothing.
   - Presets, the library, and a panel remembered open load when a check first finds the server compatible with a library, and not again while later checks find it still so.
   - A check answered with 401 counts as not ready, so once the device pairs, the presets load again, the Library tab loads when it has no page, and a Filter or Tags tab that shows loads again.
@@ -220,6 +221,7 @@ ReelRoulette is a thin-client, API-first system:
 
 - One lasting state at a time shows at the player's top center at every width, the first active one in this precedence order, so it never alternates:
   - Reconnecting… (`sync`, spinning) while the last version check didn't reach the server, or the event stream has failed and isn't open again, though not before the first check answers, nor while the last check found no library, nor while the server asks for pairing, since the server then refuses the stream.
+  - The update notice, "ReelRoulette updated · Tap to reload" (`refresh`), while the server serves a different build, though not while Reconnecting… shows, since a reload while the server can't be reached lands on the browser's error page, which an installed iOS app can't leave.
   - Server not compatible (`sync_problem`, an orange warning) while the server fails the compatibility check.
   - Running without a library (`warning`, orange) while the last check reported a library state other than ready.
   - Loading… (`progress_activity`, spinning) once a random pick, a library play, or a media load has waited half a second, counted once from the first wait until every wait ends, so a quick load shows nothing.
@@ -232,6 +234,10 @@ ReelRoulette is a thin-client, API-first system:
 - It stays clear of the corner buttons on both sides and ends a long state in an ellipsis.
   - On a player narrower than 600 px, which the page measures and marks with `is-narrow` on the player column, it sits below them.
 - Each state relays its text to `last.log` once when it starts showing, and a refresh once per stage.
+- The indicator ignores the pointer, except while it shows the update notice.
+  - A tap on the notice reloads the page and goes no further: it neither shows nor hides the controls, starts no random pick, seeks nothing, and is never a swipe.
+  - While the Filter or Tags tab holds unsaved changes, the tap first asks "Discard changes?" with a red Discard, and Cancel leaves the page as it was.
+  - A right-click or a long press on the notice opens no menu.
 - None of these states pops up; the list behind the bell shows each active one under Now.
 - A running refresh shows on the player's indicator, and how it ended pops up:
   - "Library refresh finished" with its consolidated summary as the second line, one segment per stage separated by " · " (including the Fingerprint segment).
@@ -293,7 +299,8 @@ ReelRoulette is a thin-client, API-first system:
   - It is orange while it has unread messages and while its list is open.
   - A press opens the list under it, lined up with the bell's left edge in the window's left half and its right edge otherwise, starts no random pick, and keeps the player's controls shown while the list is open.
 - The list, inside the fullscreen stage, shows:
-  - Now, each active lasting state with its full text and, for Reconnecting…, Server not compatible, and Running without a library, a second line.
+  - Now, each active lasting state with its full text and, for Reconnecting…, the update notice, Server not compatible, and Running without a library, a second line.
+    - The update notice's second line reads "The server has a newer version. Reloading the page loads it.", and a tap on its row reloads the page as a tap on the indicator does, asking first while the Filter or Tags tab holds unsaved changes.
   - Recent, the last 50 messages, newest first, with "Just now", "{n} min ago", or the time of day, moving on every 30 seconds while it is open.
   - Messages that didn't pop up show marked, and in-app notices show unmarked with the `error` icon and aren't counted.
   - Clear empties Recent.

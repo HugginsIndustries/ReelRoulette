@@ -1,20 +1,16 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
-import { h, render as renderInto } from "preact";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { DOUBLE_TAP_MS } from "../../playback/mediaGestures";
 import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
 import { SEEK_INDICATOR_MS } from "../../playback/seekIndicator";
-import { createAppServices, type AppServices } from "../../state/appServices";
-import { App } from "../../ui/App";
 import { FILE_NOT_IN_LIBRARY, LIBRARY_EMPTY } from "../serverReasons";
 import {
   API_BASE_URL,
   CLEAR_EDGE_X,
   COMPATIBLE_VERSION,
   FakeServer,
-  SSE_URL,
   IPHONE_USER_AGENT,
   buttonIn,
   closeNotices,
@@ -58,12 +54,13 @@ import {
   stubLayoutSize,
   stubTabHidden,
   stubReadOnlyVolume,
-  stubWebAudio,
   tapPage,
   useStylesheet,
   FakeWebAudio,
   type FakeGain,
-  type MountedPage
+  type MountedPage,
+  flush,
+  mountWithServices
 } from "./pageHarness";
 
 const VIDEO_ITEM = {
@@ -116,15 +113,6 @@ function serverPicking(...items: unknown[]): FakeServer {
   server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
   server.on("GET", "/api/sources", () => json([]));
   return server;
-}
-
-/** Lets fetch replies and renders finish, with real or fake timers. */
-async function flush(): Promise<void> {
-  if (vi.isFakeTimers()) {
-    await vi.advanceTimersByTimeAsync(0);
-  } else {
-    await settle();
-  }
 }
 
 async function click(element: Element): Promise<void> {
@@ -354,34 +342,8 @@ function rated<T extends object>(item: T, rating: number): T & { rating: number 
   return { ...item, rating };
 }
 
-/** Unmounts what `mountWithServices` mounted. */
-let unmountServices: (() => void) | null = null;
-
-/**
- * Mounts the page with services the test holds, without connecting to the server, so a test sets the lasting states
- * on the store itself and nothing the connection does changes them.
- */
-async function mountWithServices(server = new FakeServer()): Promise<AppServices> {
-  vi.stubGlobal("fetch", server.fetch);
-  stubWebAudio();
-  const root = document.createElement("div");
-  root.id = "app";
-  document.body.appendChild(root);
-  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
-  services.connection.start = () => {};
-  renderInto(h(App, { services }), root);
-  unmountServices = () => renderInto(null, root);
-  await flush();
-  return services;
-}
-
 beforeEach(() => {
   resetPage();
-});
-
-afterEach(() => {
-  unmountServices?.();
-  unmountServices = null;
 });
 
 /**
@@ -3481,6 +3443,82 @@ describe("the player's indicator", () => {
       .find((rule) => rule.selectorText === ".player-indicator .material-symbol-icon.spins");
     expect(reduced?.style.animationDuration).toBe("3s");
   });
+
+  it("takes a tap on the update notice, which reloads the page without starting a pick or showing or hiding the controls", async () => {
+    useStylesheet();
+    hideControlsOnClick();
+    const reloadPage = vi.fn<() => void>();
+    const server = serverPicking(VIDEO_ITEM);
+    const { store } = await mountWithServices(server, { reloadPage, connect: true });
+    await pageReady(server);
+    store.differentBuild.value = true;
+    await flush();
+    expect(indicatorState()).toBe("update");
+    // A click here ignores the stylesheet, so this is what lets a browser's tap land on the notice, not the picture.
+    expect(currentStyle(indicatorBox()).pointerEvents).toBe("auto");
+
+    // With nothing playing, a tap on the player starts a pick.
+    await click(indicatorBox());
+    expect([reloadPage.mock.calls.length, randomPicks(server)]).toEqual([1, 0]);
+
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    expect(controlsShown()).toBe(true);
+    await click(indicatorBox());
+    expect([reloadPage.mock.calls.length, controlsShown()]).toEqual([2, true]);
+
+    // A swipe that starts on it plays neither the next item nor the previous one.
+    await swipe(indicatorBox(), { x: 300, y: 20 }, { x: 150, y: 25 });
+    expect(randomPicks(server)).toBe(1);
+    expect(reloadPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks Discard changes? before the update notice's reload while the Filter tab holds unsaved changes, and Cancel keeps them", async () => {
+    const reloadPage = vi.fn<() => void>();
+    const server = serverPicking(VIDEO_ITEM);
+    const { store } = await mountWithServices(server, { reloadPage, connect: true });
+    await pageReady(server);
+    await openPanel("Filter");
+    const neverPlayed = () => within(panel()).getByLabelText("Only never played") as HTMLInputElement;
+    await click(neverPlayed());
+    store.differentBuild.value = true;
+    await flush();
+
+    await click(indicatorBox());
+    const discard = buttonIn(dialogWith("Discard changes?"), "Discard");
+    expect(discard.classList.contains("btn-danger")).toBe(true);
+    await click(buttonIn(dialogWith("Discard changes?"), "Cancel"));
+    expect([reloadPage.mock.calls.length, neverPlayed().checked, findDialog("Discard changes?")]).toEqual([0, true, null]);
+
+    await click(indicatorBox());
+    await click(buttonIn(dialogWith("Discard changes?"), "Discard"));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks Discard changes? before the update notice's reload while the Tags tab holds unsaved changes", async () => {
+    const reloadPage = vi.fn<() => void>();
+    const server = serverPicking(VIDEO_ITEM);
+    server.on("POST", "/api/tag-editor/model", () =>
+      json({ categories: [{ id: "cat-people", name: "People", sortOrder: 0 }], tags: [{ name: "Alice", categoryId: "cat-people" }], tagCounts: [], itemCount: 1 })
+    );
+    const { store } = await mountWithServices(server, { reloadPage, connect: true });
+    await pageReady(server);
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    await openPanel("Tags");
+    const addAlice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add to item']");
+    await waitFor(() => expect(addAlice()).not.toBeNull());
+    await click(addAlice()!);
+    store.differentBuild.value = true;
+    await flush();
+
+    await click(indicatorBox());
+    await click(buttonIn(dialogWith("Discard changes?"), "Cancel"));
+    expect(reloadPage).not.toHaveBeenCalled();
+    await click(indicatorBox());
+    await click(buttonIn(dialogWith("Discard changes?"), "Discard"));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("the player's rating", () => {
@@ -4019,6 +4057,27 @@ describe("the player's menu", () => {
       await flush();
       expect(contextMenuShown()).toBeNull();
     }
+    expect(itemReads(server)).toEqual([]);
+  });
+
+  it("opens none at a right-click or a long press on the indicator while it shows the update notice", async () => {
+    useFakeClock();
+    const server = menuServer();
+    const { store } = await mountWithServices(server, { connect: true });
+    await click(emptyState());
+    await flush();
+    expect(video().src).toBe(VIDEO_URL);
+    store.differentBuild.value = true;
+    await flush();
+    const notice = document.getElementById("player-indicator")!;
+
+    rightClick(notice);
+    await flush();
+    expect(contextMenuShown()).toBeNull();
+    fingerDown(notice);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(contextMenuShown()).toBeNull();
+    await fingerUp(notice, 120, 140, { withClick: false });
     expect(itemReads(server)).toEqual([]);
   });
 

@@ -1,30 +1,25 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
-import { render as renderInto } from "preact";
 import { useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createControlAccess, type ControlAccess } from "../../api/controlAccess";
 import { createDialogs, type Dialogs } from "../../dialogs/dialogs";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { createAppApi } from "../../state/appApi";
-import { createAppServices, type AppServices } from "../../state/appServices";
-import { App } from "../../ui/App";
+import type { AppServices } from "../../state/appServices";
 import { AppContext, useApp } from "../../ui/appContext";
 import { DialogHost, NameDialog } from "../../ui/Dialog";
 import { EMPTY_FIELD, isFlagged, type FieldProblem } from "../../validation/fieldValidation";
 import {
-  API_BASE_URL,
-  FakeEventSource,
   FakeServer,
-  SSE_URL,
   json,
+  mountWithServices,
   openNotices,
   pageReady,
   resetPage,
   settle,
   status,
-  stubFullscreenApi,
-  stubWebAudio
+  stubFullscreenApi
 } from "./pageHarness";
 
 /** The dialogs in the order the page opened them, so the last one is on top. */
@@ -374,23 +369,6 @@ describe("the control-token prompt", () => {
 });
 
 describe("the dialog in the page", () => {
-  let unmount: (() => void) | null = null;
-
-  /** Mounts the page and keeps its services, so a test can open a dialog the way a screen does. */
-  function mountWithServices(): { services: AppServices; server: FakeServer } {
-    const server = new FakeServer();
-    vi.stubGlobal("fetch", server.fetch);
-    vi.stubGlobal("EventSource", FakeEventSource);
-    stubWebAudio();
-    const root = document.createElement("div");
-    root.id = "app";
-    document.body.appendChild(root);
-    const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
-    renderInto(<App services={services} />, root);
-    unmount = () => renderInto(null, root);
-    return { services, server };
-  }
-
   function stage(): HTMLElement {
     return document.getElementById("fullscreen-stage") as HTMLElement;
   }
@@ -399,15 +377,9 @@ describe("the dialog in the page", () => {
     resetPage();
   });
 
-  afterEach(() => {
-    unmount?.();
-    unmount = null;
-  });
-
   it("shows inside the stage in fullscreen, and works there", async () => {
     const fullscreen = stubFullscreenApi();
-    const { services } = mountWithServices();
-    await settle();
+    const services = await mountWithServices(new FakeServer(), { connect: true });
     await press(screen.getByRole("button", { name: "Fullscreen" }));
     expect(document.fullscreenElement).toBe(stage());
     expect(fullscreen.requests).toEqual([stage()]);
@@ -422,8 +394,7 @@ describe("the dialog in the page", () => {
   });
 
   it("shows inside the stage in pseudo-fullscreen, where Escape closes the dialog and stays in pseudo-fullscreen", async () => {
-    const { services } = mountWithServices();
-    await settle();
+    const services = await mountWithServices(new FakeServer(), { connect: true });
     await press(screen.getByRole("button", { name: "Fullscreen" }));
     expect(stage().classList.contains("fullscreen-pseudo")).toBe(true);
 
@@ -443,7 +414,8 @@ describe("the dialog in the page", () => {
   });
 
   it("a notice shows its message, pops nothing up, and is relayed to last.log with the line a popup gets", async () => {
-    const { services, server } = mountWithServices();
+    const server = new FakeServer();
+    const services = await mountWithServices(server, { connect: true });
     await pageReady(server);
 
     void services.dialogs.notice("Saving presets failed.");

@@ -1,18 +1,16 @@
 // @vitest-environment happy-dom
-import { fireEvent, waitFor, within } from "@testing-library/preact";
-import { h, render as renderInto } from "preact";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POPUP_SETTINGS_KEY, messageTime, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
 import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
-import { createAppServices, type AppServices } from "../../state/appServices";
+import type { AppServices } from "../../state/appServices";
 import { RECONNECTING_DETAIL } from "../../state/lastingStates";
-import { App } from "../../ui/App";
 import {
-  API_BASE_URL,
   FakeServer,
   IPHONE_USER_AGENT,
-  SSE_URL,
+  buttonIn,
   currentStyle,
+  dialogWith,
   json,
   mountPage,
   pageReady,
@@ -20,13 +18,13 @@ import {
   randomAnswer,
   resetPage,
   setViewport,
-  settle,
   stubCoarsePointer,
   stubFullscreenApi,
   stubLayoutSize,
   stubSafeAreaInsets,
   useStylesheet,
-  stubWebAudio
+  flush,
+  mountWithServices
 } from "./pageHarness";
 
 const VIDEO_ITEM = {
@@ -40,27 +38,6 @@ const VIDEO_ITEM = {
   isBlacklisted: false
 };
 
-/** Unmounts what `mountWithServices` mounted. */
-let unmountServices: (() => void) | null = null;
-
-/**
- * Mounts the page with services the test holds, without connecting to the server, so a test sends messages and sets
- * the lasting states itself and nothing the connection does adds to them.
- */
-async function mountWithServices(server = new FakeServer()): Promise<AppServices> {
-  vi.stubGlobal("fetch", server.fetch);
-  stubWebAudio();
-  const root = document.createElement("div");
-  root.id = "app";
-  document.body.appendChild(root);
-  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
-  services.connection.start = () => {};
-  renderInto(h(App, { services }), root);
-  unmountServices = () => renderInto(null, root);
-  await flush();
-  return services;
-}
-
 /** Keeps popup settings on this device, as the Settings tab does, before the page reads them. */
 function keepSettings(settings: Partial<Omit<PopupSettings, "kinds">> & { kinds?: Partial<PopupSettings["kinds"]> }): void {
   localStorage.setItem(`rr_device.${POPUP_SETTINGS_KEY}`, JSON.stringify(settings));
@@ -68,15 +45,6 @@ function keepSettings(settings: Partial<Omit<PopupSettings, "kinds">> & { kinds?
 
 function useFakeClock(): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
-}
-
-/** Lets renders finish, with real or fake timers. */
-async function flush(): Promise<void> {
-  if (vi.isFakeTimers()) {
-    await vi.advanceTimersByTimeAsync(0);
-  } else {
-    await settle();
-  }
 }
 
 async function wait(ms: number): Promise<void> {
@@ -194,10 +162,6 @@ beforeEach(() => {
   resetPage();
 });
 
-afterEach(() => {
-  unmountServices?.();
-  unmountServices = null;
-});
 
 describe("the main page", () => {
   it("has no status line, and no diagnostics line, on a mobile browser too", async () => {
@@ -458,7 +422,6 @@ describe("popups' placement", () => {
       "top-right": ["flex-end", "column-reverse"]
     };
     for (const [position, [align, direction]] of Object.entries(expected)) {
-      unmountServices?.();
       resetPage();
       keepSettings({ position: position as PopupSettings["position"] });
       useStylesheet();
@@ -629,6 +592,46 @@ describe("the list", () => {
     await flush();
     expect(part("now").hidden).toBe(true);
     expect(emptyText().hidden).toBe(false);
+  });
+
+  it("lists the update notice under Now, before Server not compatible, and only its row's tap reloads the page", async () => {
+    const reloadPage = vi.fn<() => void>();
+    const { store } = await mountWithServices(new FakeServer(), { reloadPage });
+    store.differentBuild.value = true;
+    store.compatibilityBlocked.value = true;
+    store.compatibilityMessage.value = "Server API 3 is newer than this page supports (API 2).";
+    await click(bell());
+    expect(rows("now")).toEqual([
+      { text: "ReelRoulette updated · Tap to reload", time: "", detail: "The server has a newer version. Reloading the page loads it.", classes: ["is-action"] },
+      { text: "Server not compatible", time: "", detail: "Server API 3 is newer than this page supports (API 2).", classes: ["is-warning"] }
+    ]);
+
+    await click(within(part("now")).getByText("Server not compatible"));
+    expect(reloadPage).not.toHaveBeenCalled();
+    await click(within(part("now")).getByText("ReelRoulette updated · Tap to reload"));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks Discard changes? before the update notice's row reloads the page while the Filter tab holds unsaved changes", async () => {
+    const reloadPage = vi.fn<() => void>();
+    const server = new FakeServer();
+    server.on("GET", "/api/sources", () => json([]));
+    server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], tagCounts: [], itemCount: 0 }));
+    const { store } = await mountWithServices(server, { reloadPage, connect: true });
+    await pageReady(server);
+    await click(screen.getByRole("button", { name: "Open panel" }));
+    await click(screen.getByRole("tab", { name: "Filter" }));
+    await click(screen.getByLabelText("Only never played"));
+    store.differentBuild.value = true;
+    await click(bell());
+    const notice = () => within(part("now")).getByText("ReelRoulette updated · Tap to reload");
+
+    await click(notice());
+    await click(buttonIn(dialogWith("Discard changes?"), "Cancel"));
+    expect([reloadPage.mock.calls.length, (screen.getByLabelText("Only never played") as HTMLInputElement).checked]).toEqual([0, true]);
+    await click(notice());
+    await click(buttonIn(dialogWith("Discard changes?"), "Discard"));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
   });
 
   it("shows Recent newest first with their times, which move on while it is open, and marks what didn't pop up", async () => {
@@ -871,7 +874,6 @@ describe("the popup settings", () => {
 
   it("show popups for as long as Show for says", async () => {
     for (const seconds of [3, 10]) {
-      unmountServices?.();
       resetPage();
       useFakeClock();
       keepSettings({ seconds });

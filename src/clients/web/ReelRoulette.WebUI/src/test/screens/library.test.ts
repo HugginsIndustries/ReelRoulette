@@ -35,6 +35,7 @@ import {
   selectedPresetLabel,
   serveControlFromAnotherMachine,
   setViewport,
+  flush,
   settle,
   shownDialogs,
   status,
@@ -206,15 +207,6 @@ async function mountLibrary(
   }
   await flush();
   return { page, server, library };
-}
-
-/** Lets fetch replies and renders finish, with real or fake timers. */
-async function flush(): Promise<void> {
-  if (vi.isFakeTimers()) {
-    await vi.advanceTimersByTimeAsync(0);
-  } else {
-    await settle();
-  }
 }
 
 async function click(element: Element): Promise<void> {

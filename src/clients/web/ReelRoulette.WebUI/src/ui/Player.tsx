@@ -21,8 +21,11 @@ const OVERLAY_TOGGLE = "overlay-btn icon-glyph-base icon-glyph-toggle overlay-to
 /** The controls a mouse or pen pointer over keeps shown: the buttons and the seek row. */
 const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
 
-/** What over the picture opens no menu: the controls and the rating's stars. */
-const NO_MENU_PARTS = `${CONTROL_PARTS}, .rating-popover`;
+/** The indicator while it takes a tap, as it does for the update notice. */
+const TAPPABLE_INDICATOR = ".player-indicator.takes-tap";
+
+/** What over the picture opens no menu: the controls, the rating's stars, and the indicator while it takes a tap. */
+const NO_MENU_PARTS = `${CONTROL_PARTS}, .rating-popover, ${TAPPABLE_INDICATOR}`;
 
 function lit(className: string, active: boolean): string {
   return active ? `${className} active` : className;
@@ -49,8 +52,8 @@ function stopPropagation(event: Event): void {
  * and on a photo too, so the controls never move. The player claims its touches (`touch-action: none`), so a two-finger
  * drag changes the volume without the browser scrolling or zooming, and over it the scroll wheel never scrolls the page.
  * Hide player controls decides when the controls show; hidden, they can't be pressed, so a first tap only shows them.
- * A right-click or a long press on the picture, not on the controls or the rating's stars, opens the playing item's
- * menu, and with nothing playing opens nothing.
+ * A right-click or a long press on the picture, not on the controls, the rating's stars, or the indicator while it takes
+ * a tap, opens the playing item's menu, and with nothing playing opens nothing.
  */
 export function Player() {
   const { store, player, playerControls: controls, audio, ambient, fullscreen, settings, contextMenu, playingMenus } = useApp();
@@ -118,8 +121,9 @@ export function Player() {
     // Passive where they never cancel, which JSX cannot set, so the browser never waits for them. A two-finger drag's
     // move and the wheel cancel the browser's own scroll, and Safari's pinch gesture is turned away.
     const area = container.current!;
+    // A touch on the indicator while it takes a tap is its own, as one on the controls is, so it is never a swipe.
     const onTouchStart = (event: TouchEvent) => {
-      const startsOnControls = !!(event.target as Element | null)?.closest?.("#overlay-controls");
+      const startsOnControls = !!(event.target as Element | null)?.closest?.(`#overlay-controls, ${TAPPABLE_INDICATOR}`);
       gestures.touchStart(startsOnControls, event.touches ?? []);
     };
     const onTouchMove = (event: TouchEvent) => {
@@ -312,19 +316,24 @@ function CountsDisabled() {
 
 /**
  * The player's indicator: one lasting state at a time, the first active one in the precedence order (Reconnecting…,
- * Server not compatible, Running without a library, Loading…, then a library refresh), at the player's top center, or
- * below the corner buttons on a narrow player. Nothing shows while the server asks for pairing. It renders only while
- * a state shows. A long state ends in an ellipsis, and a refresh's percentage sits outside the text, so it always
- * shows. A refresh shows only while the player's controls do.
+ * the update notice, Server not compatible, Running without a library, Loading…, then a library refresh), at the
+ * player's top center, or below the corner buttons on a narrow player. Nothing shows while the server asks for pairing.
+ * It renders only while a state shows. A long state ends in an ellipsis, and a refresh's percentage sits outside the
+ * text, so it always shows. A refresh shows only while the player's controls do. It ignores the pointer, except while it
+ * shows the update notice, whose tap reloads the page and goes no further, so the player neither shows nor hides its
+ * controls nor starts a pick.
  */
 function PlayerIndicator() {
-  const { indicator } = useApp();
+  const { indicator, reloadForUpdate } = useApp();
   const state = indicator.value;
   return state ? (
     <div
       id="player-indicator"
-      class={["player-indicator", state.warning ? "is-warning" : "", state.followsControls ? "follows-controls" : ""].filter(Boolean).join(" ")}
+      class={["player-indicator", state.warning ? "is-warning" : "", state.followsControls ? "follows-controls" : "", state.reloads ? "takes-tap" : ""]
+        .filter(Boolean)
+        .join(" ")}
       data-state={state.id}
+      onClick={state.reloads ? press(reloadForUpdate) : undefined}
     >
       <span class={state.spins ? "material-symbol-icon spins" : "material-symbol-icon"}>{state.icon}</span>
       <span class="player-indicator-text">{state.title}</span>

@@ -1,6 +1,6 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import { noticeRequestFailure, refusalError, requestFailure, UnauthorizedError } from "../api/serverRequest";
-import type { Dialogs } from "../dialogs/dialogs";
+import { DISCARD_CHANGES, type Dialogs } from "../dialogs/dialogs";
 import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
 import type { BulkTarget } from "../library/bulkActions";
@@ -77,8 +77,6 @@ import {
 const EXPANDED_CATEGORIES_KEY = "tags.expandedCategories";
 const SCAN_FULL_LIBRARY_KEY = "tags.scanFullLibrary";
 const SAVE_SUCCEEDED = "Tag editor changes applied";
-/** The question Edit tags… asks before it drops adds and removes held for other items. */
-const DISCARD_ITEM_CHANGES = "Discard changes?";
 
 /**
  * What the tab edits: the playing item, which it follows; a tile's item chosen through Edit tags…, which it keeps until
@@ -920,7 +918,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         ? state.target.kind === "selection" && state.target.live
         : state.target.kind !== "selection" && state.itemIds.length === 1 && state.itemIds[0] === bulk.itemId;
       if (state.selections.size > 0 && !same) {
-        if (!(await dialogs.confirm({ message: DISCARD_ITEM_CHANGES, confirmLabel: "Discard", danger: true }))) {
+        if (!(await dialogs.confirm(DISCARD_CHANGES))) {
           return false;
         }
         // The catalog changes and the category order stay.

@@ -188,7 +188,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Notifications.tsx`
   - the player's bell, with its badge and its accessible name counting what didn't pop up, orange while it has unread messages or its list is open, which opens the list under it or closes it.
   - the popups, at the edge and side the popup settings say, each a card with its icon, message, second line, and Dismiss, paused while a mouse or pen points at it, and closed by a swipe past 64 px on a touch screen.
-  - the list, lined up with the bell, showing Now from `src/state/lastingStates.ts` and Recent with their times, with Clear and Close, which takes Escape before the stage except while an in-app dialog is open, and closes on a press outside it, and Notification settings at its foot, which closes it, opens the Settings tab, and asks the settings service to show the popup settings.
+  - the list, lined up with the bell, showing Now from `src/state/lastingStates.ts`, whose update notice's row takes a tap that asks the services to reload for the update, and Recent with their times, with Clear and Close, which takes Escape before the stage except while an in-app dialog is open, and closes on a press outside it, and Notification settings at its foot, which closes it, opens the Settings tab, and asks the settings service to show the popup settings.
   - However the list closes, focus inside it goes to the page.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Stage.tsx`
   - the fullscreen stage, holding the player with its popups, the side panel, the list behind the bell, the context menu, Auto Tag, the in-app dialogs' host, and Show layout measurements' figures, each in its error boundary, which stay inside the stage so they show in fullscreen.
@@ -225,17 +225,17 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the media area:
     - ambient mode's glow layer with its canvas, which comes first so it sits behind the picture.
     - then video, photo, empty state.
-    - the player's indicator, which shows the first active lasting state from `src/state/lastingStates.ts`, a long state ending in an ellipsis.
+    - the player's indicator, which shows the first active lasting state from `src/state/lastingStates.ts`, a long state ending in an ellipsis, and takes a tap only while it shows the update notice, which asks the services to reload for the update and goes no further.
     - Counts disabled while the store's Don't record plays is on.
     - the volume indicator and the seek indicator's back and forward sides, outside the controls.
     - the controls over them, shown as the player's controls say, with:
       - the bell.
       - the panel button that opens the panel on its last tab or closes it, which the stylesheet puts on the panel's side, left of the rating's star, or just right of the bell while the panel is on the left, marked with the orange dot and "unsaved changes" in its name while the Filter or Tags tab holds unsaved changes.
       - the rating's star, orange with the rating in its badge while the playing item is rated, which opens the rating's popover, the star control at the player's center, built anew each time it opens, closing it on a pointer's rating, Escape, which it takes before the stage except while an in-app dialog is open, or a press outside it, and cancelling a touch's `touchend` on it.
-    - swipe listeners (passive, added through a ref), which leave a tap to its click, and the two-finger drag's `touchmove`, the wheel, and Safari's `gesturestart`, which cancel the browser's own scroll and zoom.
+    - swipe listeners (passive, added through a ref), which leave a tap to its click and a touch on the controls or the update notice to them, and the two-finger drag's `touchmove`, the wheel, and Safari's `gesturestart`, which cancel the browser's own scroll and zoom.
     - the volume slider's press and the page's next `pointerup` or `pointercancel`, which bound its drag as one volume change and, with the scrub bar's press, a drag that keeps the controls shown.
     - a pointer other than a touch moving over the player, a mouse or pen pointer over a control, the page's key presses, and a press on the controls, which is activity, for the player's controls.
-    - the media area as a menu surface, whose picture, not its controls, seek row, or the rating's stars, opens the playing item's menu while something plays, telling the gestures that the touch that opened it is neither a tap nor a swipe.
+    - the media area as a menu surface, whose picture, not its controls, seek row, the rating's stars, or the update notice, opens the playing item's menu while something plays, telling the gestures that the touch that opened it is neither a tap nor a swipe.
   - The transport row has Random between Next and Loop, and the fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen.
   - The player sets the media elements' sources and `display`, the seek slider's value, and the stretch behind it (`#seek-loop` in `#seek-wrap`), shown and placed while Timer mode repeats one, and ambient mode the glow's `hidden` and settings, so the component renders those once.
   - It renders a new video element only for the player's next video key, once Enhanced audio is off, and hands it to the audio stage, the player, and ambient mode; it attaches the glow to ambient mode with the video and photo, and the video to the audio stage.
@@ -422,6 +422,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/ui/placement.ts`
   - keeping a box placed by script 8 px inside the window, for the context menu, the bell's list, and the field validation tooltip, and placing a box at a point as a context menu opens.
 - `src/clients/web/ReelRoulette.WebUI/src/dialogs/dialogs.ts`
+  - the "Discard changes?" confirmation, with a red Discard, that the Tags tab and the update notice's reload ask.
   - the page's confirmations and notices: each one asked for opens above the last and settles with its answer, a notice that offers an action settling true for it and false for OK, and a notice's text is relayed to `last.log` as a popup's is and kept in the list behind the bell. A notice whose message is already open doesn't open again; it is still relayed, and settles when the one showing closes.
 - `src/clients/web/ReelRoulette.WebUI/src/notifications/notifications.ts`
   - the page's one-off messages:
@@ -471,7 +472,8 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - On the first preset load, a remembered preset whose own filter applied, and that no other filter has replaced since, applies again as the server has it, so tag renames and deletions made elsewhere reach the filter.
   - Presets reloaded for a preset event or a resync are taken in one batch with the applied filter following the active preset's new filter, when another device changed it while it applied unchanged, without a dropdown pick's `headerFilterChanged`, which `appliedPresetFollowed` stands in for, so the library starts over and the Filter tab keeps its changes.
 - `src/clients/web/ReelRoulette.WebUI/src/state/lastingStates.ts`
-  - the lasting states in their precedence order (Reconnecting…, Server not compatible, Running without a library, Loading…, a library refresh), each with its icon, text, whether it warns, spins, or follows the player's controls, and the second line the list's Now shows.
+  - the lasting states in their precedence order (Reconnecting…, the update notice, Server not compatible, Running without a library, Loading…, a library refresh), each with its icon, text, whether it warns, spins, or follows the player's controls, the second line the list's Now shows, and whether a tap on it reloads the page, which only the update notice's does.
+  - the update notice while the store's `differentBuild` is on and Reconnecting… doesn't show.
   - the player's indicator, the first active one, or none while the server asks for pairing, relaying each state's text to `last.log` once when it starts showing.
   - the no-library text for the Library tab.
   - the server's message the Library, Stats, and Randomization tabs show while it holds back.
@@ -501,13 +503,14 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - player, the ratings this device sets and shows, the player's rating on them, the playing item, and the audio stage, the player's controls on whether playback waits for the user and on the bell's list or the rating's popover.
     - the file items for the menus that act on a file, ambient mode on the settings, the playing item, and the player's media failure, the context menu, which a library tile's menu opens in.
     - library, the tag catalog the Filter, Tags, Stats, and Randomization tabs and the Library tab's Random line share, filter dialog, tag editor, stats tab, the playing item's menus, the menus on tags, and randomization tab, which shows normalization's adjustment with Enhanced audio and sets ratings through them.
-    - from the runtime config and, for the settings' reset, a page reload when one is given.
+    - from the runtime config and a page reload when one is given, or the browser's own, for the settings' reset and the update notice.
   - connects:
     - the panel's tabs to the library, tag editor, stats tab, filter dialog, randomization tab, the last two of which open as their tab shows and close as it hides, and Settings tab.
     - Auto-Pause to the panel, Auto Tag, and the player, in the mode the Settings tab sets.
   - the panel opening closing the bell's list and the rating's popover.
   - starting a tab remembered open once the server has passed or failed the compatibility check or turned out to have no library.
   - whether the Filter and Tags tabs hold unsaved changes, which both the tabs' dots and the panel button's dot read.
+  - the update notice's reload, which asks "Discard changes?" first while the Filter or Tags tab holds unsaved changes.
   - the library after the player, so the player handles an item-state event first.
 - `src/clients/web/ReelRoulette.WebUI/src/state/deviceStore.ts`
   - the per-device store:
@@ -876,7 +879,7 @@ Boundary:
   - `src/core/ReelRoulette.Core.SystemChecks/*`
 - WebUI tests:
   - `src/clients/web/ReelRoulette.WebUI/src/test/*`
-  - screen tests under `src/test/screens/` mount the page in `happy-dom` against a fake server and event stream (`pageHarness.ts`).
+  - screen tests under `src/test/screens/` mount the page in `happy-dom` against a fake server and event stream (`pageHarness.ts`), or with services the test holds and the connection left off unless asked for (`mountWithServices`).
 - Manual test guide/checklist:
   - `docs/checklists/testing-checklist.md`
 

@@ -2,9 +2,9 @@ import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import type { AppStore } from "./appStore";
 
 /** The lasting states, in their precedence order: the player's indicator shows the first active one. */
-export type LastingStateId = "reconnecting" | "incompatible" | "nolibrary" | "loading" | "refresh";
+export type LastingStateId = "reconnecting" | "update" | "incompatible" | "nolibrary" | "loading" | "refresh";
 
-export const LASTING_STATE_ORDER: readonly LastingStateId[] = ["reconnecting", "incompatible", "nolibrary", "loading", "refresh"];
+export const LASTING_STATE_ORDER: readonly LastingStateId[] = ["reconnecting", "update", "incompatible", "nolibrary", "loading", "refresh"];
 
 /** What the Library tab says in place of the grid while the server runs without a library. */
 export function noLibraryText(libraryMessage: string | null): string {
@@ -54,16 +54,35 @@ export interface LastingState {
   followsControls: boolean;
   /** A second line the list behind the bell shows under it in Now, or null. */
   detail: string | null;
+  /** A tap on it, on the indicator or its row in Now, reloads the page, as the update notice's does. */
+  reloads: boolean;
 }
 
 /** Reconnecting…'s second line in the list's Now. */
 export const RECONNECTING_DETAIL = "The connection to the server was lost. ReelRoulette keeps trying.";
 
+/** The update notice's second line in the list's Now. */
+export const UPDATE_DETAIL = "The server has a newer version. Reloading the page loads it.";
+
 /** Every active lasting state, in the precedence order. */
 export function activeLastingStates(store: AppStore): LastingState[] {
   const active: LastingState[] = [];
   if (store.reconnecting.value) {
-    active.push({ id: "reconnecting", icon: "sync", title: "Reconnecting…", progress: null, warning: false, spins: true, followsControls: false, detail: RECONNECTING_DETAIL });
+    active.push({ id: "reconnecting", icon: "sync", title: "Reconnecting…", progress: null, warning: false, spins: true, followsControls: false, detail: RECONNECTING_DETAIL, reloads: false });
+  } else if (store.differentBuild.value) {
+    // Off while Reconnecting… shows: a reload while the server can't be reached lands on the browser's error page, which
+    // an installed iOS app can't leave.
+    active.push({
+      id: "update",
+      icon: "refresh",
+      title: "ReelRoulette updated · Tap to reload",
+      progress: null,
+      warning: false,
+      spins: false,
+      followsControls: false,
+      detail: UPDATE_DETAIL,
+      reloads: true
+    });
   }
   if (store.compatibilityBlocked.value) {
     active.push({
@@ -74,7 +93,8 @@ export function activeLastingStates(store: AppStore): LastingState[] {
       warning: true,
       spins: false,
       followsControls: false,
-      detail: store.compatibilityMessage.value
+      detail: store.compatibilityMessage.value,
+      reloads: false
     });
   }
   if (store.noLibrary.value) {
@@ -86,11 +106,12 @@ export function activeLastingStates(store: AppStore): LastingState[] {
       warning: true,
       spins: false,
       followsControls: false,
-      detail: store.libraryMessage.value
+      detail: store.libraryMessage.value,
+      reloads: false
     });
   }
   if (store.loading.shown.value) {
-    active.push({ id: "loading", icon: "progress_activity", title: "Loading…", progress: null, warning: false, spins: true, followsControls: false, detail: null });
+    active.push({ id: "loading", icon: "progress_activity", title: "Loading…", progress: null, warning: false, spins: true, followsControls: false, detail: null, reloads: false });
   }
   const refresh = store.refreshProgress.value;
   if (refresh) {
@@ -102,7 +123,8 @@ export function activeLastingStates(store: AppStore): LastingState[] {
       warning: false,
       spins: true,
       followsControls: true,
-      detail: null
+      detail: null,
+      reloads: false
     });
   }
   return active;
