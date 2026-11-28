@@ -3695,13 +3695,14 @@ Last milestone completed: M12n1
 ### P52 - WebUI Tooltips
 
 - **Status**: ⏳ Planned
-- **Goal**: The app draws every tooltip itself, in the app's theme, so desktop hover tooltips follow the theme instead of the browser's, and a long press on a touch screen shows the same tip, so icon names and disabled buttons' reasons can be read without a mouse. Low priority, after Animations.
+- **Goal**: The app draws every tooltip itself, in the app's theme, so desktop hover tooltips follow the theme instead of the browser's, and a long press on a touch screen shows the same tip, so icon names and disabled buttons' reasons can be read without a mouse, and the Settings tab's explanations move into tooltips, so the tab shows less text. Low priority, after Animations.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
 
 - The app draws every tooltip itself, in the app's theme, so desktop hover tooltips follow the theme instead of the browser's, and a long press on a touch screen shows the same tip.
 - On a touch screen, long-pressing any element with a tooltip shows it as a tip beside the element, icon names and disabled buttons' reasons alike.
+- The Settings tab's explanations, each setting's hint and each choice's description, move into the tooltip of the setting or choice they explain, so the tab shows only labels and controls.
 - The tip shows while the press is held and for about 1.5 seconds after release.
 - A long press never also presses the button.
 - Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, the player's taps, and opening context menus.
@@ -3715,6 +3716,8 @@ Last milestone completed: M12n1
 - The app's tooltips are 71 `title` attributes in 16 components under `src/ui/`, and two the library grid sets itself: a tile's file name and its check icon's "Select" or "Deselect" (`libraryGridTile.ts`) (measured).
 - A `title` is also an element's accessible name when it has no other, and AGENTS.md keeps controls' accessible names, so an element named only by its `title` needs its name kept another way.
 - Tests read tooltips through `title`, with Testing Library's `getByTitle`, `getAttribute("title")`, and `.title`, 71 times in 10 test files, most in `screens/filter.test.ts` (28) and `screens/tags.test.ts` (12), and the filter, foundation, library, and tags screen snapshots hold `title` attributes (measured).
+- The Settings tab shows a setting's `hint` as text under it and a choice's `description` as text under its label (`src/ui/SettingControls.tsx`, used throughout `src/ui/SettingsTab.tsx`).
+- The loudness target's choices describe their LUFS values, and Automatic its measured baseline, rather than explaining the choice (`src/ui/SettingsTab.tsx`).
 - A disabled button gets no pointer or click events in some browsers, so its long press has to be caught around it (inferred).
 - Safari on iOS and Chrome on Android show their own callout, menu, or text selection on a long press (inferred).
 - Reordering presets and tag categories starts a drag on pointer down on a row's handle (`src/ui/Reorder.tsx`).
@@ -3726,6 +3729,7 @@ Last milestone completed: M12n1
 
 - On a touch screen, a long press on an element with a tooltip shows its tip beside it while held and for about 1.5 seconds after release, without pressing it, in WebUI tests of long-press tips with touch pointers.
 - A long press on a disabled button shows its reason, in WebUI tests of long-press tips on disabled buttons.
+- The Settings tab's explanations show as their setting's or choice's tooltip instead of text under it, in Settings screen tests.
 - Dragging presets and tag categories, the player's taps, opening context menus, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
 - A mouse shows no tip on a long press, in WebUI tests with a mouse pointer.
 - On a desktop, hovering an element with a tooltip shows the app's tip in the app's theme, and the browser shows none of its own, in WebUI tests of hover tips.
