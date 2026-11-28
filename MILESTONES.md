@@ -289,6 +289,7 @@ Last milestone completed: M12n5
 - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and the Core system checks pass (measured).
 - Since the totals and the baseline now depend on which sources are on, the WebUI's Stats tab, while it shows, and its loudness baseline load again on `sourceStateChanged` (`statsTab.ts`, `libraryBaseline.ts`). The Stats screen test of reloads and the baseline's test of its loads failed without them, the screen test for each of the two on its own (measured).
 - `CONTEXT.md`, `docs/domain-inventory.md`, `docs/dev-setup.md`, and `docs/api.md` describe schema version 10, the stats' totals, and the reloads, and `CHANGELOG.md`'s WebUI Stats tab and loudness normalization bullets, both unreleased, say the totals and the baseline count only the sources turned on.
+- The user's spot check on main after the merge passed: the catalog upgraded to schema 10 as the server started, the library loaded with its items, tags, and presets, the Stats tab's totals counted only the sources turned on, and Random, the library, and Auto Tag worked as before.
 
 #### Contract slice
 
@@ -329,6 +330,7 @@ Last milestone completed: M12n5
 - New tests: `ProfileRouteTests`, for the profile routes' answers, refusals, and events against their schemas, each scoped request with and without `profileId`, `profileId` in each request schema, and the item events' `sourceId`.
 - Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): the query, ids, stats, random, cycle, and scan handlers each dropping the profile, a taken name answering 400, each of the four item events without its source id, the flag change reading no source, and the spec without the create route, the query's `profileId`, or `itemStateChanged`'s `sourceId`.
 - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass (measured).
+- The user's spot check on main after the merge passed, as the Server slice's records; nothing in the app uses the profile routes before the WebUI slice.
 
 #### WebUI slice
 
