@@ -171,8 +171,8 @@ Last milestone completed: M12n5
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The whole profiles design, including the tag, category, and preset visibility that Profile Tag and Preset Visibility builds, approved on a desktop browser, the iPad, and an Android phone. |
-| Server | ⏳ Planned | Profiles and their sources in a new catalog schema step, the profile store, the profile's sources in the library query, its counts, random picks, library stats, and Auto Tag's scan, library stats without disabled sources, and `profilesChanged`. |
-| Contract | ⏳ Planned | The profile routes, `profileId` on the scoped requests, `sourceId` on the item events, and `profilesChanged`, in OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| Server | ✅ Complete | Profiles and their sources in a new catalog schema step, the profile store, the profile's sources in the library query, its counts, random picks, library stats, and Auto Tag's scan, library stats without disabled sources, and `profilesChanged`. |
+| Contract | ✅ Complete | The profile routes, `profileId` on the scoped requests, `sourceId` on the item events, and `profilesChanged`, in OpenAPI, the generated WebUI types, and `docs/api.md`. |
 | WebUI | ⏳ Planned | The header's profile button and picker, Add and Edit Profile's General and Sources tabs, switching, the per-device memory, the scoped tabs, and the profile rule for popups and notices. |
 
 #### Mockup slice
@@ -270,6 +270,26 @@ Last milestone completed: M12n5
 - Each profile write publishes `profilesChanged`, in server tests of each write.
 - `dotnet test ReelRoulette.sln` passes.
 
+**Evidence**
+
+- `LibraryCatalogStore.SchemaVersion` is 10, and `UpgradeSchema9To10` runs `ProfileTablesSql`, which a new catalog runs too: `profiles` (id, position, name, name_fold, color, follows_all_sources, default_filter) and `profile_sources` (profile_id, source_id, primary key on both), with the default profile under the id `default` as "Main" in `#ef7f22`, following all sources.
+- A profile's `default_filter` is null until one is saved, meaning the WebUI's built-in default filter, as the approved mockup models it.
+- `RequirementsBySchemaVersion` gives each schema version's tables and item columns together, in place of one table list for every version, so a catalog from 2 to 9 without the profile tables still passes the schema check.
+- `LibraryCatalogSession` reads profiles in position order, so the default comes first and the WebUI sorts the rest, and writes each profile with its chosen sources in one commit; deleting one deletes its source rows in the same transaction. `ReadTagGroups` became `ReadGroups`, since it now groups profile sources too.
+- `LibraryListRequest.ProfileSourceIds` holds the profile's sources, or null for every source, and `BuildWhere` adds them outside the filter, through the helper the filter's source list now shares; an empty chosen list matches nothing. `QueryRandomCandidates`, `ReadLibraryStats`, and `ReadAutoTagScanItems` take the same list.
+- The session's three copies of the enabled-source condition became one, `InEnabledSourceSql`, which the baseline loudness now uses too.
+- `LibraryProfileService` holds the profile store's rules, and reads profiles from the catalog on every call, so a catalog import or restore needs nothing reloaded.
+- The profile store takes its own lock for each write and its `profilesChanged`, as the preset store does, which replaces the Scope's "under the library operations lock": profiles never touch items, the lock's job is to keep the events in the order of the writes, and the operations lock would hold a profile save behind a long duplicate or Auto Tag scan.
+- A profile update changes only the fields it names, so Edit Profile and the Filter tab's Update on None write apart, and a chosen list it names replaces the profile's whenever the profile has one after it; a color is stored as lower-case `#rrggbb`.
+- `QueryLibrary`, `QueryLibraryIds`, `GetLibraryStats`, `ScanAutoTags`, `TrySelectRandom`, and `TryGetRandomCycle` take the resolved sources as an optional last parameter, which the Contract slice's handlers pass from `LibraryProfileService.ResolveSourceIds`. `ProfileResponse` and `ProfilesChangedPayload` are in `ApiContracts.cs`, for the Contract slice's schemas.
+- "A scan with no path list" in the Scope is read as Auto Tag's scan without Scan full library, since its request has no path list.
+- Three tests that counted disabled sources and items in no source in the stats' totals and the baseline now expect them left out, and the upgrade theories' seed items carry their date added, since the theories now start from version 9 too, which holds its own.
+- New tests: `LibraryProfileStoreTests`, for the store's writes, refusals, events, resolution, and a source imported later, and `LibraryProfileSourcesTests`, for the profile's sources in each read; the upgrade and import theories check the default profile.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): the profile condition left out of `BuildWhere` or put inside the filter, an empty chosen list read as every source, the stats' totals counting disabled sources or ignoring the profile, the baseline counting disabled sources, Auto Tag's scan or the random candidates ignoring the profile, a delete keeping the source rows, the 9→10 step or a new catalog without the profile tables, version 9 requiring them, a taken name or a bad color accepted, the default profile deletable or limitable, each unknown id logged every time, a new profile without the default filter, writes publishing nothing, and a profile that follows all sources resolving to its empty list.
+- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and the Core system checks pass (measured).
+- Since the totals and the baseline now depend on which sources are on, the WebUI's Stats tab, while it shows, and its loudness baseline load again on `sourceStateChanged` (`statsTab.ts`, `libraryBaseline.ts`). The Stats screen test of reloads and the baseline's test of its loads failed without them, the screen test for each of the two on its own (measured).
+- `CONTEXT.md`, `docs/domain-inventory.md`, `docs/dev-setup.md`, and `docs/api.md` describe schema version 10, the stats' totals, and the reloads, and `CHANGELOG.md`'s WebUI Stats tab and loudness normalization bullets, both unreleased, say the totals and the baseline count only the sources turned on.
+
 #### Contract slice
 
 **Scope**
@@ -294,6 +314,21 @@ Last milestone completed: M12n5
 - The item events carry each item's source id, in server tests of each event.
 - `docs/api.md` describes the routes, `profileId`, and the events, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `GET /api/profiles`, `POST /api/profiles/create`, `POST /api/profiles/{profileId}/update`, and `POST /api/profiles/{profileId}/delete` follow the per-preset routes: create and update answer with the `ProfileResponse`, delete with an empty 200, and a refusal with `{ error }`, 409 for a taken name, 404 for a missing profile, 500 for a write the catalog didn't take, and 400 otherwise.
+- The update request's fields are each optional, a null one keeping the profile's own, and `defaultFilter` is a filter state object.
+- `profileId` is an optional field of `LibraryQueryRequest`, `LibraryIdsQueryRequest`, `RandomRequest`, which the cycle route shares, and `AutoTagScanRequest`, and a query parameter of `GET /api/library/stats`. Each handler resolves it through `LibraryProfileService.ResolveSourceIds` and passes the sources to its service; the query, stats, random, cycle, and scan handlers became `internal static` methods, as the ids query's was, so route tests call them.
+- `sourceId` is required on `ItemStateChangedPayload`, `ItemRatingChangedPayload`, `BulkItemState`, and `BulkItemRating`, from `CatalogItemFlagChange.SourceId` and `CatalogItemRatingChange.SourceId`, which the writes read with each item's values before the change.
+- `LibraryOperationsService.SetFavorite` and `SetBlacklist` return the `CatalogItemFlagChange`, as `SetRating` returns its change, in place of two `LibraryStateResponse`s through an out parameter, and the handler builds the response and the event from it.
+- `profilesChanged` is in the event envelope's payload list, with `ProfilesChangedPayload` and `ProfileResponse`, and `npm run generate:contracts` regenerated `src/types/openapi.generated.ts`; no WebUI code or test needed a change (measured).
+- `docs/api.md` has a Profiles section, `profileId` on each scoped request, `profilesChanged`, and `sourceId` on the item events, and its stats bullets now say the totals and the baseline leave disabled sources out, which the Server slice changed without updating them. `CONTEXT.md` and `docs/domain-inventory.md` describe the routes and the events' `sourceId`.
+- The review of the Server slice found that an update naming only a chosen list kept the old one; `UpdateProfile` now takes the update's list whenever the profile has a chosen list after it, and `UpdateProfile_ChangesOnlyWhatItNames`, which covers it, failed with the old rule (measured).
+- Every refusal's `error` is a sentence for users, the default filter's included: "The default filter isn't a filter the server can read."
+- New tests: `ProfileRouteTests`, for the profile routes' answers, refusals, and events against their schemas, each scoped request with and without `profileId`, `profileId` in each request schema, and the item events' `sourceId`.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): the query, ids, stats, random, cycle, and scan handlers each dropping the profile, a taken name answering 400, each of the four item events without its source id, the flag change reading no source, and the spec without the create route, the query's `profileId`, or `itemStateChanged`'s `sourceId`.
+- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass (measured).
 
 #### WebUI slice
 
@@ -352,6 +387,8 @@ Last milestone completed: M12n5
 - `filterWithGeneralDraft` writes an empty source list when every listed source is checked (`src/filter/filterDialogModel.ts`), and an empty list means every source.
 - Requests go through `createServerRequester` in `src/state/appApi.ts`, except the library play in `src/api/coreApi.ts`, which names no profile.
 - `src/events/sseClient.ts` listens only to the event types registered with it.
+- The default profile's `defaultFilter` is null, meaning the built-in default filter, until the Filter tab's Update on None saves one, and a new profile copies the default profile's, null included (`LibraryProfileService`).
+- The profile list and `profilesChanged` give the profiles in the order they were added, the default first, so the picker sorts the others itself (`LibraryProfileService`).
 - A drag on the color picker's square or slider scrolls the dialog on a touch screen unless they set `touch-action: none` and capture the pointer (inferred).
 - The dialog's tab page scrolls, which would clip a popover placed inside it; the mockup's popover is `position: fixed`, placed from the color button's box, which nothing in the dialog clips (inferred).
 - Escape in a `<dialog>` also sends its `cancel` close request, so the picker's Escape has to stop it to close only the popover (inferred).

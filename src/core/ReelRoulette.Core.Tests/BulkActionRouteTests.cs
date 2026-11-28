@@ -139,7 +139,7 @@ public sealed class BulkActionRouteTests : IDisposable
     {
         CatalogSeed.Write(_dataDir);
 
-        var result = ServerHostComposition.QueryLibraryIds(new LibraryIdsQueryRequest { FilterState = Filter("[]") }, CreateOperations());
+        var result = ServerHostComposition.QueryLibraryIds(new LibraryIdsQueryRequest { FilterState = Filter("[]") }, CreateOperations(), CreateProfiles());
 
         Assert.Equal(StatusCodes.Status400BadRequest, Status(result));
         Assert.Equal("filterState must be an object", OpenApiSpec.ErrorReason(result));
@@ -827,7 +827,7 @@ public sealed class BulkActionRouteTests : IDisposable
             sources: [new SeedSource("s1", "/media")],
             items: [new SeedItem("item-1", "/media/one.mp4") { SourceId = "s1" }]);
 
-        var result = ServerHostComposition.QueryLibraryIds(null, CreateOperations());
+        var result = ServerHostComposition.QueryLibraryIds(null, CreateOperations(), CreateProfiles());
 
         var response = Assert.IsType<LibraryIdsQueryResponse>(Value(result));
         Assert.Equal(["item-1"], response.Ids);
@@ -1032,9 +1032,9 @@ public sealed class BulkActionRouteTests : IDisposable
     private static (string, bool, bool, bool, bool) Describe(BulkItemState item) =>
         (item.ItemId, item.IsFavorite, item.IsBlacklisted, item.PreviousIsFavorite, item.PreviousIsBlacklisted);
 
-    private static List<string> QueryIds(LibraryOperationsService operations, LibraryIdsQueryRequest request)
+    private List<string> QueryIds(LibraryOperationsService operations, LibraryIdsQueryRequest request)
     {
-        return Assert.IsType<LibraryIdsQueryResponse>(Value(ServerHostComposition.QueryLibraryIds(request, operations))).Ids;
+        return Assert.IsType<LibraryIdsQueryResponse>(Value(ServerHostComposition.QueryLibraryIds(request, operations, CreateProfiles()))).Ids;
     }
 
     private static JsonElement Filter(string json)
@@ -1046,6 +1046,11 @@ public sealed class BulkActionRouteTests : IDisposable
     private LibraryOperationsService CreateOperations()
     {
         return new LibraryOperationsService(CatalogOpen.Host(_dataDir), NullLogger<LibraryOperationsService>.Instance, _dataDir);
+    }
+
+    private LibraryProfileService CreateProfiles()
+    {
+        return new LibraryProfileService(CatalogOpen.Host(_dataDir), new ServerStateService());
     }
 
     private string[] LogLines()

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using ReelRoulette.Core.Filtering;
@@ -15,6 +16,10 @@ public sealed class LibraryCatalogSession
 
     /// <summary>The condition an item has playback stats to clear under.</summary>
     private const string HasPlaybackStatsSql = "(play_count != 0 OR last_played_utc IS NOT NULL)";
+
+    /// <summary>The condition an item is in an enabled source under, for reads that don't join the sources.</summary>
+    private const string InEnabledSourceSql =
+        "EXISTS (SELECT 1 FROM sources WHERE sources.is_enabled != 0 AND sources.id = items.source_id COLLATE NOCASE)";
 
     private readonly string _databasePath;
     private readonly AsyncLocal<WriteScope?> _writeScope = new();
@@ -209,23 +214,24 @@ public sealed class LibraryCatalogSession
     }
 
     /// <summary>
-    /// The items random selection picks from: the list filter over enabled sources, plus the media type,
-    /// with only the columns selection reads, in ordinal id order. The order is applied here rather than
-    /// with ORDER BY, which walks the id index and looks up every row. With <paramref name="includeTags"/>, each
-    /// item also gets its tags, each with its category from the tag catalog, or none for a tag the catalog doesn't
-    /// have. Everything comes from one read.
+    /// The items random selection picks from: the list filter over enabled sources and the profile's sources
+    /// (<see cref="LibraryListRequest.ProfileSourceIds"/>), plus the media type, with only the columns selection reads,
+    /// in ordinal id order. The order is applied here rather than with ORDER BY, which walks the id index and looks up
+    /// every row. With <paramref name="includeTags"/>, each item also gets its tags, each with its category from the tag
+    /// catalog, or none for a tag the catalog doesn't have. Everything comes from one read.
     /// </summary>
     public List<RandomizationItem> QueryRandomCandidates(
         FilterStateModel filter,
         MediaTypeValue? requiredMediaType = null,
-        bool includeTags = false)
+        bool includeTags = false,
+        IReadOnlyCollection<string>? profileSourceIds = null)
     {
         ArgumentNullException.ThrowIfNull(filter);
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         LibraryCatalogListSql.RegisterCollation(connection);
         using var transaction = connection.BeginTransaction(deferred: true);
 
-        var request = new LibraryListRequest { Filter = filter };
+        var request = new LibraryListRequest { Filter = filter, ProfileSourceIds = profileSourceIds };
         var catalogTags = ReadCatalogTags(connection);
         var args = new LibraryCatalogListSql.SqlArgs();
         var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, FilterClock.From(Time), args);
@@ -284,7 +290,7 @@ public sealed class LibraryCatalogSession
         using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT item_id, name_fold FROM item_tags ORDER BY item_id, position;";
-            foldsByItem = LibraryCatalogStore.ReadTagGroups(command);
+            foldsByItem = LibraryCatalogStore.ReadGroups(command);
         }
 
         foreach (var item in items)
@@ -388,17 +394,26 @@ public sealed class LibraryCatalogSession
     /// <summary>
     /// Global and per-source figures from one pass over the items, grouped by source id and media type.
     /// An item counts toward the source whose id it holds, and is a photo when its media type is photo
-    /// and a video otherwise.
+    /// and a video otherwise. The global totals count only enabled sources, as lists and random picks do, and of those
+    /// only the profile's (<paramref name="profileSourceIds"/>, null for every source); each source's own figures count
+    /// all its items. The baseline loudness covers every enabled source, whatever the profile, since it is loudness
+    /// normalization's target rather than a count.
     /// </summary>
-    public CatalogLibraryStats ReadLibraryStats()
+    public CatalogLibraryStats ReadLibraryStats(IReadOnlyCollection<string>? profileSourceIds = null)
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         using var transaction = connection.BeginTransaction(deferred: true);
         var groups = ReadStatsGroups(connection);
+        var sources = BuildSourceStats(connection, groups);
+        var counted = sources
+            .Where(source => source.IsEnabled)
+            .Select(source => source.SourceId)
+            .Where(id => profileSourceIds == null || profileSourceIds.Contains(id, StringComparer.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var stats = new CatalogLibraryStats
         {
-            Global = BuildGlobalStats(groups, ReadBaselineLoudness(connection)),
-            Sources = BuildSourceStats(connection, groups)
+            Global = BuildGlobalStats(groups.Where(group => counted.Contains(group.SourceId)).ToList(), ReadBaselineLoudness(connection)),
+            Sources = sources
         };
         transaction.Commit();
         return stats;
@@ -422,25 +437,32 @@ public sealed class LibraryCatalogSession
         return names;
     }
 
-    public IReadOnlyList<CatalogAutoTagScanItem> ReadAutoTagScanItems(CatalogAutoTagScanScope scope)
+    /// <summary>
+    /// The items Auto Tag's scan matches, with their tags: every item, or only those in enabled sources, and of those
+    /// only the ones in the profile's sources (<paramref name="profileSourceIds"/>, null for every source).
+    /// </summary>
+    public IReadOnlyList<CatalogAutoTagScanItem> ReadAutoTagScanItems(
+        CatalogAutoTagScanScope scope,
+        IReadOnlyCollection<string>? profileSourceIds = null)
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        LibraryCatalogListSql.RegisterCollation(connection);
         using var command = connection.CreateCommand();
-        command.CommandText = scope == CatalogAutoTagScanScope.EnabledSources
-            ? """
-              SELECT items.id, items.full_path, items.relative_path, items.file_name
-              FROM items
-              WHERE EXISTS (
-                  SELECT 1 FROM sources
-                  WHERE sources.is_enabled != 0
-                    AND sources.id = items.source_id COLLATE NOCASE)
-              ORDER BY items.position
-              """
-            : """
-              SELECT id, full_path, relative_path, file_name
-              FROM items
-              ORDER BY position
-              """;
+        var where = new StringBuilder("WHERE 1 = 1");
+        if (scope == CatalogAutoTagScanScope.EnabledSources)
+        {
+            where.Append(" AND " + InEnabledSourceSql);
+        }
+
+        var args = new LibraryCatalogListSql.SqlArgs();
+        LibraryCatalogListSql.AppendProfileSources(where, profileSourceIds, args);
+        command.CommandText = $"""
+            SELECT items.id, items.full_path, items.relative_path, items.file_name
+            FROM items
+            {where}
+            ORDER BY items.position
+            """;
+        args.Bind(command);
         var items = ReadAutoTagItems(command);
         if (items.Count == 0)
         {
@@ -465,12 +487,7 @@ public sealed class LibraryCatalogSession
         using var command = connection.CreateCommand();
         var where = scope switch
         {
-            CatalogDuplicateScanScope.EnabledSources => """
-                WHERE EXISTS (
-                    SELECT 1 FROM sources
-                    WHERE sources.is_enabled != 0
-                      AND sources.id = items.source_id COLLATE NOCASE)
-                """,
+            CatalogDuplicateScanScope.EnabledSources => "WHERE " + InEnabledSourceSql,
             CatalogDuplicateScanScope.Source => "WHERE items.source_id = $source COLLATE NOCASE",
             _ => string.Empty
         };
@@ -750,6 +767,178 @@ public sealed class LibraryCatalogSession
     private static string StoredFilterState(string filterStateJson)
     {
         return string.IsNullOrWhiteSpace(filterStateJson) ? "{}" : filterStateJson;
+    }
+
+    /// <summary>Every profile, in the order they were added, so the default profile comes first.</summary>
+    public IReadOnlyList<LibraryCatalogProfile> ReadProfiles()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction(deferred: true);
+        var profiles = ReadProfileRows(connection, transaction, id: null);
+        transaction.Commit();
+        return profiles;
+    }
+
+    /// <summary>The profile with this id, or null when there is none.</summary>
+    public LibraryCatalogProfile? ReadProfile(string id)
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction(deferred: true);
+        var profile = ReadProfileRows(connection, transaction, id).FirstOrDefault();
+        transaction.Commit();
+        return profile;
+    }
+
+    /// <summary>Adds a profile after every other one.</summary>
+    public void CreateProfile(LibraryCatalogProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        Commit((connection, transaction) =>
+        {
+            var position = LibraryCatalogStore.ExecuteScalarInt(
+                connection,
+                "SELECT COALESCE(MAX(position) + 1, 0) FROM profiles;",
+                transaction);
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                """
+                INSERT INTO profiles (id, position, name, name_fold, color, follows_all_sources, default_filter)
+                VALUES ($id, $position, $name, $fold, $color, $all, $filter);
+                """,
+                ("$id", profile.Id),
+                ("$position", position),
+                ("$name", profile.Name),
+                ("$fold", LibraryCatalogStore.Fold(profile.Name)),
+                ("$color", profile.Color),
+                ("$all", profile.FollowsAllSources ? 1 : 0),
+                ("$filter", (object?)profile.DefaultFilterJson ?? DBNull.Value));
+            WriteProfileSources(connection, transaction, profile);
+            return true;
+        });
+    }
+
+    /// <summary>Replaces the profile with this id, its chosen sources included, keeping its place. False when there is none.</summary>
+    public bool UpdateProfile(LibraryCatalogProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return Commit((connection, transaction) =>
+        {
+            var updated = LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                """
+                UPDATE profiles
+                SET name = $name, name_fold = $fold, color = $color, follows_all_sources = $all, default_filter = $filter
+                WHERE id = $id;
+                """,
+                ("$id", profile.Id),
+                ("$name", profile.Name),
+                ("$fold", LibraryCatalogStore.Fold(profile.Name)),
+                ("$color", profile.Color),
+                ("$all", profile.FollowsAllSources ? 1 : 0),
+                ("$filter", (object?)profile.DefaultFilterJson ?? DBNull.Value));
+            if (updated == 0)
+            {
+                return false;
+            }
+
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "DELETE FROM profile_sources WHERE profile_id = $id;",
+                ("$id", profile.Id));
+            WriteProfileSources(connection, transaction, profile);
+            return true;
+        });
+    }
+
+    /// <summary>Deletes the profile with this id and its chosen sources. False when there is none.</summary>
+    public bool DeleteProfile(string id)
+    {
+        return Commit((connection, transaction) =>
+        {
+            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM profile_sources WHERE profile_id = $id;", ("$id", id));
+            return LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM profiles WHERE id = $id;", ("$id", id)) > 0;
+        });
+    }
+
+    /// <summary>The chosen sources of a profile that has a chosen list; one that follows all sources has no rows.</summary>
+    private static void WriteProfileSources(SqliteConnection connection, SqliteTransaction transaction, LibraryCatalogProfile profile)
+    {
+        if (profile.FollowsAllSources)
+        {
+            return;
+        }
+
+        foreach (var sourceId in profile.SourceIds.Distinct(StringComparer.Ordinal))
+        {
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "INSERT INTO profile_sources (profile_id, source_id) VALUES ($profile, $source);",
+                ("$profile", profile.Id),
+                ("$source", sourceId));
+        }
+    }
+
+    /// <summary>The profile with <paramref name="id"/>, or every profile when it is null, in their order, each with its chosen sources.</summary>
+    private static List<LibraryCatalogProfile> ReadProfileRows(SqliteConnection connection, SqliteTransaction transaction, string? id)
+    {
+        var where = id == null ? string.Empty : "WHERE id = $id";
+        var rows = new List<(string Id, string Name, string Color, bool FollowsAll, string? DefaultFilter)>();
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = $"""
+                SELECT id, name, color, follows_all_sources, default_filter
+                FROM profiles
+                {where}
+                ORDER BY position;
+                """;
+            if (id != null)
+            {
+                command.Parameters.AddWithValue("$id", id);
+            }
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetInt32(3) != 0,
+                    reader.IsDBNull(4) ? null : reader.GetString(4)));
+            }
+        }
+
+        Dictionary<string, List<string>> sourcesByProfile;
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = id == null
+                ? "SELECT profile_id, source_id FROM profile_sources ORDER BY profile_id, source_id;"
+                : "SELECT profile_id, source_id FROM profile_sources WHERE profile_id = $id ORDER BY source_id;";
+            if (id != null)
+            {
+                command.Parameters.AddWithValue("$id", id);
+            }
+
+            sourcesByProfile = LibraryCatalogStore.ReadGroups(command);
+        }
+
+        return rows
+            .Select(row => new LibraryCatalogProfile
+            {
+                Id = row.Id,
+                Name = row.Name,
+                Color = row.Color,
+                FollowsAllSources = row.FollowsAll,
+                SourceIds = row.FollowsAll ? [] : sourcesByProfile.GetValueOrDefault(row.Id) ?? [],
+                DefaultFilterJson = row.DefaultFilter
+            })
+            .ToList();
     }
 
     public bool SetThumbnail(string itemId, string? revision, int? width, int? height)
@@ -1194,8 +1383,8 @@ public sealed class LibraryCatalogSession
         Commit((connection, transaction) =>
         {
             changes.Clear();
-            var rows = ReadItemRows(connection, transaction, ids, "id, full_path, is_favorite, is_blacklisted", reader =>
-                (FullPath: reader.GetString(1), IsFavorite: reader.GetInt32(2) != 0, IsBlacklisted: reader.GetInt32(3) != 0));
+            var rows = ReadItemRows(connection, transaction, ids, "id, full_path, is_favorite, is_blacklisted, source_id", reader =>
+                (FullPath: reader.GetString(1), IsFavorite: reader.GetInt32(2) != 0, IsBlacklisted: reader.GetInt32(3) != 0, SourceId: reader.GetString(4)));
             using var update = connection.CreateCommand();
             update.Transaction = transaction;
             update.CommandText = "UPDATE items SET is_favorite = $favorite, is_blacklisted = $blacklisted WHERE id = $id;";
@@ -1216,6 +1405,7 @@ public sealed class LibraryCatalogSession
                 {
                     Id = id,
                     FullPath = before.FullPath,
+                    SourceId = before.SourceId,
                     IsFavorite = isFavorite,
                     IsBlacklisted = isBlacklisted,
                     PreviousIsFavorite = before.IsFavorite,
@@ -1260,8 +1450,8 @@ public sealed class LibraryCatalogSession
         Commit((connection, transaction) =>
         {
             changes.Clear();
-            var rows = ReadItemRows(connection, transaction, ids, "id, full_path, rating", reader =>
-                (FullPath: reader.GetString(1), RatingHalfStars: reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2)));
+            var rows = ReadItemRows(connection, transaction, ids, "id, full_path, rating, source_id", reader =>
+                (FullPath: reader.GetString(1), RatingHalfStars: reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2), SourceId: reader.GetString(3)));
             using var update = connection.CreateCommand();
             update.Transaction = transaction;
             update.CommandText = "UPDATE items SET rating = $rating WHERE id = $id;";
@@ -1279,6 +1469,7 @@ public sealed class LibraryCatalogSession
                 {
                     Id = id,
                     FullPath = before.FullPath,
+                    SourceId = before.SourceId,
                     RatingHalfStars = halfStars,
                     PreviousRatingHalfStars = before.RatingHalfStars
                 };
@@ -2634,7 +2825,7 @@ public sealed class LibraryCatalogSession
     {
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT item_id, name FROM item_tags ORDER BY item_id, position;";
-        return LibraryCatalogStore.ReadTagGroups(command);
+        return LibraryCatalogStore.ReadGroups(command);
     }
 
     private static List<LibraryCatalogTag> ReadCatalogTags(SqliteConnection connection)
@@ -2710,7 +2901,7 @@ public sealed class LibraryCatalogSession
         using var command = connection.CreateCommand();
         command.CommandText = $"SELECT item_id, name FROM item_tags WHERE item_id IN ({string.Join(", ", names)}) ORDER BY item_id, position;";
         args.Bind(command);
-        var tagsByItem = LibraryCatalogStore.ReadTagGroups(command);
+        var tagsByItem = LibraryCatalogStore.ReadGroups(command);
         foreach (var item in items)
         {
             if (tagsByItem.TryGetValue(item.Id, out var tags))
@@ -2905,12 +3096,13 @@ public sealed class LibraryCatalogSession
     private static double ReadBaselineLoudness(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = """
+        command.CommandText = $"""
             SELECT integrated_loudness
             FROM items
             WHERE media_type = 0
               AND has_audio = 1
               AND integrated_loudness IS NOT NULL
+              AND {InEnabledSourceSql}
             ORDER BY integrated_loudness ASC;
             """;
         var values = new List<double>();
@@ -3083,6 +3275,10 @@ public sealed class CatalogItemFlagChange
 {
     public string Id { get; init; } = string.Empty;
     public string FullPath { get; init; } = string.Empty;
+
+    /// <summary>The source the item is in, so a profile that hides it can leave the change out.</summary>
+    public string SourceId { get; init; } = string.Empty;
+
     public bool IsFavorite { get; init; }
     public bool IsBlacklisted { get; init; }
     public bool PreviousIsFavorite { get; init; }
@@ -3096,6 +3292,10 @@ public sealed class CatalogItemRatingChange
 {
     public string Id { get; init; } = string.Empty;
     public string FullPath { get; init; } = string.Empty;
+
+    /// <summary>The source the item is in, so a profile that hides it can leave the change out.</summary>
+    public string SourceId { get; init; } = string.Empty;
+
     public int? RatingHalfStars { get; init; }
     public int? PreviousRatingHalfStars { get; init; }
 

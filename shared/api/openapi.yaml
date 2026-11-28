@@ -845,6 +845,185 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
+  /api/profiles:
+    get:
+      summary: Get the profiles
+      description: |
+        Every profile, in the order they were added, so the default profile comes first.
+      operationId: getProfiles
+      responses:
+        "200":
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProfileResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/profiles/create:
+    post:
+      summary: Add a profile after every other one
+      description: |
+        Gives the profile a new id and the default profile's default filter, and publishes `profilesChanged` with
+        every profile and the request's `clientId`.
+      operationId: postProfileCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProfileRequest"
+      responses:
+        "200":
+          description: The new profile, with its id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "400":
+          description: The name is empty, or the color isn't `#rrggbb`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Another profile has the name, ignoring case, and `error` names it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/profiles/{profileId}/update:
+    post:
+      summary: Change a profile
+      description: |
+        Changes only the fields the request names, keeping the others, and publishes `profilesChanged` with every
+        profile and the request's `clientId`. A profile may take its own name in another case.
+      operationId: postProfileUpdate
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: The profile as changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "400":
+          description: The name is empty, the color isn't `#rrggbb`, the default filter isn't an object, or the request gives the default profile a chosen list of sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No profile has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Another profile has the name, ignoring case, and `error` names it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/profiles/{profileId}/delete:
+    post:
+      summary: Delete a profile
+      description: |
+        Deletes the profile and its chosen sources, and publishes `profilesChanged` with the remaining profiles and
+        the request's `clientId`.
+      operationId: postProfileDelete
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteProfileRequest"
+      responses:
+        "200":
+          description: The profile is deleted
+        "400":
+          description: The profile is the default one, which can't be deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No profile has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/sources:
     get:
       summary: Get library sources with global enabled states
@@ -1094,8 +1273,19 @@ paths:
       summary: Get library statistics
       description: |
         Returns global totals and per-source totals from SQL aggregates, plus `baselineLoudnessLufs`, the
-        75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify).
+        75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify). The global
+        totals count only enabled sources, and of those only the profile's; each source's own totals count all its
+        items, and the baseline covers every enabled source, whatever the profile.
       operationId: getLibraryStats
+      parameters:
+        - name: profileId
+          in: query
+          required: false
+          description: >-
+            The device's active profile, whose sources the global totals keep to. Omitted, or an id the library
+            doesn't have, is the default profile, which shows every source.
+          schema:
+            type: string
       responses:
         "200":
           description: Library statistics
@@ -3188,6 +3378,11 @@ components:
             selection; an empty list answers none. Ids match exactly.
           items:
             type: string
+        profileId:
+          type: string
+          nullable: true
+          description: >-
+            As in `LibraryQueryRequest`.
 
     LibraryIdsQueryResponse:
       type: object
@@ -3279,6 +3474,12 @@ components:
           maximum: 10000
           default: 100
           description: Up to 10,000, so a client can reload the window it has loaded in one request.
+        profileId:
+          type: string
+          nullable: true
+          description: >-
+            The device's active profile, whose sources the page and both counts keep to. Omitted, null, or an id the
+            library doesn't have is the default profile, which shows every source.
 
     LibraryQueryResponse:
       type: object
@@ -3446,6 +3647,12 @@ components:
             - $ref: "#/components/schemas/RandomPickOptionsRequest"
             - type: "null"
           description: The options the pick combines. Omitted or null, every option takes its default.
+        profileId:
+          type: string
+          nullable: true
+          description: >-
+            The device's active profile, whose sources the pick and the cycle numbers keep to. Omitted, null, or an id
+            the library doesn't have is the default profile, which shows every source.
 
     RandomPickOptionsRequest:
       type: object
@@ -3841,6 +4048,7 @@ components:
             - $ref: "#/components/schemas/ItemTagsChangedPayload"
             - $ref: "#/components/schemas/TagCatalogChangedPayload"
             - $ref: "#/components/schemas/PresetCatalogChangedPayload"
+            - $ref: "#/components/schemas/ProfilesChangedPayload"
             - $ref: "#/components/schemas/SourceStateChangedPayload"
             - $ref: "#/components/schemas/RefreshStatusChangedPayload"
             - $ref: "#/components/schemas/StreamOpenedPayload"
@@ -3850,6 +4058,7 @@ components:
       required:
         - itemId
         - path
+        - sourceId
         - isFavorite
         - isBlacklisted
         - previousIsFavorite
@@ -3869,6 +4078,9 @@ components:
         previousIsBlacklisted:
           type: boolean
           description: Blacklist before this change.
+        sourceId:
+          type: string
+          description: The source the item is in, so a client can leave out a change to an item its profile hides.
         clientId:
           type: string
           nullable: true
@@ -3912,6 +4124,7 @@ components:
       type: object
       required:
         - itemId
+        - sourceId
         - isFavorite
         - isBlacklisted
         - previousIsFavorite
@@ -3919,6 +4132,9 @@ components:
       properties:
         itemId:
           type: string
+        sourceId:
+          type: string
+          description: The source the item is in, so a client can leave out a change to an item its profile hides.
         isFavorite:
           type: boolean
         isBlacklisted:
@@ -3963,11 +4179,15 @@ components:
       type: object
       required:
         - itemId
+        - sourceId
         - rating
         - previousRating
       properties:
         itemId:
           type: string
+        sourceId:
+          type: string
+          description: The source the item is in, so a client can leave out a change to an item its profile hides.
         rating:
           type: number
           format: double
@@ -3998,6 +4218,7 @@ components:
       required:
         - itemId
         - path
+        - sourceId
         - rating
         - previousRating
       properties:
@@ -4005,6 +4226,9 @@ components:
           type: string
         path:
           type: string
+        sourceId:
+          type: string
+          description: The source the item is in, so a client can leave out a change to an item its profile hides.
         rating:
           type: number
           format: double
@@ -4199,6 +4423,114 @@ components:
           type: string
           nullable: true
           description: The client making the change, which `presetCatalogChanged` carries back.
+
+    ProfileResponse:
+      type: object
+      description: A named view of the library that shows every source, following newly added ones, or a chosen list.
+      required:
+        - id
+        - name
+        - color
+        - isDefault
+        - followsAllSources
+        - sourceIds
+        - defaultFilter
+      properties:
+        id:
+          type: string
+          description: The profile's id, which the profile routes and each scoped request's `profileId` use.
+        name:
+          type: string
+        color:
+          type: string
+          description: The profile's color as lower-case `#rrggbb`.
+        isDefault:
+          type: boolean
+          description: Whether this is the default profile, which always shows every source and can't be deleted.
+        followsAllSources:
+          type: boolean
+          description: True when the profile shows every source, newly added ones included.
+        sourceIds:
+          type: array
+          description: The chosen sources' ids, empty while the profile follows all sources.
+          items:
+            type: string
+        defaultFilter:
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: >-
+            The profile's default filter, which None and Clear all load, as it was saved, or null for the built-in
+            default filter. A new profile starts with the default profile's.
+
+    CreateProfileRequest:
+      type: object
+      required:
+        - name
+        - color
+      properties:
+        name:
+          type: string
+          description: Trimmed. Refused when empty or another profile's, ignoring case.
+        color:
+          type: string
+          description: The profile's color as `#rrggbb`, in either case.
+        followsAllSources:
+          type: boolean
+          default: true
+          description: True for every source, following newly added ones, false for the chosen list in `sourceIds`.
+        sourceIds:
+          type: array
+          nullable: true
+          description: The chosen sources, read only when `followsAllSources` is false.
+          items:
+            type: string
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `profilesChanged` carries back.
+
+    UpdateProfileRequest:
+      type: object
+      description: Each field omitted or null keeps the profile's own.
+      properties:
+        name:
+          type: string
+          nullable: true
+          description: Trimmed. Refused when empty or another profile's, ignoring case; the profile's own in another case is taken.
+        color:
+          type: string
+          nullable: true
+          description: The profile's color as `#rrggbb`, in either case.
+        followsAllSources:
+          type: boolean
+          nullable: true
+          description: >-
+            True for every source, following newly added ones, false for a chosen list. The default profile always
+            follows all sources.
+        sourceIds:
+          type: array
+          nullable: true
+          description: The chosen sources, read whenever the profile has a chosen list after the update.
+          items:
+            type: string
+        defaultFilter:
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: The profile's new default filter.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `profilesChanged` carries back.
+
+    DeleteProfileRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `profilesChanged` carries back.
 
     TagCategorySnapshot:
       type: object
@@ -4634,6 +4966,12 @@ components:
         scanFullLibrary:
           type: boolean
           description: When true, scan every item. When false, scan enabled sources only.
+        profileId:
+          type: string
+          nullable: true
+          description: >-
+            The device's active profile, whose sources the scan keeps to. Omitted, null, or an id the library doesn't
+            have is the default profile, which shows every source.
 
     AutoTagScanResponse:
       type: object
@@ -5016,6 +5354,23 @@ components:
           type: string
           nullable: true
           description: The preset created, updated, renamed, or deleted, or null when the presets were reordered.
+        clientId:
+          type: string
+          nullable: true
+          description: The client whose request made the change, so it can tell its own change from another device's.
+
+    ProfilesChangedPayload:
+      type: object
+      description: Published by each profile create, update, and delete.
+      required:
+        - profiles
+        - clientId
+      properties:
+        profiles:
+          type: array
+          description: Every profile after the change, in the order `GET /api/profiles` gives them.
+          items:
+            $ref: "#/components/schemas/ProfileResponse"
         clientId:
           type: string
           nullable: true

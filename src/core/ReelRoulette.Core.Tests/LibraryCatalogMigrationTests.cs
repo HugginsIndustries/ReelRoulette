@@ -36,7 +36,11 @@ public sealed class LibraryCatalogMigrationTests
             sources: [new SeedSource("on", "/media", "On")],
             items:
             [
-                new SeedItem("a", "/media/Beta.mp4") { SourceId = "on", PlayCount = 2, LastWriteTimeUtc = Modified, Tags = ["Ann"] },
+                // A catalog from version 9 holds its own date added; an older one gets the modified time from the 8 to 9 step.
+                new SeedItem("a", "/media/Beta.mp4")
+                {
+                    SourceId = "on", PlayCount = 2, LastWriteTimeUtc = Modified, DateAddedUtc = Modified, Tags = ["Ann"]
+                },
                 new SeedItem("b", "/media/alpha.jpg") { SourceId = "on", MediaType = 1 }
             ],
             tags: [new SeedTag("Ann")],
@@ -55,6 +59,7 @@ public sealed class LibraryCatalogMigrationTests
             new Dictionary<string, DateTime?> { ["a"] = Modified, ["b"] = null },
             CatalogSeed.ReadDatesAdded(opened.Session.DatabasePath));
         AssertUpgradedNightPreset(Assert.Single(opened.Session.ReadPresets()));
+        AssertOnlyTheDefaultProfile(opened.Session);
     }
 
     [Theory]
@@ -67,7 +72,7 @@ public sealed class LibraryCatalogMigrationTests
         var export = CatalogSeed.WriteAtVersion(
             source.Path,
             version,
-            items: [new SeedItem("import", "/clips/Import.mp4") { LastWriteTimeUtc = Modified }],
+            items: [new SeedItem("import", "/clips/Import.mp4") { LastWriteTimeUtc = Modified, DateAddedUtc = Modified }],
             standalone: true,
             presets: [NightPreset(version)]);
 
@@ -82,6 +87,7 @@ public sealed class LibraryCatalogMigrationTests
         Assert.Null(opened.MigratedFromSchemaVersion);
         Assert.Equal("import", Assert.Single(opened.Snapshot()!.Items).Id);
         AssertUpgradedNightPreset(Assert.Single(opened.Session!.ReadPresets()));
+        AssertOnlyTheDefaultProfile(opened.Session);
     }
 
     // Full filter states in the shapes presets were saved in before the flag modes, with no mode fields, one with modes
@@ -397,6 +403,16 @@ public sealed class LibraryCatalogMigrationTests
     private static SeedPreset NightPreset(int schemaVersion) => schemaVersion < 5
         ? new SeedPreset("Night", """{"favoritesOnly":true}""")
         : new SeedPreset("Night", """{"favoritesMode":"only","blacklistedMode":"excluded"}""");
+
+    /// <summary>An upgraded catalog has the default profile, Main in the brand orange, which shows every source.</summary>
+    private static void AssertOnlyTheDefaultProfile(LibraryCatalogSession session)
+    {
+        var profile = Assert.Single(session.ReadProfiles());
+        Assert.Equal(
+            (LibraryCatalogStore.DefaultProfileId, "Main", "#ef7f22", true, (string?)null),
+            (profile.Id, profile.Name, profile.Color, profile.FollowsAllSources, profile.DefaultFilterJson));
+        Assert.Empty(profile.SourceIds);
+    }
 
     private static void AssertUpgradedNightPreset(LibraryCatalogPreset preset)
     {

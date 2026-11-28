@@ -137,23 +137,26 @@ Reconnect/resync behavior:
   - The WebUI tells another device's changes from its own by `clientId`, a missing one counting as another device's, and what changed by comparing the reloaded list with each preset as it held it when the event came.
   - When another device changes the filter of the preset the page has applied unchanged, or a resync finds it changed, the page applies the new filter.
 - WebUI Filter and Tags tabs: while it shows, the Filter tab loads its sources, tags, and presets again on `tagCatalogChanged`, `sourceStateChanged`, and `resyncRequired`, and while it shows without unsaved changes, the Tags tab loads its tags again on `tagCatalogChanged` and `resyncRequired`, a burst sharing one load. A hidden tab loads when it next shows. `sourceStateChanged` is published only when a source is enabled or disabled.
+- WebUI Stats tab and loudness baseline: `sourceStateChanged` loads the Stats tab again while it shows, and the library's loudness baseline, since the library totals and the baseline count only enabled sources.
 - When the server starts stopping, it ends every open stream normally. Clients reconnect as after any dropped stream.
 - `playbackRecorded` includes `itemId`, `playCount`, `lastPlayedUtc`, and `previousLastPlayedUtc`.
   - `previousLastPlayedUtc` is the last-played time from before this play, and is null when the file had never been played.
   - Clients copy `playCount` and `lastPlayedUtc` onto a loaded tile when those fields are present.
   - The WebUI's Stats tab shows `previousLastPlayedUtc` on the current file, holding an event that comes before its item starts, as a library play's does, until it starts.
-- `itemStateChanged` includes `itemId`, `path`, `isFavorite`, `isBlacklisted`, and `previousIsFavorite` and `previousIsBlacklisted`, the values from before this change, and `clientId`, the client that made the change, from its favorite or blacklist request, or null when the request named none.
+- `itemStateChanged` includes `itemId`, `path`, `sourceId`, the source the item is in, `isFavorite`, `isBlacklisted`, and `previousIsFavorite` and `previousIsBlacklisted`, the values from before this change, and `clientId`, the client that made the change, from its favorite or blacklist request, or null when the request named none.
   - The event goes to every client, the one that made the change too.
   - The WebUI uses the previous values for an item outside the loaded window, which reloads that window only when the change brings the item into the filter or takes it out.
-- `itemRatingChanged` includes `itemId`, `path`, `rating`, and `previousRating`, the rating before this change, each in stars or null for none, and `clientId`, the client that made the change, from its rating request, or null when the request named none.
+- `itemRatingChanged` includes `itemId`, `path`, `sourceId`, `rating`, and `previousRating`, the rating before this change, each in stars or null for none, and `clientId`, the client that made the change, from its rating request, or null when the request named none.
   - `POST /api/rating` publishes it only when the rating changed, and it goes to every client, the one that made the change too.
   - The WebUI's Stats tab, and the player's star and the stars it opens, show the new rating at once, unless a change made on this device is still waiting or on its way, the Stats tab loads again, and the WebUI pops up a change whose `clientId` isn't its own, one without a client id counting as another device's.
   - The Library tab puts the new rating on a loaded tile, and reloads its loaded window only when the change can alter what it shows, its order, or how many items match: under Only unrated or a minimum rating when `rating` takes a loaded tile out, or `rating` and `previousRating` show an item outside it comes in or goes out, and under the Rating sort for any change.
-- `bulkItemStateChanged`, from `POST /api/bulk/item-state`, includes `flag` (`favorite` or `blacklist`) and `value`, what the request set, `count`, how many of the named items are in the library, `items`, the ones whose favorite or blacklist changed, each with `itemId`, `isFavorite`, `isBlacklisted`, `previousIsFavorite`, and `previousIsBlacklisted`, and `clientId`, from the request, or null when it named none.
+- `bulkItemStateChanged`, from `POST /api/bulk/item-state`, includes `flag` (`favorite` or `blacklist`) and `value`, what the request set, `count`, how many of the named items are in the library, `items`, the ones whose favorite or blacklist changed, each with `itemId`, `sourceId`, `isFavorite`, `isBlacklisted`, `previousIsFavorite`, and `previousIsBlacklisted`, and `clientId`, from the request, or null when it named none.
   - It is published once for the whole request, when `count` is above 0, in place of one `itemStateChanged` per item, and goes to every client.
   - The WebUI updates its loaded tiles and the playing item from `items`, and a client whose `clientId` isn't the event's pops up one message for the batch, such as "Added 3 items to favorites on another device".
-- `bulkItemRatingChanged`, from `POST /api/bulk/rating`, includes `rating`, the rating the request set in stars or null for none, `count`, `items`, the ones whose rating changed, each with `itemId`, `rating`, and `previousRating`, and `clientId`, published once for the request when `count` is above 0.
+- `bulkItemRatingChanged`, from `POST /api/bulk/rating`, includes `rating`, the rating the request set in stars or null for none, `count`, `items`, the ones whose rating changed, each with `itemId`, `sourceId`, `rating`, and `previousRating`, and `clientId`, published once for the request when `count` is above 0.
   - The WebUI applies it as it applies `itemRatingChanged` to each item, and another client pops up one message for the batch, such as "Rated 3 items 3.5 stars on another device".
+- The item events carry each item's `sourceId` so that a client can leave out changes to items in sources its profile hides, since every event goes to every client.
+- `profilesChanged`, from each profile create, update, and delete, includes `profiles`, every profile after the change, as `GET /api/profiles` gives them, and `clientId`, from the request, or null when it named none.
 - `itemsRemoved`, from `POST /api/library/delete-files` and `POST /api/duplicates/apply`, includes `itemIds`, the items removed from the library, and is published only when it removed any. The WebUI reloads its loaded library window, its Stats tab, and the library's loudness baseline once.
 - `itemTagsChanged` includes `resolvedItemIds`, the catalog item ids of the files the change applies to. The WebUI matches tiles and its own saves by them.
 - The WebUI matches every item event to loaded tiles and the playing item by item id only, so two files whose paths differ only in case stay apart. It names items by id in favorite, blacklist, rating, record-playback, and tag-editor requests.
@@ -202,6 +205,10 @@ Reconnect/resync behavior:
 - `POST /api/presets/{presetId}/rename`
 - `POST /api/presets/reorder`
 - `POST /api/presets/{presetId}/delete`
+- `GET /api/profiles`
+- `POST /api/profiles/create`
+- `POST /api/profiles/{profileId}/update`
+- `POST /api/profiles/{profileId}/delete`
 - `POST /api/random`
 - `POST /api/random/cycle`
 - `POST /api/random/reset`
@@ -238,7 +245,7 @@ Reconnect/resync behavior:
 - When both are supplied, the server resolves eligibility from **`filterState` first** (inline wins).
 - A `presetId` of `all-media`, which is never a preset's id, picks with the default filter.
 - Without a `filterState`, any other `presetId` that is no preset's id, a preset's name included, returns **404**.
-- Eligibility is the library list filter for enabled sources, plus the request's video and photo options.
+- Eligibility is the library list filter for enabled sources and the sources of the request's `profileId`, plus the request's video and photo options.
 - When nothing is eligible, the answer's `item` is null and its cycle numbers are all 0.
 - A library with no items returns **503**, as does one the server can't read, each without a `code`.
 - Clients send a full `filterState` on every random request.
@@ -315,6 +322,24 @@ Reconnect/resync behavior:
 - When their preset write fails, the presets the server holds still change, and `last.log` gets a warning.
 - Presets live in a catalog table, and core settings stay in `core-settings.json`.
 
+#### Profiles
+
+- A profile is a named view of the library that shows every source, following newly added ones, or a chosen list, with its own color and default filter.
+- `GET /api/profiles` lists them as `ProfileResponse`, in the order they were added, so the default profile comes first: `id`, `name`, `color` as lower-case `#rrggbb`, `isDefault`, `followsAllSources`, `sourceIds`, the chosen list, empty while it follows all sources, and `defaultFilter`, a filter state, or null for the built-in default filter.
+- The default profile, `"Main"` in `#ef7f22` in a new library, always shows every source and can't be deleted; its name, color, and default filter change like any profile's.
+- `POST /api/profiles/create` (`{ name, color, followsAllSources?, sourceIds?, clientId? }`) adds a profile after every other one, with a new id and the default profile's default filter, and answers with it.
+- `POST /api/profiles/{profileId}/update` (`{ name?, color?, followsAllSources?, sourceIds?, defaultFilter?, clientId? }`) changes only the fields it names and answers with the profile; `sourceIds` replaces the chosen list whenever the profile has one after the update, and following all sources drops it.
+- `POST /api/profiles/{profileId}/delete` (an optional `{ clientId? }`) deletes the profile and its chosen list, answering 200 with no body.
+- Names are trimmed, a name another profile has, ignoring case, is **409** with `error` naming it, and a profile may take its own name in another case.
+- An empty name, a color that isn't `#rrggbb`, a default filter that isn't an object, a chosen list for the default profile, and deleting the default profile are **400**, and an id no profile has is **404**.
+- A write the catalog doesn't take answers **500**, changes and publishes nothing, and writes a `last.log` warning.
+- Each write publishes `profilesChanged` with every profile and the request's `clientId`.
+- Profiles live in catalog tables, so they travel with catalog export, import, and backups.
+- `POST /api/library/query`, `POST /api/library/query-ids`, `POST /api/random`, `POST /api/random/cycle`, and `POST /api/autotag/scan` take an optional `profileId` in their body, and `GET /api/library/stats` as a query parameter, and keep to that profile's sources, together with enabled sources and the filter.
+  - A filter naming only sources the profile hides finds nothing.
+  - No `profileId`, or one the library doesn't have, as for a profile another device deleted, is the default profile, which shows every source, and `last.log` gets one line the first time each such id comes.
+  - Item reads, plays, media, thumbnails, and the event stream name no profile.
+
 #### Direct item play
 
 - `POST /api/play/{itemId}` requests playback by persisted library **`id`** (the path segment is **not** `fullPath`).
@@ -350,7 +375,7 @@ Reconnect/resync behavior:
 #### Library queries, items, and ratings
 
 - `POST /api/library/query` — browse path for filter, search, sort, and paging.
-  - Order is enabled sources, then a filename or relative-path substring search, then `filterState`, then sort.
+  - Order is enabled sources and the sources of `profileId`, then a filename or relative-path substring search, then `filterState`, then sort.
   - The body accepts:
     - `filterState` (omitted or null applies no filter predicates).
     - `search`.
@@ -358,12 +383,13 @@ Reconnect/resync behavior:
     - `sortDescending` (default false; direction applies only to the primary key).
     - `offset` (default 0).
     - `limit` (default 100, maximum 10,000, so a client can reload the window it has loaded in one request).
+    - `profileId` (the device's active profile, as Profiles describes).
   - Search is an invariant-lowercase substring and stays accent-sensitive.
   - Selected and excluded tags match an item's tags, and find their category, by the invariant-lowercase fold the catalog identifies tags by.
   - Name sort is accent-sensitive and ignores case.
   - Null last-played, duration, date added, date created, and rating sort as the minimum.
   - Ties break by filename ascending, then item id ascending, including when the primary sort is descending.
-  - The response has `items`, `totalCount` (after search and filter), and `searchBaselineCount` (after search, before filter).
+  - The response has `items`, `totalCount` (after search and filter), and `searchBaselineCount` (after search, before filter), both within the profile's sources.
   - Items carry `duration` as `hh:mm:ss` in whole seconds and `durationSeconds` as a number when the catalog has a duration, `integratedLoudness` in LUFS when the loudness scan has measured it, `peakDb`, the true peak in dBTP, when the scan has measured it, and `dateAddedUtc` and `dateCreatedUtc`, the date added and the file's modified time as ISO UTC strings, when the catalog has them.
     - A missing value is left out rather than sent as null.
   - Listed items include `hasThumbnail`, `thumbnailVersion`, `thumbnailWidth`, and `thumbnailHeight` for that page only.
@@ -372,10 +398,10 @@ Reconnect/resync behavior:
   - `thumbnailVersion` is present when it does, is opaque, and changes whenever the JPEG is written again.
   - Missing files stay in the result.
   - Every page returns both counts.
-  - The server caches them by catalog revision, search, and filter, and every committed catalog write raises the revision, so a later page of the same query does not count again.
+  - The server caches them by catalog revision, search, the profile's sources, and filter, and every committed catalog write raises the revision, so a later page of the same query does not count again.
   - Each request writes one `Library query` line to `last.log` with its elapsed time.
   - Invalid sort, paging, or a non-object `filterState` returns **400** `{ error }`.
-- `POST /api/library/query-ids` — the catalog id of every item that `POST /api/library/query` with the same `filterState` and `search` matches, as `{ ids }`, for selecting all of them: no paging, no page cap, no order, and no thumbnail fields.
+- `POST /api/library/query-ids` — the catalog id of every item that `POST /api/library/query` with the same `filterState`, `search`, and `profileId` matches, as `{ ids }`, for selecting all of them: no paging, no page cap, no order, and no thumbnail fields.
   - With `itemIds`, only those of them that match, each once, for checking which selected items still do; ids match exactly, and an empty list answers none.
   - Each request writes one `Library ids query` line to `last.log` with the count, how many ids `itemIds` named when the request has it, and its elapsed time.
   - A non-object `filterState` returns **400**.
@@ -404,10 +430,11 @@ Reconnect/resync behavior:
   - A missing item returns **404**.
 - `GET /api/library/catalog-checkpoint` — a standalone SQLite copy of the live catalog, produced while `library.db` is open. The response is `application/octet-stream` and does not depend on a WAL sidecar. No client calls it.
 - `GET /api/library/stats` — global totals and per-source totals from one SQL pass grouped by source id and media type, plus `baselineLoudnessLufs`.
-  - The global totals include `rated`, the items with a rating.
+  - The global totals count only enabled sources, as lists and random picks do, and with `?profileId=` only that profile's, and include `rated`, the items with a rating.
+  - Each source's own totals count all its items, a disabled source's included.
   - An item counts toward the source whose id it holds, ignoring case, and is a photo when its media type is photo and a video otherwise.
   - Durations are summed in whole seconds.
-  - The baseline is the 75th percentile of integrated loudness for videos that have audio, including items on disabled sources, and is −18 LUFS when none qualify.
+  - The baseline is the 75th percentile of integrated loudness for videos that have audio in enabled sources, whatever the profile, and is −18 LUFS when none qualify.
 - `POST /api/favorite`, `POST /api/blacklist`, `POST /api/record-playback`, and `POST /api/playback/clear-stats` update SQLite catalog rows.
   - Favorite, blacklist, and record-playback name the item in `itemId`, and clear-stats names items in `itemIds`, each by catalog id only, matched exactly as the server sends it, so a full path or an id in other casing finds no item, and favorite, blacklist, and record-playback answer **404** for an unknown id.
   - Favorite and blacklist take an optional `clientId`, which the WebUI sends and `itemStateChanged` carries back.
@@ -550,7 +577,7 @@ Reconnect/resync behavior:
 - `POST /api/duplicates/apply` deletes the non-kept files and catalog rows through the same code as `POST /api/library/delete-files`, and leaves the kept item.
   - A missing file is reported with its `itemId` and `fullPath`, and that row stays.
   - It publishes one `itemsRemoved` for the items it removed, when it removed any, or `resyncRequired` in its place past 1,000, writes delete files' `last.log` lines named `Duplicate apply`, and takes delete files' admin check, with the same **403** and warning line for any other caller.
-- `POST /api/autotag/scan` — body `scanFullLibrary`. The scan reads catalog rows. `scanFullLibrary: true` scans every item, and `false` scans enabled sources only (zero enabled sources scans nothing). Each matched file carries its `itemId` beside `fullPath`.
+- `POST /api/autotag/scan` — body `scanFullLibrary` and an optional `profileId`. The scan reads catalog rows. `scanFullLibrary: true` scans every item in the profile's sources, and `false` only those in enabled sources (zero enabled sources scans nothing). Each matched file carries its `itemId` beside `fullPath`.
   - A tag matches a file whose name, or path inside its source, contains the tag's name, ignoring case. The source's own folder isn't matched, so a tag named after it doesn't match every file in that source.
 - `POST /api/autotag/apply` returns `applied`, one entry per tag that was newly written, with only the files that gained that tag by item id in `changedItemIds`.
   - When any file gains a tag, it publishes one `itemTagsChanged` event per tag that was newly applied, listing only the files that gained that tag in `resolvedItemIds`, except that one `resyncRequired`, published after them, stands in for every tag's event that would list more than 1,000, and one `tagCatalogChanged` event.

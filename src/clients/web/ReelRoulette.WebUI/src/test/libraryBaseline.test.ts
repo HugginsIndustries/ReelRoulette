@@ -41,7 +41,7 @@ describe("library baseline", () => {
     expect(baseline.lufs.value).toBe(-27.8);
   });
 
-  it("loads again after each refresh, removal of items, and resync, which can change it", async () => {
+  it("loads again after each refresh, removal of items, source turned on or off, and resync, which can change it", async () => {
     vi.useFakeTimers();
     let next = -27.8;
     const { baseline, getJson, send } = setup(async () => stats(next));
@@ -52,10 +52,13 @@ describe("library baseline", () => {
     next = -25.4;
     await send("itemsRemoved");
     expect(baseline.lufs.value).toBe(-25.4);
+    next = -24.6;
+    await send("sourceStateChanged");
+    expect(baseline.lufs.value).toBe(-24.6);
     next = -25;
     await send("resyncRequired");
     expect(baseline.lufs.value).toBe(-25);
-    expect(getJson).toHaveBeenCalledTimes(4);
+    expect(getJson).toHaveBeenCalledTimes(5);
   });
 
   it("loads nothing while the server holds back or asks for pairing", async () => {

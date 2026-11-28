@@ -180,6 +180,8 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
   connection.on("itemRatingChanged", request);
   connection.on("bulkItemRatingChanged", request);
   connection.on("itemsRemoved", request);
+  // The library totals count only enabled sources.
+  connection.on("sourceStateChanged", request);
   connection.on("itemTagsChanged", request);
   connection.on("tagCatalogChanged", request);
   connection.on("refreshCompleted", request);

@@ -120,6 +120,7 @@ internal static class CatalogSeed
             7 => Schema7,
             8 => Schema8,
             9 => Schema9,
+            10 => Schema10,
             _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
         };
 
@@ -602,6 +603,29 @@ internal static class CatalogSeed
     private const string Schema9 =
         "CREATE TABLE items (\n" + Schema9ItemColumns + "\n);\n" + SharedTables + Schema5Presets +
         SortIndexes + "\n" + RatingSortIndexes + "\n" + DateSortIndexes;
+
+    /// <summary>Schema version 10 added the profile tables, with the default profile.</summary>
+    private const string Schema10 = Schema9 + "\n" + ProfileTables;
+
+    /// <summary>The profile tables from version 10, with the default profile the catalog seeds.</summary>
+    private const string ProfileTables =
+        """
+        CREATE TABLE profiles (
+            id TEXT PRIMARY KEY,
+            position INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            name_fold TEXT NOT NULL,
+            color TEXT NOT NULL,
+            follows_all_sources INTEGER NOT NULL,
+            default_filter TEXT NULL
+        );
+        CREATE TABLE profile_sources (
+            profile_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            PRIMARY KEY (profile_id, source_id)
+        );
+        INSERT INTO profiles VALUES ('default', 0, 'Main', 'main', '#ef7f22', 1, NULL);
+        """;
 
     /// <summary>The sort indexes every version from 3 has.</summary>
     private const string SortIndexes =

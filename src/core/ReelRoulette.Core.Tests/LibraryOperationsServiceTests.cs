@@ -266,8 +266,8 @@ public sealed class LibraryOperationsServiceTests
 
             var favorited = service.SetFavorite("item-1", isFavorite: true);
             Assert.NotNull(favorited);
-            Assert.Equal("item-1", favorited!.ItemId);
-            Assert.Equal(@"C:\media\movie.mp4", favorited.Path);
+            Assert.Equal("item-1", favorited!.Id);
+            Assert.Equal(@"C:\media\movie.mp4", favorited.FullPath);
             Assert.True(favorited.IsFavorite);
             Assert.False(favorited.IsBlacklisted);
             var unchanged = service.SetFavorite("item-1", isFavorite: true);
@@ -279,8 +279,8 @@ public sealed class LibraryOperationsServiceTests
 
             var blacklisted = service.SetBlacklist("item-2", isBlacklisted: true);
             Assert.NotNull(blacklisted);
-            Assert.Equal("item-2", blacklisted!.ItemId);
-            Assert.Equal(@"C:\media\other.mp4", blacklisted.Path);
+            Assert.Equal("item-2", blacklisted!.Id);
+            Assert.Equal(@"C:\media\other.mp4", blacklisted.FullPath);
             Assert.True(blacklisted.IsBlacklisted);
             Assert.False(blacklisted.IsFavorite);
 
@@ -606,7 +606,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void GetLibraryStats_ShouldAggregateGlobalAndPerSourceTotals()
+    public void GetLibraryStats_TotalsLeaveOutDisabledSources_WhileEachSourceCountsItsOwn()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -648,16 +648,23 @@ public sealed class LibraryOperationsServiceTests
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
+            // The totals leave out the disabled source's photo, as lists and random picks do.
             Assert.Equal(2, stats.Global.TotalVideos);
-            Assert.Equal(1, stats.Global.TotalPhotos);
-            Assert.Equal(3, stats.Global.TotalMedia);
+            Assert.Equal(0, stats.Global.TotalPhotos);
+            Assert.Equal(2, stats.Global.TotalMedia);
             Assert.Equal(1, stats.Global.Favorites);
             Assert.Equal(1, stats.Global.Blacklisted);
-            Assert.Equal(2, stats.Global.UniquePlayedMedia);
+            Assert.Equal(1, stats.Global.UniquePlayedMedia);
             Assert.Equal(1, stats.Global.NeverPlayedMedia);
-            Assert.Equal(3, stats.Global.TotalPlays);
+            Assert.Equal(2, stats.Global.TotalPlays);
             Assert.Equal(1, stats.Global.VideosWithAudio);
             Assert.Equal(1, stats.Global.VideosWithoutAudio);
+
+            // Each source's own row still counts its items, a disabled one's included.
+            var sourceB = Assert.Single(stats.Sources, source => source.SourceId == "src-b");
+            Assert.False(sourceB.IsEnabled);
+            Assert.Equal(1, sourceB.TotalPhotos);
+            Assert.Equal(1, sourceB.TotalMedia);
 
             var sourceA = Assert.Single(stats.Sources, source => source.SourceId == "src-a");
             Assert.Equal(2, sourceA.TotalVideos);
@@ -761,10 +768,11 @@ public sealed class LibraryOperationsServiceTests
             var stats = service.GetLibraryStats();
 
             // Media type photo is a photo and any other is a video, whatever the extension. An item
-            // counts toward the source whose id it holds, ignoring case, and not by its path.
-            Assert.Equal(3, stats.Global.TotalVideos);
+            // counts toward the source whose id it holds, ignoring case, and not by its path, and one
+            // in no source counts toward neither.
+            Assert.Equal(2, stats.Global.TotalVideos);
             Assert.Equal(1, stats.Global.TotalPhotos);
-            Assert.Equal(4, stats.Global.TotalMedia);
+            Assert.Equal(3, stats.Global.TotalMedia);
             Assert.Equal(1, stats.Global.UniquePlayedMedia);
 
             var sourceA = Assert.Single(stats.Sources, source => source.SourceId == "src-a");

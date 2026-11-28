@@ -185,9 +185,35 @@ public sealed class LibraryCatalogPreset
     public string FilterStateJson { get; init; } = "{}";
 }
 
+/// <summary>
+/// A profile: a named view of the library that shows every source, following newly added ones, or a chosen list.
+/// </summary>
+public sealed class LibraryCatalogProfile
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>The profile's color as <c>#rrggbb</c>.</summary>
+    public string Color { get; init; } = string.Empty;
+
+    public bool FollowsAllSources { get; init; } = true;
+
+    /// <summary>The chosen sources' ids, empty while the profile follows all sources.</summary>
+    public IReadOnlyList<string> SourceIds { get; init; } = [];
+
+    /// <summary>The profile's default filter as it was posted, or null for the WebUI's built-in default filter.</summary>
+    public string? DefaultFilterJson { get; init; }
+}
+
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 9;
+    public const int SchemaVersion = 10;
+
+    /// <summary>The default profile's fixed id. It always shows every source and can't be deleted.</summary>
+    public const string DefaultProfileId = "default";
+
+    internal const string DefaultProfileName = "Main";
+    internal const string DefaultProfileColor = "#ef7f22";
 
     /// <summary>
     /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
@@ -285,7 +311,30 @@ public static class LibraryCatalogStore
         CREATE INDEX idx_items_date_added_desc ON items(COALESCE(date_added_utc, 0) DESC, file_name_sort_key);
         """;
 
-    private static readonly string[] CatalogTables =
+    /// <summary>
+    /// The profile tables, which a new catalog gets and the 9 to 10 step adds, with the default profile. A later change
+    /// to them needs a step and SQL of its own.
+    /// </summary>
+    private const string ProfileTablesSql = $"""
+        CREATE TABLE profiles (
+            id TEXT PRIMARY KEY,
+            position INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            name_fold TEXT NOT NULL,
+            color TEXT NOT NULL,
+            follows_all_sources INTEGER NOT NULL,
+            default_filter TEXT NULL
+        );
+        CREATE TABLE profile_sources (
+            profile_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            PRIMARY KEY (profile_id, source_id)
+        );
+        INSERT INTO profiles (id, position, name, name_fold, color, follows_all_sources, default_filter)
+        VALUES ('{DefaultProfileId}', 0, '{DefaultProfileName}', 'main', '{DefaultProfileColor}', 1, NULL);
+        """;
+
+    private static readonly string[] Schema2Tables =
     [
         "sources",
         "items",
@@ -295,6 +344,8 @@ public static class LibraryCatalogStore
         "presets",
         "catalog_meta"
     ];
+
+    private static readonly string[] Schema10Tables = [.. Schema2Tables, "profiles", "profile_sources"];
 
     private static readonly string[] Schema2ItemColumns =
     [
@@ -312,17 +363,21 @@ public static class LibraryCatalogStore
 
     private static readonly string[] Schema9ItemColumns = [.. Schema7ItemColumns, "date_added_utc"];
 
-    /// <summary>The <c>items</c> columns each usable schema version must have, from the oldest shipped one to the current one.</summary>
-    private static readonly Dictionary<int, string[]> ItemColumnsBySchemaVersion = new()
+    /// <summary>The tables and <c>items</c> columns a catalog at one schema version must have.</summary>
+    private sealed record SchemaRequirements(string[] Tables, string[] ItemColumns);
+
+    /// <summary>What each usable schema version must have, from the oldest shipped one to the current one.</summary>
+    private static readonly Dictionary<int, SchemaRequirements> RequirementsBySchemaVersion = new()
     {
-        [2] = Schema2ItemColumns,
-        [3] = Schema3ItemColumns,
-        [4] = Schema4ItemColumns,
-        [5] = Schema4ItemColumns,
-        [6] = Schema4ItemColumns,
-        [7] = Schema7ItemColumns,
-        [8] = Schema7ItemColumns,
-        [9] = Schema9ItemColumns
+        [2] = new(Schema2Tables, Schema2ItemColumns),
+        [3] = new(Schema2Tables, Schema3ItemColumns),
+        [4] = new(Schema2Tables, Schema4ItemColumns),
+        [5] = new(Schema2Tables, Schema4ItemColumns),
+        [6] = new(Schema2Tables, Schema4ItemColumns),
+        [7] = new(Schema2Tables, Schema7ItemColumns),
+        [8] = new(Schema2Tables, Schema7ItemColumns),
+        [9] = new(Schema2Tables, Schema9ItemColumns),
+        [10] = new(Schema10Tables, Schema9ItemColumns)
     };
 
     /// <summary>
@@ -338,7 +393,8 @@ public static class LibraryCatalogStore
         [5] = UpgradeSchema5To6,
         [6] = UpgradeSchema6To7,
         [7] = UpgradeSchema7To8,
-        [8] = UpgradeSchema8To9
+        [8] = UpgradeSchema8To9,
+        [9] = UpgradeSchema9To10
     };
 
     /// <summary>
@@ -595,6 +651,14 @@ public static class LibraryCatalogStore
         Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_date_added_asc;");
         Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_date_added_desc;");
         Execute(connection, transaction, DateSortIndexesSql);
+    }
+
+    /// <summary>
+    /// Schema version 9 to 10: adds the profile tables with the default profile (see <see cref="ProfileTablesSql"/>).
+    /// </summary>
+    private static void UpgradeSchema9To10(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, ProfileTablesSql);
     }
 
     private static string WithFlagModesWritten(string filterStateJson)
@@ -1162,6 +1226,7 @@ public static class LibraryCatalogStore
         Execute(connection, SortIndexesSql);
         Execute(connection, RatingSortIndexesSql);
         Execute(connection, DateSortIndexesSql);
+        Execute(connection, transaction, ProfileTablesSql);
 
         Execute(
             connection,
@@ -1228,7 +1293,7 @@ public static class LibraryCatalogStore
                 return CatalogFileInspection.Newer;
             }
 
-            if (version is not int known || !ItemColumnsBySchemaVersion.ContainsKey(known))
+            if (version is not int known || !RequirementsBySchemaVersion.ContainsKey(known))
             {
                 return CatalogFileInspection.NotADatabase;
             }
@@ -1408,17 +1473,17 @@ public static class LibraryCatalogStore
     /// </summary>
     private static bool HasRequiredCatalogSchema(SqliteConnection connection)
     {
-        if (!ItemColumnsBySchemaVersion.TryGetValue(ExecuteScalarInt(connection, "PRAGMA user_version;"), out var itemColumns))
+        if (!RequirementsBySchemaVersion.TryGetValue(ExecuteScalarInt(connection, "PRAGMA user_version;"), out var required))
         {
             return false;
         }
 
-        if (!HasTables(connection, CatalogTables) || HasTables(connection, ["available_tags"]))
+        if (!HasTables(connection, required.Tables) || HasTables(connection, ["available_tags"]))
         {
             return false;
         }
 
-        return itemColumns.All(column => HasItemColumn(connection, column));
+        return required.ItemColumns.All(column => HasItemColumn(connection, column));
     }
 
     private static LibraryCatalogSnapshot ReadSnapshot(SqliteConnection connection)
@@ -1497,7 +1562,7 @@ public static class LibraryCatalogStore
         using (var tagCommand = connection.CreateCommand())
         {
             tagCommand.CommandText = "SELECT item_id, name FROM item_tags ORDER BY item_id, position;";
-            tagsByItem = ReadTagGroups(tagCommand);
+            tagsByItem = ReadGroups(tagCommand);
         }
 
         using var command = connection.CreateCommand();
@@ -1554,26 +1619,26 @@ public static class LibraryCatalogStore
     }
 
     /// <summary>
-    /// Groups the rows of an <c>item_tags</c> read by item: the first column is the item id, and each item keeps the
-    /// second column's values in the order read.
+    /// Groups the rows of a two-column read, such as an <c>item_tags</c> read by item, by the first column, each key
+    /// keeping the second column's values in the order read.
     /// </summary>
-    internal static Dictionary<string, List<string>> ReadTagGroups(SqliteCommand command)
+    internal static Dictionary<string, List<string>> ReadGroups(SqliteCommand command)
     {
-        var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var groups = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            var itemId = reader.GetString(0);
-            if (!tags.TryGetValue(itemId, out var values))
+            var key = reader.GetString(0);
+            if (!groups.TryGetValue(key, out var values))
             {
                 values = [];
-                tags[itemId] = values;
+                groups[key] = values;
             }
 
             values.Add(reader.GetString(1));
         }
 
-        return tags;
+        return groups;
     }
 
     internal static string NormalizeCategoryId(string? categoryId)

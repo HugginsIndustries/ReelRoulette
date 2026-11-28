@@ -49,6 +49,7 @@ public static class ServerHostComposition
         services.AddSingleton<LibraryPlaybackService>();
         services.AddSingleton<RefreshPipelineService>();
         services.AddSingleton<LibraryOperationsService>();
+        services.AddSingleton<LibraryProfileService>();
         services.AddSingleton<ServerSessionStore>();
         services.AddSingleton<ApiTelemetryService>();
         services.AddSingleton<ConnectedClientTracker>();
@@ -295,16 +296,7 @@ public static class ServerHostComposition
 
         app.MapPost("/api/library/item", ReadLibraryItem);
 
-        app.MapPost("/api/library/query", (LibraryQueryRequest? request, LibraryOperationsService operations, RefreshPipelineService refresh) =>
-        {
-            var outcome = operations.QueryLibrary(request, refresh.EnrichListedItems);
-            if (!outcome.Accepted || outcome.Body == null)
-            {
-                return Results.BadRequest(new { error = outcome.Error ?? "Invalid library query" });
-            }
-
-            return Results.Json(outcome.Body);
-        });
+        app.MapPost("/api/library/query", QueryLibrary);
 
         app.MapPost("/api/library/query-ids", QueryLibraryIds);
 
@@ -312,10 +304,7 @@ public static class ServerHostComposition
 
         app.MapPost("/api/library/delete-files", DeleteFiles);
 
-        app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>
-        {
-            return Results.Ok(operations.GetLibraryStats());
-        });
+        app.MapGet("/api/library/stats", GetLibraryStats);
 
         app.MapGet("/api/library/catalog-checkpoint", (LibraryOperationsService operations) =>
         {
@@ -362,15 +351,17 @@ public static class ServerHostComposition
 
         app.MapPost("/api/presets/{presetId}/delete", DeletePreset);
 
-        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
-            playback.TrySelectRandom(request, state.GetPresetCatalogSnapshot(), out var response, out var statusCode, out var error)
-                ? Results.Ok(response)
-                : Results.Json(new { error }, statusCode: statusCode));
+        app.MapGet("/api/profiles", (LibraryProfileService profiles) => Results.Ok(profiles.GetProfiles()));
 
-        app.MapPost("/api/random/cycle", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
-            playback.TryGetRandomCycle(request, state.GetPresetCatalogSnapshot(), out var response, out var statusCode, out var error)
-                ? Results.Ok(response)
-                : Results.Json(new { error }, statusCode: statusCode));
+        app.MapPost("/api/profiles/create", CreateProfile);
+
+        app.MapPost("/api/profiles/{profileId}/update", UpdateProfile);
+
+        app.MapPost("/api/profiles/{profileId}/delete", DeleteProfile);
+
+        app.MapPost("/api/random", SelectRandom);
+
+        app.MapPost("/api/random/cycle", GetRandomCycle);
 
         app.MapPost("/api/random/reset", (RandomResetRequest? request, LibraryPlaybackService playback) =>
         {
@@ -457,10 +448,7 @@ public static class ServerHostComposition
 
         app.MapPost("/api/duplicates/apply", ApplyDuplicates);
 
-        app.MapPost("/api/autotag/scan", (AutoTagScanRequest request, LibraryOperationsService operations) =>
-        {
-            return Results.Ok(operations.ScanAutoTags(request));
-        });
+        app.MapPost("/api/autotag/scan", ScanAutoTags);
 
         app.MapPost("/api/autotag/apply", ApplyAutoTags);
 
@@ -583,6 +571,57 @@ public static class ServerHostComposition
             PresetWriteStatus.NameTaken or PresetWriteStatus.FilterTaken or PresetWriteStatus.OrderMismatch => StatusCodes.Status409Conflict,
             PresetWriteStatus.NotSaved => StatusCodes.Status500InternalServerError,
             // No name, a filter state that isn't an object, or the default filter.
+            _ => StatusCodes.Status400BadRequest
+        };
+        return Results.Json(new { error = result.Error }, statusCode: statusCode);
+    }
+
+    internal static IResult CreateProfile(CreateProfileRequest request, LibraryProfileService profiles)
+    {
+        var result = profiles.CreateProfile(
+            request.Name,
+            request.Color,
+            request.FollowsAllSources,
+            request.SourceIds,
+            NormalizeOptionalIdentity(request.ClientId));
+        return ProfileWritten(result, answersWithProfile: true);
+    }
+
+    internal static IResult UpdateProfile(string profileId, UpdateProfileRequest request, LibraryProfileService profiles)
+    {
+        var update = new ProfileUpdate
+        {
+            Name = request.Name,
+            Color = request.Color,
+            FollowsAllSources = request.FollowsAllSources,
+            SourceIds = request.SourceIds,
+            DefaultFilter = request.DefaultFilter
+        };
+        return ProfileWritten(profiles.UpdateProfile(profileId, update, NormalizeOptionalIdentity(request.ClientId)), answersWithProfile: true);
+    }
+
+    internal static IResult DeleteProfile(string profileId, DeleteProfileRequest? body, LibraryProfileService profiles)
+    {
+        return ProfileWritten(profiles.DeleteProfile(profileId, NormalizeOptionalIdentity(body?.ClientId)), answersWithProfile: false);
+    }
+
+    /// <summary>
+    /// Answers a profile write with the profile as written, or an empty 200 for a delete. A refusal or a write the
+    /// catalog didn't take answers with the server's reason.
+    /// </summary>
+    private static IResult ProfileWritten(ProfileWriteResult result, bool answersWithProfile)
+    {
+        if (result.Status == ProfileWriteStatus.Done)
+        {
+            return answersWithProfile ? Results.Ok(result.Profile) : Results.Ok();
+        }
+
+        var statusCode = result.Status switch
+        {
+            ProfileWriteStatus.NotFound => StatusCodes.Status404NotFound,
+            ProfileWriteStatus.NameTaken => StatusCodes.Status409Conflict,
+            ProfileWriteStatus.NotSaved => StatusCodes.Status500InternalServerError,
+            // No name, a color or default filter that isn't one, or what the default profile can't do.
             _ => StatusCodes.Status400BadRequest
         };
         return Results.Json(new { error = result.Error }, statusCode: statusCode);
@@ -719,8 +758,7 @@ public static class ServerHostComposition
             return Results.BadRequest(new { error = "itemId is required" });
         }
 
-        var persisted = operations.SetFavorite(request.ItemId, request.IsFavorite, out var previous);
-        return PublishItemState(state, persisted, previous, request.ClientId);
+        return PublishItemState(state, operations.SetFavorite(request.ItemId, request.IsFavorite), request.ClientId);
     }
 
     internal static IResult SetBlacklist(BlacklistRequest request, ServerStateService state, LibraryOperationsService operations)
@@ -730,8 +768,7 @@ public static class ServerHostComposition
             return Results.BadRequest(new { error = "itemId is required" });
         }
 
-        var persisted = operations.SetBlacklist(request.ItemId, request.IsBlacklisted, out var previous);
-        return PublishItemState(state, persisted, previous, request.ClientId);
+        return PublishItemState(state, operations.SetBlacklist(request.ItemId, request.IsBlacklisted), request.ClientId);
     }
 
     /// <summary>
@@ -764,6 +801,7 @@ public static class ServerHostComposition
             {
                 ItemId = change.Id,
                 Path = change.FullPath,
+                SourceId = change.SourceId,
                 Rating = rating,
                 PreviousRating = ItemRating.ToStars(change.PreviousRatingHalfStars),
                 ClientId = NormalizeOptionalIdentity(request.ClientId)
@@ -811,6 +849,7 @@ public static class ServerHostComposition
                     .Select(change => new BulkItemState
                     {
                         ItemId = change.Id,
+                        SourceId = change.SourceId,
                         IsFavorite = change.IsFavorite,
                         IsBlacklisted = change.IsBlacklisted,
                         PreviousIsFavorite = change.PreviousIsFavorite,
@@ -853,6 +892,7 @@ public static class ServerHostComposition
                     .Select(change => new BulkItemRating
                     {
                         ItemId = change.Id,
+                        SourceId = change.SourceId,
                         Rating = ItemRating.ToStars(change.RatingHalfStars),
                         PreviousRating = ItemRating.ToStars(change.PreviousRatingHalfStars)
                     })
@@ -954,13 +994,69 @@ public static class ServerHostComposition
         }
     }
 
-    /// <summary>
-    /// The ids of every item the library query with the same filter and search matches, or only those of the named
-    /// <see cref="LibraryIdsQueryRequest.ItemIds"/> that match.
-    /// </summary>
-    internal static IResult QueryLibraryIds(LibraryIdsQueryRequest? request, LibraryOperationsService operations)
+    /// <summary>One page of the library query, in the sources of the request's profile.</summary>
+    internal static IResult QueryLibrary(
+        LibraryQueryRequest? request,
+        LibraryOperationsService operations,
+        RefreshPipelineService refresh,
+        LibraryProfileService profiles)
     {
-        var response = operations.QueryLibraryIds(request, out var error);
+        var outcome = operations.QueryLibrary(request, refresh.EnrichListedItems, profiles.ResolveSourceIds(request?.ProfileId));
+        if (!outcome.Accepted || outcome.Body == null)
+        {
+            return Results.BadRequest(new { error = outcome.Error ?? "Invalid library query" });
+        }
+
+        return Results.Json(outcome.Body);
+    }
+
+    /// <summary>The library's stats, with totals over the sources of the profile the query names.</summary>
+    internal static IResult GetLibraryStats(string? profileId, LibraryOperationsService operations, LibraryProfileService profiles)
+    {
+        return Results.Ok(operations.GetLibraryStats(profiles.ResolveSourceIds(profileId)));
+    }
+
+    /// <summary>A random pick from the sources of the request's profile.</summary>
+    internal static IResult SelectRandom(RandomRequest request, ServerStateService state, LibraryPlaybackService playback, LibraryProfileService profiles)
+    {
+        return playback.TrySelectRandom(
+            request,
+            state.GetPresetCatalogSnapshot(),
+            out var response,
+            out var statusCode,
+            out var error,
+            profiles.ResolveSourceIds(request.ProfileId))
+            ? Results.Ok(response)
+            : Results.Json(new { error }, statusCode: statusCode);
+    }
+
+    /// <summary>The Shuffle cycle numbers a pick with the same request, in the sources of its profile, would start from.</summary>
+    internal static IResult GetRandomCycle(RandomRequest request, ServerStateService state, LibraryPlaybackService playback, LibraryProfileService profiles)
+    {
+        return playback.TryGetRandomCycle(
+            request,
+            state.GetPresetCatalogSnapshot(),
+            out var response,
+            out var statusCode,
+            out var error,
+            profiles.ResolveSourceIds(request.ProfileId))
+            ? Results.Ok(response)
+            : Results.Json(new { error }, statusCode: statusCode);
+    }
+
+    /// <summary>Auto Tag's scan of the items in the sources of the request's profile.</summary>
+    internal static IResult ScanAutoTags(AutoTagScanRequest request, LibraryOperationsService operations, LibraryProfileService profiles)
+    {
+        return Results.Ok(operations.ScanAutoTags(request, profiles.ResolveSourceIds(request.ProfileId)));
+    }
+
+    /// <summary>
+    /// The ids of every item the library query with the same filter, search, and profile matches, or only those of the
+    /// named <see cref="LibraryIdsQueryRequest.ItemIds"/> that match.
+    /// </summary>
+    internal static IResult QueryLibraryIds(LibraryIdsQueryRequest? request, LibraryOperationsService operations, LibraryProfileService profiles)
+    {
+        var response = operations.QueryLibraryIds(request, out var error, profiles.ResolveSourceIds(request?.ProfileId));
         return response == null
             ? Results.BadRequest(new { error = error ?? "Invalid library query" })
             : Results.Ok(response);
@@ -982,25 +1078,32 @@ public static class ServerHostComposition
     /// Publishes the change to every client, the one that made it too, naming that client so it can tell its own change
     /// from another device's.
     /// </summary>
-    private static IResult PublishItemState(ServerStateService state, LibraryStateResponse? persisted, LibraryStateResponse? previous, string? clientId)
+    private static IResult PublishItemState(ServerStateService state, CatalogItemFlagChange? change, string? clientId)
     {
-        if (persisted == null || previous == null)
+        if (change == null)
         {
             return Results.NotFound(new { error = ItemNotInLibrary });
         }
 
         var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
         {
-            ItemId = persisted.ItemId,
-            Path = persisted.Path,
-            IsFavorite = persisted.IsFavorite,
-            IsBlacklisted = persisted.IsBlacklisted,
-            PreviousIsFavorite = previous.IsFavorite,
-            PreviousIsBlacklisted = previous.IsBlacklisted,
+            ItemId = change.Id,
+            Path = change.FullPath,
+            SourceId = change.SourceId,
+            IsFavorite = change.IsFavorite,
+            IsBlacklisted = change.IsBlacklisted,
+            PreviousIsFavorite = change.PreviousIsFavorite,
+            PreviousIsBlacklisted = change.PreviousIsBlacklisted,
             ClientId = NormalizeOptionalIdentity(clientId)
         });
-        persisted.Revision = envelope.Revision;
-        return Results.Ok(persisted);
+        return Results.Ok(new LibraryStateResponse
+        {
+            ItemId = change.Id,
+            Path = change.FullPath,
+            IsFavorite = change.IsFavorite,
+            IsBlacklisted = change.IsBlacklisted,
+            Revision = envelope.Revision
+        });
     }
 
     /// <summary>

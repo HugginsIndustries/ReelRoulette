@@ -63,20 +63,22 @@ public sealed class LibraryPlaybackService
     }
 
     /// <summary>
-    /// Picks one of the eligible items with the request's options and remembers it for the request's device. On
-    /// success the response holds the item, or null when nothing is eligible, and the cycle numbers after the pick.
+    /// Picks one of the eligible items, in the profile's sources (<paramref name="profileSourceIds"/>, null for every
+    /// source), with the request's options and remembers it for the request's device. On success the response holds
+    /// the item, or null when nothing is eligible, and the cycle numbers after the pick.
     /// </summary>
     public bool TrySelectRandom(
         RandomRequest request,
         IReadOnlyList<StoredPreset> presets,
         out RandomPickResponse? response,
         out int statusCode,
-        out string? error)
+        out string? error,
+        IReadOnlyCollection<string>? profileSourceIds = null)
     {
         var stopwatch = Stopwatch.StartNew();
         response = null;
         var options = ReadPickOptions(request.Options);
-        if (!TryQueryEligible(request, presets, options, out var eligible, out statusCode, out error))
+        if (!TryQueryEligible(request, presets, options, profileSourceIds, out var eligible, out statusCode, out error))
         {
             return false;
         }
@@ -134,19 +136,20 @@ public sealed class LibraryPlaybackService
     }
 
     /// <summary>
-    /// The cycle numbers a pick with the same request would start from, for the request's device. Changes nothing, and
-    /// a device without a memory has picked nothing.
+    /// The cycle numbers a pick with the same request and profile's sources would start from, for the request's device.
+    /// Changes nothing, and a device without a memory has picked nothing.
     /// </summary>
     public bool TryGetRandomCycle(
         RandomRequest request,
         IReadOnlyList<StoredPreset> presets,
         out RandomPickCycleResponse? response,
         out int statusCode,
-        out string? error)
+        out string? error,
+        IReadOnlyCollection<string>? profileSourceIds = null)
     {
         response = null;
         var options = ReadPickOptions(request.Options);
-        if (!TryQueryEligible(request, presets, options, out var eligible, out statusCode, out error))
+        if (!TryQueryEligible(request, presets, options, profileSourceIds, out var eligible, out statusCode, out error))
         {
             return false;
         }
@@ -250,13 +253,14 @@ public sealed class LibraryPlaybackService
     }
 
     /// <summary>
-    /// The library's eligible items for a pick or a cycle read: the filter's, of the media types asked for, with their
-    /// tags only under tag spread. Null when the request asks for neither media type.
+    /// The library's eligible items for a pick or a cycle read: the filter's, in the profile's sources, of the media
+    /// types asked for, with their tags only under tag spread. Null when the request asks for neither media type.
     /// </summary>
     private bool TryQueryEligible(
         RandomRequest request,
         IReadOnlyList<StoredPreset> presets,
         RandomPickOptions options,
+        IReadOnlyCollection<string>? profileSourceIds,
         out List<RandomizationItem>? eligible,
         out int statusCode,
         out string? error)
@@ -310,7 +314,8 @@ public sealed class LibraryPlaybackService
             eligible = _catalog.Session.QueryRandomCandidates(
                 filter,
                 requiredMediaType,
-                includeTags: options.SpreadByTags != TagSpreadValue.Off);
+                includeTags: options.SpreadByTags != TagSpreadValue.Off,
+                profileSourceIds);
         }
         catch (Exception ex)
         {

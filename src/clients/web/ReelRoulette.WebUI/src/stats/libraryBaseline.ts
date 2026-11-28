@@ -83,6 +83,8 @@ export function createLibraryBaseline(options: LibraryBaselineOptions): LibraryB
   connection.on("serverReady", request);
   connection.on("refreshCompleted", request);
   connection.on("itemsRemoved", request);
+  // The baseline covers only enabled sources.
+  connection.on("sourceStateChanged", request);
   connection.on("resyncRequired", request);
   connection.on("stopped", () => {
     stopped = true;

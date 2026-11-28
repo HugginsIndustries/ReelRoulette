@@ -57,7 +57,7 @@ ReelRoulette is a thin-client, API-first system:
 ### Domain execution (`src/core/ReelRoulette.Core` + server services)
 
 - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
-- The server opens a SQLite `library.db` at startup (WAL, synchronous=NORMAL, `user_version` 9).
+- The server opens a SQLite `library.db` at startup (WAL, synchronous=NORMAL, `user_version` 10).
   - A catalog at an older version from 2 is upgraded in place on open in one transaction, one step per version, and `last.log` records it:
     - Version 2 to 3 adds the stored file name sort key and the sort indexes and drops the item tag index that duplicates its primary key and the file name fold index that no query uses.
     - Version 3 to 4 adds each item's loudness analysis version, clears every stored peak, and marks every video as scanned under analysis version 1.
@@ -66,6 +66,7 @@ ReelRoulette is a thin-client, API-first system:
     - Version 6 to 7 adds each item's rating, which the catalog stores as a whole number of half stars from 1 to 10, with no value for none.
     - Version 7 to 8 adds the rating sort's indexes.
     - Version 8 to 9 adds each item's date added, set to its modified time, with the date added sort's indexes, and renames the modified time's sort indexes for the date created.
+    - Version 9 to 10 adds the profile tables, with the default profile, "Main" in `#ef7f22`, which shows every source.
   - The `DateAdded` sort orders by the date added and `DateCreated` by the modified time, each through its own indexes.
   - An upgrade that cannot run leaves the catalog unchanged and is reported like a catalog that cannot be read.
   - A `library.db`, `library.db.previous`, or `library.db.incoming` that a newer version saved, or that cannot be opened or read at the moment, is left unchanged.
@@ -126,8 +127,10 @@ ReelRoulette is a thin-client, API-first system:
 - Clear-stats clears every played row only with `allItems`, and an id list clears only those items; a request with neither, or both, is refused and clears nothing.
   - It answers `count`, how many of the named items are in the library, or every item with `allItems`, and publishes `resyncRequired` when it cleared any item's stats.
 - Library stats are one SQL pass grouped by source id and media type: an item counts toward the source whose id it holds, and is a photo when its media type is photo and a video otherwise.
+  - The totals count only enabled sources, as lists and random picks do, while each source's own figures count all its items.
+  - The baseline loudness covers every enabled source's videos.
 - Auto-tag scan and duplicate scan read catalog rows.
-  - A full-library auto-tag scan reads every item, and any other scan reads enabled sources.
+  - A full-library auto-tag scan reads every item in the request's profile's sources, and any other scan the enabled ones among them.
   - Duplicate groups include only ready fingerprints.
   - Duplicate apply deletes the non-kept files and rows through the delete-files code, takes the same admin check, and publishes `itemsRemoved`.
 - Source import inserts new files and updates existing paths.
@@ -170,7 +173,13 @@ ReelRoulette is a thin-client, API-first system:
   - A write the catalog doesn't take answers 500 and gets a `last.log` warning.
   - The WebUI's Filter tab saves each preset it changed through them, one at a time.
   - Every open WebUI reloads its presets on the event.
+- Profiles: each a named view of the library, with a color, every source, following newly added ones, or a chosen list, and its own default filter, null for the built-in one, kept in the catalog with the default profile first.
+  - `GET /api/profiles` lists them in the order they were added, and `POST /api/profiles/create`, `POST /api/profiles/{profileId}/update`, which changes only the fields it names, and `POST /api/profiles/{profileId}/delete` write one, each publishing `profilesChanged` with every profile and the request's `clientId`.
+  - A name another profile has, ignoring case, or a color that isn't `#rrggbb` is refused, the default profile can't be deleted or given a chosen list, and a new profile takes the default profile's default filter.
+  - The library query and both its counts, the ids-only query, random picks and their cycle numbers, library stats' totals, and Auto Tag's scan take an optional `profileId` and keep to its sources, outside the filter.
+  - No profile, or an id the library doesn't have, sees every source, and each such id gets one `last.log` line the first time it comes.
 - Every event and response that names a library item carries its catalog item id: `PlaybackItemResponse.itemId` (its `id` is the full path, which the Stats tab shows), `playbackRecorded.itemId`, `itemTagsChanged.resolvedItemIds`, the record-playback response, auto-tag scan files and apply results, and duplicate-apply failures.
+  - `itemStateChanged`, `itemRatingChanged`, and each item of `bulkItemStateChanged` and `bulkItemRatingChanged` carry the item's `sourceId`, so a client can leave out items in sources its profile hides.
   - `itemStateChanged` also carries `previousIsFavorite` and `previousIsBlacklisted`, and `clientId`, the client whose favorite or blacklist request made the change, which the WebUI sends.
   - `itemRatingChanged`, published only when a rating changed, carries the item's id and path, its `rating` and `previousRating`, in stars or null for none, and the `clientId` of the rating request.
   - `bulkItemStateChanged` and `bulkItemRatingChanged` carry what the bulk request set, `count`, the named items in the library, the items that changed with their values before and after, and the request's `clientId`, and `itemsRemoved` the ids of the items delete files or duplicate apply removed.
@@ -530,7 +539,7 @@ ReelRoulette is a thin-client, API-first system:
     - A boost is held to the smallest of what is needed, the boost limit, and the video's headroom, −1 dBTP minus its peak, plus 6 dB with Allow limiting on, for the limiter to catch, and never goes below 0 dB.
     - A video without a peak is only cut, and one without loudness data plays as it is.
   - `src/clients/web/ReelRoulette.WebUI/src/test/fixtures/loudness-gain-rule.json` locks the rule.
-  - Automatic's target is the library's baseline, the library stats' `baselineLoudnessLufs`, which the WebUI loads once the server is ready and again after each refresh, resync, and removal of items, not while the server holds back or asks for pairing, keeping the last one through a failed load, which relays `audio=baseline-load-failed error=<reason>` and is tried again every 5 seconds, relaying nothing more, until one succeeds or the server holds back or asks for pairing.
+  - Automatic's target is the library's baseline, the library stats' `baselineLoudnessLufs`, which the WebUI loads once the server is ready and again after each refresh, resync, removal of items, and source turned on or off, not while the server holds back or asks for pairing, keeping the last one through a failed load, which relays `audio=baseline-load-failed error=<reason>` and is tried again every 5 seconds, relaying nothing more, until one succeeds or the server holds back or asks for pairing.
     - Until it first loads, Automatic applies no adjustment.
   - Each video's gain is set while it starts from silence.
   - A change of a setting, the target, or the baseline glides the playing video's gain to its new value, with the volume's 15 ms time constant, so nothing clicks.
@@ -646,7 +655,7 @@ ReelRoulette is a thin-client, API-first system:
 - Library shows `GET /api/library/stats` as cards: Videos, Photos, Total media, Favorites, Blacklisted, Rated, Total plays, Unique played, Never played, Videos with audio, Videos without audio, and Baseline loudness.
 - The tab loads only while it shows:
   - Showing it loads once.
-  - While it shows, a new playing item and the playback, favorite and blacklist, rating, tag, tag catalog, refresh, resync, and server-ready events load it again, as do the bulk favorite, blacklist, and rating events and the removal of items, coalesced:
+  - While it shows, a new playing item and the playback, favorite and blacklist, rating, tag, tag catalog, refresh, resync, and server-ready events load it again, as do the bulk favorite, blacklist, and rating events, the removal of items, and a source turned on or off, coalesced:
     - A 250 ms wait gathers a burst.
     - One load goes at a time, and requests during it get one more.
 - A failed first load says "Stats load failed: {why}", or "Stats load failed." when the server gives no reason, in place of the cards and relays it with its status, and the current file shows only its name and path.

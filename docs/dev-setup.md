@@ -188,12 +188,12 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 
 ### Library catalog
 
-- The server opens `library.db` in the roaming directory, or the data folder override, at startup (`user_version` 9).
-- A `user_version` 2 or 3 catalog, from v0.14.x or earlier, or 4, 5, 6, 7, or 8, from a development build, is upgraded in place on that start in one transaction, one step per version, and `last.log` records how long it took; an interrupted upgrade leaves the older catalog as it was.
+- The server opens `library.db` in the roaming directory, or the data folder override, at startup (`user_version` 10).
+- A `user_version` 2 or 3 catalog, from v0.14.x or earlier, or 4, 5, 6, 7, 8, or 9, from a development build, is upgraded in place on that start in one transaction, one step per version, and `last.log` records how long it took; an interrupted upgrade leaves the older catalog as it was.
 - The upgrade from version 3 clears every stored peak, so the next refresh scans every video with audio again to measure its true peak, one video at a time, which takes hours for a large library on a network share.
 - After a newer build has opened a data folder, do not run v0.14.0 against it: v0.14.0 moves a catalog it does not recognize aside and then deletes its backups.
-- Presets and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`.
-- `GET /api/library/catalog-checkpoint` writes a standalone copy of `library.db`, with presets and thumbnail metadata; no client exports or imports a library.
+- Presets, profiles, and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`.
+- `GET /api/library/catalog-checkpoint` writes a standalone copy of `library.db`, with presets, profiles, and thumbnail metadata; no client exports or imports a library.
 - Server catalog backups are `library.db.backup.*` files in `backups/`.
 
 When the server cannot use its catalog, it keeps running without a library instead of stopping:

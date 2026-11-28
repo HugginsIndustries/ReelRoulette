@@ -130,10 +130,14 @@ public sealed class LibraryOperationsService
     }
 
     /// <summary>
-    /// One browse page. <paramref name="enrichItems"/> adds the per-request item fields, such as
-    /// thumbnails, before the request's one <c>last.log</c> line, so its elapsed time covers them.
+    /// One browse page, of the profile's sources (<paramref name="profileSourceIds"/>, null for every source).
+    /// <paramref name="enrichItems"/> adds the per-request item fields, such as thumbnails, before the request's one
+    /// <c>last.log</c> line, so its elapsed time covers them.
     /// </summary>
-    public LibraryQueryOutcome QueryLibrary(LibraryQueryRequest? request, Action<JsonArray>? enrichItems = null)
+    public LibraryQueryOutcome QueryLibrary(
+        LibraryQueryRequest? request,
+        Action<JsonArray>? enrichItems = null,
+        IReadOnlyCollection<string>? profileSourceIds = null)
     {
         var stopwatch = Stopwatch.StartNew();
         request ??= new LibraryQueryRequest();
@@ -166,6 +170,7 @@ public sealed class LibraryOperationsService
             {
                 Search = request.Search,
                 Filter = filter,
+                ProfileSourceIds = profileSourceIds,
                 Sort = sort,
                 SortDescending = request.SortDescending ?? false,
                 Offset = offset,
@@ -199,11 +204,14 @@ public sealed class LibraryOperationsService
     }
 
     /// <summary>
-    /// The id of every item the browse query with the same filter and search matches, for selecting all of them, or
-    /// only those of the request's <see cref="LibraryIdsQueryRequest.ItemIds"/> that match, for checking a selection,
-    /// or the reason the filter is refused.
+    /// The id of every item the browse query with the same filter, search, and profile's sources matches, for selecting
+    /// all of them, or only those of the request's <see cref="LibraryIdsQueryRequest.ItemIds"/> that match, for checking
+    /// a selection, or the reason the filter is refused.
     /// </summary>
-    public LibraryIdsQueryResponse? QueryLibraryIds(LibraryIdsQueryRequest? request, out string? error)
+    public LibraryIdsQueryResponse? QueryLibraryIds(
+        LibraryIdsQueryRequest? request,
+        out string? error,
+        IReadOnlyCollection<string>? profileSourceIds = null)
     {
         var stopwatch = Stopwatch.StartNew();
         request ??= new LibraryIdsQueryRequest();
@@ -218,7 +226,8 @@ public sealed class LibraryOperationsService
             ids = _catalog.Session.QueryListIds(new LibraryListRequest
             {
                 Search = request.Search,
-                Filter = filter
+                Filter = filter,
+                ProfileSourceIds = profileSourceIds
             });
         }
 
@@ -262,11 +271,15 @@ public sealed class LibraryOperationsService
         };
     }
 
-    public LibraryStatsResponse GetLibraryStats()
+    /// <summary>
+    /// The library's stats: totals over the enabled sources of the profile (<paramref name="profileSourceIds"/>, null
+    /// for every source), the baseline loudness over every enabled source, and each source's own figures.
+    /// </summary>
+    public LibraryStatsResponse GetLibraryStats(IReadOnlyCollection<string>? profileSourceIds = null)
     {
         lock (_lock)
         {
-            var stats = _catalog.Session.ReadLibraryStats();
+            var stats = _catalog.Session.ReadLibraryStats(profileSourceIds);
             return new LibraryStatsResponse
             {
                 Global = new LibraryGlobalStatsResponse
@@ -304,26 +317,16 @@ public sealed class LibraryOperationsService
         }
     }
 
-    public LibraryStateResponse? SetFavorite(string itemId, bool isFavorite)
+    /// <summary>Sets or clears an item's favorite, returning its favorite and blacklist before and after, or null when it isn't in the library.</summary>
+    public CatalogItemFlagChange? SetFavorite(string itemId, bool isFavorite)
     {
-        return SetFavorite(itemId, isFavorite, out _);
+        return SetItemFlag(itemId, CatalogItemFlag.Favorite, isFavorite);
     }
 
-    /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
-    public LibraryStateResponse? SetFavorite(string itemId, bool isFavorite, out LibraryStateResponse? previous)
+    /// <summary>Sets or clears an item's blacklist, returning its favorite and blacklist before and after, or null when it isn't in the library.</summary>
+    public CatalogItemFlagChange? SetBlacklist(string itemId, bool isBlacklisted)
     {
-        return SetItemFlag(itemId, CatalogItemFlag.Favorite, isFavorite, out previous);
-    }
-
-    public LibraryStateResponse? SetBlacklist(string itemId, bool isBlacklisted)
-    {
-        return SetBlacklist(itemId, isBlacklisted, out _);
-    }
-
-    /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
-    public LibraryStateResponse? SetBlacklist(string itemId, bool isBlacklisted, out LibraryStateResponse? previous)
-    {
-        return SetItemFlag(itemId, CatalogItemFlag.Blacklist, isBlacklisted, out previous);
+        return SetItemFlag(itemId, CatalogItemFlag.Blacklist, isBlacklisted);
     }
 
     /// <summary>
@@ -785,7 +788,11 @@ public sealed class LibraryOperationsService
         IReadOnlyList<string> RemovedItemIds,
         IReadOnlyList<(CatalogStoredItem Item, Exception? Error)> Failures);
 
-    public AutoTagScanResponse ScanAutoTags(AutoTagScanRequest request)
+    /// <summary>
+    /// Matches every catalog tag against the items in the profile's sources (<paramref name="profileSourceIds"/>, null
+    /// for every source): all of them for a full-library scan, and otherwise those in enabled sources.
+    /// </summary>
+    public AutoTagScanResponse ScanAutoTags(AutoTagScanRequest request, IReadOnlyCollection<string>? profileSourceIds = null)
     {
         lock (_lock)
         {
@@ -796,9 +803,9 @@ public sealed class LibraryOperationsService
                 .OrderBy(name => name, TagNameComparer.Instance)
                 .ToList();
 
-            var scanItems = _catalog.Session.ReadAutoTagScanItems(request.ScanFullLibrary
-                ? CatalogAutoTagScanScope.All
-                : CatalogAutoTagScanScope.EnabledSources);
+            var scanItems = _catalog.Session.ReadAutoTagScanItems(
+                request.ScanFullLibrary ? CatalogAutoTagScanScope.All : CatalogAutoTagScanScope.EnabledSources,
+                profileSourceIds);
 
             var response = new AutoTagScanResponse();
             foreach (var tagName in tags)
@@ -958,38 +965,10 @@ public sealed class LibraryOperationsService
     private static bool ItemHasTag(CatalogAutoTagScanItem item, string tagName) =>
         item.Tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>
-    /// Sets or clears one item's flag, and returns its state after the change, with <paramref name="previous"/> its
-    /// state before. Both are null for an item not in the library.
-    /// </summary>
-    private LibraryStateResponse? SetItemFlag(string itemId, CatalogItemFlag flag, bool value, out LibraryStateResponse? previous)
+    /// <summary>Sets or clears one item's flag, and returns the item's flag change, or null when the item isn't in the library.</summary>
+    private CatalogItemFlagChange? SetItemFlag(string itemId, CatalogItemFlag flag, bool value)
     {
-        previous = null;
-        if (string.IsNullOrWhiteSpace(itemId))
-        {
-            return null;
-        }
-
-        var change = WriteItemsFlag([itemId], flag, value).FirstOrDefault();
-        if (change == null)
-        {
-            return null;
-        }
-
-        previous = new LibraryStateResponse
-        {
-            ItemId = change.Id,
-            Path = change.FullPath,
-            IsFavorite = change.PreviousIsFavorite,
-            IsBlacklisted = change.PreviousIsBlacklisted
-        };
-        return new LibraryStateResponse
-        {
-            ItemId = change.Id,
-            Path = change.FullPath,
-            IsFavorite = change.IsFavorite,
-            IsBlacklisted = change.IsBlacklisted
-        };
+        return string.IsNullOrWhiteSpace(itemId) ? null : WriteItemsFlag([itemId], flag, value).FirstOrDefault();
     }
 
     private static string NormalizeCategoryId(string? categoryId)

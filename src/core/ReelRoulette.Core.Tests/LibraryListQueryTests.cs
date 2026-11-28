@@ -1003,8 +1003,9 @@ public sealed class LibraryListQueryTests
         Assert.True(session.SetLoudness("silent", false, -8.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
         Assert.True(session.SetLoudness("disabled", true, -16.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
 
+        // The 75th percentile of the enabled source's videos with audio, leaving out the disabled source's -16.
         var stats = session.ReadLibraryStats();
-        Assert.Equal(-16.0, stats.Global.BaselineLoudnessLufs);
+        Assert.Equal(-20.0, stats.Global.BaselineLoudnessLufs);
 
         Assert.Null(session.ReadListedItem("KEEP"));
         var byId = session.ReadListedItem("keep");
@@ -1032,7 +1033,7 @@ public sealed class LibraryListQueryTests
         Assert.Null(operations.ReadLibraryItem("missing"));
         Assert.Null(operations.ReadLibraryItem("  "));
         var serviceStats = operations.GetLibraryStats();
-        Assert.Equal(-16.0, serviceStats.Global.BaselineLoudnessLufs);
+        Assert.Equal(-20.0, serviceStats.Global.BaselineLoudnessLufs);
     }
 
     [Fact]

@@ -460,6 +460,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the profiles
+         * @description Every profile, in the order they were added, so the default profile comes first.
+         */
+        get: operations["getProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a profile after every other one
+         * @description Gives the profile a new id and the default profile's default filter, and publishes `profilesChanged` with
+         *     every profile and the request's `clientId`.
+         */
+        post: operations["postProfileCreate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/{profileId}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change a profile
+         * @description Changes only the fields the request names, keeping the others, and publishes `profilesChanged` with every
+         *     profile and the request's `clientId`. A profile may take its own name in another case.
+         */
+        post: operations["postProfileUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/{profileId}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete a profile
+         * @description Deletes the profile and its chosen sources, and publishes `profilesChanged` with the remaining profiles and
+         *     the request's `clientId`.
+         */
+        post: operations["postProfileDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources": {
         parameters: {
             query?: never;
@@ -629,7 +712,9 @@ export interface paths {
         /**
          * Get library statistics
          * @description Returns global totals and per-source totals from SQL aggregates, plus `baselineLoudnessLufs`, the
-         *     75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify).
+         *     75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify). The global
+         *     totals count only enabled sources, and of those only the profile's; each source's own totals count all its
+         *     items, and the baseline covers every enabled source, whatever the profile.
          */
         get: operations["getLibraryStats"];
         put?: never;
@@ -1686,6 +1771,8 @@ export interface components {
             search?: string | null;
             /** @description When set, the answer holds only those of these catalog ids that match, each once, as when checking a selection; an empty list answers none. Ids match exactly. */
             itemIds?: string[] | null;
+            /** @description As in `LibraryQueryRequest`. */
+            profileId?: string | null;
         };
         LibraryIdsQueryResponse: {
             /** @description The catalog id of every item the query matches. */
@@ -1747,6 +1834,8 @@ export interface components {
              * @default 100
              */
             limit: number;
+            /** @description The device's active profile, whose sources the page and both counts keep to. Omitted, null, or an id the library doesn't have is the default profile, which shows every source. */
+            profileId?: string | null;
         };
         LibraryQueryResponse: {
             items: components["schemas"]["LibraryProjectionItem"][];
@@ -1877,6 +1966,8 @@ export interface components {
             includePhotos: boolean;
             /** @description The options the pick combines. Omitted or null, every option takes its default. */
             options?: components["schemas"]["RandomPickOptionsRequest"] | null;
+            /** @description The device's active profile, whose sources the pick and the cycle numbers keep to. Omitted, null, or an id the library doesn't have is the default profile, which shows every source. */
+            profileId?: string | null;
         };
         /**
          * @description The options a random pick combines. A missing option takes its default, a `rememberPlaysForDays` other than
@@ -2100,7 +2191,7 @@ export interface components {
             eventType: string;
             /** Format: date-time */
             timestamp: string;
-            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["BulkItemStateChangedPayload"] | components["schemas"]["ItemRatingChangedPayload"] | components["schemas"]["BulkItemRatingChangedPayload"] | components["schemas"]["ItemsRemovedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
+            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["BulkItemStateChangedPayload"] | components["schemas"]["ItemRatingChangedPayload"] | components["schemas"]["BulkItemRatingChangedPayload"] | components["schemas"]["ItemsRemovedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["ProfilesChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
         };
         ItemStateChangedPayload: {
             itemId: string;
@@ -2111,6 +2202,8 @@ export interface components {
             previousIsFavorite: boolean;
             /** @description Blacklist before this change. */
             previousIsBlacklisted: boolean;
+            /** @description The source the item is in, so a client can leave out a change to an item its profile hides. */
+            sourceId: string;
             /** @description The client that made the change, from its favorite or blacklist request, or null when the request named none. */
             clientId?: string | null;
         };
@@ -2135,6 +2228,8 @@ export interface components {
         };
         BulkItemState: {
             itemId: string;
+            /** @description The source the item is in, so a client can leave out a change to an item its profile hides. */
+            sourceId: string;
             isFavorite: boolean;
             isBlacklisted: boolean;
             /** @description Favorite before this change. */
@@ -2161,6 +2256,8 @@ export interface components {
         };
         BulkItemRating: {
             itemId: string;
+            /** @description The source the item is in, so a client can leave out a change to an item its profile hides. */
+            sourceId: string;
             /**
              * Format: double
              * @description The rating in stars, or null for none.
@@ -2180,6 +2277,8 @@ export interface components {
         ItemRatingChangedPayload: {
             itemId: string;
             path: string;
+            /** @description The source the item is in, so a client can leave out a change to an item its profile hides. */
+            sourceId: string;
             /**
              * Format: double
              * @description The rating in stars, from 0.5 to 5 in half-star steps, or null for none.
@@ -2293,6 +2392,56 @@ export interface components {
         };
         DeletePresetRequest: {
             /** @description The client making the change, which `presetCatalogChanged` carries back. */
+            clientId?: string | null;
+        };
+        /** @description A named view of the library that shows every source, following newly added ones, or a chosen list. */
+        ProfileResponse: {
+            /** @description The profile's id, which the profile routes and each scoped request's `profileId` use. */
+            id: string;
+            name: string;
+            /** @description The profile's color as lower-case `#rrggbb`. */
+            color: string;
+            /** @description Whether this is the default profile, which always shows every source and can't be deleted. */
+            isDefault: boolean;
+            /** @description True when the profile shows every source, newly added ones included. */
+            followsAllSources: boolean;
+            /** @description The chosen sources' ids, empty while the profile follows all sources. */
+            sourceIds: string[];
+            /** @description The profile's default filter, which None and Clear all load, as it was saved, or null for the built-in default filter. A new profile starts with the default profile's. */
+            defaultFilter: components["schemas"]["FilterState"] | null;
+        };
+        CreateProfileRequest: {
+            /** @description Trimmed. Refused when empty or another profile's, ignoring case. */
+            name: string;
+            /** @description The profile's color as `#rrggbb`, in either case. */
+            color: string;
+            /**
+             * @description True for every source, following newly added ones, false for the chosen list in `sourceIds`.
+             * @default true
+             */
+            followsAllSources: boolean;
+            /** @description The chosen sources, read only when `followsAllSources` is false. */
+            sourceIds?: string[] | null;
+            /** @description The client making the change, which `profilesChanged` carries back. */
+            clientId?: string | null;
+        };
+        /** @description Each field omitted or null keeps the profile's own. */
+        UpdateProfileRequest: {
+            /** @description Trimmed. Refused when empty or another profile's, ignoring case; the profile's own in another case is taken. */
+            name?: string | null;
+            /** @description The profile's color as `#rrggbb`, in either case. */
+            color?: string | null;
+            /** @description True for every source, following newly added ones, false for a chosen list. The default profile always follows all sources. */
+            followsAllSources?: boolean | null;
+            /** @description The chosen sources, read whenever the profile has a chosen list after the update. */
+            sourceIds?: string[] | null;
+            /** @description The profile's new default filter. */
+            defaultFilter?: components["schemas"]["FilterState"] | null;
+            /** @description The client making the change, which `profilesChanged` carries back. */
+            clientId?: string | null;
+        };
+        DeleteProfileRequest: {
+            /** @description The client making the change, which `profilesChanged` carries back. */
             clientId?: string | null;
         };
         TagCategorySnapshot: {
@@ -2508,6 +2657,8 @@ export interface components {
         AutoTagScanRequest: {
             /** @description When true, scan every item. When false, scan enabled sources only. */
             scanFullLibrary?: boolean;
+            /** @description The device's active profile, whose sources the scan keeps to. Omitted, null, or an id the library doesn't have is the default profile, which shows every source. */
+            profileId?: string | null;
         };
         AutoTagScanResponse: {
             rows: components["schemas"]["AutoTagMatchRowResponse"][];
@@ -2729,6 +2880,13 @@ export interface components {
         PresetCatalogChangedPayload: {
             /** @description The preset created, updated, renamed, or deleted, or null when the presets were reordered. */
             presetId: string | null;
+            /** @description The client whose request made the change, so it can tell its own change from another device's. */
+            clientId: string | null;
+        };
+        /** @description Published by each profile create, update, and delete. */
+        ProfilesChangedPayload: {
+            /** @description Every profile after the change, in the order `GET /api/profiles` gives them. */
+            profiles: components["schemas"]["ProfileResponse"][];
             /** @description The client whose request made the change, so it can tell its own change from another device's. */
             clientId: string | null;
         };
@@ -3940,6 +4098,230 @@ export interface operations {
             503: components["responses"]["LibraryUnavailable"];
         };
     };
+    getProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"][];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postProfileCreate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The new profile, with its id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description The name is empty, or the color isn't `#rrggbb` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another profile has the name, ignoring case, and `error` names it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postProfileUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The profile as changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description The name is empty, the color isn't `#rrggbb`, the default filter isn't an object, or the request gives the default profile a chosen list of sources */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No profile has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another profile has the name, ignoring case, and `error` names it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postProfileDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeleteProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The profile is deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The profile is the default one, which can't be deleted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No profile has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
     getSources: {
         parameters: {
             query?: never;
@@ -4212,7 +4594,10 @@ export interface operations {
     };
     getLibraryStats: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The device's active profile, whose sources the global totals keep to. Omitted, or an id the library doesn't have, is the default profile, which shows every source. */
+                profileId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

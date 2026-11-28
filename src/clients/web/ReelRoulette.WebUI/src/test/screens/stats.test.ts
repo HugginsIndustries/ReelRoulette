@@ -524,7 +524,7 @@ describe("Stats tab", () => {
     expect(statsLoads()).toBe(4);
   });
 
-  it("loads again for a batch of favorites or ratings, and, with the baseline, for removed items", async () => {
+  it("loads again for a batch of favorites or ratings, and, with the baseline, for removed items and a source turned on or off", async () => {
     const { page, server } = await mountStats();
     const loads = () => server.requests("GET", "/api/library/stats").length;
     fireEvent.click(document.getElementById("now-playing-name")!);
@@ -548,8 +548,11 @@ describe("Stats tab", () => {
     // The tab's stats and the baseline loudness each load again.
     emit(page, "itemsRemoved", { itemIds: ["item-other"] });
     await waitFor(() => expect(loads()).toBe(BASELINE_LOADS + 5));
+    // The totals and the baseline count only enabled sources.
+    emit(page, "sourceStateChanged", { sourceId: "source-1", isEnabled: false });
+    await waitFor(() => expect(loads()).toBe(BASELINE_LOADS + 7));
     await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(loads()).toBe(BASELINE_LOADS + 5);
+    expect(loads()).toBe(BASELINE_LOADS + 7);
   });
 
   it("loads nothing once the page closes, not even the load it was waiting to make", async () => {

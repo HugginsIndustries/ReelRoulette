@@ -23,7 +23,7 @@ Core/server domain services own business rules and persisted state semantics.
 - `src/core/ReelRoulette.Core/Filtering/FilterDateRange.cs`
   - the library list filter's `addedRange` and `createdRange`: a preset or a custom range of days, read and compared by the choice, and resolved each time it filters to whole days in the server's time zone.
 - `src/core/ReelRoulette.Core/Library/LibraryCatalogStore.cs` and `LibraryCatalogSession.cs`
-  - SQLite catalog at `library.db` (WAL, synchronous=NORMAL, `user_version` 9) is the live library store.
+  - SQLite catalog at `library.db` (WAL, synchronous=NORMAL, `user_version` 10) is the live library store.
   - Opening a catalog at an older version from 2 upgrades it in place in one transaction, one step per version:
     - Version 3 brings the stored file name sort key, the sort indexes, and neither a separate item tag index nor a file name fold index, which no query uses.
     - Version 4 brings each item's loudness analysis version, with every stored peak cleared.
@@ -32,16 +32,18 @@ Core/server domain services own business rules and persisted state semantics.
     - Version 7 brings each item's rating, stored as a whole number of half stars from 1 to 10, with no value for none.
     - Version 8 brings the rating sort's indexes.
     - Version 9 brings each item's date added, set to its modified time, with the date added sort's indexes, and the modified time's sort indexes renamed for the date created.
+    - Version 10 brings the profile tables, `profiles` and `profile_sources`, with the default profile.
   - The `DateAdded` sort orders by the date added and `DateCreated` by the modified time, each through its own indexes.
   - `LibraryCatalogNameSortKey` computes the key, which orders like OrdinalIgnoreCase but takes its casing from .NET's built-in Unicode table rather than the system's ICU, so the key is the same on every system; insert and rename write it with the row.
-  - Presets and thumbnail revision, width, and height are catalog columns.
+  - Presets, profiles with their chosen sources, and thumbnail revision, width, and height are catalog columns.
   - Core settings stay in `core-settings.json`.
   - Startup opens it without reading the whole catalog and updates catalog rows in place.
   - A catalog that a newer version saved, including a replace file beside it, or one that cannot be opened or read at the moment, is left unchanged.
   - A file that is not a database, is corrupt, or has another schema, including a schema version before 2, is moved aside to `library.db.refused`.
   - An empty catalog is created only when there is no `library.db`, refused file, or catalog backup.
   - In any of those other cases the server runs without a library: library routes answer 503 with the reason, `/api/version`, `/control/status`, and the Operator page show it, and neither backups nor refresh run.
-  - `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging), with one index per sort mode and direction and both counts cached by catalog revision, search, and filter.
+  - `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, the profile's sources, filter, sort, paging), with one index per sort mode and direction and both counts cached by catalog revision, search, profile's sources, and filter.
+  - The ids-only query, random candidates, library stats' totals, and Auto Tag's scan take the profile's sources too, as a list of source ids, or none for every source.
   - The filter's tags become one set of item ids that each item is checked against once, so a filter costs the same with one tag or many; tags match by name fold.
   - Random eligibility uses that filter without search, plus the request's video and photo options, and reads each eligible item's id, path, play count, last played, date added, modified time, and rating, and every item's tags in one read only while Spread by tags is on; the picked item is read by id.
   - The server keeps each device's random pick memory by client id and drops it once the device's last pick is past its window.
@@ -84,6 +86,11 @@ Core/server domain services own business rules and persisted state semantics.
   - a preset holding the default filter, another preset's filter by Core's `FilterStateComparison`, or another preset's name is refused, and a write that throws or changes no catalog row is not saved, changes nothing, answers 500, and gets a `last.log` warning.
   - Tag rename and delete update the presets that hold the tag and are never refused for the filters they leave, and a failed preset write of theirs gets a `last.log` warning.
   - Source reads and enable and disable use catalog rows.
+- `src/core/ReelRoulette.Server/Services/LibraryProfileService.cs`
+  - profile reads and writes, read from the catalog on every call, each write publishing `profilesChanged` with every profile.
+  - A name another profile has, ignoring case, or a color that isn't `#rrggbb` is refused, and the default profile can't be deleted or given a chosen list of sources.
+  - A new profile takes the default profile's default filter.
+  - It resolves a request's profile to the sources it shows: every source for no profile, a profile that follows all sources, or an id the catalog doesn't have, which gets one `last.log` line the first time it comes.
 - `src/core/ReelRoulette.Server/Services/CoreSettingsService.cs`
   - core-owned runtime settings persistence/flow where applicable.
 
@@ -106,6 +113,8 @@ Boundary:
   - an event that would list more than 1,000 items is published as `resyncRequired` in its place (`PublishListingItems` in `ServerStateService`), with one for all of an Auto Tag apply's (`PublishEachListingItems`), as clear-stats' resync is, with the revision before it and its own.
   - A tag rename's or delete's `itemTagsChanged` is published whole, since other devices retarget their filters from it.
   - Item-tag writes go through one set of statements prepared per write that find an item's rows by its primary key (`ItemTagWriter` in `LibraryCatalogSession`).
+  - the profile routes under `/api/profiles`, which `LibraryProfileService` serves, and the `profileId` of the library query, the ids-only query, random picks and their cycle, Auto Tag's scan, and library stats, which each handler resolves to the profile's sources for the service it calls.
+  - the item events' `sourceId`, read with each item's values before the change.
   - `POST /api/show-in-file-manager/{itemId}`, accepted only from localhost, as `LocalRequest` decides, and the `api.showInFileManager` capability, which `/api/version` and `/api/capabilities` list only for a caller that route would accept.
 - `src/core/ReelRoulette.Server/Hosting/IFileManagerLauncher.cs`
   - the hook ServerApp registers to open the server machine's file manager, whether it has a desktop to open one in, and how a try went; without one registered, Show in File Manager is unavailable.
@@ -368,7 +377,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the Library tab's Random line, its label, separator, and wording.
 - `src/clients/web/ReelRoulette.WebUI/src/stats/libraryBaseline.ts`
   - the library's baseline loudness, loudness normalization's Automatic target:
-    - loads `GET /api/library/stats` for its `baselineLoudnessLufs` once the server is ready and after each refresh, removal of items, and resync, one load at a time and without a wait, and not while the server holds back or asks for pairing.
+    - loads `GET /api/library/stats` for its `baselineLoudnessLufs` once the server is ready and after each refresh, removal of items, source turned on or off, and resync, one load at a time and without a wait, and not while the server holds back or asks for pairing.
     - a failed load keeps the baseline it has, relays `audio=baseline-load-failed error=<reason>`, and is tried again every 5 seconds, relaying nothing more, until one succeeds, the server holds back or asks for pairing, or the connection stops.
     - a 401 relays nothing and isn't tried again.
 - `src/clients/web/ReelRoulette.WebUI/src/tags/tagCatalog.ts`

@@ -22,6 +22,10 @@ public sealed class LibraryListRequest
 {
     public string? Search { get; init; }
     public FilterStateModel? Filter { get; init; }
+
+    /// <summary>The sources the request's profile shows, or null when it shows every source.</summary>
+    public IReadOnlyCollection<string>? ProfileSourceIds { get; init; }
+
     public LibraryListSort Sort { get; init; } = LibraryListSort.Name;
     public bool SortDescending { get; init; }
     public int Offset { get; init; }
@@ -52,7 +56,10 @@ internal static class LibraryCatalogListSql
             (left, right) => StringComparer.OrdinalIgnoreCase.Compare(left, right));
     }
 
-    /// <summary>The query's WHERE clause, with the filter's date ranges resolved against <paramref name="clock"/>.</summary>
+    /// <summary>
+    /// The query's WHERE clause, with the filter's date ranges resolved against <paramref name="clock"/>. The profile's
+    /// sources are outside the filter, so the count without the filter keeps to them too.
+    /// </summary>
     public static string BuildWhere(
         LibraryListRequest request,
         bool includeFilter,
@@ -62,6 +69,7 @@ internal static class LibraryCatalogListSql
     {
         var where = new StringBuilder("WHERE 1 = 1");
         AppendSearch(where, request.Search, args);
+        AppendProfileSources(where, request.ProfileSourceIds, args);
         if (includeFilter && request.Filter != null)
         {
             AppendFilter(where, request.Filter, catalogTags, clock, args);
@@ -112,22 +120,11 @@ internal static class LibraryCatalogListSql
         FilterClock clock,
         SqlArgs args)
     {
+        // An empty source list in a filter means every source.
         var included = filter.IncludedSourceIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
         if (included.Count > 0)
         {
-            where.Append(" AND (");
-            for (var i = 0; i < included.Count; i++)
-            {
-                if (i > 0)
-                {
-                    where.Append(" OR ");
-                }
-
-                var name = args.Add(included[i]);
-                where.Append(CultureInfo.InvariantCulture, $"items.source_id = {name} COLLATE {CollationName}");
-            }
-
-            where.Append(')');
+            AppendSources(where, included, args);
         }
 
         AppendFlag(where, "items.is_blacklisted", filter.BlacklistedMode);
@@ -205,6 +202,46 @@ internal static class LibraryCatalogListSql
         {
             where.Append(CultureInfo.InvariantCulture, $" AND items.media_type = {PhotoMediaType}");
         }
+    }
+
+    /// <summary>
+    /// Keeps the items in a profile's sources: every item for null, a profile that shows every source, and none for a
+    /// chosen list that names no source.
+    /// </summary>
+    public static void AppendProfileSources(StringBuilder where, IReadOnlyCollection<string>? sourceIds, SqlArgs args)
+    {
+        if (sourceIds == null)
+        {
+            return;
+        }
+
+        if (sourceIds.Count == 0)
+        {
+            where.Append(" AND 0 = 1");
+            return;
+        }
+
+        AppendSources(where, sourceIds, args);
+    }
+
+    /// <summary>Keeps the items in any of the sources, matching their ids ignoring case.</summary>
+    private static void AppendSources(StringBuilder where, IEnumerable<string> sourceIds, SqlArgs args)
+    {
+        where.Append(" AND (");
+        var first = true;
+        foreach (var sourceId in sourceIds)
+        {
+            if (!first)
+            {
+                where.Append(" OR ");
+            }
+
+            first = false;
+            var name = args.Add(sourceId);
+            where.Append(CultureInfo.InvariantCulture, $"items.source_id = {name} COLLATE {CollationName}");
+        }
+
+        where.Append(')');
     }
 
     private static void AppendFlag(StringBuilder where, string column, FlagFilterModeValue mode)

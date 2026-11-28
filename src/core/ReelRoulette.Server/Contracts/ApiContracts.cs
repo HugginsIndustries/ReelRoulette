@@ -23,6 +23,27 @@ public sealed class PresetResponse
     public JsonElement? FilterState { get; set; }
 }
 
+/// <summary>A profile: a named view of the library that shows every source, following newly added ones, or a chosen list.</summary>
+public sealed class ProfileResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The profile's color as <c>#rrggbb</c>.</summary>
+    public string Color { get; set; } = string.Empty;
+
+    /// <summary>Whether this is the default profile, which always shows every source and can't be deleted.</summary>
+    public bool IsDefault { get; set; }
+
+    public bool FollowsAllSources { get; set; } = true;
+
+    /// <summary>The chosen sources' ids, empty while the profile follows all sources.</summary>
+    public List<string> SourceIds { get; set; } = [];
+
+    /// <summary>The profile's default filter as it was saved, or null for the built-in default filter.</summary>
+    public JsonElement? DefaultFilter { get; set; }
+}
+
 public sealed class SourceResponse
 {
     public string Id { get; set; } = string.Empty;
@@ -92,6 +113,9 @@ public sealed class RandomRequest
 
     /// <summary>The options the pick combines, or null for every option's default.</summary>
     public RandomPickOptionsRequest? Options { get; set; }
+
+    /// <summary>The device's active profile, whose sources the request keeps to, or null for the default profile.</summary>
+    public string? ProfileId { get; set; }
 }
 
 /// <summary>
@@ -323,6 +347,43 @@ public sealed class ReorderPresetsRequest
 }
 
 public sealed class DeletePresetRequest
+{
+    public string? ClientId { get; set; }
+}
+
+public sealed class CreateProfileRequest
+{
+    public string? Name { get; set; }
+
+    /// <summary>The profile's color as <c>#rrggbb</c>.</summary>
+    public string? Color { get; set; }
+
+    /// <summary>True for all sources, following newly added ones, false for the chosen list in <see cref="SourceIds"/>.</summary>
+    public bool FollowsAllSources { get; set; } = true;
+
+    public List<string>? SourceIds { get; set; }
+    public string? ClientId { get; set; }
+}
+
+/// <summary>A profile update: each field left out or null keeps the profile's own.</summary>
+public sealed class UpdateProfileRequest
+{
+    public string? Name { get; set; }
+    public string? Color { get; set; }
+
+    /// <summary>True for all sources, following newly added ones, false for a chosen list.</summary>
+    public bool? FollowsAllSources { get; set; }
+
+    /// <summary>The chosen sources, read whenever the profile has a chosen list after the update.</summary>
+    public List<string>? SourceIds { get; set; }
+
+    /// <summary>The profile's new default filter, a filter state object.</summary>
+    public JsonElement? DefaultFilter { get; set; }
+
+    public string? ClientId { get; set; }
+}
+
+public sealed class DeleteProfileRequest
 {
     public string? ClientId { get; set; }
 }
@@ -669,6 +730,9 @@ public sealed class ItemStateChangedPayload
 {
     public string ItemId { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
+
+    /// <summary>The source the item is in, so a profile that hides it can leave the change out.</summary>
+    public string SourceId { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }
     public bool PreviousIsFavorite { get; set; }
@@ -698,6 +762,9 @@ public sealed class BulkItemStateChangedPayload
 public sealed class BulkItemState
 {
     public string ItemId { get; set; } = string.Empty;
+
+    /// <summary>The source the item is in, so a profile that hides it can leave the change out.</summary>
+    public string SourceId { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }
     public bool PreviousIsFavorite { get; set; }
@@ -723,6 +790,9 @@ public sealed class BulkItemRating
 {
     public string ItemId { get; set; } = string.Empty;
 
+    /// <summary>The source the item is in, so a profile that hides it can leave the change out.</summary>
+    public string SourceId { get; set; } = string.Empty;
+
     /// <summary>The rating in stars, or null for none.</summary>
     public double? Rating { get; set; }
 
@@ -739,6 +809,9 @@ public sealed class ItemRatingChangedPayload
 {
     public string ItemId { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
+
+    /// <summary>The source the item is in, so a profile that hides it can leave the change out.</summary>
+    public string SourceId { get; set; } = string.Empty;
     /// <summary>The rating in stars, or null for none.</summary>
     public double? Rating { get; set; }
     /// <summary>The rating before this change, in stars, or null for none.</summary>
@@ -785,6 +858,15 @@ public sealed class PresetCatalogChangedPayload
     public string? PresetId { get; set; }
 
     /// <summary>The client whose request changed the presets, so it can tell its own change from another device's.</summary>
+    public string? ClientId { get; set; }
+}
+
+public sealed class ProfilesChangedPayload
+{
+    /// <summary>Every profile after the change, in the order the profile list gives them.</summary>
+    public List<ProfileResponse> Profiles { get; set; } = [];
+
+    /// <summary>The client whose request changed the profiles, so it can tell its own change from another device's.</summary>
     public string? ClientId { get; set; }
 }
 
@@ -890,6 +972,9 @@ public sealed class DuplicateApplyFailure
 public sealed class AutoTagScanRequest
 {
     public bool ScanFullLibrary { get; set; } = true;
+
+    /// <summary>The device's active profile, whose sources the request keeps to, or null for the default profile.</summary>
+    public string? ProfileId { get; set; }
 }
 
 public sealed class AutoTagScanResponse
@@ -950,6 +1035,9 @@ public sealed class LibraryQueryRequest
     public bool? SortDescending { get; set; }
     public int? Offset { get; set; }
     public int? Limit { get; set; }
+
+    /// <summary>The device's active profile, whose sources the request keeps to, or null for the default profile.</summary>
+    public string? ProfileId { get; set; }
 }
 
 public sealed class LibraryIdsQueryRequest
@@ -959,6 +1047,9 @@ public sealed class LibraryIdsQueryRequest
 
     /// <summary>When set, only these ids are answered, those that match, as when checking a selection.</summary>
     public List<string>? ItemIds { get; set; }
+
+    /// <summary>The device's active profile, whose sources the request keeps to, or null for the default profile.</summary>
+    public string? ProfileId { get; set; }
 }
 
 public sealed class LibraryIdsQueryResponse
