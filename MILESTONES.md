@@ -907,23 +907,7 @@ Last milestone completed: M12n4
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Update download report | ⏳ Planned | The cause of the Operator's two-attempt update download, reported before the admin section's update controls are built. |
 | Admin section | ⏳ Planned | A full-page admin view with every Operator section but its Server Logs, as Preact screens on the same control routes. |
-
-#### Update download report slice
-
-**Scope**
-
-- Find and report the cause of the Operator's update download needing two attempts, so the admin section's update controls don't inherit it.
-
-**Traps**
-
-- The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads (measured).
-- No commit has fixed it.
-
-**Acceptance**
-
-- The report names the cause of the Operator's two attempts, and is written before the Admin section slice starts.
 
 #### Admin section slice
 
@@ -946,6 +930,7 @@ Last milestone completed: M12n4
   - connected clients;
   - incoming and outgoing API events.
 - The screens call the same control routes, so there is no contract change.
+- While an update downloads, Download Update is disabled and the update line says the download is under way, until it finishes or fails. The mockup shows this state before the slice is built.
 - The Operator page stays until Recovery Page and Operator Retirement retires it, so its Server Logs stay reachable until Log Viewer Redesign adds the Log Viewer.
 - The control token shows hidden, with Show and Copy beside it.
 - Saving a changed token asks first, "Change the control token? Other machines will be signed out and need the new token to open admin.", with Cancel focused and a red Change Token. Saving it unchanged asks nothing.
@@ -969,6 +954,8 @@ Last milestone completed: M12n4
 - `verify-linux-packaged-server-smoke.sh` still requests `/operator` (measured).
 - The Operator page's responsive layout is a 12-column grid that changes at 620 and 980 px wide.
 - The Operator page shows the control token as plain text and saves a change without asking (`adminSharedToken` in `Program.cs`).
+- The Operator's update download looked like it needed two attempts, but the first Download and confirmation does download: nothing shows that it is under way, so the user pressed again before it finished (the user, 2026-11-28).
+- The admin mockup's Download Update goes straight to "downloaded and ready to apply", with no state while it downloads (`build/admin.src.html`).
 - The server keeps each event stream's client id, user agent, and connection time (`ConnectedClientTracker`), so connected clients need no contract change.
 - WebUI Context Menus renders its menus inside the fullscreen stage (`ContextMenuHost` in `src/ui/Stage.tsx`).
 - A full-page admin view may cover or replace the fullscreen stage, and the menus with it (inferred).
@@ -982,7 +969,7 @@ Last milestone completed: M12n4
 - The admin section offers every action and setting the Operator page offers today, apart from its Server Logs and Enable Web UI, and calls the same routes, in admin section UI tests of loading status and settings, saving settings, and the testing panel.
 - Connected clients show each client's id with its operating system where the user agent names one, its type, address, and connection time, and the three counts, without the session id, in admin section UI tests.
 - A connection time reads "HH:MM" for today and "MM-DD HH:MM" for another day, in admin section UI tests.
-- In the admin section, one Download click and one confirmation start the update download, in admin section UI tests.
+- In the admin section, one Download click and one confirmation start the update download, and Download Update stays disabled, with the update line saying it's downloading, until the download finishes or fails, in admin section UI tests.
 - The admin view has no status line, its bar ends with the bell, which opens the list, and its acknowledgments pop up, in admin section UI tests of its notifications.
 - The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing, in admin section UI tests of the control token's Show, Copy, and change confirmation.
 - An admin settings field with a value the server would not accept, such as the port, is flagged with the field validation pattern as it is typed, and its Save can't proceed until it is corrected, in admin section UI tests of settings fields with the field validation pattern.
