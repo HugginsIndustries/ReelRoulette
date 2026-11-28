@@ -287,6 +287,36 @@ describe("startup and connection", () => {
     ]);
   });
 
+  it("sends an automatic refresh with no library changes only to the bell's list, unmarked and uncounted, and pops up one the user starts", async () => {
+    const page = mountPage();
+    await pageReady(page.server);
+    const stream = page.stream();
+    const toastTexts = () =>
+      Array.from(document.querySelectorAll("#toasts .toast:not(.is-leaving)")).map((toast) => toast.querySelector(".toast-text > div")!.textContent);
+    const bell = () => document.getElementById("notify-btn")!;
+    const finished = (runId: string, trigger: string) =>
+      refreshStatus({ runId, trigger, completedUtc: "2026-10-07T00:00:00Z", ffmpegNotFound: true });
+
+    stream.emit("refreshStatusChanged", 2, { snapshot: finished("run-1", "auto") });
+    await settle();
+    expect(toastTexts()).toEqual([]);
+    expect(bell().querySelector<HTMLElement>(".notify-badge")!.hidden).toBe(true);
+    expect(page.server.logLines()).toContain(statusLogLine("Library refresh finished: ffmpeg not found", null, 0));
+    fireEvent.click(bell());
+    await settle();
+    const recent = Array.from(document.querySelectorAll('#notify-list [data-part="recent"] .notify-entry'));
+    expect(recent.map((row) => [row.querySelector(".notify-text")!.textContent, row.querySelector(".notify-detail")!.textContent])).toEqual([
+      ["Library refresh finished", "ffmpeg not found"]
+    ]);
+    expect(recent[0]!.classList.contains("is-unread")).toBe(false);
+    fireEvent.click(bell());
+    await settle();
+
+    stream.emit("refreshStatusChanged", 3, { snapshot: finished("run-2", "manual") });
+    await settle();
+    expect(toastTexts()).toEqual(["Library refresh finished"]);
+  });
+
   it("reloads presets and the library when the server asks for a resync", async () => {
     const server = new FakeServer();
     const page = mountPage({ server });

@@ -3264,7 +3264,7 @@ describe("the player's indicator", () => {
   it("shows the first active lasting state in the precedence order, alone and together, so it never alternates", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { store } = await mountWithServices();
-    store.refreshProgress.value = { stage: "Scanning durations", percent: 42 };
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 42, line: "17 of 40 videos" };
     store.loading.hold("pick");
     await vi.advanceTimersByTimeAsync(500);
     store.libraryState.value = "missing";
@@ -3321,9 +3321,9 @@ describe("the player's indicator", () => {
     }
   });
 
-  it("shows a refresh's percentage after the text that ends in an ellipsis, outside it", async () => {
+  it("shows a refresh's percentage after the text that ends in an ellipsis, outside it, and never its second line", async () => {
     const { store } = await mountWithServices();
-    store.refreshProgress.value = { stage: "Generating thumbnails", percent: 7 };
+    store.refreshProgress.value = { stage: "Generating thumbnails", percent: 7, line: "3,462 of 49,455 files" };
     await flush();
 
     const box = indicatorBox();
@@ -3350,7 +3350,7 @@ describe("the player's indicator", () => {
     useStylesheet();
     const { store } = await mountWithServices(serverPicking(VIDEO_ITEM));
     await click(emptyState());
-    store.refreshProgress.value = { stage: "Refreshing sources", percent: 3 };
+    store.refreshProgress.value = { stage: "Refreshing sources", percent: 3, line: null };
     await flush();
     // happy-dom reports no opacity where no rule sets one, which is fully shown.
     expect(currentStyle(indicatorBox()).opacity).not.toBe("0");
@@ -3373,7 +3373,7 @@ describe("the player's indicator", () => {
   it("stays clear of the corner buttons on both sides, a long state ending in an ellipsis", async () => {
     useStylesheet();
     const { store } = await mountWithServices();
-    store.refreshProgress.value = { stage: "Fingerprinting files", percent: 50 };
+    store.refreshProgress.value = { stage: "Fingerprinting files", percent: 50, line: "Checking 24,728 of 49,455 files" };
     await flush();
 
     const box = currentStyle(indicatorBox());

@@ -2381,8 +2381,8 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
-  // `popup: false` adds the message to the list only, as an automatic refresh that changes nothing does, and `unread`
-  // says whether the badge then counts it.
+  // `popup: false` adds the message to the list only, as an automatic refresh with no library changes does, and
+  // `unread` says whether the badge then counts it.
   function notify({ kind, text, detail = "", key = "", level = "", icon = "", popup = true, unread = true }) {
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;

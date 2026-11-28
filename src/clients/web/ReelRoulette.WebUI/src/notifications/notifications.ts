@@ -110,6 +110,11 @@ export interface NotifyRequest {
   icon?: string;
   /** What `last.log` gets in place of `text`, such as a text that leaves out a file name. */
   logText?: string;
+  /**
+   * It goes only to the list, unmarked: it doesn't pop up, and the badge doesn't count it, as an automatic refresh
+   * with no library changes.
+   */
+  quiet?: boolean;
 }
 
 /**
@@ -129,7 +134,7 @@ export interface Notifications {
   /** Show seconds, off by default: the list's times read HH:MM:SS in place of HH:MM. */
   readonly showSeconds: ReadonlySignal<boolean>;
   setShowSeconds(on: boolean): void;
-  /** A one-off message: it pops up if its kind is on, and the list keeps it either way. It relays its text. */
+  /** A one-off message: it pops up if its kind is on, unless it is quiet, and the list keeps it either way. It relays its text. */
   notify(request: NotifyRequest): void;
   /** Keeps a notice in the list, unmarked, since the user saw it in its dialog. It relays nothing; the notice did. */
   record(text: string): void;
@@ -303,8 +308,13 @@ export function createNotifications(options: NotificationsOptions): Notification
     const current = settings.peek();
     const open = listOpen.peek();
     const pops =
-      current.popups && current.kinds[request.kind] && !open && (current.fullscreen || !options.inFullscreen.peek()) && hasRoom(key);
-    if (!pops && !open) {
+      !request.quiet &&
+      current.popups &&
+      current.kinds[request.kind] &&
+      !open &&
+      (current.fullscreen || !options.inFullscreen.peek()) &&
+      hasRoom(key);
+    if (!pops && !open && !request.quiet) {
       entry.unread = true;
       unread.value = unread.peek() + 1;
     }

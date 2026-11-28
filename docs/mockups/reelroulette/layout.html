@@ -2321,7 +2321,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <button type="button" data-test="burst">Four at once</button>
           <button type="button" data-test="yesterday">From yesterday</button>
         </div>
-        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it. Automatic refresh, no changes goes only to the list too, as an automatic refresh that changes nothing does, and the bell doesn't count it, while one the user starts pops up "No changes". From yesterday goes only to the list, as one kept from an earlier visit, and shows its date.</p>
+        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it. Automatic refresh, no changes goes only to the list too, as an automatic refresh with no library changes does, even one that names problems such as "ffmpeg not found", and the bell doesn't count it, while one the user starts pops up whatever it found. From yesterday goes only to the list, as one kept from an earlier visit, and shows its date.</p>
       </fieldset>
       <fieldset>
         <legend>How a finished refresh reads</legend>
@@ -3646,8 +3646,8 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
-  // `popup: false` adds the message to the list only, as an automatic refresh that changes nothing does, and `unread`
-  // says whether the badge then counts it.
+  // `popup: false` adds the message to the list only, as an automatic refresh with no library changes does, and
+  // `unread` says whether the badge then counts it.
   function notify({ kind, text, detail = "", key = "", level = "", icon = "", popup = true, unread = true }) {
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;
@@ -7662,7 +7662,8 @@ const TESTS = {
   devices: () => notes.notify({ kind: "devices", text: "Blacklisted on another device", detail: sampleName() }),
   refresh: () => notes.notify(refreshFinished()),
   "refresh-failed": () => notes.notify(refreshFailed()),
-  // An automatic refresh that changes nothing goes only to the list, and the badge doesn't count it.
+  // An automatic refresh with no library changes goes only to the list, even one that names problems, and the badge
+  // doesn't count it.
   "refresh-auto": () => notes.notify({ ...refreshFinished(), detail: REFRESH_RUNS.none, popup: false, unread: false }),
   skips: () => notes.notify({ kind: "skips", text: "Skipped a file this browser can't play.", detail: sampleName(), key: "skip" }),
   connection: () => notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" }),

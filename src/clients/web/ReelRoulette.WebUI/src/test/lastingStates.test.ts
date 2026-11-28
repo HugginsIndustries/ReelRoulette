@@ -22,7 +22,7 @@ function activateAll(store: ReturnType<typeof setup>["store"]): void {
   store.libraryState.value = "newer";
   store.loading.hold("pick");
   vi.advanceTimersByTime(500);
-  store.refreshProgress.value = { stage: "Scanning durations", percent: 40 };
+  store.refreshProgress.value = { stage: "Scanning durations", percent: 40, line: "16 of 40 videos" };
 }
 
 describe("lasting states", () => {
@@ -50,7 +50,7 @@ describe("lasting states", () => {
     ],
     [
       "refresh",
-      (store: ReturnType<typeof setup>["store"]) => (store.refreshProgress.value = { stage: "Refreshing sources", percent: 10 }),
+      (store: ReturnType<typeof setup>["store"]) => (store.refreshProgress.value = { stage: "Refreshing sources", percent: 10, line: null }),
       "Library refresh: Refreshing sources",
       "autorenew"
     ]
@@ -130,20 +130,24 @@ describe("lasting states", () => {
     expect(activeLastingStates(store).filter((state) => state.reloads).map((state) => state.id)).toEqual(["update"]);
   });
 
-  it("gives the server's states a second line for the list's Now: the reconnect's, and the server's own messages", () => {
+  it("gives the server's states and a refresh a second line for the list's Now: the reconnect's, the server's own messages, and the refresh's progress", () => {
     const { store } = setup();
     store.reconnecting.value = true;
     store.compatibilityBlocked.value = true;
     store.compatibilityMessage.value = "Unsupported server API version: 2.";
     store.libraryState.value = "newer";
     store.libraryMessage.value = "The library was saved by a newer version.";
-    store.refreshProgress.value = { stage: "Scanning durations", percent: 40 };
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 40, line: "16 of 40 videos" };
     expect(activeLastingStates(store).map((state) => state.detail)).toEqual([
       "The connection to the server was lost. ReelRoulette keeps trying.",
       "Unsupported server API version: 2.",
       "The library was saved by a newer version.",
-      null
+      "16 of 40 videos"
     ]);
+
+    // A refresh before its first stage has no second line.
+    store.refreshProgress.value = { stage: "Starting", percent: 0, line: null };
+    expect(activeLastingStates(store).find((state) => state.id === "refresh")!.detail).toBeNull();
   });
 
   it("shows nothing while the server asks for pairing", () => {
@@ -155,7 +159,7 @@ describe("lasting states", () => {
     expect(indicator.value!.id).toBe("reconnecting");
   });
 
-  it("relays a state's text once when it starts showing, and a refresh once per stage", () => {
+  it("relays a state's text once when it starts showing, and a refresh once per stage whatever its second line", () => {
     const { store, relayed } = setup();
     store.reconnecting.value = true;
     // Still showing, so a change of something it doesn't show relays nothing.
@@ -171,9 +175,12 @@ describe("lasting states", () => {
     vi.advanceTimersByTime(2_000);
     relayed.length = 0;
     store.reconnecting.value = false;
-    store.refreshProgress.value = { stage: "Refreshing sources", percent: 0 };
-    store.refreshProgress.value = { stage: "Refreshing sources", percent: 50 };
-    store.refreshProgress.value = { stage: "Scanning durations", percent: 0 };
+    store.refreshProgress.value = { stage: "Refreshing sources", percent: 0, line: null };
+    store.refreshProgress.value = { stage: "Refreshing sources", percent: 50, line: "Source 1 of 2" };
+    store.refreshProgress.value = { stage: "Refreshing sources", percent: 75, line: "Source 2 of 2 · 10 of 20 new files" };
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 0, line: null };
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 50, line: "20 of 40 videos" };
+    // The second line, which the indicator never shows, relays nothing either.
     expect(relayed).toEqual(["status=Library refresh: Refreshing sources (0%)", "status=Library refresh: Scanning durations (0%)"]);
   });
 

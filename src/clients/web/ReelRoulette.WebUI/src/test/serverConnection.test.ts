@@ -955,7 +955,7 @@ describe("createServerConnection", () => {
       stages: { sourceRefresh: { percent: 40, added: 12, removed: 3 } }
     });
     stream.emit("refreshStatusChanged", 1, { snapshot: running });
-    expect(store.refreshProgress.value).toEqual({ stage: "Refreshing sources", percent: 40 });
+    expect(store.refreshProgress.value).toEqual({ stage: "Refreshing sources", percent: 40, line: null });
     expect(statuses).toEqual([]);
     expect(notified).toEqual([]);
 
@@ -973,7 +973,8 @@ describe("createServerConnection", () => {
         text: "Library refresh finished",
         detail: summary,
         key: "refresh",
-        logText: `Library refresh finished: ${summary}`
+        logText: `Library refresh finished: ${summary}`,
+        quiet: false
       },
       // A failed run names the stage it stopped in, which the server keeps as its current stage.
       { kind: "refresh", text: "Library refresh failed", detail: "Refreshing sources failed.", key: "refresh", warning: true }
@@ -986,6 +987,45 @@ describe("createServerConnection", () => {
     expect(store.refreshProgress.value).not.toBeNull();
     stream.emit("resyncRequired", 9, { reason: "gap" });
     expect(store.refreshProgress.value).toBeNull();
+  });
+
+  it("shows a running refresh's progress line for the bell's Now", async () => {
+    const { store, connection, sources } = setup();
+    connection.start();
+    await settle();
+    sources[0]!.emit("refreshStatusChanged", 1, {
+      snapshot: refreshStatus({
+        isRunning: true,
+        currentStage: "durationScan",
+        stages: { durationScan: { percent: 30, processed: 12, total: 40 } }
+      })
+    });
+    expect(store.refreshProgress.value).toEqual({ stage: "Scanning durations", percent: 30, line: "12 of 40 videos" });
+  });
+
+  it("sends an automatic refresh with no library changes only to the list, even with problems, and pops up every other finished refresh", async () => {
+    const { connection, sources, notified } = setup();
+    connection.start();
+    await settle();
+    const finished = (runId: string, overrides: Parameters<typeof refreshStatus>[0]) => ({
+      snapshot: refreshStatus({ runId, completedUtc: "2026-10-07T00:00:00Z", ...overrides })
+    });
+    sources[0]!.emit("refreshStatusChanged", 1, finished("run-1", { trigger: "auto" }));
+    sources[0]!.emit("refreshStatusChanged", 2, finished("run-2", { trigger: "auto", ffmpegNotFound: true, stages: { loudnessScan: { failed: 2 } } }));
+    sources[0]!.emit("refreshStatusChanged", 3, finished("run-3", { trigger: "auto", stages: { sourceRefresh: { added: 1 } } }));
+    sources[0]!.emit("refreshStatusChanged", 4, finished("run-4", { trigger: "manual" }));
+    sources[0]!.emit("refreshStatusChanged", 5, finished("run-5", { trigger: "manual", ffmpegNotFound: true }));
+    expect(notified.map((request) => [request.detail, request.quiet])).toEqual([
+      ["No changes", true],
+      ["2 loudness scans failed, ffmpeg not found", true],
+      ["1 added", false],
+      ["No changes", false],
+      ["ffmpeg not found", false]
+    ]);
+    // An automatic refresh that failed is a warning, which pops up.
+    sources[0]!.emit("refreshStatusChanged", 6, finished("run-6", { trigger: "auto", failed: true, currentStage: "sourceRefresh" }));
+    expect(notified.at(-1)).toMatchObject({ text: "Library refresh failed", warning: true });
+    expect(notified.at(-1)!.quiet).toBeUndefined();
   });
 });
 

@@ -573,7 +573,7 @@ describe("the list", () => {
     store.compatibilityMessage.value = "Server API 3 is newer than this page supports (API 2).";
     store.libraryState.value = "missing";
     store.libraryMessage.value = "The library file is missing.";
-    store.refreshProgress.value = { stage: "Scanning durations", percent: 42 };
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 42, line: "17 of 40 videos" };
     await flush();
 
     expect(part("now").hidden).toBe(false);
@@ -582,7 +582,7 @@ describe("the list", () => {
       { text: "Reconnecting…", time: "", detail: RECONNECTING_DETAIL, classes: [] },
       { text: "Server not compatible", time: "", detail: "Server API 3 is newer than this page supports (API 2).", classes: ["is-warning"] },
       { text: "Running without a library", time: "", detail: "The library file is missing.", classes: ["is-warning"] },
-      { text: "Library refresh: Scanning durations (42%)", time: "", detail: null, classes: [] }
+      { text: "Library refresh: Scanning durations (42%)", time: "", detail: "17 of 40 videos", classes: [] }
     ]);
 
     store.reconnecting.value = false;

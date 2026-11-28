@@ -52,7 +52,30 @@ describe("event helpers", () => {
       refreshStatus({ completedUtc: "2026-03-29T12:00:00Z", stages: { sourceRefresh: { added: 12 } } })
     );
 
-    expect(outcome).toEqual({ result: "finished", summary: "12 added" });
+    expect(outcome).toEqual({ result: "finished", summary: "12 added", changed: true });
+  });
+
+  it("tells a finished refresh that changed the library or rescanned from one that changed nothing or found only problems", () => {
+    const finished = (overrides: Parameters<typeof refreshStatus>[0]) =>
+      refreshOutcome(refreshStatus({ completedUtc: "2026-03-29T12:00:00Z", ...overrides }));
+
+    expect(finished({})).toEqual({ result: "finished", summary: "No changes", changed: false });
+    expect(finished({ ffmpegNotFound: true, stages: { loudnessScan: { failed: 2 }, sourceRefresh: { unmatched: 1 } } })).toEqual({
+      result: "finished",
+      summary: "1 left unmatched, 2 loudness scans failed, ffmpeg not found",
+      changed: false
+    });
+    for (const stages of [
+      { sourceRefresh: { removed: 1 } },
+      { sourceRefresh: { renamed: 1 } },
+      { sourceRefresh: { moved: 1 } },
+      { fingerprintScan: { changed: 1 } },
+      { durationScan: { changed: 1 } },
+      // A rescan the user turned on runs once, so its result is news even when it changed nothing.
+      { loudnessScan: { forced: true } }
+    ]) {
+      expect(finished({ stages, ffprobeNotFound: true })).toMatchObject({ changed: true });
+    }
   });
 
   it("sums up a refresh that changed nothing as No changes, leaving out the work done for new files", () => {
@@ -170,9 +193,39 @@ describe("event helpers", () => {
     ] as const;
     for (const [stage, label] of stages) {
       const snapshot = refreshStatus({ isRunning: true, currentStage: stage, stages: { [stage]: { percent: 35 } } });
-      expect(refreshProgress(snapshot)).toEqual({ stage: label, percent: 35 });
+      expect(refreshProgress(snapshot)).toEqual({ stage: label, percent: 35, line: null });
     }
-    expect(refreshProgress(refreshStatus({ isRunning: true }))).toEqual({ stage: "Starting", percent: 0 });
+    expect(refreshProgress(refreshStatus({ isRunning: true }))).toEqual({ stage: "Starting", percent: 0, line: null });
     expect(refreshProgress(refreshStatus({ completedUtc: "2026-10-13T10:00:00Z" }))).toBeNull();
+  });
+
+  it("words each stage's progress line, grouping its numbers, and none before a stage has counted its work", () => {
+    const line = (overrides: Parameters<typeof refreshStatus>[0]) => refreshProgress(refreshStatus({ isRunning: true, ...overrides }))!.line;
+    const n = (count: number) => count.toLocaleString();
+
+    // Before the first source, and with no source enabled, so "0 of 0" never shows.
+    expect(line({ currentStage: "sourceRefresh" })).toBeNull();
+    expect(line({ currentStage: "sourceRefresh", stages: { sourceRefresh: { source: 2, sourceCount: 3 } } })).toBe("Source 2 of 3");
+    expect(
+      line({ currentStage: "sourceRefresh", stages: { sourceRefresh: { source: 2, sourceCount: 3, newFilesFingerprinted: 120, newFilesToFingerprint: 400 } } })
+    ).toBe("Source 2 of 3 · 120 of 400 new files");
+    expect(line({ currentStage: "nameSortKeys", stages: { nameSortKeys: { processed: 1234, total: 49455 } } })).toBe(`${n(1234)} of ${n(49455)} files`);
+    expect(line({ currentStage: "fingerprintScan", stages: { fingerprintScan: { phase: "checking", processed: 12000, total: 49455 } } })).toBe(
+      `Checking ${n(12000)} of ${n(49455)} files`
+    );
+    expect(line({ currentStage: "fingerprintScan", stages: { fingerprintScan: { phase: "hashing", processed: 1234, total: 2000 } } })).toBe(
+      `${n(1234)} of ${n(2000)} files`
+    );
+    expect(line({ currentStage: "durationScan", stages: { durationScan: { processed: 12, total: 40 } } })).toBe("12 of 40 videos");
+    expect(line({ currentStage: "loudnessScan", stages: { loudnessScan: { processed: 0, total: 1 } } })).toBe("0 of 1 video");
+    expect(
+      line({ currentStage: "thumbnailGeneration", stages: { thumbnailGeneration: { phase: "generating", processed: 12000, total: 49455 } } })
+    ).toBe(`${n(12000)} of ${n(49455)} files`);
+    expect(line({ currentStage: "thumbnailGeneration", stages: { thumbnailGeneration: { phase: "cleanup", processed: 120, total: 5000 } } })).toBe(
+      `Removing 120 of ${n(5000)} old thumbnails`
+    );
+    // A stage with nothing to do.
+    expect(line({ currentStage: "durationScan", stages: { durationScan: { isComplete: true, percent: 100 } } })).toBeNull();
+    expect(line({ currentStage: "thumbnailGeneration", stages: { thumbnailGeneration: { phase: "cleanup" } } })).toBeNull();
   });
 });

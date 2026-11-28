@@ -171,6 +171,19 @@ describe("notifications", () => {
     expect(off.notes.entries.value.every((entry) => !entry.highlight)).toBe(true);
   });
 
+  it("sends a quiet message only to the list, unmarked and uncounted, and relays it, whatever its kind's setting", () => {
+    for (const saved of [undefined, { kinds: { refresh: false } }]) {
+      const { notes, relayed, shown } = setup(saved);
+      notes.notify({ kind: "refresh", text: "Library refresh finished", detail: "No changes", key: "refresh", logText: "Library refresh finished: No changes", quiet: true });
+      expect(shown()).toEqual([]);
+      expect(notes.unread.value).toBe(0);
+      expect(notes.entries.value).toMatchObject([{ text: "Library refresh finished", detail: "No changes", unread: false }]);
+      expect(relayed).toEqual(["Library refresh finished: No changes"]);
+      notes.openList();
+      expect(notes.entries.value[0]!.highlight).toBe(false);
+    }
+  });
+
   it("keeps a notice unmarked with the error icon, relaying nothing, and keeps the last 50 messages", () => {
     const { notes, relayed } = setup();
     notes.record("Saving presets failed.");

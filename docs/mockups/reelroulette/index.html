@@ -726,7 +726,7 @@ th { font-weight: 600; }
     <ul>
       <li>Nothing plays until a tap or Play starts a random pick. Previous and Next step through what played, and Next and autoplay pick at random at its end. R and the Random button pick from anywhere in it. Each skips a missing file or one this browser can't play, saying so in a popup. Play behavior, in Settings, places a pick from R or the Random button, and a file played from the library, right after the current item with Insert, its default, or at the end with Jump; either way every entry stays.</li>
       <li>No status line. Lasting states (reconnecting, a newer build of ReelRoulette on the server, a server that fails the compatibility check or runs without a library, loading, and a library refresh) show one at a time on the player's indicator. One-off messages pop up briefly, three at most. The bell at the player's top left, which shows and hides with its other controls, lists recent messages, the in-app notices included, and every lasting state under Now; its badge counts what didn't pop up, and the bell is orange while there is any. Each message shows its time, "HH:MM" today and "MM-DD HH:MM" for another day, and the list is kept on the device across reloads, with what was read, until Clear.</li>
-      <li>A running library refresh shows its stage and percent on the indicator, and under Now its progress line too, such as "Checking 12,000 of 49,455 files". A finished one pops up only what it changed, "No changes" when nothing did, and a failed one the stage it stopped in. An automatic refresh that changes nothing goes only to the list, and the badge doesn't count it.</li>
+      <li>A running library refresh shows its stage and percent on the indicator, and under Now its progress line too, such as "Checking 12,000 of 49,455 files". A finished one pops up only what it changed, "No changes" when nothing did, and a failed one the stage it stopped in. An automatic refresh with no library changes goes only to the list, even one that names problems such as "ffmpeg not found", and the badge doesn't count it.</li>
       <li>When the server serves a newer build, "ReelRoulette updated · Tap to reload" shows on the indicator and under Now, except while reconnecting, since a reload then would fail. A tap on either reloads the page, after asking "Discard changes?" while the Filter or Tags tab holds unsaved changes. With a server that also fails the compatibility check, the indicator shows the update and Now lists both.</li>
       <li>The player's one panel button opens the panel on its last tab, and closes it. It sits on the panel's side, at the top right, or just right of the bell while the panel is on the left. The rating's star, Favorite, and Blacklist stay on the player; the seek row ends with Mute and the volume slider. The panel's tabs are, in order, Library, Tags, Stats, Filter, Randomization, and Settings.</li>
       <li>The player's controls don't appear, hide, or move on their own; a control may hide only because of a user setting, as the volume slider does on iOS while Enhanced audio is off.</li>
@@ -2078,8 +2078,8 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   }
 
   // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
-  // `popup: false` adds the message to the list only, as an automatic refresh that changes nothing does, and `unread`
-  // says whether the badge then counts it.
+  // `popup: false` adds the message to the list only, as an automatic refresh with no library changes does, and
+  // `unread` says whether the badge then counts it.
   function notify({ kind, text, detail = "", key = "", level = "", icon = "", popup = true, unread = true }) {
     const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
     const toastKey = key || kind + ":" + text;

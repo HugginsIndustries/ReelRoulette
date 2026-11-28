@@ -203,7 +203,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
 
   /**
    * How a refresh that isn't running ended: finished, with its summary, or failed, a warning that stays until closed.
-   * A cancelled run says nothing, and only relays.
+   * An automatic refresh whose summary names no library change goes only to the list, since the problems it can name
+   * come back on every refresh until they're fixed. A cancelled run says nothing, and only relays.
    */
   function showRefreshOutcome(snapshot: RefreshStatusSnapshot): void {
     const outcome = refreshOutcome(snapshot);
@@ -213,7 +214,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         text: "Library refresh finished",
         detail: outcome.summary,
         key: "refresh",
-        logText: `Library refresh finished: ${outcome.summary}`
+        logText: `Library refresh finished: ${outcome.summary}`,
+        quiet: snapshot.trigger === "auto" && !outcome.changed
       });
     } else if (outcome.result === "failed") {
       // The server writes the failure to last.log itself, with its error, so the relay sends only the first line.

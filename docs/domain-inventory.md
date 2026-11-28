@@ -429,6 +429,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the page's one-off messages:
     - each relays its text, or a log text that leaves out a file or preset name, to `last.log`, pops up if the popup settings allow, at most three at once, the cap never closing a warning, one with the same key replacing the one showing, a warning staying until closed, and the time pausing while held, with a floor.
     - the list keeps it, the last 50, with in-app notices kept unmarked.
+    - a quiet one, as an automatic refresh with no library changes, goes only to the list, unmarked and uncounted.
   - The badge's count of what didn't pop up, the list's open state, and the popup settings, read per device from `notifications.popups` with each field falling back to its default, which a change merges into and keeps whole.
   - Show seconds, for the list's times, read per device from `notifications.showSeconds`, apart from the popup settings.
   - nothing pops up while the list is open, and entering fullscreen closes the popups while Show in fullscreen is off.
@@ -642,6 +643,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the Stats tab's file name's and path's, with the file items.
 - `src/clients/web/ReelRoulette.WebUI/src/text/countText.ts`
   - a count with its noun, grouped as the device writes numbers, such as "1 item" or "1,234 items", for the Filters line, the kept-source notice, and the popups for another device's batch.
+  - how far through a count, both numbers grouped the same way, such as "1,234 of 49,455 files", for a refresh's progress line.
 - `src/clients/web/ReelRoulette.WebUI/src/time/timeText.ts`
   - days and times as text:
     - a number as at least two digits and a duration split into hours, then the minutes and seconds under 60, which the seek row's time and the filter's durations use too.
@@ -843,7 +845,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
   - event envelope parsing/building utilities.
 - `src/clients/web/ReelRoulette.WebUI/src/events/refreshStatusProjection.ts`
-  - works out from a refresh status, typed by the generated contract, the player indicator's progress and stage labels, a finished run's summary worded from its counts or a failed run's stage, the kept folders it settled, and whether a run has newly finished.
+  - works out from a refresh status, typed by the generated contract, the player indicator's progress and stage labels, the progress line the bell's Now shows, a finished run's summary worded from its counts and whether it names a library change, or a failed run's stage, the kept folders it settled, and whether a run has newly finished.
 - `src/clients/web/ReelRoulette.WebUI/src/config/runtimeConfig.ts`
   - runtime config parsing/validation.
 - `src/clients/web/ReelRoulette.WebUI/src/config/appVersion.ts`

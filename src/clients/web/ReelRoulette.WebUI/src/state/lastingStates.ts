@@ -123,7 +123,7 @@ export function activeLastingStates(store: AppStore): LastingState[] {
       warning: false,
       spins: true,
       followsControls: true,
-      detail: null,
+      detail: refresh.line,
       reloads: false
     });
   }

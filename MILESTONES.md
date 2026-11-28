@@ -496,7 +496,7 @@ Last milestone completed: M12n1
 
 ### M12n3 - Library Refresh Progress and Summary
 
-- **Status**: 🚧 In Progress
+- **Status**: ✅ Complete
 - **Goal**: While a library refresh runs, the bell's list shows how far its stage has got, and a finished refresh says in plain words what it changed, from counts the server sends as numbers.
 - **Depends on**: WebUI Notifications, whose bell list's Now entry and Library refresh popup this milestone rewords.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -517,7 +517,8 @@ Last milestone completed: M12n1
 - The summary leaves out the work done for new files, their fingerprints, durations, loudness, and thumbnails, since "added" covers it.
 - A failure that happens again on every refresh, such as a video whose loudness can't be measured, shows in every summary.
 - While ffmpeg or ffprobe isn't found, the stages that need it count no failures for it, and the summary names the missing tool once.
-- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, and the bell doesn't count it as unread, while a refresh the user starts pops up "No changes".
+- An automatic refresh whose summary names no library changes adds its entry to the bell's list without a popup, and the bell doesn't count it as unread, whether its summary is "No changes" or names only problems, such as a missing ffmpeg or a loudness scan that keeps failing, which come back on every refresh until they're fixed.
+- A refresh the user starts pops up whatever it found, "No changes" included.
 - A failed refresh's second line names the stage it stopped in, such as "Refreshing sources failed.", worded by the WebUI from `currentStage` with the labels the player's indicator uses, so the stage labels live only in the WebUI, and the exception's own message goes only to `last.log`.
 
 #### Slices
@@ -527,7 +528,7 @@ Last milestone completed: M12n1
 | Mockup | ✅ Complete | The progress line of each stage, the finished summary of each kind of run, a failed refresh's wording, which refreshes pop up, and the admin view's Library refresh card text, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Server | ✅ Complete | The thumbnail cleanup's progress counted over the thumbnails it removes and sent at most every 500 ms, each stage published as the current stage when it starts, and a failed refresh worded in plain words with its exception in `last.log`. |
 | Contract | ✅ Complete | One typed object per stage in the refresh status, with the counts the progress line and the summary need, in place of the stages array and its messages, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`, and the WebUI's finished summary built from them. |
-| Progress line and popups | ⏳ Planned | The Now entry's second line while a refresh runs, and an automatic refresh that changes nothing going to the bell's list without a popup. |
+| Progress line and popups | ✅ Complete | The Now entry's second line while a refresh runs, and an automatic refresh with no library changes going to the bell's list without a popup. |
 
 #### Mockup slice
 
@@ -761,8 +762,8 @@ Last milestone completed: M12n1
 - `RefreshProgress` carries the counts the line needs from the status.
 - An "X of Y" helper beside `countText` in `src/text/` groups both numbers.
 - The player's indicator stays "Library refresh: {stage} ({percent}%)".
-- An automatic refresh that changes nothing adds its entry to the bell's list without a popup, not counted as unread.
-- A refresh the user starts that changes nothing pops up "No changes".
+- An automatic refresh with no library changes adds its entry to the bell's list without a popup, not counted as unread.
+- A refresh the user starts with no library changes pops up its summary, "No changes" included.
 - `notify` takes a request to add an entry without a popup (`src/notifications/notifications.ts`).
 - `CONTEXT.md` describes the progress line and which refreshes pop up.
 
@@ -782,9 +783,37 @@ Last milestone completed: M12n1
 
 - The Now entry shows each stage's second line, and none before the first stage, in lasting state and notifications screen tests.
 - The indicator's text and its relays are unchanged, in player and foundation screen tests.
-- An automatic refresh that changes nothing lands in the list without a popup, and one the user starts pops up "No changes", in server connection tests.
+- An automatic refresh with no library changes lands in the list without a popup, and one the user starts pops up "No changes", in server connection tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check of a refresh's second line in the bell's list.
+
+**Evidence**
+
+- `refreshProgress` gives the running refresh's line with its stage and percent, worded from the stage's counts as `REFRESH_STEPS` words them, and the refresh's lasting state shows it as its second line in the bell's Now (`src/events/refreshStatusProjection.ts`, `src/state/lastingStates.ts`).
+- Deviation: `RefreshProgress` carries the worded line in place of the Scope's counts, so all the refresh's wording stays in the projection beside the summary and the failed line, and the admin view's Library refresh card can read the same field.
+- The source stage's line needs a source and an enabled source count, and every other stage's a total, so Starting, a stage's first status before it has counted its work, and a stage with nothing to do show no line.
+- `ofText` beside `countText` writes "X of Y", both numbers grouped, with the noun counted by the total, or none for "Source 2 of 3" (`src/text/countText.ts`).
+- The indicator's text, and its relay key of the state and its title, are unchanged, so a moving line adds no `last.log` lines.
+- `refreshOutcome` says whether a finished summary names a library change, from the summary's own groups, and an automatic refresh whose summary doesn't is sent with `notify`'s `quiet`, which adds it to the list unmarked, with no popup and no badge count, whatever its kind's popup setting (`src/state/serverConnection.ts`, `src/notifications/notifications.ts`).
+- The user's ruling widened the popup rule from an automatic refresh that changes nothing to one whose summary names no library changes, so a summary naming only problems, such as "ffmpeg not found", goes to the list without a popup too, as the Decisions record.
+- Planning settled that a forced rescan's result, "{n} changed" or "no changes", counts as a change, so an automatic refresh that runs a rescan the user turned on pops up, since the rescan runs once and never repeats every interval.
+- One `quiet` flag stands in for the mockup's separate `popup` and `unread`, since the only use needs both off.
+- A failed refresh pops up whatever started it.
+- The mockup's notes on the popup rule say an automatic refresh with no library changes goes only to the list even when it names problems, and need no review on the devices, since only their wording changed (`build/index.src.html`, `build/layout.src.html`, `build/common.js`).
+- New tests cover each stage's line and none before a stage has counted its work, `ofText`, the refresh's second line in Now and its relays, the indicator never showing the line, a quiet message, which finished refreshes are quiet, and an automatic refresh landing in the bell's list without a popup or a badge while one the user starts pops up.
+- Each of these, broken one at a time, fails its tests (measured):
+  - a stage with no total showing "0 of 0";
+  - the source stage's line before its first source;
+  - the cleanup or checking phase worded as the other;
+  - rescans or problems counted wrongly as a library change;
+  - the Now entry without the refresh's line;
+  - the relay keyed on the line;
+  - the indicator showing the line;
+  - a quiet message popping up or counting as unread;
+  - an automatic refresh never quiet, or a refresh the user starts quiet.
+- `CONTEXT.md` describes the progress line and which refreshes pop up, and `docs/domain-inventory.md` the projection, `ofText`, and a quiet message.
+- The quick spot check of a refresh's second line in the bell's list waits for main, since a worktree can't run the server against the user's data.
+- `npm run verify` and `node docs/mockups/reelroulette/build/check.mjs` pass after the update from main (measured).
 
 #### Release checks
 

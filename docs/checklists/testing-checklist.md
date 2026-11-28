@@ -139,6 +139,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] In Firefox on the desktop, with Don't record plays on, a random pick and a library play leave the file's play count in the Stats tab unchanged, and Counts disabled shows and hides with the controls, on the player and in fullscreen.
 - [ ] On the iPad, with Show layout measurements on, the figures show at their elements and follow a rotation.
 - [ ] On the iPad and the Android phone, the panel beside the player, the overlay panel, and a field's tooltip in the Settings tab look and sit as before.
+- [ ] In Firefox on the desktop, a refresh started from the tray shows its stage's progress in the bell's list, and when it finishes pops up "No changes" or what it changed.
 
 ## Release Flow
 

@@ -242,10 +242,13 @@ ReelRoulette is a thin-client, API-first system:
   - While the Filter or Tags tab holds unsaved changes, the tap first asks "Discard changes?" with a red Discard, and Cancel leaves the page as it was.
   - A right-click or a long press on the notice opens no menu.
 - None of these states pops up; the list behind the bell shows each active one under Now.
-- A running refresh shows on the player's indicator, and how it ended pops up:
+- A running refresh shows on the player's indicator, and how it ended is shown:
   - "Library refresh finished" with its summary as the second line, naming only what changed: "No changes" when nothing did, and otherwise the library's nonzero changes (added, removed, renamed, moved, and files changed on disk), then each duration or loudness rescan's changes, then any problems (files left unmatched, failed fingerprints, duration and loudness scans, and thumbnails, and a missing ffmpeg or ffprobe), joined by " · ", such as "12 added, 3 removed · 2 thumbnails failed".
     - A forced rescan that changed nothing says so, such as "Loudness rescanned: no changes".
   - "Library refresh failed" with the stage it stopped in as the second line, such as "Refreshing sources failed.", a warning.
+- An automatic refresh whose summary names no library change, "No changes" or only problems, goes only to the list behind the bell, unmarked, and the badge doesn't count it, since its problems come back on every refresh until they're fixed.
+  - A forced rescan's result counts as a change, so it pops up.
+  - A refresh the user starts pops up whatever it found, and a failed refresh always pops up.
 - `last.log` gets the summary, and the server writes a failed run's error to it itself.
 - A run that ends without finishing or failing, such as one cancelled at shutdown, relays "Core refresh idle." and shows nothing.
 
@@ -299,16 +302,18 @@ ReelRoulette is a thin-client, API-first system:
   - Skipped files ("Skipped a file this browser can't play." or "Skipped a missing file.", with the file name on the second line).
   - Connection ("Reconnected." when Reconnecting… ends, unless the server comes back failing the compatibility check, and a further library page that fails).
 - The bell (`notifications`), at the player's top left, shows and hides with its corner buttons.
-  - Its badge counts the one-off messages that didn't pop up since the list was last open, "9+" past nine, which its accessible name gives as "Notifications, {n} unread".
+  - Its badge counts the one-off messages that didn't pop up since the list was last open, except an automatic refresh with no library changes, "9+" past nine, which its accessible name gives as "Notifications, {n} unread".
   - It is orange while it has unread messages and while its list is open.
   - A press opens the list under it, lined up with the bell's left edge in the window's left half and its right edge otherwise, starts no random pick, and keeps the player's controls shown while the list is open.
 - The list, inside the fullscreen stage, shows:
-  - Now, each active lasting state with its full text and, for Reconnecting…, the update notice, Server not compatible, and Running without a library, a second line.
+  - Now, each active lasting state with its full text and, for Reconnecting…, the update notice, Server not compatible, Running without a library, and a running refresh, a second line.
+    - A running refresh's second line says how far its stage has got, its numbers grouped: "Source 2 of 3", with " · 120 of 400 new files" while it fingerprints a source's new files; "1,234 of 49,455 files" while it sorts names; "Checking 12,000 of 49,455 files", then "1,234 of 2,000 files" while it fingerprints; "12 of 40 videos" while it scans durations or loudness; and "12,000 of 49,455 files", then "Removing 120 of 5,000 old thumbnails" while it makes thumbnails.
+    - A refresh before its first stage, or in a stage that hasn't counted any work, has no second line, so "0 of 0" never shows.
     - The update notice's second line reads "The server has a newer version. Reloading the page loads it.", and a tap on its row reloads the page as a tap on the indicator does, asking first while the Filter or Tags tab holds unsaved changes.
   - Recent, the last 50 messages, newest first, each with its time in 24-hour time: "HH:MM" for a message from today and "MM-DD HH:MM" for one from another day.
     - With Show seconds on, the times read "HH:MM:SS" and "MM-DD HH:MM:SS".
     - The list works out the day each time it renders, so a message from before midnight gains its date at the list's next render.
-  - Messages that didn't pop up show marked, and in-app notices show unmarked with the `error` icon and aren't counted.
+  - Messages that didn't pop up show marked, except an automatic refresh with no library changes, and in-app notices show unmarked with the `error` icon and aren't counted.
   - Clear empties Recent.
   - While the list is open nothing pops up, and a popup showing with a new message's key closes.
   - The list closes on its Close, the bell, Escape, which comes to it before the stage except while an in-app dialog is open, a press outside it, and the panel opening.
