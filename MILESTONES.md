@@ -553,7 +553,7 @@ Last milestone completed: M12n4
 
 ### M12n6 - Library Profiles
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
 - **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, Random Pick Options, whose cycle route the profile's sources apply to, WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile, and WebUI Context Menus, whose menu and long press a picker row's menu uses.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -582,7 +582,7 @@ Last milestone completed: M12n4
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The whole profiles design, including the tag, category, and preset visibility that Profile Tag and Preset Visibility builds, approved on a desktop browser, the iPad, and an Android phone. |
+| Mockup | ✅ Complete | The whole profiles design, including the tag, category, and preset visibility that Profile Tag and Preset Visibility builds, approved on a desktop browser, the iPad, and an Android phone. |
 | Server | ⏳ Planned | Profiles and their sources in a new catalog schema step, the profile store, the profile's sources in the library query, its counts, random picks, library stats, and Auto Tag's scan, library stats without disabled sources, and `profilesChanged`. |
 | Contract | ⏳ Planned | The profile routes, `profileId` on the scoped requests, `sourceId` on the item events, and `profilesChanged`, in OpenAPI, the generated WebUI types, and `docs/api.md`. |
 | WebUI | ⏳ Planned | The header's profile button and picker, Add and Edit Profile's General and Sources tabs, switching, the per-device memory, the scoped tabs, and the profile rule for popups and notices. |
@@ -597,7 +597,7 @@ Last milestone completed: M12n4
   - It hides with the header in fullscreen and on a phone on its side.
   - A row's context menu holds Edit… and Delete…, with Delete… disabled on the default profile and its reason as its tooltip.
 - Add Profile and Edit Profile, one tabbed in-app dialog:
-  - General: the name, under the field validation pattern, flagged when another profile has it, ignoring case, and the color, from a basic palette or a hex field, random when none is chosen.
+  - General: the name, under the field validation pattern, flagged when another profile has it, ignoring case, and the color, from the app's own color picker, which the color button opens in a popover, starting Add Profile on a random color.
   - Sources: all of them, following newly added ones, or a chosen list.
   - Tags: categories with their tags as checkboxes, a category's tags greyed while it is off.
   - Presets: a checkbox for each preset.
@@ -621,6 +621,18 @@ Last milestone completed: M12n4
 **Acceptance**
 
 - The mockup shows the profiles design as the user approved it in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- The user approved the mockup on their devices after four reviews.
+- The first review kept the design as first built apart from the color, and accepted the texts and rules that this milestone's WebUI slice and Profile Tag and Preset Visibility's WebUI slice record: the circle's 3:1 letter rule, the picker's head, foot, and active row, the picker staying open under its dialogs, the default profile's dialog without tabs, the Sources tab, the popups, the fallback when another device deletes the profile, Update on None, the creation question, Show in, the dialog's Tags tab, and the hidden-name message.
+- The first review settled that another device's change to a preset the profile hides doesn't pop up, as with items in hidden sources, which Profile Tag and Preset Visibility's WebUI slice records.
+- The second review replaced the palette's circles and hex field on the General tab with the app's own color picker in a popover from the color button: a 200 px saturation and brightness square, a hue slider beside it, the palette's colors as quick picks, and the hex field.
+- The third review settled 7 quick picks in rainbow order, a random button with the dice icon right of the hex field, a hex field that always shows the color's value with "Enter hex value" as its placeholder, and an empty or invalid value going back to the last valid color as the picker closes.
+- The approval settled random colors as any hex value at least 0.12 apart in OKLab from every other profile's color and from the color shown, or the most distinct of 20 tries. OKLab is the measure because its distance follows how different colors look. At 0.12 the palette's blue, indigo, and violet, about 0.09 apart, count as close, its red and brand orange, 0.13 apart, as clearly different, and 83% of random colors pass beside the three seeded profiles' (measured).
+- The mockup seeds Kids and Travel to show the rules, and its Mockup tab sends another device's delete of the active profile. Profiles start over when the page reloads, as tags and presets do, and the active profile and each profile's filter are kept on the device.
+- The red badge style for a text tab's flagged field, `.text-tab .tab-problem` in `build/common.css`, covers any text tab, so the dialog's tabs share it with the Filter tab's, and `check` joins the icon subset for the picker's active row.
+- `node docs/mockups/reelroulette/build/check.mjs` passes, with no checks added, as `AGENTS.md` says (measured).
 
 #### Server slice
 
@@ -700,11 +712,27 @@ Last milestone completed: M12n4
 **Scope**
 
 - The header's profile button and its picker, as the Decisions and the approved mockup describe, first in a right-hand group that the admin icon later joins.
+  - The circle's letter is white where white reaches 3:1 contrast on the profile's color, as large bold text needs, and `#1a1a1a` otherwise.
+  - The picker's head reads "Profiles" with a close button, and Add Profile sits in its foot, where the bell's list has Notification settings.
+  - The active profile's row has a bold name and an orange check.
+  - The picker stays open under Add Profile, Edit Profile, and the delete question, so its list shows the change, and saving a new profile doesn't switch to it.
 - The header takes the mockup's layout: the now-playing name follows the logo and fills the space before the right-hand group, with the mockup's spacing (`src/styles.css`).
 - The now-playing name is cut only by the CSS ellipsis, as the mockup cuts it, and the 45-character cut in code goes (`NOW_PLAYING_MAX_CHARS` in `src/playback/nowPlaying.ts`).
 - A picker row has a context menu with Edit…, which opens Edit Profile, and Delete…, which asks first as Edit Profile's Delete does and is disabled on the default profile with its reason.
 - Escape closes a picker row's context menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen.
 - Add Profile and Edit Profile with their General and Sources tabs, and Delete. Profile Tag and Preset Visibility adds the Tags and Presets tabs.
+  - A name another profile has, ignoring case, is flagged with "Use a name no other profile has."
+  - General's color button shows the profile's circle and its hex value, and opens the color picker.
+  - The default profile's Edit Profile has no tab row, and says "The default profile always shows every source, tag, and preset."
+  - Sources offers "All sources", with "Sources added later show too.", or "Only these sources", whose checkboxes are flagged with "Check at least one source." while none is checked. A source turned off on the server can be chosen.
+  - Add Profile opens with a random color, picked as the color picker's random button picks one, already chosen and shown.
+  - Saving or deleting a profile pops up `Profile "{name}" added.`, `saved.`, or `deleted.`; a switch pops up nothing.
+- The color picker, which the app draws so it looks the same on every device, in a popover under the color button:
+  - a 200 px square for saturation and brightness, with a 32 px hue slider beside it, each set by a press or a drag with a mouse or a finger;
+  - the 7 palette colors as one-tap quick picks, in this order: red `#e5484d`, orange `#ef7f22`, yellow `#f5c518`, green `#30a46c`, blue `#3e7bfa`, indigo `#5b5bd6`, and violet `#8e4ec6`;
+  - the hex field, under the field validation pattern, which always shows the color's value, takes `#rgb` or `#rrggbb`, with or without the `#`, shows "Enter hex value" only while empty, and is flagged with "Use a hex color, such as #ef7f22." while it is empty or isn't one;
+  - a random button with the dice icon (`casino`, as the player's Random uses) at the hex field's right, which picks a random color, any hex value, at least 0.12 apart in OKLab from every other profile's color and from the color shown, trying up to 20 random colors and taking the one furthest from its nearest when none is that far;
+  - each change applies at once, and the popover closes on its button, a press outside it, and Escape, before the dialog, an empty or invalid hex field then going back to the last valid color.
 - The per-device store keeps the active profile as `profiles.active`, and each profile's applied filter and its preset as `filter.appliedByProfile`, which replaces `filter.applied` with no carry-over.
 - Every request the Decisions scope sends the active profile's `profileId`.
 - A switch, after "Discard changes?" when the Filter or Tags tab holds unsaved changes:
@@ -713,8 +741,11 @@ Last milestone completed: M12n4
   - clears Auto Tag's kept scan, ends a selection, and closes the picker;
   - leaves the playing item and history as they are.
 - A device whose active profile is gone, deleted on another device or removed by a catalog import or a backup restore, falls back to the default profile once `profilesChanged` or the profile list says so.
+  - It pops up `Your profile "{name}" was deleted on another device. This device now shows "{default profile's name}".`
+  - It drops the Filter and Tags tabs' unsaved changes without asking.
 - The Filter tab lists only the profile's sources, the Filters line counts them out of the profile's sources, and a source list that names none of the profile's sources is not read as every source.
 - None and Clear all load the active profile's default filter, and the Filter tab's Update is enabled on None, where it writes the tab's filter into that default filter.
+  - On None, Update's name and tooltip read "Update default filter", it pops up "Updated the default filter locally — Apply to save.", and it is disabled with "This is the default filter already." while the tab's filter is the default one.
 - The Stats tab's library cards come from the profile's stats.
 - Other devices popups, the bulk ones included, leave out items in sources the profile hides, and a bulk popup counts only the items it shows. The refresh's kept-folder notice leaves out folders the profile hides.
 
@@ -733,14 +764,19 @@ Last milestone completed: M12n4
 - `filterWithGeneralDraft` writes an empty source list when every listed source is checked (`src/filter/filterDialogModel.ts`), and an empty list means every source.
 - Requests go through `createServerRequester` in `src/state/appApi.ts`, except the library play in `src/api/coreApi.ts`, which names no profile.
 - `src/events/sseClient.ts` listens only to the event types registered with it.
+- A drag on the color picker's square or slider scrolls the dialog on a touch screen unless they set `touch-action: none` and capture the pointer (inferred).
+- The dialog's tab page scrolls, which would clip a popover placed inside it; the mockup's popover is `position: fixed`, placed from the color button's box, which nothing in the dialog clips (inferred).
+- Escape in a `<dialog>` also sends its `cancel` close request, so the picker's Escape has to stop it to close only the popover (inferred).
+- A random color clearly different from the others is found within 20 tries almost always, so a test of the most-distinct fallback needs `Math.random` stubbed (inferred).
 
 **Acceptance**
 
-- The button shows the active profile's circle and first letter in a readable color, the picker lists the default profile first and the others alphabetically, and it closes as the Decisions describe, in Header screen tests.
+- The button shows the active profile's circle and first letter, white where white reaches 3:1 on its color and dark otherwise, the picker lists the default profile first and the others alphabetically, and it closes as the Decisions describe, in Header screen tests.
 - A now-playing name longer than 45 characters is shown whole, for the CSS ellipsis to cut, in Header screen tests, and the header's layout matches the mockup's, checked in the spot check.
 - Escape closes a picker row's context menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen, in keyboard tests.
 - A picker row's context menu opens Edit Profile and deletes the profile after asking, and its Delete is disabled with its reason on the default profile, in Header screen tests.
 - Add Profile and Edit Profile create, change, and delete a profile, a taken name is flagged with the field validation pattern, and the default profile's dialog has only the General tab, in profile dialog tests.
+- The color picker sets the color from its square, hue slider, quick picks, hex field, and random button, an empty or invalid hex field goes back to the last valid color as it closes, and Add Profile opens with, and the random button picks, a color at least 0.12 apart in OKLab from the other profiles' colors and the color shown, or the most distinct of 20 tries, in profile dialog tests.
 - Each scoped request sends `profileId`, in WebUI tests of each request.
 - A switch asks "Discard changes?" while the Filter or Tags tab holds unsaved changes, applies the new profile's remembered filter or preset, loads the Library and Stats tabs again, starts the Filter tab over, ends a selection, and leaves the playing item playing, in WebUI tests of switching.
 - After a page refresh, the device is on its active profile with that profile's filter, in a test for a page refresh keeping both.
@@ -864,9 +900,11 @@ Last milestone completed: M12n4
 
 **Scope**
 
-- Add and Edit Profile's Tags tab, with categories and their tags as checkboxes and a category's tags greyed while it is off, and its Presets tab, with a checkbox for each preset. Add Profile starts with the "All profiles" ones checked.
+- Add and Edit Profile's Tags tab, with every category listed expanded and its tags as checkboxes, a category's tags disabled while it is off and keeping their checks, and its Presets tab, with a checkbox for each preset. Add Profile starts with the "All profiles" ones checked.
 - The creation question, a dialog with two choices, after Add tag, New Category, Add Preset, and a category's menu's New tag in this category, once a second profile exists.
-- Show in in Edit Tag, Edit Category, and Edit Preset.
+  - It reads `Which profiles show the new {tag|category|preset} "{name}"?` with the buttons "Only this profile" and "All profiles", and Escape or a press outside cancels the creation.
+  - The default profile asks it too, where "Only this profile" keeps the new tag, category, or preset out of the other profiles.
+- Show in in Edit Tag, Edit Category, and Edit Preset, once a second profile exists: a checkbox for each profile besides the default one, and one for "Profiles added later", which is whether new profiles show it, over `{default profile's name} shows every {tag|category|preset}.`
 - In a profile, hidden tags, categories, and presets don't show:
   - in the Filter tab's tags and presets, where conditions on hidden tags stay out of its block of tags the catalog doesn't have;
   - in the Tags tab, an item's hidden tags included;
@@ -875,7 +913,8 @@ Last milestone completed: M12n4
   - in the Randomization tab's category list and the Library tab's Random line.
 - Applying a filter or preset in a profile leaves out its conditions on hidden tags, as the shared fixture says.
 - The "modified" marker compares a preset with its conditions on hidden tags and sources left out.
-- A new tag, category, or preset name is checked against the whole catalog, hidden ones included, as the approved mockup words it.
+- A new tag, category, or preset name is checked against the whole catalog, hidden ones included. A hidden one's name is flagged with "Use a name no other tag has. A tag this profile hides has it.", and the same for categories and presets.
+- Other devices popups leave out changes to presets the profile hides, as they leave out items in sources it hides.
 - Reordering in a profile, as the Decisions describe.
 - WebUI tests read `shared/fixtures/profile-filter-projection.json`.
 
@@ -898,6 +937,7 @@ Last milestone completed: M12n4
 - Applying a filter or preset leaves out conditions on hidden tags as the shared fixture says, in WebUI tests of the fixture.
 - The "modified" marker ignores hidden tags and sources, in WebUI preset matching tests.
 - A name a hidden tag, category, or preset has is flagged, in Tags and Filter screen tests.
+- Another device's change to a preset the profile hides doesn't pop up, in WebUI tests of the popups.
 - A reorder in a profile keeps hidden categories and presets in their places, in WebUI tests of reordering.
 - Saving an item's tags in a profile leaves its hidden tags on it, in Tags screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.

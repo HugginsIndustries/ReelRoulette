@@ -23,8 +23,9 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 }
 
-/* Header: the logo and the file name, the pairing prompt while the server asks for it, and at the right the admin icon.
-   It has no settings icon, since the panel's tab row reaches Settings, and no bell, which is on the player. */
+/* Header: the logo and the file name, the pairing prompt while the server asks for it, and at the right the profile
+   button and the admin icon. It has no settings icon, since the panel's tab row reaches Settings, and no bell, which is
+   on the player. */
 .top-bar {
   display: flex;
   flex-wrap: wrap;
@@ -50,6 +51,141 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
 @media (max-width: 600px) {
   .now-playing { order: 3; flex-basis: 100%; }
 }
+
+/* Profiles. A profile's circle shows its color with its first letter, white where white reaches 3:1 on the color, as
+   large bold text needs, and dark otherwise. The header's profile button, first in the header's right-hand group, shows
+   the active profile's, ringed while its picker is open. */
+.profile-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--profile-color, var(--huggins-orange));
+  color: var(--profile-letter, #1a1a1a);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.profile-circle.is-small { width: 22px; height: 22px; font-size: 0.75rem; }
+.profile-btn.is-open .profile-circle { box-shadow: 0 0 0 2px var(--page-bg), 0 0 0 4px var(--page-fg); }
+/* The picker, styled like the bell's list: the default profile first, then the others alphabetically, each with its
+   edit icon, and Add Profile at the bottom. The active profile's name is bold, with an orange check. */
+.profile-picker { width: min(320px, calc(100vw - 16px)); }
+.profile-rows { list-style: none; margin: 0; padding: 0; }
+.profile-row { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 6px; border-bottom: 1px solid var(--surface-border); }
+.profile-row:last-child { border-bottom: 0; }
+.profile-choose {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) { .profile-choose:hover { background: rgba(127, 127, 127, 0.12); } }
+.profile-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-row.is-active .profile-name { font-weight: 700; }
+.profile-check { font-size: 22px; color: var(--huggins-orange); }
+.profile-row .icon-btn .material-symbol-icon { font-size: 24px; }
+/* Add Profile and Edit Profile: one dialog whose text tabs follow the shared tab rule, as the Filter tab's sections do.
+   With its tabs it keeps one height, so switching tabs doesn't move its buttons, and only the tab's page scrolls. */
+.app-dialog.profile-dialog { width: min(520px, calc(100vw - 32px)); }
+.app-dialog.profile-dialog.has-tabs { height: min(620px, calc(100dvh - 32px)); overflow: hidden; }
+.profile-dialog.has-tabs .dialog-body { height: 100%; }
+.profile-dialog .filter-tabstrip { gap: 0; flex: 0 0 auto; margin-bottom: 6px; overflow-x: auto; scrollbar-width: none; }
+.profile-dialog .text-tab { padding: 0 10px; flex: 0 0 auto; }
+.profile-pages { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -14px; padding: 2px 14px 6px; }
+.profile-page { display: flex; flex-direction: column; gap: 8px; }
+.profile-page .filter-hint { margin: 0; }
+.profile-field-label { font-weight: 600; margin-top: 6px; }
+.profile-page > .profile-field-label:first-child { margin-top: 0; }
+/* The color: a button showing the profile's circle and its hex value, which opens the color picker. */
+.profile-color-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 2px 14px 2px 2px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--control-bg);
+  color: var(--control-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.profile-color-btn:hover { background: var(--control-bg-hover); }
+.profile-color-btn .profile-circle { width: 38px; height: 38px; font-size: 1.1rem; }
+.profile-color-btn.is-open .profile-circle { box-shadow: 0 0 0 2px var(--control-bg), 0 0 0 4px var(--page-fg); }
+/* The color picker, drawn by the app so it looks the same on every device, in a popover under the color button: a
+   square for saturation and brightness, big enough to aim with a finger, the hue slider beside it, the palette's colors
+   as quick picks, and the hex field with the random button at its right. A drag on the square or the slider never
+   scrolls. */
+.color-popover {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: max-content;
+  padding: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.color-picker-main { display: flex; gap: 12px; }
+.color-sv, .color-hue { position: relative; height: 200px; border-radius: 8px; touch-action: none; }
+.color-sv {
+  width: 200px;
+  cursor: crosshair;
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(var(--hue, 25) 100% 50%));
+}
+.color-hue {
+  width: 32px;
+  cursor: ns-resize;
+  background: linear-gradient(to bottom, #f00 0%, #ff0 16.67%, #0f0 33.33%, #0ff 50%, #00f 66.67%, #f0f 83.33%, #f00 100%);
+}
+.color-sv-thumb, .color-hue-thumb {
+  position: absolute;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.color-sv-thumb { width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%; background: var(--thumb); }
+.color-hue-thumb { left: -4px; right: -4px; height: 14px; margin-top: -7px; border-radius: 7px; background: hsl(var(--hue, 25) 100% 50%); }
+.color-quick { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.color-quick button { aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: var(--swatch); cursor: pointer; }
+.color-quick button.is-chosen { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--page-fg); }
+.color-hex-row { display: flex; align-items: center; gap: 6px; }
+.dialog-body .color-hex-row .vfield { flex: 1 1 auto; width: auto; }
+.profile-page .choice-stack label { min-height: 36px; }
+.profile-sources { border: 0; margin: 0; padding: 0; min-width: 0; }
+.profile-sources .setting-sub { margin: 0 0 0 26px; gap: 0; }
+.profile-sources label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.profile-sources:disabled label { opacity: 0.55; }
+.profile-tag-category > label { display: flex; align-items: center; gap: 8px; min-height: 40px; font-weight: 600; }
+.profile-tag-grid { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 0 0 4px 26px; padding: 0; border: 0; min-width: 0; }
+.profile-tag-grid label { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+.profile-tag-grid:disabled { opacity: 0.45; }
+.profile-check-list { display: flex; flex-direction: column; }
+.profile-check-list label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* Show in, in Edit Tag, Edit Category, and Edit Preset: a checkbox for each profile but the default one, and one for
+   profiles added later. */
+.show-in-list { display: flex; flex-direction: column; }
+.show-in-list label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.dialog-body .filter-hint { margin: 0; }
 
 /* The stage: the player and the panel, which goes fullscreen with it. */
 .stage { flex: 1; min-height: 0; display: flex; position: relative; }
@@ -933,6 +1069,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       <button class="btn" type="submit" id="pair-btn"><span class="btn-label">Pair</span><span class="btn-problem material-symbol-icon">error</span></button>
     </form>
     <div class="top-bar-end">
+      <button class="icon-btn profile-btn" id="profile-btn" type="button"><span class="profile-circle" id="profile-circle"></span></button>
       <a class="icon-btn" id="header-admin" href="admin.html" aria-label="Admin" title="Admin"><span class="material-symbol-icon">admin_panel_settings</span></a>
     </div>
   </header>
@@ -1674,6 +1811,15 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <p class="mock-small mock-keep">The preset changes act on presets besides yours, the one the preset dropdown shows; the Your preset ones act on yours.</p>
         <p class="mock-small mock-keep" id="mock-presets-note" hidden></p>
         <p class="mock-small mock-keep">A refresh that finds no media files in a source's folder keeps its items, and a notice names each folder once per page load; reload the page to see it again.</p>
+        <p class="mock-small mock-keep">In a profile that hides a file's source, another device's change to it doesn't pop up, and a refresh's notice leaves out the folders it hides.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Profiles</legend>
+        <div class="mock-sheet-actions">
+          <button type="button" id="mock-profile-deleted">Your profile deleted on another device</button>
+        </div>
+        <p class="mock-small mock-keep" id="mock-profile-note" hidden>To delete your profile on another device, pick a profile besides Main in the header first.</p>
+        <p class="mock-small mock-keep">Main, the default profile, shows everything. Kids shows only the Videos source, and hides the Mood and Quality categories and the Night shots and Concerts presets. Travel hides the People category and the Family preset, and with Main alone shows the Trips category and the Trips abroad and Drone footage presets, as if they were created there with "Only this profile". Profiles start over when the page reloads, as tags and presets do; the active profile and each profile's filter are kept on this device.</p>
       </fieldset>
       <div class="mock-sheet-actions">
         <button type="button" id="mock-reset">Forget the panel's state</button>
@@ -1967,6 +2113,110 @@ const PRESET_NAMES = ["Favorites", "Short clips", "Photos only", "Long videos", 
 const presets = PRESET_NAMES.map((_, index) => `preset-${index + 1}`);
 let presetNames = new Map(presets.map((id, index) => [id, PRESET_NAMES[index]]));
 let nextPresetId = presets.length + 1;
+
+// ---- Profiles: the sources, tags, categories, and presets each one shows ----
+// The library's sources, as the Filter tab lists them: each item is in the one whose folder holds it. Archive is turned
+// off on the server, so its items never show.
+const SOURCES = [
+  { id: "videos", name: "Videos", root: "/media/videos" },
+  { id: "phone", name: "Phone backup", root: "/media/phone" },
+  { id: "archive", name: "Archive", root: "/mnt/archive", off: true }
+];
+const sourceOf = (item) => SOURCES.find((source) => item.path.startsWith(`${source.root}/`));
+// The profiles, as the server lists them, with the default profile, which shows everything and can't be deleted, first.
+// Each has its name, its color, all sources, following newly added ones, or a chosen list, and its own default filter,
+// which None and Clear all load: the built-in one until Update changes it. They start over with the page, as tags and
+// presets do.
+const DEFAULT_PROFILE = "main";
+const profiles = [
+  { id: DEFAULT_PROFILE, name: "Main", color: "#ef7f22", allSources: true, sources: [], defaultFilter: null },
+  { id: "kids", name: "Kids", color: "#3e7bfa", allSources: false, sources: ["videos"], defaultFilter: null },
+  { id: "travel", name: "Travel", color: "#f5c518", allSources: true, sources: [], defaultFilter: null }
+];
+let nextProfileId = 1;
+const profileById = (id) => profiles.find((profile) => profile.id === id);
+// This device's active profile, which it keeps. One the server doesn't list, as after another device deleted it, reads
+// as the default profile.
+let activeProfileId = profileById(store.get("profiles.active", DEFAULT_PROFILE)) ? store.get("profiles.active", DEFAULT_PROFILE) : DEFAULT_PROFILE;
+const activeProfile = () => profileById(activeProfileId) || profiles[0];
+const isDefaultProfile = (profile) => profile.id === DEFAULT_PROFILE;
+// The palette the color picker offers as quick picks: red, the brand orange, yellow, green, blue, indigo, and violet.
+const PROFILE_COLORS = ["#e5484d", "#ef7f22", "#f5c518", "#30a46c", "#3e7bfa", "#5b5bd6", "#8e4ec6"];
+// A color's relative luminance, and the letter color a profile's circle uses on it: white where white reaches 3:1 on
+// it, the contrast large bold text needs, and dark otherwise, as on the brand orange.
+function luminance(hex) {
+  const channel = (i) => {
+    const value = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+const letterColor = (hex) => (1.05 / (luminance(hex) + 0.05) >= 3 ? "#ffffff" : "#1a1a1a");
+const profileInitial = (name) => [...name.trim()][0]?.toUpperCase() || "";
+// A profile's circle, its color with its first letter.
+function paintCircle(el, name, color) {
+  el.textContent = profileInitial(name);
+  el.style.setProperty("--profile-color", color);
+  el.style.setProperty("--profile-letter", letterColor(color));
+}
+function profileCircle(profile, small) {
+  const circle = document.createElement("span");
+  circle.className = small ? "profile-circle is-small" : "profile-circle";
+  paintCircle(circle, profile.name, profile.color);
+  return circle;
+}
+
+// Which profiles show each tag, category, and preset: "All profiles", which profiles added later show too, or only the
+// profiles chosen for it, and the profiles that differ from that choice, as a profile's own Tags and Presets tabs make
+// them. A tag hides with its category, and the default profile shows everything. Anything without a choice of its own
+// shows in every profile. A tag's and a category's are kept with them, so the Tags tab's Save saves them and Discard
+// changes puts them back; a preset's are kept by its id, which the Filter tab's Apply saves.
+function showsIn(record, profileId = activeProfileId) {
+  if (profileId === DEFAULT_PROFILE || !profileById(profileId)) return true;
+  return (record?.all ?? true) !== (record?.differ || []).includes(profileId);
+}
+const visibility = (all, differ = []) => ({ all, differ });
+// Kids hides Mood and Quality, Travel hides People, and Trips was created in Travel with "Only this profile".
+Object.assign(TAGS.find((category) => category.id === "mood"), visibility(true, ["kids"]));
+Object.assign(TAGS.find((category) => category.id === "quality"), visibility(true, ["kids"]));
+Object.assign(TAGS.find((category) => category.id === "people"), visibility(true, ["travel"]));
+Object.assign(TAGS.find((category) => category.id === "trips"), visibility(false, ["travel"]));
+const PRESET_VISIBILITY = {
+  "Night shots": visibility(true, ["kids"]),
+  Concerts: visibility(true, ["kids"]),
+  Family: visibility(true, ["travel"]),
+  "Trips abroad": visibility(false, ["travel"]),
+  "Drone footage": visibility(false, ["travel"])
+};
+// The tag catalog as the server has it, which the Tags tab's Save saves and Discard changes puts back.
+const snapshotTags = () => JSON.parse(JSON.stringify(TAGS, (key, value) => (key === "pending" ? undefined : value)));
+let savedTags = snapshotTags();
+// The Filter tab's presets' visibility, by id, which Edit Preset's Show in changes until Apply.
+let presetVisibility = new Map(presets.map((id) => [id, PRESET_VISIBILITY[presetNames.get(id)] || visibility(true)]));
+// The tags and categories a profile hides, in a tag catalog: a tag hides with its category.
+function hiddenTags(tags, profileId = activeProfileId) {
+  const keys = new Set();
+  const categories = new Set();
+  tags.forEach((category) => {
+    const shown = showsIn(category, profileId);
+    if (!shown) categories.add(category.id);
+    category.chips.forEach((chip) => {
+      if (!shown || !showsIn(chip, profileId)) keys.add(chip.key);
+    });
+  });
+  return { keys, categories };
+}
+// The categories a profile shows, each with only the tags it shows.
+const shownCategories = (tags) => tags.filter((category) => showsIn(category)).map((category) => ({ category, chips: category.chips.filter((chip) => showsIn(chip)) }));
+// The source folders a profile shows: all of them, those added later included, or its chosen list.
+const profileRoots = (profile = activeProfile()) => SOURCES.filter((source) => profile.allSources || profile.sources.includes(source.id)).map((source) => source.root);
+const inProfile = (item) => profileRoots().includes(sourceOf(item)?.root);
+// A reorder in a profile moves the ones it shows only among the places they held, and the ones it hides keep theirs.
+function mergeOrder(all, shownKeys) {
+  const shown = new Set(shownKeys);
+  const queue = [...shownKeys];
+  return all.map((key) => (shown.has(key) ? queue.shift() : key));
+}
 
 // Whole `seconds` as h:mm:ss with hours, or m:ss, its first part padded to `digits`.
 function timeInShape(seconds, withHours, digits) {
@@ -2607,6 +2857,8 @@ function renderPanelButton() {
 function applyLayout() {
   state.mode = computeMode();
   document.body.classList.toggle("short-screen", isShortScreen());
+  // The profile picker hides with the header, in fullscreen and on a phone on its side.
+  if (isFullscreen() || (isShortScreen() && !state.pairing)) picker.close();
   stage.dataset.side = state.side;
   stage.classList.toggle("is-overlay", state.mode === "overlay");
   stage.classList.toggle("covers-player", state.mode === "overlay" && state.open);
@@ -2650,6 +2902,8 @@ function showTab(tab) {
 function openPanel(tab) {
   notes.closeList();
   ratingPopover.close();
+  // The profile picker closes only where the panel covers the screen, and the header with it.
+  if (state.mode === "overlay") picker.close();
   state.open = true;
   store.set("open", true);
   $("mock-hint").hidden = true;
@@ -3383,12 +3637,13 @@ function makeSortable({ list, rowSelector, keyOf, commit }) {
 }
 
 // ---- Library tab ----
-// Sort, direction, and the active preset are remembered on this device; the search text is not.
+// Sort and direction are remembered on this device, and the active preset for each profile, with its filter; the search
+// text is not.
 const lib = {
   sort: store.get("libSort", "Name"),
   descending: store.get("libDescending", false),
   search: "",
-  preset: store.get("libPresetId", "")
+  preset: ""
 };
 const DIRECTION_LABELS = {
   Name: ["A–Z", "Z–A"],
@@ -3404,7 +3659,7 @@ let presetsLoading = true;
 function saveLibState() {
   store.set("libSort", lib.sort);
   store.set("libDescending", lib.descending);
-  store.set("libPresetId", lib.preset);
+  saveFilterState();
 }
 // What the grid says in place of tiles: today's messages, and the server's own when it fails the compatibility check
 // or runs without a library. While the server asks for pairing, its load answers 401 and the grid shows nothing.
@@ -3421,7 +3676,7 @@ function libraryMessage() {
 // The library's items that match the search and the filter, sorted, and the baseline the count line counts them
 // against, which, as the server counts it, is what matches the search before the filter.
 function visibleItems() {
-  let items = ITEMS.filter((item) => !item.removed);
+  let items = ITEMS.filter((item) => !item.removed && inProfile(item));
   if (lib.search) items = items.filter((item) => item.name.toLowerCase().includes(lib.search.toLowerCase()));
   const baseline = items.length;
   items = items.filter((item) => passesApplied(item));
@@ -3814,7 +4069,8 @@ $("lib-dir").addEventListener("click", () => {
 });
 // The preset menu, as the Library tab's preset dropdown shows it: "Loading…" until presets arrive, "Error loading
 // presets" when they can't load, and the applied filter's preset as the app names it, with a starred row, such as
-// "Favorites*", while it matches no preset and isn't the default filter.
+// "Favorites*", while it matches no preset and isn't the profile's default filter. It lists the presets the profile
+// shows, so a remembered preset it hides shows as None*, its filter kept, as a deleted one does.
 function renderLibPresets() {
   // The Mockup tab's preset changes from another device follow the preset the dropdown shows.
   renderMockPresets();
@@ -3828,10 +4084,11 @@ function renderLibPresets() {
   if (state.situation === "nolibrary") return add("", "Running without a library");
   if (presetsLoading) return add("", "Loading…");
   select.disabled = false;
-  const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
-  if (anchor.starred) add("*", anchorLabel(anchor, presetSnapshot, savedPresetNames));
+  const shown = shownSavedPresets();
+  const anchor = presetAnchor(appliedValue || savedDefault, lib.preset, shown, savedPresetFilters, savedDefault);
+  if (anchor.starred) add("*", anchorLabel(anchor, shown, savedPresetNames));
   add("", "None");
-  presetSnapshot.forEach((id) => add(id, savedPresetNames.get(id)));
+  shown.forEach((id) => add(id, savedPresetNames.get(id)));
   select.value = anchor.starred ? "*" : anchor.id;
 }
 // "Preset:" sits in the preset dropdown's left padding, which makes room for it by its measured width, since the font
@@ -3852,10 +4109,8 @@ $("lib-preset").addEventListener("change", (event) => {
 function pickLibPreset(id) {
   lib.preset = id;
   saveLibState();
-  presets.splice(0, presets.length, ...presetSnapshot);
-  presetNames = new Map(savedPresetNames);
-  presetFilters = new Map(savedPresetFilters);
-  applyFilterValue(lib.preset ? savedPresetFilters.get(lib.preset) : DEFAULT_FILTER);
+  restoreSavedPresets();
+  applyFilterValue(lib.preset ? savedPresetFilters.get(lib.preset) : savedDefault);
   takeSnapshot();
   startOver();
   renderPresets();
@@ -3868,12 +4123,14 @@ function pickLibPreset(id) {
 
 // ---- Filter tab ----
 const filterBody = $("filter-body");
-// A name another preset than `own`, an id, has, ignoring case, is taken.
+// A name another preset than `own`, an id, has, ignoring case, is taken, a preset the profile hides included, which the
+// message says, since the list doesn't show it.
 function checkPresetName(value, own) {
   const name = value.trim();
   if (!name) return { empty: true };
-  if (presets.some((id) => id !== own && presetNames.get(id).toLowerCase() === name.toLowerCase())) {
-    return { message: "Use a name no other preset has." };
+  const taken = presets.find((id) => id !== own && presetNames.get(id).toLowerCase() === name.toLowerCase());
+  if (taken) {
+    return { message: presetShown(taken) ? "Use a name no other preset has." : "Use a name no other preset has. A preset this profile hides has it." };
   }
   return null;
 }
@@ -3906,6 +4163,59 @@ const PRESET_FILTERS = {
 let presetFilters = new Map(presets.map((id) => [id, { ...DEFAULT_FILTER, ...PRESET_FILTERS[presetNames.get(id)] }]));
 let savedPresetFilters = new Map(presetFilters);
 let savedPresetNames = new Map(presetNames);
+let savedPresetVisibility = new Map(presetVisibility);
+// The profile's default filter, as the server has it and as the tab holds it: Update with Choose Preset on None writes
+// the tab's filter into it, until Apply saves it. None and Clear all load it, and no preset may hold it.
+const defaultFilterOf = (profile) => profile.defaultFilter || DEFAULT_FILTER;
+let savedDefault = defaultFilterOf(activeProfile());
+let tabDefault = savedDefault;
+// The presets a profile shows, in their order: the tab's, with its unsaved visibility, and the saved ones.
+const presetShown = (id, vis = presetVisibility) => showsIn(vis.get(id));
+const shownPresets = () => presets.filter((id) => presetShown(id));
+const shownSavedPresets = () => presetSnapshot.filter((id) => presetShown(id, savedPresetVisibility));
+// The Filter tab's presets, names, filters, and visibility go back to the saved ones, as the default filter does.
+function restoreSavedPresets() {
+  presets.splice(0, presets.length, ...presetSnapshot);
+  presetNames = new Map(savedPresetNames);
+  presetFilters = new Map(savedPresetFilters);
+  presetVisibility = new Map(savedPresetVisibility);
+  tabDefault = savedDefault;
+}
+// A filter as the profile sees it, which the Filter tab shows and the presets' comparisons use: without its conditions
+// on the tags and categories the profile hides, and with its sources cut to the profile's, all of them reading as no
+// restriction. A list that names none of them stays empty, which matches nothing. Applying a filter in a profile leaves
+// out the same conditions, and the server keeps the sources it hides as its own condition.
+function visibleFilter(value, tags = savedTags) {
+  const hidden = hiddenTags(tags);
+  const roots = profileRoots();
+  const named = value.sources && roots.filter((root) => value.sources.includes(root)).sort();
+  return {
+    ...value,
+    sources: !named || named.length === roots.length ? null : named,
+    include: value.include.filter((key) => !hidden.keys.has(key)),
+    exclude: value.exclude.filter((key) => !hidden.keys.has(key)),
+    local: Object.fromEntries(Object.entries(value.local).filter(([id]) => !hidden.categories.has(id)))
+  };
+}
+const sameShown = (a, b) => sameFilter(visibleFilter(a), visibleFilter(b));
+// What Update writes into a preset, or the default filter, in a profile: the tab's filter, keeping the stored conditions
+// on the tags, categories, and sources the profile hides, one at a time. A result that names every source is stored as
+// no restriction.
+function keepHidden(value, stored) {
+  const hidden = hiddenTags(savedTags);
+  const roots = profileRoots();
+  const allRoots = SOURCES.map((source) => source.root);
+  const storedSources = stored.sources || allRoots;
+  const tabSources = value.sources || roots;
+  const sources = allRoots.filter((root) => (roots.includes(root) ? tabSources : storedSources).includes(root));
+  return {
+    ...value,
+    sources: sources.length === allRoots.length ? null : sources.sort(),
+    include: [...value.include, ...stored.include.filter((key) => hidden.keys.has(key))].sort(),
+    exclude: [...value.exclude, ...stored.exclude.filter((key) => hidden.keys.has(key))].sort(),
+    local: Object.fromEntries(Object.entries({ ...stored.local, ...value.local }).filter(([id]) => value.local[id] || hidden.categories.has(id)).sort())
+  };
+}
 // The applied filter, its fields, the saved presets, the applied tags, and the applied match modes, which Discard changes
 // puts back.
 let appliedValue = null;
@@ -3923,11 +4233,11 @@ let tabBase = lib.preset;
 // while the Presets section stays in view, and starts over on the preset the heading names when the tab starts over or
 // the section comes into view.
 let chosenPreset = lib.preset;
-// The filter Load puts in the tab: the chosen preset's, or the default filter for None, as Clear all does.
-const chosenFilter = () => (chosenPreset ? presetFilters.get(chosenPreset) : DEFAULT_FILTER);
+// The filter Load puts in the tab: the chosen preset's, or the profile's default filter for None, as Clear all does.
+const chosenFilter = () => visibleFilter(chosenPreset ? presetFilters.get(chosenPreset) : tabDefault);
 function startOver() {
   tabBase = lib.preset;
-  chosenPreset = presets.includes(lib.preset) ? lib.preset : "";
+  chosenPreset = shownPresets().includes(lib.preset) ? lib.preset : "";
 }
 // Each time the Presets section comes into view, however it got there, Choose Preset starts over on the preset the
 // heading names, its base while starred, with or without unsaved changes: from its sub-tab, the Filter tab, or the
@@ -3942,12 +4252,13 @@ function notePresetsView() {
   }
   presetsWereInView = inView;
 }
-// The preset a filter is named for, as the app names it: None for the default filter; otherwise the first preset whose
-// filter matches; otherwise the preset it came from, starred. That preset stays while the list lacks it, as after
-// another device deletes it, showing as None*. Presets go by id.
-function presetAnchor(value, base, ids, filters) {
-  if (sameFilter(value, DEFAULT_FILTER)) return { id: "", starred: false };
-  const match = ids.find((id) => sameFilter(filters.get(id), value));
+// The preset a filter is named for, as the app names it: None for the profile's default filter, `def`; otherwise the
+// first preset among `ids` whose filter matches; otherwise the preset it came from, starred. That preset stays while the
+// list lacks it, as after another device deletes it or while the profile hides it, showing as None*. Presets go by id.
+// Filters compare as the profile sees them, so conditions on what it hides never star one.
+function presetAnchor(value, base, ids, filters, def) {
+  if (sameShown(value, def)) return { id: "", starred: false };
+  const match = ids.find((id) => sameShown(filters.get(id), value));
   if (match) return { id: match, starred: false };
   return { id: base, starred: true };
 }
@@ -4030,7 +4341,40 @@ function dateRangeValue({ choice, from, to }) {
 }
 const nameField = new ValidatedField($("filter-new-preset"), (value) => checkPresetName(value, null));
 const flagModesField = flagPairField($("filter-fav"), $("filter-fav-mode"), $("filter-bl"), $("filter-bl-mode"));
-const sourcesField = sourceChecksField([...generalSection("Sources").querySelectorAll('input[type="checkbox"]')]);
+const sourceBoxes = [...generalSection("Sources").querySelectorAll('input[type="checkbox"]')];
+const sourcesField = sourceChecksField(sourceBoxes);
+// The Filter tab lists only the profile's sources, and only they count: with none of them that can be checked left
+// checked, the field is flagged, on the first of them, whose row the field's icon moves to. An empty library lists
+// none, and says so, as today.
+const profileSourceBoxes = () => sourceBoxes.filter((box) => profileRoots().includes(sourceRoot(box)));
+sourcesField.check = () => {
+  const usable = profileSourceBoxes().filter((box) => !box.disabled);
+  return !usable.length || usable.some((box) => box.checked) ? null : { message: SOURCES_PROBLEM };
+};
+function renderFilterSources() {
+  const empty = state.situation === "empty";
+  const stack = $("no-sources").parentElement;
+  const wrap = sourcesField.wrap;
+  const shown = empty ? [] : profileSourceBoxes();
+  const usable = shown.filter((box) => !box.disabled);
+  sourceBoxes.forEach((box) => {
+    const label = box.closest(".filter-source");
+    label.hidden = !shown.includes(box);
+    if (box === usable[0]) {
+      wrap.prepend(label);
+      stack.insertBefore(wrap, $("no-sources"));
+    } else {
+      stack.insertBefore(label, $("no-sources"));
+    }
+  });
+  wrap.hidden = !usable.length;
+  if (usable.length) {
+    sourcesField.input = usable[0];
+    sourcesField.partners = usable.slice(1);
+  }
+  $("no-sources").hidden = !empty;
+  sourcesField.update();
+}
 // An empty duration field means no limit, and its placeholder says so.
 // Each mode dropdown applies only while its checkbox is on.
 function syncModeSelects() {
@@ -4076,7 +4420,7 @@ const sourceRoot = (box) => /\(([^)]+)\)/.exec(box.parentElement.textContent)[1]
 function filterValue() {
   const general = filterBody.querySelector('[data-subpanel="general"]');
   const chosen = (name) => Math.max(0, [...general.querySelectorAll(`input[name="${name}"]`)].findIndex((radio) => radio.checked));
-  const boxes = [...generalSection("Sources").querySelectorAll('input[type="checkbox"]')];
+  const boxes = profileSourceBoxes();
   const on = boxes.filter((box) => box.checked);
   const duration = (field) => parseDuration(field.input.value);
   const tagged = (mode) => [...filterTagState].filter(([, value]) => value === mode).map(([key]) => key).sort();
@@ -4098,8 +4442,9 @@ function filterValue() {
     local: Object.fromEntries([...filterLocalModes].sort())
   };
 }
-// Puts a filter into the tab's fields, tags, and match modes.
-function applyFilterValue(value) {
+// Puts a filter into the tab's fields, tags, and match modes, as the profile sees it.
+function applyFilterValue(stored) {
+  const value = visibleFilter(stored);
   durationsTyped.clear();
   const general = filterBody.querySelector('[data-subpanel="general"]');
   $("filter-fav").checked = !!value.fav;
@@ -4134,9 +4479,10 @@ function applyFilterValue(value) {
   renderFilterTags();
 }
 
-// The default filter: every source, Blacklisted excluded, and nothing else, with no tags and every category matched with
-// ALL (AND). Clear all has nothing to clear while the tab's filter is the default one, which no preset may hold.
-const filterIsDefault = () => sameFilter(filterValue(), DEFAULT_FILTER);
+// The built-in default filter: every source, Blacklisted excluded, and nothing else, with no tags and every category
+// matched with ALL (AND), which each profile's starts as. Clear all has nothing to clear while the tab's filter is the
+// profile's default one, which no preset may hold.
+const filterIsDefault = () => sameShown(filterValue(), tabDefault);
 
 // Whether the tab holds changes to apply, compared with the applied filter and the saved presets, so a change put back
 // is none: its filter, typed durations included, and its preset list by order, id, name, and filter. Without one, Apply and
@@ -4148,8 +4494,8 @@ function filterChanges() {
   const value = filterValue();
   const presetList = presets.length !== presetSnapshot.length ||
     presets.some((id, i) => id !== presetSnapshot[i] || presetNames.get(id) !== savedPresetNames.get(id) ||
-      !sameFilter(presetFilters.get(id), savedPresetFilters.get(id)));
-  return !sameFilter(value, appliedValue) || presetList;
+      !sameFilter(presetFilters.get(id), savedPresetFilters.get(id)) || !sameFilter(presetVisibility.get(id), savedPresetVisibility.get(id)));
+  return !sameFilter(value, appliedValue) || presetList || !sameFilter(tabDefault, savedDefault);
 }
 let applyHold = null;
 let addPresetHold = null;
@@ -4170,11 +4516,17 @@ function renderApply() {
   // The heading names the working filter's preset, as the dropdown will once it applies, and stars it while the tab's
   // filter, with each duration as its field reads, differs from that preset's, so text passed through while typing
   // doesn't change the preset. Choose Preset doesn't follow it.
-  const anchor = presetAnchor(workingValue(), tabBase, presets, presetFilters);
+  const shown = shownPresets();
+  const anchor = presetAnchor(workingValue(), tabBase, shown, presetFilters, tabDefault);
   tabBase = anchor.id;
   // A preset the list lacks has no filter to match, so it stays starred.
-  const named = !anchor.id ? DEFAULT_FILTER : presets.includes(anchor.id) ? presetFilters.get(anchor.id) : null;
-  $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !named || !sameFilter(filterValue(), named) }, presets, presetNames)}`;
+  const named = !anchor.id ? tabDefault : shown.includes(anchor.id) ? presetFilters.get(anchor.id) : null;
+  $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !named || !sameShown(filterValue(), named) }, shown, presetNames)}`;
+  // Update writes into the default filter while Choose Preset is on None, which its name says, and its tooltip while
+  // nothing holds it.
+  const update = $("filter-update-preset");
+  update.setAttribute("aria-label", chosenPreset ? "Update preset" : "Update default filter");
+  if (!update.disabled && !update.classList.contains("shows-problem")) update.title = update.getAttribute("aria-label");
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = generalFields.some((field) => field.flagged);
   generalTab.classList.toggle("has-problem", generalProblem);
@@ -4247,14 +4599,20 @@ applyHold = holdAction($("filter-apply"), () => generalFields, {
   reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
-// No preset may hold the default filter or another preset's, so Add Preset and Update are disabled while the tab's
-// filter, with each duration as its field reads, is the default one or a preset's, the chosen preset's included, since
-// updating a preset with the filter it has changes nothing. They say why, the default filter first, and name the first
-// preset that has the filter.
+// No preset may hold the profile's default filter or another preset's, so Add Preset and Update are disabled while the
+// tab's filter, with each duration as its field reads, is the default one or a preset's, the chosen preset's included,
+// since updating a preset with the filter it has changes nothing. They say why, the default filter first, and name the
+// first preset that has the filter. Update on None writes into the default filter, so it says so while the tab's filter
+// is the default one already.
+const presetHolder = (value) => shownPresets().find((id) => sameShown(presetFilters.get(id), value));
 function presetReason() {
   if (filterIsDefault()) return "Choose a filter to save as a preset.";
-  const value = filterValue();
-  const holder = presets.find((id) => sameFilter(presetFilters.get(id), value));
+  const holder = presetHolder(filterValue());
+  return holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
+}
+function defaultReason() {
+  if (filterIsDefault()) return "This is the default filter already.";
+  const holder = presetHolder(filterValue());
   return holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
 }
 addPresetHold = holdAction($("filter-add-preset"), () => [nameField, ...generalFields], {
@@ -4263,9 +4621,9 @@ addPresetHold = holdAction($("filter-add-preset"), () => [nameField, ...generalF
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
-// Update has nothing to write into while Choose Preset is on None, which it says before the filter's reasons.
+// Update writes into the chosen preset, or into the profile's default filter while Choose Preset is on None.
 updatePresetHold = holdAction($("filter-update-preset"), () => generalFields, {
-  unavailable: () => (chosenPreset ? presetReason() : "Choose a preset to update."),
+  unavailable: () => (chosenPreset ? presetReason() : defaultReason()),
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
@@ -4278,11 +4636,15 @@ filterBody.addEventListener("change", (event) => {
   renderApply();
 });
 
+// The tab's presets, their visibility, and the profile's default filter become the saved ones, as Apply saves them.
 function takeSnapshot() {
   snapshot = [...filterBody.querySelectorAll("input, select")].map((el) => [el, el.value, el.checked, el.disabled]);
   presetSnapshot = presets.slice();
   savedPresetNames = new Map(presetNames);
   savedPresetFilters = new Map(presetFilters);
+  savedPresetVisibility = new Map(presetVisibility);
+  savedDefault = tabDefault;
+  activeProfile().defaultFilter = tabDefault;
   tagSnapshot = new Map(filterTagState);
   localSnapshot = new Map(filterLocalModes);
   appliedValue = filterValue();
@@ -4294,9 +4656,7 @@ function restoreSnapshot() {
     el.checked = checked;
     el.disabled = disabled;
   });
-  presets.splice(0, presets.length, ...presetSnapshot);
-  presetNames = new Map(savedPresetNames);
-  presetFilters = new Map(savedPresetFilters);
+  restoreSavedPresets();
   filterTagState.clear();
   tagSnapshot.forEach((value, key) => filterTagState.set(key, value));
   filterLocalModes = new Map(localSnapshot);
@@ -4306,36 +4666,33 @@ function restoreSnapshot() {
   syncDateRanges();
   [...generalFields, nameField].forEach((field) => field.reset());
 }
-// The applied filter is remembered on this device, as the per-device store keeps it.
-function saveFilterState() {
-  store.set("filterInputs", [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select')].map((el) => [el.value, el.checked]));
-  store.set("filterTags", [...filterTagState]);
-  store.set("filterGlobal", $("filter-global").value);
-  store.set("filterLocal", [...filterLocalModes]);
+// Each profile's applied filter and its preset are remembered on this device, as the per-device store keeps them: the
+// preset, whether its filter showed as modified, and the filter.
+function profileRecords() {
+  const kept = store.get("filter.appliedByProfile", {});
+  return kept && typeof kept === "object" ? kept : {};
 }
+function saveFilterState() {
+  if (!appliedValue) return;
+  const anchor = presetAnchor(appliedValue, lib.preset, shownSavedPresets(), savedPresetFilters, savedDefault);
+  store.set("filter.appliedByProfile", { ...profileRecords(), [activeProfileId]: { preset: lib.preset, starred: anchor.starred, value: appliedValue } });
+}
+// The active profile's remembered filter goes into the tab, or its default filter when it has none. A preset applied
+// unmodified applies again as the server has it now; one that showed as modified, or that the server no longer has,
+// keeps its filter.
 function restoreFilterState() {
-  durationsTyped.clear();
-  const inputs = store.get("filterInputs", null);
-  const elements = [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select')];
-  if (inputs && inputs.length === elements.length) {
-    elements.forEach((el, i) => {
-      el.value = inputs[i][0];
-      el.checked = inputs[i][1];
-    });
-  }
-  store.get("filterTags", []).forEach(([key, value]) => filterTagState.set(key, value));
-  $("filter-global").value = store.get("filterGlobal", "AND");
-  filterLocalModes = new Map(store.get("filterLocal", []));
-  syncModeSelects();
-  syncDateRanges();
-  generalFields.forEach((field) => field.update());
+  const record = profileRecords()[activeProfileId];
+  const kept = record?.value ? { ...DEFAULT_FILTER, ...record.value } : null;
+  const current = kept && !record.starred && presetSnapshot.includes(record.preset) ? savedPresetFilters.get(record.preset) : null;
+  lib.preset = kept ? record.preset || "" : "";
+  applyFilterValue(current || kept || savedDefault);
 }
 
 $("filter-apply").addEventListener("click", () => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Saving presets failed: Couldn't reach the server." });
   if (state.pairing || heldBack()) return;
   // The dropdown takes the preset the tab names.
-  lib.preset = presetAnchor(filterValue(), tabBase, presets, presetFilters).id;
+  lib.preset = presetAnchor(filterValue(), tabBase, shownPresets(), presetFilters, tabDefault).id;
   resetUnusedFields();
   takeSnapshot();
   startOver();
@@ -4356,30 +4713,34 @@ $("filter-discard").addEventListener("click", () => {
   renderLibPresets();
   renderApply();
 });
-// Clear all filters returns to the default filter and the saved presets, as today. Choose Preset keeps its choice while
-// the saved presets have it.
+// Clear all filters returns to the profile's saved default filter and the saved presets, as today. Choose Preset keeps
+// its choice while the saved presets have it.
 $("filter-clear").addEventListener("click", () => {
-  applyFilterValue(DEFAULT_FILTER);
-  presets.splice(0, presets.length, ...presetSnapshot);
-  presetNames = new Map(savedPresetNames);
-  presetFilters = new Map(savedPresetFilters);
+  restoreSavedPresets();
+  applyFilterValue(savedDefault);
   tabBase = "";
   renderPresets();
   renderApply();
 });
-// Load puts the chosen preset's filter in the tab, or the default filter for None, which Apply then applies, as picking a
-// preset did before. It leaves the preset list as it is.
+// Load puts the chosen preset's filter in the tab, or the profile's default filter for None, which Apply then applies,
+// as picking a preset did before. It leaves the preset list as it is.
 $("filter-load-preset").addEventListener("click", () => loadPresetIntoFilter(chosenPreset));
 function loadPresetIntoFilter(id) {
-  applyFilterValue(id ? presetFilters.get(id) : DEFAULT_FILTER);
+  applyFilterValue(id ? presetFilters.get(id) : tabDefault);
   tabBase = id;
   renderApply();
 }
-// Update saves the tab's filter into the chosen preset until Apply saves the list.
+// Update saves the tab's filter into the chosen preset, or into the profile's default filter for None, until Apply
+// saves them, keeping their conditions on what the profile hides.
 $("filter-update-preset").addEventListener("click", () => updatePresetFromFilter(chosenPreset));
 function updatePresetFromFilter(id) {
-  acknowledge(`Updated preset "${presetNames.get(id)}" locally — Apply to save.`, "filter");
-  presetFilters.set(id, filterValue());
+  if (!id) {
+    acknowledge("Updated the default filter locally — Apply to save.", "filter");
+    tabDefault = keepHidden(filterValue(), tabDefault);
+  } else {
+    acknowledge(`Updated preset "${presetNames.get(id)}" locally — Apply to save.`, "filter");
+    presetFilters.set(id, keepHidden(filterValue(), presetFilters.get(id)));
+  }
   renderApply();
 }
 
@@ -4391,13 +4752,10 @@ function updatePresetFromFilter(id) {
 contextMenu.add("#filter-preset-list .filter-preset-row", (row) => {
   const id = row.dataset.key;
   if (!presets.includes(id)) return null;
-  const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
-  const own = sameFilter(filterValue(), presetFilters.get(id));
+  const anchor = presetAnchor(appliedValue || savedDefault, lib.preset, shownSavedPresets(), savedPresetFilters, savedDefault);
+  const own = sameShown(filterValue(), presetFilters.get(id));
   const flagged = generalFields.find((field) => field.flagged);
-  const holder = presets.find((other) => sameFilter(presetFilters.get(other), filterValue()));
-  const updateReason = flagged ? generalReason(flagged, "first")
-    : filterIsDefault() ? "Choose a filter to save as a preset."
-    : holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
+  const updateReason = flagged ? generalReason(flagged, "first") : presetReason();
   return [
     [(anchor.id !== id || anchor.starred) && menuItem("filter_alt", "Apply", () => pickLibPreset(id), { reason: unsaved.filter ? "Apply or discard the Filter tab's changes first" : null })],
     [
@@ -4415,7 +4773,7 @@ contextMenu.add("#filter-preset-list .filter-preset-row", (row) => {
 const SOURCE_OFF = "This source is turned off on the server";
 contextMenu.add("#filter-body .filter-source", (row) => {
   const box = row.querySelector("input");
-  const others = [...filterBody.querySelectorAll(".filter-source input")].filter((other) => other !== box && !other.disabled);
+  const others = profileSourceBoxes().filter((other) => other !== box && !other.disabled);
   if (box.checked && !box.disabled && !others.some((other) => other.checked)) return null;
   return [[menuItem("filter_alt", "Only this source", () => {
     box.checked = true;
@@ -4430,26 +4788,28 @@ function presetsChanged() {
   nameField.update();
   renderApply();
 }
+// The tab lists the presets the profile shows.
 function renderPresets() {
+  const shown = shownPresets();
   const select = $("filter-preset-select");
   select.textContent = "";
-  ["", ...presets].forEach((id) => {
+  ["", ...shown].forEach((id) => {
     const option = document.createElement("option");
     option.value = id;
     option.textContent = id ? presetNames.get(id) : "None";
     select.append(option);
   });
   // Choose Preset shows the chosen preset, or None once the list no longer has it.
-  if (!presets.includes(chosenPreset)) chosenPreset = "";
+  if (!shown.includes(chosenPreset)) chosenPreset = "";
   select.value = chosenPreset;
   const list = $("filter-preset-list");
   list.textContent = "";
-  if (state.situation === "empty" || !presets.length) {
+  if (state.situation === "empty" || !shown.length) {
     list.append(Object.assign(document.createElement("span"), { className: "filter-hint", textContent: "No presets" }));
     return;
   }
   // Edit Preset opens from a row's menu.
-  presets.forEach((id) => {
+  shown.forEach((id) => {
     const name = presetNames.get(id);
     const row = document.createElement("div");
     row.className = "filter-preset-row";
@@ -4466,20 +4826,24 @@ makeSortable({
   rowSelector: ".filter-preset-row",
   keyOf: (row) => row.dataset.key,
   commit: (keys) => {
-    presets.splice(0, presets.length, ...keys);
+    presets.splice(0, presets.length, ...mergeOrder(presets, keys));
     presetsChanged();
   }
 });
 // A rename keeps the preset's id, so the heading's preset and the chosen one keep naming it.
+// Its Show in waits for Apply, as its name does.
 function openEditPreset(index) {
   const own = presets[index];
+  let showIn = null;
   nameDialog({
     title: "Edit Preset",
     label: "Preset Name",
     value: presetNames.get(own),
     check: (value) => checkPresetName(value, own),
+    extra: (form) => (showIn = showInFields(form, presetVisibility.get(own), "preset")),
     onSave: (name) => {
       presetNames.set(own, name);
+      if (showIn) presetVisibility.set(own, showIn());
       presetsChanged();
     },
     deleteMessage: () => presetDeleteMessage(own),
@@ -4492,12 +4856,17 @@ function removePreset(id) {
   if (tabBase === id) tabBase = "";
   presetsChanged();
 }
-// Add Preset adds the preset last, with an id of its own.
-$("filter-add-preset").addEventListener("click", () => {
+// Add Preset adds the preset last, with an id of its own, once the creation question is answered.
+$("filter-add-preset").addEventListener("click", async () => {
+  const name = nameField.input.value.trim();
+  const value = filterValue();
+  const shown = await askWhichProfiles("preset", name);
+  if (!shown) return;
   const id = `preset-${nextPresetId++}`;
   presets.push(id);
-  presetNames.set(id, nameField.input.value.trim());
-  presetFilters.set(id, filterValue());
+  presetNames.set(id, name);
+  presetFilters.set(id, value);
+  presetVisibility.set(id, shown);
   nameField.reset("");
   presetsChanged();
 });
@@ -4520,6 +4889,9 @@ function takeLoadedPresets(order, names, filters) {
   const ownFilter = (id) => !order.includes(id) || !sameFilter(presetFilters.get(id), savedPresetFilters.get(id));
   presetNames = new Map(merged.map((id) => [id, ownName(id) ? presetNames.get(id) : names.get(id)]));
   presetFilters = new Map(merged.map((id) => [id, ownFilter(id) ? presetFilters.get(id) : filters.get(id)]));
+  // A preset another device added shows in every profile.
+  presetVisibility = new Map(merged.map((id) => [id, presetVisibility.get(id) || visibility(true)]));
+  savedPresetVisibility = new Map(order.map((id) => [id, savedPresetVisibility.get(id) || visibility(true)]));
   presets.splice(0, presets.length, ...merged);
   presetSnapshot = order.slice();
   savedPresetNames = new Map(names);
@@ -4637,11 +5009,11 @@ function categoryEl(view, id, name, { handle: handleEl, controls, inUse = 0, inU
   show();
   return { section, grid };
 }
-// The Filter tab's tags are the library's tags.
+// The Filter tab's tags are the library's tags the profile shows.
 function renderFilterTags() {
   const host = $("filter-tag-categories");
   host.textContent = "";
-  const categories = state.situation === "empty" ? [] : TAGS.filter((category) => category.chips.length);
+  const categories = state.situation === "empty" ? [] : shownCategories(TAGS).filter(({ chips }) => chips.length).map(({ category, chips }) => ({ ...category, chips }));
   if (!categories.length) {
     host.append(Object.assign(document.createElement("p"), { className: "filter-hint", textContent: "No tags yet. Add them in the Tags tab." }));
     return;
@@ -4682,18 +5054,9 @@ function renderFilterTags() {
     host.append(section);
   });
 }
-// Today's empty states: no sources, and (above) no tags and no presets.
-function renderFilterEmpty() {
-  const empty = state.situation === "empty";
-  const stack = $("no-sources").parentElement;
-  stack.querySelectorAll(".filter-source").forEach((label) => ((label.closest(".vfield") || label).hidden = empty));
-  $("no-sources").hidden = !empty;
-}
 
 // ---- Tags tab ----
 let tagsDirty = false;
-const snapshotTags = () => JSON.parse(JSON.stringify(TAGS, (key, value) => (key === "pending" ? undefined : value)));
-let savedTags = snapshotTags();
 
 // The Tags tab edits its item's tags. It follows the playing item, unless it has unsaved changes to its item's tags:
 // then it stays on its item, names it, and follows once those changes are saved or discarded. With nothing playing,
@@ -4766,9 +5129,12 @@ function renderTags() {
   }
   line.append(target);
   // While the server asks for pairing, the tags' load answers 401, so the tab shows none, and while it fails the
-  // compatibility check or runs without a library, nothing loads.
-  const shown = state.pairing || heldBack() ? [] : state.situation === "empty" ? TAGS.filter((category) => category.id === UNCATEGORIZED).map((category) => ({ ...category, chips: [] })) : TAGS;
-  shown.forEach((category) => {
+  // compatibility check or runs without a library, nothing loads. In a profile it shows only the categories and tags
+  // the profile shows, an item's hidden tags included.
+  const shown = state.pairing || heldBack() ? [] : state.situation === "empty"
+    ? TAGS.filter((category) => category.id === UNCATEGORIZED).map((category) => ({ category, chips: [] }))
+    : shownCategories(TAGS);
+  shown.forEach(({ category, chips }) => {
     // Uncategorized has a dimmed, disabled handle, so its name lines up and it is clear it can't move. Edit Category
     // opens from the category's menu.
     const handleEl = dragHandle(category.name);
@@ -4777,7 +5143,7 @@ function renderTags() {
       handleEl.title = "Uncategorized stays last";
       handleEl.setAttribute("aria-label", "Uncategorized stays last");
     }
-    const inUse = category.chips.filter((chip) => items.some((item) => item.tags.has(chip.key))).length;
+    const inUse = chips.filter((chip) => items.some((item) => item.tags.has(chip.key))).length;
     const { section, grid } = categoryEl("tags", category.id, category.name, {
       handle: handleEl,
       inUse,
@@ -4785,7 +5151,7 @@ function renderTags() {
       unsaved: categoryUnsaved(category)
     });
     section.dataset.key = category.id;
-    category.chips.forEach((chip) => {
+    chips.forEach((chip) => {
       pending = pending || !!chip.pending;
       // Green: every item being edited has the tag. Orange: only some do. Add or Remove applies to all of them.
       const { count, buttons } = chipButtons(chip, items);
@@ -4806,8 +5172,9 @@ function renderTags() {
   const select = $("tags-category-select");
   const keep = select.value || UNCATEGORIZED;
   select.textContent = "";
-  TAGS.forEach((category) => select.append(Object.assign(document.createElement("option"), { value: category.id, textContent: category.name })));
-  if (TAGS.some((category) => category.id === keep)) select.value = keep;
+  const categories = TAGS.filter((category) => showsIn(category));
+  categories.forEach((category) => select.append(Object.assign(document.createElement("option"), { value: category.id, textContent: category.name })));
+  if (categories.some((category) => category.id === keep)) select.value = keep;
 }
 // A tag shows only the buttons that would change something for the items the tab edits: Add to item while the tag
 // isn't on every one of them, and Remove from item while it is on some, so one item's tag shows one of them, and only
@@ -4900,7 +5267,8 @@ async function confirmDelete(message, onDelete) {
 function categoryUnsaved(category) {
   if (category.chips.some((chip) => chip.pending)) return true;
   const saved = savedTags.find((c) => c.id === category.id);
-  const shape = (c) => JSON.stringify([c.name, c.chips.map((chip) => [chip.key, chip.name])]);
+  const shown = (record) => [record.all ?? true, record.differ || []];
+  const shape = (c) => JSON.stringify([c.name, shown(c), c.chips.map((chip) => [chip.key, chip.name, shown(chip)])]);
   return !saved || shape(saved) !== shape(category);
 }
 function tagsChanged() {
@@ -4913,7 +5281,7 @@ makeSortable({
   keyOf: (row) => row.dataset.key,
   commit: (keys) => {
     const byId = new Map(TAGS.map((category) => [category.id, category]));
-    const ordered = keys.map((key) => byId.get(key));
+    const ordered = mergeOrder(TAGS.map((category) => category.id).filter((id) => id !== UNCATEGORIZED), keys).map((key) => byId.get(key));
     TAGS.splice(0, TAGS.length, ...ordered, byId.get(UNCATEGORIZED));
     tagsChanged();
   }
@@ -4948,22 +5316,27 @@ $("tags-discard").addEventListener("click", () => {
   tagsDirty = false;
   followPlayingItem();
 });
-// New tag name: a name another tag has, ignoring case, is flagged, and Add tag, which sits beside it, is disabled
-// while the name is empty or taken. An existing tag goes on the item with its chip's Add.
+// New tag name: a name another tag has, ignoring case, is flagged, a tag the profile hides included, which the message
+// says, since the tab doesn't show it. Add tag, which sits beside it, is disabled while the name is empty or taken. An
+// existing tag goes on the item with its chip's Add.
 const newTagField = new ValidatedField($("tags-new-name"), (value) => {
   const name = value.trim();
   if (!name) return { empty: true };
-  return TAGS.some((category) => category.chips.some((chip) => chip.name.toLowerCase() === name.toLowerCase()))
-    ? { message: "Use a name no other tag has." }
-    : null;
+  const category = TAGS.find((c) => c.chips.some((chip) => chip.name.toLowerCase() === name.toLowerCase()));
+  if (!category) return null;
+  const chip = category.chips.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  return { message: showsIn(category) && showsIn(chip) ? "Use a name no other tag has." : "Use a name no other tag has. A tag this profile hides has it." };
 });
 holdAction($("tags-add-tag"), () => [newTagField], { beside: () => [newTagField] });
-// Add tag adds the tag to the chosen category, until Save, without putting it on the item being edited.
-function addTag() {
+// Add tag adds the tag to the chosen category, once the creation question is answered, until Save, without putting it
+// on the item being edited.
+async function addTag() {
   if (newTagField.holds) return;
   const name = $("tags-new-name").value.trim();
   const category = TAGS.find((c) => c.id === $("tags-category-select").value) || TAGS[TAGS.length - 1];
-  const chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name };
+  const shown = await askWhichProfiles("tag", name);
+  if (!shown) return;
+  const chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name, ...shown };
   category.chips.push(chip);
   // The category the tag is in opens, so the change is visible.
   setCategoryExpanded("tags", category.id, true);
@@ -4977,30 +5350,39 @@ $("tags-new-name").addEventListener("keydown", (event) => {
     addTag();
   }
 });
+// A category the profile hides has its name too, which the message says, since the tab doesn't show it.
 function checkCategoryName(value, own) {
   const name = value.trim();
   if (!name) return { empty: true };
-  if (TAGS.some((category) => category !== own && category.name.toLowerCase() === name.toLowerCase())) {
-    return { message: "Use a name no other category has." };
+  const taken = TAGS.find((category) => category !== own && category.name.toLowerCase() === name.toLowerCase());
+  if (taken) {
+    return { message: showsIn(taken) ? "Use a name no other category has." : "Use a name no other category has. A category this profile hides has it." };
   }
   return null;
 }
 
-// New Category checks its name as Edit Category does, so a new category can't take a name another one has.
+// New Category checks its name as Edit Category does, so a new category can't take a name another one has. Once its
+// dialog closes, the creation question asks which profiles show it.
 $("tags-add-category").addEventListener("click", () => {
+  let name = "";
   nameDialog({
     title: "New Category",
     label: "Category Name",
     value: "",
     check: (value) => checkCategoryName(value, null),
-    onSave: (name) => {
-      TAGS.splice(TAGS.length - 1, 0, { id: `c${Date.now()}`, name, chips: [] });
+    onSave: (value) => void (name = value),
+    onClose: async (saved) => {
+      if (!saved) return;
+      const shown = await askWhichProfiles("category", name);
+      if (!shown) return;
+      TAGS.splice(TAGS.length - 1, 0, { id: `c${Date.now()}`, name, chips: [], ...shown });
       tagsChanged();
     }
   });
 });
 
 function openEditTag(category, chip) {
+  let showIn = null;
   nameDialog({
     title: "Edit Tag",
     label: "Tag Name",
@@ -5016,7 +5398,7 @@ function openEditTag(category, chip) {
       select.className = "ctl";
       select.id = id;
       select.name = "category";
-      TAGS.forEach((c) => {
+      TAGS.filter((c) => c === category || showsIn(c)).forEach((c) => {
         const option = document.createElement("option");
         option.value = c.id;
         option.textContent = c.name;
@@ -5024,9 +5406,11 @@ function openEditTag(category, chip) {
         select.append(option);
       });
       form.append(label, select);
+      showIn = showInFields(form, chip, "tag");
     },
     onSave: (name, form) => {
       chip.name = name;
+      if (showIn) Object.assign(chip, showIn());
       const target = TAGS.find((c) => c.id === form.elements.category.value);
       if (target && target !== category) {
         category.chips.splice(category.chips.indexOf(chip), 1);
@@ -5046,13 +5430,16 @@ function deleteTag(category, chip) {
 }
 
 function openEditCategory(category) {
+  let showIn = null;
   nameDialog({
     title: "Edit Category",
     label: "Category Name",
     value: category.name,
     check: (value) => checkCategoryName(value, category),
+    extra: (form) => (showIn = showInFields(form, category, "category")),
     onSave: (name) => {
       category.name = name;
+      if (showIn) Object.assign(category, showIn());
       tagsChanged();
     },
     deleteMessage: () => categoryDeleteMessage(category),
@@ -5072,10 +5459,12 @@ function deleteCategory(category) {
 // holds (ignoring the extension), with nothing checked, as today; Select all checks everything. Rows expand to their files; Apply applies the checked changes.
 // `error` is why the last scan failed, which Auto Tag's status shows in place of a result.
 const autoTag = { scanning: false, rows: null, error: null };
+// In a profile it scans only the profile's sources, the whole library in them for a full scan, and uses only the tags
+// the profile shows.
 function autoTagScan() {
   if (state.situation === "empty") return [];
-  const pool = $("autotag-full").checked ? ITEMS.filter((item) => !item.removed) : visibleItems().items;
-  return TAGS.flatMap((category) => category.chips).map((chip) => {
+  const pool = $("autotag-full").checked ? ITEMS.filter((item) => !item.removed && inProfile(item)) : visibleItems().items;
+  return shownCategories(savedTags).flatMap(({ chips }) => chips).map((chip) => {
     const files = pool
       .filter((item) => item.name.replace(/\.[^.]+$/, "").toLowerCase().includes(chip.name.toLowerCase()))
       .map((item) => ({ item, change: !item.tags.has(chip.key), checked: false }));
@@ -5249,6 +5638,720 @@ function openStats() {
 }
 $("np-name").addEventListener("click", openStats);
 
+// ---- Profiles: the header's profile button, its picker, and Add Profile and Edit Profile ----
+// The button shows the active profile's circle and opens the picker.
+function renderProfileButton() {
+  const profile = activeProfile();
+  paintCircle($("profile-circle"), profile.name, profile.color);
+  const label = `Profile: ${profile.name}`;
+  $("profile-btn").setAttribute("aria-label", label);
+  $("profile-btn").title = label;
+}
+// The default profile first, then the others alphabetically, ignoring case.
+const pickerOrder = () => [profiles[0], ...profiles.slice(1).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))];
+
+// The picker, styled like the bell's list, under the button. It closes on a choice, Escape, a press outside it, the
+// panel opening where it covers the screen, and the header hiding, in fullscreen and on a phone on its side. A menu
+// opened from a row, and a dialog opened from it, keep it open while they are used.
+const picker = (() => {
+  const button = $("profile-btn");
+  const list = document.createElement("section");
+  list.className = "notify-list profile-picker";
+  list.id = "profile-picker";
+  list.hidden = true;
+  list.innerHTML =
+    '<div class="notify-head"><h2>Profiles</h2>' +
+    '<button class="icon-btn" type="button" data-act="close" aria-label="Close" title="Close"><span class="material-symbol-icon">close</span></button></div>' +
+    '<ul class="profile-rows notify-scroll themed-scrollbar"></ul>' +
+    '<div class="notify-foot"><button class="btn" type="button" data-act="add"><span class="material-symbol-icon">add</span>Add Profile</button></div>';
+  hydrateIcons(list);
+  $("app").append(list);
+  let open = false;
+
+  function render() {
+    const rows = list.querySelector(".profile-rows");
+    rows.replaceChildren(...pickerOrder().map((profile) => {
+      const row = document.createElement("li");
+      row.className = "profile-row";
+      row.classList.toggle("is-active", profile.id === activeProfileId);
+      row.dataset.id = profile.id;
+      const choose = document.createElement("button");
+      choose.type = "button";
+      choose.className = "profile-choose";
+      const name = Object.assign(document.createElement("span"), { className: "profile-name", textContent: profile.name });
+      choose.append(profileCircle(profile), name);
+      if (profile.id === activeProfileId) choose.append(iconSpan("check", "profile-check"));
+      choose.addEventListener("click", () => switchProfile(profile.id));
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "icon-btn";
+      edit.setAttribute("aria-label", `Edit ${profile.name}`);
+      edit.title = "Edit profile";
+      edit.append(iconSpan("edit_note"));
+      edit.addEventListener("click", () => openProfileDialog(profile));
+      row.append(choose, edit);
+      return row;
+    }));
+  }
+  // Under the button, lined up with its right edge, as the bell's list lines up with a bell in the right half.
+  function place() {
+    const anchor = button.getBoundingClientRect();
+    const width = list.offsetWidth || Math.min(320, window.innerWidth - 16);
+    list.style.left = `${Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8))}px`;
+    list.style.top = `${Math.round(anchor.bottom + 6)}px`;
+    list.style.maxHeight = `${Math.max(220, Math.round(window.innerHeight - anchor.bottom - 18))}px`;
+  }
+  function show() {
+    open = true;
+    list.hidden = false;
+    button.classList.add("is-open");
+    render();
+    place();
+  }
+  // Closing it, however it closes, leaves focus on the page.
+  function close() {
+    if (!open) return;
+    open = false;
+    if (list.contains(document.activeElement) || button.contains(document.activeElement)) document.activeElement.blur();
+    list.hidden = true;
+    button.classList.remove("is-open");
+  }
+  button.addEventListener("click", () => (open ? close() : show()));
+  list.querySelector('[data-act="close"]').addEventListener("click", close);
+  list.querySelector('[data-act="add"]').addEventListener("click", () => openProfileDialog(null));
+  document.addEventListener("pointerdown", (event) => {
+    if (open && !list.contains(event.target) && !button.contains(event.target) && !contextMenu.contains(event.target) && !event.target.closest?.("dialog")) close();
+  }, true);
+  // Escape closes a row's menu first, then the picker, before the bell's list, the panel, and pseudo-fullscreen.
+  document.addEventListener("keydown", (event) => {
+    if (!open || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  }, true);
+  window.addEventListener("resize", () => open && place());
+  return { close, isOpen: () => open, render: () => open && render() };
+})();
+
+// A row's menu: Edit…, as its edit icon, and Delete…, which asks first, as Edit Profile's Delete does. The default
+// profile can't be deleted, so its Delete… is disabled, saying why. A long press on the row's name opens it too.
+const DEFAULT_PROFILE_KEPT = "The default profile can't be deleted";
+contextMenu.add("#profile-picker .profile-row", (row) => {
+  const profile = profileById(row.dataset.id);
+  if (!profile) return null;
+  return [[
+    menuItem("edit_note", "Edit…", () => openProfileDialog(profile)),
+    menuItem("delete", "Delete…", () => confirmDelete(profileDeleteMessage(profile), () => deleteProfile(profile)), { danger: true, reason: isDefaultProfile(profile) ? DEFAULT_PROFILE_KEPT : null })
+  ]];
+}, { pressOn: ".profile-choose" });
+
+// A switch asks first while the Filter or Tags tab holds unsaved changes, which it would discard. The picker closes as
+// it is chosen.
+async function switchProfile(id) {
+  picker.close();
+  if (id === activeProfileId) return;
+  if ((unsaved.filter || unsaved.tags) && !(await confirmDialog({ message: "Discard changes?", confirmLabel: "Discard", danger: true }))) return;
+  enterProfile(id);
+}
+// A switch discards the Filter and Tags tabs' unsaved changes and puts the new profile's remembered filter and preset in
+// place together, as the default filter when it has none. The Library tab's query and the Filter tab start over, the
+// Stats tab loads again, Auto Tag's kept scan clears, and a selection ends. The playing item and the history carry on;
+// only the next random pick uses the new profile.
+function enterProfile(id) {
+  if (unsaved.tags) {
+    TAGS.splice(0, TAGS.length, ...JSON.parse(JSON.stringify(savedTags)));
+    tagsDirty = false;
+  }
+  activeProfileId = id;
+  store.set("profiles.active", id);
+  savedDefault = defaultFilterOf(activeProfile());
+  restoreSavedPresets();
+  nameField.reset("");
+  newTagField.reset("");
+  renderFilterSources();
+  restoreFilterState();
+  resetUnusedFields();
+  takeSnapshot();
+  startOver();
+  renderPresets();
+  renderFilterTags();
+  saveFilterState();
+  readApplied();
+  renderApply();
+  renderLibPresets();
+  if (selecting) setSelecting(false);
+  Object.assign(autoTag, { rows: null, error: null });
+  renderAutoTag();
+  followPlayingItem();
+  renderStats();
+  renderCategoryList();
+  renderRandomization();
+  reloadGrid();
+  renderProfileButton();
+  renderMockProfiles();
+}
+// A change to the active profile's sources or visibility shows at once in every tab, keeping the tabs' unsaved changes.
+function refreshProfileViews() {
+  renderFilterSources();
+  readApplied();
+  renderPresets();
+  renderFilterTags();
+  renderApply();
+  renderLibPresets();
+  renderTags();
+  renderStats();
+  renderCategoryList();
+  renderRandomization();
+  reloadGrid();
+}
+const profileDeleteMessage = (profile) => `Delete profile "${profile.name}"?`;
+// The server deletes a profile with its visibility choices, and this device forgets its filter there.
+function removeProfile(profile) {
+  profiles.splice(profiles.indexOf(profile), 1);
+  const forget = (record) => record.differ && (record.differ = record.differ.filter((id) => id !== profile.id));
+  [TAGS, savedTags].forEach((tags) => tags.forEach((category) => [category, ...category.chips].forEach(forget)));
+  [presetVisibility, savedPresetVisibility].forEach((map) => map.forEach(forget));
+  const records = profileRecords();
+  delete records[profile.id];
+  store.set("filter.appliedByProfile", records);
+}
+// A device on a deleted profile, this one included, goes to the default profile.
+function deleteProfile(profile) {
+  removeProfile(profile);
+  acknowledge(`Profile "${profile.name}" deleted.`, "profile");
+  if (profile.id === activeProfileId) enterProfile(DEFAULT_PROFILE);
+  else refreshProfileViews();
+  picker.render();
+}
+
+// A name another profile has, ignoring case, is taken.
+function checkProfileName(value, own) {
+  const name = value.trim();
+  if (!name) return { empty: true };
+  return profiles.some((profile) => profile !== own && profile.name.toLowerCase() === name.toLowerCase()) ? { message: "Use a name no other profile has." } : null;
+}
+// A color as #rrggbb, from "#rgb" or "#rrggbb", with or without the "#", or null for one that isn't.
+function readColor(value) {
+  const hex = value.trim().replace(/^#/, "").toLowerCase();
+  if (/^[0-9a-f]{3}$/.test(hex)) return `#${[...hex].map((digit) => digit + digit).join("")}`;
+  return /^[0-9a-f]{6}$/.test(hex) ? `#${hex}` : null;
+}
+// A color in OKLab, where the straight distance between two colors follows how different they look.
+function oklab(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const value = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+  });
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  ];
+}
+// Add Profile's first color, and the random button's: any hex value, clearly different from every profile's color but
+// `own`'s, and from `current`, the color shown, at least DISTINCT_COLOR apart in OKLab. It tries COLOR_TRIES random
+// colors, and takes the one furthest from the nearest of them when none is that far.
+const DISTINCT_COLOR = 0.12;
+const COLOR_TRIES = 20;
+function randomProfileColor(own, current) {
+  const avoid = [...profiles.filter((profile) => profile !== own).map((profile) => profile.color), ...(current ? [current] : [])].map(oklab);
+  let best = null;
+  for (let i = 0; i < COLOR_TRIES; i++) {
+    const hex = `#${Math.floor(Math.random() * 0x1000000).toString(16).padStart(6, "0")}`;
+    const lab = oklab(hex);
+    const nearest = Math.min(Infinity, ...avoid.map((other) => Math.hypot(lab[0] - other[0], lab[1] - other[1], lab[2] - other[2])));
+    if (nearest >= DISTINCT_COLOR) return hex;
+    if (!best || nearest > best.nearest) best = { hex, nearest };
+  }
+  return best.hex;
+}
+// Hue in degrees, and saturation and brightness from 0 to 1, to #rrggbb and back. A gray has no hue of its own, so it
+// reads as hue 0.
+function hsvToHex({ h, s, v }) {
+  const channel = (n) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return `#${[channel(5), channel(3), channel(1)].map((value) => Math.round(value * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+function hexToHsv(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const range = max - Math.min(r, g, b);
+  const sector = !range ? 0 : max === r ? ((g - b) / range + 6) % 6 : max === g ? (b - r) / range + 2 : (r - g) / range + 4;
+  return { h: sector * 60, s: max ? range / max : 0, v: max };
+}
+const clamp01 = (value) => Math.min(1, Math.max(0, value || 0));
+// A press on `el` and the drag that follows it, with a mouse or a finger: `move(x, y)` gets the pointer's place across
+// and down `el`, each from 0 to 1, at the press and as it moves, even outside it.
+function trackPointer(el, move) {
+  el.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    const at = (e) => {
+      const box = el.getBoundingClientRect();
+      move(clamp01((e.clientX - box.left) / box.width), clamp01((e.clientY - box.top) / box.height));
+    };
+    el.setPointerCapture?.(event.pointerId);
+    at(event);
+    const end = () => {
+      el.removeEventListener("pointermove", at);
+      el.removeEventListener("pointerup", end);
+      el.removeEventListener("pointercancel", end);
+    };
+    el.addEventListener("pointermove", at);
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+  });
+}
+
+// The color picker in Add Profile and Edit Profile, drawn by the app so it looks the same on every device, in a popover
+// that `button` opens under itself, inside `host`: a square for saturation and brightness, the hue slider beside it, the
+// palette's colors as one-tap quick picks, and the hex field, under the field validation pattern, which always shows the
+// color's value, with the random button at its right, whose color `pickRandom(current)` gives. Each change applies at
+// once and calls `onChange`. It closes on the button, a press outside it, and Escape, before the dialog; a hex field that
+// is empty or not valid then goes back to the last valid color. It answers its hex field and its color, the last valid
+// one, and `close`, `set`, and `dispose`.
+function colorPicker({ host, button, pickRandom, onChange }) {
+  const popover = document.createElement("div");
+  popover.className = "color-popover";
+  popover.hidden = true;
+  popover.innerHTML =
+    '<div class="color-picker-main">' +
+    '<div class="color-sv" title="Saturation and brightness"><span class="color-sv-thumb"></span></div>' +
+    '<div class="color-hue" title="Hue"><span class="color-hue-thumb"></span></div></div>' +
+    '<div class="color-quick"></div>' +
+    '<div class="color-hex-row">' +
+    '<span class="vfield"><input class="ctl" type="text" placeholder="Enter hex value" aria-label="Color as a hex value" autocomplete="off" spellcheck="false"><span class="vfield-icon material-symbol-icon">error</span></span>' +
+    '<button class="icon-btn" type="button" aria-label="Random color" title="Random color"><span class="material-symbol-icon">casino</span></button></div>';
+  hydrateIcons(popover);
+  host.append(popover);
+  const square = popover.querySelector(".color-sv");
+  const slider = popover.querySelector(".color-hue");
+  const input = popover.querySelector("input");
+  // The field must always hold a color, so an emptied one is flagged too.
+  const field = new ValidatedField(input, (value) => (readColor(value) ? null : { message: "Use a hex color, such as #ef7f22." }));
+  // Where the square and the slider stand, which a gray leaves at the hue it had, and the last valid color.
+  let hsv = hexToHsv(PROFILE_COLORS[0]);
+  let lastValid = PROFILE_COLORS[0];
+  let open = false;
+  let swallowCancel = false;
+  const color = () => readColor(input.value) || lastValid;
+  const quick = PROFILE_COLORS.map((swatch) => {
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.title = swatch;
+    pick.setAttribute("aria-label", swatch);
+    pick.style.setProperty("--swatch", swatch);
+    pick.addEventListener("click", () => take(swatch));
+    popover.querySelector(".color-quick").append(pick);
+    return pick;
+  });
+  popover.querySelector(".color-hex-row .icon-btn").addEventListener("click", () => take(pickRandom(color())));
+  function render() {
+    const shown = color();
+    popover.style.setProperty("--hue", String(hsv.h));
+    const thumb = square.querySelector(".color-sv-thumb");
+    thumb.style.left = `${hsv.s * 100}%`;
+    thumb.style.top = `${(1 - hsv.v) * 100}%`;
+    thumb.style.setProperty("--thumb", shown);
+    slider.querySelector(".color-hue-thumb").style.top = `${(hsv.h / 360) * 100}%`;
+    quick.forEach((pick) => pick.classList.toggle("is-chosen", pick.title === shown));
+  }
+  // A color from a quick pick or the hex field moves the square and the slider to it, a gray keeping the hue.
+  function follow(value) {
+    const next = hexToHsv(value);
+    hsv = { h: next.s && next.v ? next.h : hsv.h, s: next.s, v: next.v };
+  }
+  function take(value, moved = false) {
+    if (!moved) follow(value);
+    field.reset(value);
+    lastValid = value;
+    render();
+    onChange();
+  }
+  trackPointer(square, (x, y) => {
+    hsv = { ...hsv, s: x, v: 1 - y };
+    take(hsvToHex(hsv), true);
+  });
+  trackPointer(slider, (x, y) => {
+    hsv = { ...hsv, h: Math.min(y * 360, 359.9) };
+    take(hsvToHex(hsv), true);
+  });
+  input.addEventListener("input", () => {
+    const value = readColor(input.value);
+    if (value) {
+      follow(value);
+      lastValid = value;
+    }
+    render();
+    onChange();
+  });
+  // Under the button, or above it where the window has no room below.
+  function place() {
+    if (!open) return;
+    const anchor = button.getBoundingClientRect();
+    const below = anchor.bottom + 6;
+    const top = below + popover.offsetHeight + 8 <= window.innerHeight ? below : Math.max(8, anchor.top - popover.offsetHeight - 6);
+    popover.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - popover.offsetWidth - 8))}px`;
+    popover.style.top = `${Math.round(top)}px`;
+  }
+  function show() {
+    open = true;
+    popover.hidden = false;
+    button.classList.add("is-open");
+    render();
+    place();
+  }
+  function close() {
+    if (!open) return;
+    open = false;
+    popover.hidden = true;
+    button.classList.remove("is-open");
+    if (input.contains(document.activeElement) || popover.contains(document.activeElement)) document.activeElement.blur();
+    if (field.holds) take(lastValid);
+  }
+  button.addEventListener("click", () => (open ? close() : show()));
+  host.addEventListener("pointerdown", (event) => {
+    if (open && !popover.contains(event.target) && !button.contains(event.target)) close();
+  }, true);
+  // Escape closes it, and the dialog's own close request that the same key sends goes no further.
+  const onKey = (event) => {
+    if (!open || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+    swallowCancel = true;
+    setTimeout(() => (swallowCancel = false), 0);
+  };
+  const onCancel = (event) => {
+    if (!swallowCancel) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  document.addEventListener("keydown", onKey, true);
+  document.addEventListener("cancel", onCancel, true);
+  window.addEventListener("resize", place);
+  document.addEventListener("scroll", place, true);
+  return {
+    field,
+    color,
+    close,
+    set(value) {
+      follow(value);
+      lastValid = value;
+      field.reset(value);
+      render();
+    },
+    dispose() {
+      field.dispose();
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("cancel", onCancel, true);
+      window.removeEventListener("resize", place);
+      document.removeEventListener("scroll", place, true);
+    }
+  };
+}
+
+// Add Profile, for `profile` null, and Edit Profile: one in-app dialog with General, Sources, Tags, and Presets tabs,
+// text tabs as the Filter tab's sections are. General holds the name, under the field validation pattern, and the color,
+// from the color picker its color button opens, which starts Add Profile on a random color. Sources holds all of them or a chosen list. Tags and
+// Presets check what the profile shows, a category's tags greyed while it is off; Add Profile starts with the "All
+// profiles" ones checked. Save stays disabled while a field is not valid, and the field's tab shows the red badge. Edit
+// Profile has a red Delete that asks first. The default profile's has only the General fields, and no Delete. Save
+// saves at once, as the server's profile writes do.
+function openProfileDialog(profile) {
+  const adding = !profile;
+  const tabs = adding || !isDefaultProfile(profile);
+  const id = `profile-dialog-${++dialogCounter}`;
+  const form = document.createElement("form");
+  form.className = "dialog-body";
+  form.noValidate = true;
+  const tabRow = tabs
+    ? '<div class="filter-tabstrip" role="tablist">' +
+      '<button class="tab text-tab" type="button" role="tab" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>' +
+      '<button class="tab text-tab" type="button" role="tab" data-sub="sources">Sources<span class="tab-problem material-symbol-icon">error</span></button>' +
+      '<button class="tab text-tab" type="button" role="tab" data-sub="tags">Tags</button>' +
+      '<button class="tab text-tab" type="button" role="tab" data-sub="presets">Presets</button></div>'
+    : "";
+  form.innerHTML =
+    `<h3 id="${id}-title"></h3>${tabRow}` +
+    '<div class="profile-pages themed-scrollbar scroll-y">' +
+    '<div class="profile-page" data-page="general">' +
+    `<label class="profile-field-label" for="${id}-name">Name</label>` +
+    `<span class="vfield"><input class="ctl" type="text" id="${id}-name" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>` +
+    '<span class="profile-field-label">Color</span>' +
+    '<button class="profile-color-btn" type="button" title="Choose a color"><span class="profile-circle"></span><span class="profile-color-value"></span></button>' +
+    (tabs ? "" : '<p class="filter-hint">The default profile always shows every source, tag, and preset.</p>') +
+    "</div>" +
+    (tabs
+      ? '<div class="profile-page" data-page="sources" hidden>' +
+        '<div class="choice-stack">' +
+        `<label><input type="radio" name="${id}-sources" value="all"><span>All sources<small>Sources added later show too.</small></span></label>` +
+        `<label><input type="radio" name="${id}-sources" value="chosen"><span>Only these sources</span></label></div>` +
+        '<fieldset class="profile-sources"><div class="setting-sub"></div></fieldset></div>' +
+        '<div class="profile-page" data-page="tags" hidden><p class="filter-hint">A category\'s tags show only while the category does.</p></div>' +
+        '<div class="profile-page" data-page="presets" hidden><div class="profile-check-list"></div></div>'
+      : "") +
+    "</div>" +
+    '<div class="dialog-actions"></div>';
+  hydrateIcons(form);
+  const part = (selector) => form.querySelector(selector);
+  part("h3").textContent = adding ? "Add Profile" : "Edit Profile";
+
+  // General: the name, and the color button, showing the circle and its hex value, which opens the picker. Add Profile
+  // starts with a random color clearly different from the other profiles'.
+  const nameInput = part(`#${id}-name`);
+  const colorButton = part(".profile-color-btn");
+  const nameField = new ValidatedField(nameInput, (value) => checkProfileName(value, profile));
+  const colors = colorPicker({ host: form, button: colorButton, pickRandom: (current) => randomProfileColor(profile, current), onChange: () => renderColor() });
+  const colorField = colors.field;
+  function renderColor() {
+    const color = colors.color();
+    paintCircle(colorButton.querySelector(".profile-circle"), nameInput.value, color);
+    colorButton.querySelector(".profile-color-value").textContent = color;
+  }
+  nameInput.addEventListener("input", renderColor);
+
+  // Sources, Tags, and Presets, in the profile's own choices, or for Add Profile all sources and what shows in every
+  // profile.
+  const shows = (record) => (adding ? record?.all ?? true : showsIn(record, profile.id));
+  let sourcesField = null;
+  const tagBoxes = [];
+  const presetBoxes = [];
+  if (tabs) {
+    const radios = [...form.querySelectorAll(`input[name="${id}-sources"]`)];
+    const set = part(".profile-sources");
+    const sourceBoxes = SOURCES.map((source, index) => {
+      const label = document.createElement("label");
+      const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: adding || profile.allSources || profile.sources.includes(source.id) });
+      label.append(box, ` ${source.name} (${source.root})`);
+      if (source.off) label.title = "This source is turned off on the server";
+      if (index === 0) {
+        const wrap = Object.assign(document.createElement("span"), { className: "vfield vfield-after" });
+        wrap.append(label, iconSpan("error", "vfield-icon"));
+        set.firstChild.append(wrap);
+      } else {
+        set.firstChild.append(label);
+      }
+      box.dataset.source = source.id;
+      return box;
+    });
+    const chosen = () => radios[1].checked;
+    sourcesField = new ValidatedField(sourceBoxes[0], () => (chosen() && !sourceBoxes.some((box) => box.checked) ? { message: SOURCES_PROBLEM } : null), { partners: sourceBoxes.slice(1) });
+    const syncSources = () => {
+      set.disabled = !chosen();
+      sourcesField.update();
+    };
+    radios[adding || profile.allSources ? 0 : 1].checked = true;
+    radios.forEach((radio) => radio.addEventListener("change", syncSources));
+    sourceBoxes.forEach((box) => box.addEventListener("change", () => sourcesField.update()));
+    syncSources();
+
+    // Tags: each category with its tags, in the catalog's order. A category's tags are greyed while it is off, and keep
+    // their checks.
+    savedTags.forEach((category) => {
+      const block = Object.assign(document.createElement("div"), { className: "profile-tag-category" });
+      const head = document.createElement("label");
+      const categoryBox = Object.assign(document.createElement("input"), { type: "checkbox", checked: shows(category) });
+      head.append(categoryBox, ` ${category.name}`);
+      const grid = Object.assign(document.createElement("fieldset"), { className: "profile-tag-grid" });
+      category.chips.forEach((chip) => {
+        const label = document.createElement("label");
+        const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: shows(chip) });
+        label.append(box, ` ${chip.name}`);
+        grid.append(label);
+        tagBoxes.push({ key: chip.key, box });
+      });
+      const syncCategory = () => (grid.disabled = !categoryBox.checked);
+      categoryBox.addEventListener("change", syncCategory);
+      syncCategory();
+      block.append(head, grid);
+      part('[data-page="tags"]').append(block);
+      tagBoxes.push({ key: category.id, box: categoryBox, category: true });
+    });
+
+    // Presets: one checkbox each, in their saved order.
+    presetSnapshot.forEach((presetId) => {
+      const label = document.createElement("label");
+      const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: shows(savedPresetVisibility.get(presetId)) });
+      label.append(box, ` ${savedPresetNames.get(presetId)}`);
+      part(".profile-check-list").append(label);
+      presetBoxes.push({ id: presetId, box });
+    });
+    if (!presetSnapshot.length) part(".profile-check-list").append(Object.assign(document.createElement("span"), { className: "filter-hint", textContent: "No presets" }));
+
+    // The tabs: the one shown is orange and underlined, and a tab holding a field that is not valid shows the badge.
+    const showPage = (sub) => {
+      colors.close();
+      form.querySelectorAll(".filter-tabstrip .tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.sub === sub)));
+      form.querySelectorAll(".profile-page").forEach((page) => (page.hidden = page.dataset.page !== sub));
+      part(".profile-pages").scrollTop = 0;
+      placeAllTips();
+    };
+    form.querySelectorAll(".filter-tabstrip .tab").forEach((tab) => tab.addEventListener("click", () => showPage(tab.dataset.sub)));
+    showPage("general");
+  }
+  const fields = [nameField, colorField, sourcesField].filter(Boolean);
+  const markTabs = () => {
+    const mark = (sub, problem) => {
+      const tab = form.querySelector(`.filter-tabstrip .tab[data-sub="${sub}"]`);
+      if (!tab) return;
+      tab.classList.toggle("has-problem", problem);
+      fadeShown(tab.querySelector(".tab-problem"), problem);
+      tab.title = problem ? "A field here is not valid" : "";
+    };
+    mark("general", nameField.flagged || colorField.flagged);
+    mark("sources", !!sourcesField?.flagged);
+  };
+  fields.forEach((field) => field.onChange(markTabs));
+
+  // The actions: Delete for a profile besides the default one, then Cancel and Save.
+  const actions = part(".dialog-actions");
+  const cancel = dialogButton("Cancel");
+  const save = dialogButton("Save", "", "submit");
+  save.append(iconSpan("error", "btn-problem"));
+  if (!adding && !isDefaultProfile(profile)) {
+    const remove = dialogButton("Delete", "btn-danger");
+    remove.addEventListener("click", async () => {
+      if (await confirmDialog({ message: profileDeleteMessage(profile), confirmLabel: "Delete", danger: true })) {
+        close(false);
+        deleteProfile(profile);
+      }
+    });
+    actions.append(remove);
+  }
+  actions.append(Object.assign(document.createElement("span"), { className: "dialog-spacer" }), cancel, save);
+
+  const { dialog, close } = openDialog({
+    content: form,
+    labelledBy: `${id}-title`,
+    onClose: () => {
+      nameField.dispose();
+      sourcesField?.dispose();
+      colors.dispose();
+    }
+  });
+  dialog.classList.add("profile-dialog");
+  dialog.classList.toggle("has-tabs", tabs);
+  nameField.reset(adding ? "" : profile.name);
+  colors.set(adding ? randomProfileColor(null, null) : profile.color);
+  renderColor();
+  markTabs();
+  holdAction(save, () => fields, { beside: () => fields });
+  cancel.addEventListener("click", () => close(false));
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (fields.some((field) => field.holds)) return;
+    const name = nameInput.value.trim();
+    const color = colors.color();
+    const target = profile || { id: `profile-${nextProfileId++}`, defaultFilter: defaultFilterOf(profiles[0]) };
+    Object.assign(target, { name, color });
+    if (tabs) {
+      const chosenSources = [...form.querySelectorAll(".profile-sources input")].filter((box) => box.checked).map((box) => box.dataset.source);
+      target.allSources = form.querySelector(`input[name="${id}-sources"][value="all"]`).checked;
+      target.sources = target.allSources ? [] : chosenSources;
+      // A choice that differs from what shows in every profile, or from the profile's own, makes the profile differ.
+      const differs = (record, checked) => {
+        record.differ = (record.differ || []).filter((each) => each !== target.id);
+        if (checked !== (record.all ?? true)) record.differ.push(target.id);
+      };
+      [TAGS, savedTags].forEach((tags) => tags.forEach((category) => {
+        const own = tagBoxes.find((entry) => entry.category && entry.key === category.id);
+        if (own) differs(category, own.box.checked);
+        category.chips.forEach((chip) => {
+          const entry = tagBoxes.find((each) => !each.category && each.key === chip.key);
+          if (entry) differs(chip, entry.box.checked);
+        });
+      }));
+      presetBoxes.forEach(({ id: presetId, box }) => {
+        [savedPresetVisibility, presetVisibility].forEach((map) => {
+          const record = { ...(map.get(presetId) || visibility(true)) };
+          differs(record, box.checked);
+          map.set(presetId, record);
+        });
+      });
+    }
+    if (adding) profiles.push(target);
+    close(true);
+    acknowledge(`Profile "${name}" ${adding ? "added" : "saved"}.`, "profile");
+    picker.render();
+    renderProfileButton();
+    if (target.id === activeProfileId) refreshProfileViews();
+    renderMockProfiles();
+  });
+  setTimeout(() => {
+    nameInput.focus();
+    nameInput.select();
+  }, 0);
+}
+
+// The creation question: once a second profile exists, creating a tag, category, or preset asks which profiles show
+// it. "Only this profile" shows it in the active profile and the default one, which shows everything. Escape or a
+// press outside cancels the creation. It answers the new visibility, or null when cancelled.
+function askWhichProfiles(noun, name) {
+  if (profiles.length < 2) return Promise.resolve(visibility(true));
+  return new Promise((resolve) => {
+    const body = document.createElement("div");
+    body.className = "dialog-body";
+    const text = document.createElement("p");
+    text.className = "dialog-message";
+    text.id = `dialog-message-${++dialogCounter}`;
+    text.textContent = `Which profiles show the new ${noun} "${name}"?`;
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const only = dialogButton("Only this profile");
+    const all = dialogButton("All profiles");
+    actions.append(Object.assign(document.createElement("span"), { className: "dialog-spacer" }), only, all);
+    body.append(text, actions);
+    const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: (result) => resolve(result || null) });
+    only.addEventListener("click", () => close(visibility(false, activeProfileId === DEFAULT_PROFILE ? [] : [activeProfileId])));
+    all.addEventListener("click", () => close(visibility(true)));
+  });
+}
+
+// Show in, in Edit Tag, Edit Category, and Edit Preset, once a second profile exists: a checkbox for each profile but
+// the default one, which shows everything, and one for profiles added later, which "All profiles" means. It answers a
+// reader of the new visibility for the dialog's Save, or null while there is no choice to make.
+function showInFields(form, record, noun) {
+  if (profiles.length < 2) return null;
+  const heading = Object.assign(document.createElement("span"), { textContent: "Show in" });
+  const list = Object.assign(document.createElement("div"), { className: "show-in-list" });
+  const boxes = profiles.filter((profile) => !isDefaultProfile(profile)).map((profile) => {
+    const label = document.createElement("label");
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: showsIn(record, profile.id) });
+    label.append(box, profileCircle(profile, true), profile.name);
+    list.append(label);
+    return { profile, box };
+  });
+  const laterLabel = document.createElement("label");
+  const later = Object.assign(document.createElement("input"), { type: "checkbox", checked: record?.all ?? true });
+  laterLabel.append(later, " Profiles added later");
+  list.append(laterLabel);
+  const hint = Object.assign(document.createElement("p"), { className: "filter-hint", textContent: `${profiles[0].name} shows every ${noun}.` });
+  form.append(heading, list, hint);
+  return () => visibility(later.checked, boxes.filter(({ box }) => box.checked !== later.checked).map(({ profile }) => profile.id));
+}
+
+// Another device deletes this device's profile, which then shows the default profile.
+$("mock-profile-deleted").addEventListener("click", () => {
+  const profile = activeProfile();
+  if (isDefaultProfile(profile)) return;
+  streamEvent();
+  removeProfile(profile);
+  notes.notify({ kind: "devices", text: `Your profile "${profile.name}" was deleted on another device. This device now shows "${profiles[0].name}".`, key: "your-profile" });
+  enterProfile(DEFAULT_PROFILE);
+  picker.render();
+});
+function renderMockProfiles() {
+  const onDefault = activeProfileId === DEFAULT_PROFILE;
+  $("mock-profile-deleted").disabled = onDefault;
+  $("mock-profile-note").hidden = !onDefault;
+}
+
 // ---- Mockup options ----
 function toggleSheet(show) {
   $("mock-sheet").hidden = !show;
@@ -5298,7 +6401,7 @@ function applySituation(situation) {
   renderSortControls();
   renderPresets();
   renderFilterTags();
-  renderFilterEmpty();
+  renderFilterSources();
   renderTags();
   layoutGrid(true);
   renderStats();
@@ -5333,7 +6436,8 @@ $("mock-sync").addEventListener("click", () => {
   streamEvent();
   item.favorite = !item.favorite;
   if (item.favorite) item.blacklisted = false;
-  notes.notify({ kind: "devices", text: `${item.favorite ? "Added to" : "Removed from"} favorites on another device`, detail: item.name, key: `sync:${item.id}` });
+  // A popup leaves out an item in a source the profile hides, as the event names its source.
+  if (inProfile(item)) notes.notify({ kind: "devices", text: `${item.favorite ? "Added to" : "Removed from"} favorites on another device`, detail: item.name, key: `sync:${item.id}` });
   renderPlayback();
   layoutGrid(true);
 });
@@ -5345,7 +6449,7 @@ $("mock-sync-rating").addEventListener("click", () => {
   streamEvent();
   item.rating = item.rating ? null : 3.5;
   const text = item.rating ? `Rated ${ratingText(item.rating)}` : "Rating cleared";
-  notes.notify({ kind: "devices", text: `${text} on another device`, detail: item.name, key: `sync-rating:${item.id}` });
+  if (inProfile(item)) notes.notify({ kind: "devices", text: `${text} on another device`, detail: item.name, key: `sync-rating:${item.id}` });
   renderPlayback();
   if (ratingShapesGrid()) layoutGrid(true);
 });
@@ -5361,10 +6465,11 @@ const serverPresets = () => ({ order: presetSnapshot.slice(), names: new Map(sav
 // Your preset: the one this device has applied, which the dropdown shows, starred while its filter shows as modified,
 // or null while None is applied or the list lacks it.
 function yourPreset() {
-  const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
-  return presetSnapshot.includes(anchor.id) ? anchor : null;
+  const shown = shownSavedPresets();
+  const anchor = presetAnchor(appliedValue || savedDefault, lib.preset, shown, savedPresetFilters, savedDefault);
+  return shown.includes(anchor.id) ? anchor : null;
 }
-const otherPresets = () => presetSnapshot.filter((id) => id !== yourPreset()?.id);
+const otherPresets = () => shownSavedPresets().filter((id) => id !== yourPreset()?.id);
 // A name and a filter that neither the server's presets nor the tab's have, and a filter that is neither applied nor in
 // the tab, so a change shows only as itself.
 function freePresetName(candidates, server) {
@@ -5373,7 +6478,7 @@ function freePresetName(candidates, server) {
   return candidates.find(free) ?? Array.from({ length: names.length + 1 }, (_, index) => `Preset ${index + 1}`).find(free);
 }
 function freePresetFilter(server) {
-  const held = [...server.order.map((id) => server.filters.get(id)), ...presets.map((id) => presetFilters.get(id)), appliedValue, filterValue()];
+  const held = [...server.order.map((id) => server.filters.get(id)), ...presets.map((id) => presetFilters.get(id)), appliedValue, filterValue(), savedDefault, tabDefault];
   for (let minutes = 1; ; minutes++) {
     const value = { ...DEFAULT_FILTER, media: "videos", min: minutes * 60 };
     if (!held.some((each) => sameFilter(each, value))) return value;
@@ -5406,7 +6511,7 @@ function presetsFromAnotherDevice(edit) {
   const follows = yourChange?.kind === "updated" && !yours.starred;
   takeLoadedPresets(server.order, server.names, server.filters);
   if (follows) followAppliedFilter(server.filters.get(yours.id));
-  lib.preset = presetAnchor(appliedValue, lib.preset, presetSnapshot, savedPresetFilters).id;
+  lib.preset = presetAnchor(appliedValue, lib.preset, shownSavedPresets(), savedPresetFilters, savedDefault).id;
   saveLibState();
   renderLibPresets();
   // The ordinary popups share one key, so a later burst's replaces one still showing, and several changes collapse
@@ -5483,7 +6588,8 @@ function keptSourcesMessage(sources) {
 }
 function refreshKeptSources(ids) {
   streamEvent();
-  const fresh = ids.filter((id) => !keptNoticed.has(id));
+  // It leaves out folders the profile hides.
+  const fresh = ids.filter((id) => !keptNoticed.has(id) && profileRoots().includes(KEPT_SOURCES[id].folder));
   if (!fresh.length) return;
   fresh.forEach((id) => keptNoticed.add(id));
   noticeDialog({ message: keptSourcesMessage(fresh.map((id) => KEPT_SOURCES[id])) });
@@ -5620,7 +6726,8 @@ function readApplied() {
   };
   const media = chosen("media");
   const audio = chosen("audio");
-  const boxes = [...sectionOf("Sources").querySelectorAll('input[type="checkbox"]')];
+  // Sources count out of the profile's.
+  const boxes = profileSourceBoxes();
   const on = boxes.filter((box) => box.checked);
   if (on.length < boxes.length) parts.push(`${on.length} of ${boxes.length} sources`);
   const min = minField.input.value && !minField.holds ? parseDuration(minField.input.value) : null;
@@ -5632,6 +6739,7 @@ function readApplied() {
   DATE_FILTERS.forEach(({ key, label }) => {
     if (ranges[key]) parts.push(`${label} ${dateRangeText(ranges[key])}`);
   });
+  // The tab holds no conditions on tags the profile hides, so the tag counts leave them out.
   const include = [...filterTagState].filter(([, mode]) => mode === "inc").map(([key]) => key);
   const exclude = [...filterTagState].filter(([, mode]) => mode === "exc").map(([key]) => key);
   if (include.length) parts.push(`${include.length} tag${include.length === 1 ? "" : "s"}`);
@@ -5680,8 +6788,10 @@ function inDateRange(time, range) {
   const end = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
   return time >= first.getTime() && time < end.getTime();
 }
+// The server applies the profile's sources with the filter.
 function passesApplied(item) {
   const a = applied;
+  if (!inProfile(item)) return false;
   if (a.fav === "only" && !item.favorite) return false;
   if (a.fav === "excluded" && item.favorite) return false;
   if (a.bl === "only" && !item.blacklisted) return false;
@@ -6413,7 +7523,7 @@ function fileStats(item) {
   }
   const tags = document.createElement("div");
   tags.className = "stats-tags";
-  TAGS.flatMap((category) => category.chips).filter((chip) => item.tags.has(chip.key)).forEach((chip) => {
+  shownCategories(savedTags).flatMap(({ chips }) => chips).filter((chip) => item.tags.has(chip.key)).forEach((chip) => {
     const tag = document.createElement("span");
     tag.className = "stats-tag";
     tag.dataset.key = chip.key;
@@ -6449,7 +7559,9 @@ function renderStats() {
   const library = document.createElement("section");
   library.className = "stats-section";
   library.innerHTML = "<h3>Library</h3>";
-  const live = state.situation === "empty" ? [] : ITEMS.filter((x) => !x.removed);
+  // In a profile the cards count only its sources' files. The baseline loudness stays the library's, since it is
+  // normalization's target and isn't a count.
+  const live = state.situation === "empty" ? [] : ITEMS.filter((x) => !x.removed && inProfile(x));
   const videos = live.filter((x) => !isPhoto(x));
   const cards = [
     ["Videos", videos.length],
@@ -6536,7 +7648,8 @@ function choosePick(pool) {
   return item;
 }
 // The categories Spread by tags can use, in the saved tag catalog's order, as the Filter tab lists them, and those chosen.
-const spreadCategories = () => (state.situation === "empty" ? [] : savedTags.filter((category) => category.chips.length));
+// In a profile, only the categories it shows, with tags it shows.
+const spreadCategories = () => (state.situation === "empty" ? [] : shownCategories(savedTags).filter(({ chips }) => chips.length).map(({ category }) => category));
 const chosenCategories = () => spreadCategories().filter((category) => randomOptions.categories.includes(category.id));
 const listText = (names) => (names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
 // The Random line's summary, such as "Shuffle · Spread by folder". By category with none chosen spreads by no tags.
@@ -6947,7 +8060,7 @@ const SHORTCUTS = [
   ["P", "Show or hide the panel"],
   ["Shift+F", "Fullscreen"],
   ["H", "These shortcuts"],
-  ["Esc", "Close the top dialog, a menu, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
+  ["Esc", "Close the top dialog, a menu, the profile picker, the notifications list, the rating stars, or the panel, clear selection, or leave fullscreen"]
 ];
 function showShortcuts() {
   openPanel("settings");
@@ -7317,11 +8430,15 @@ function renderFigures() {
 // ---- Start ----
 // The library and presets load after a moment, as they do from the server.
 initSettings();
+store.set("profiles.active", activeProfileId);
+renderProfileButton();
+renderMockProfiles();
 restoreFilterState();
+startOver();
 readApplied();
 renderPresets();
 renderFilterTags();
-renderFilterEmpty();
+renderFilterSources();
 takeSnapshot();
 renderSortControls();
 applyCollapse();
