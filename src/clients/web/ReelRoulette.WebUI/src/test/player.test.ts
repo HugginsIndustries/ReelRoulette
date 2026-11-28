@@ -291,12 +291,12 @@ function setup(
     emit: (event: keyof ServerConnectionEvents, payload: unknown) => listeners[event]?.forEach((listener) => listener(payload)),
     /** Plays `item` as the user starts a play from `origin`, forward unless it says otherwise. */
     play(item: PlayingItem, origin?: PlayOrigin) {
-      store.pushHistory({ ...item });
+      store.appendHistory({ ...item });
       player.playCurrent({ origin });
     },
     /** Plays `item` as a video `seconds` long whose metadata has loaded and that has started playing. */
     playVideo(item: PlayingItem, seconds: number) {
-      store.pushHistory({ ...item });
+      store.appendHistory({ ...item });
       player.playCurrent();
       elements.video.duration = seconds;
       player.videoMetadataLoaded();
@@ -344,7 +344,7 @@ describe("createPlayer", () => {
 
   it("does not record a library play, which the server already recorded", async () => {
     const page = setup();
-    page.store.pushHistory({ ...VIDEO });
+    page.store.appendHistory({ ...VIDEO });
     page.player.playCurrent({ origin: "library" });
     await Promise.resolve();
     expect(page.requests("/api/record-playback")).toHaveLength(0);
@@ -381,7 +381,7 @@ describe("createPlayer", () => {
   it("only traces events from an attempt once another item is playing", () => {
     const page = setup();
     page.play(VIDEO);
-    page.store.pushHistory({ ...SECOND_VIDEO });
+    page.store.appendHistory({ ...SECOND_VIDEO });
 
     page.player.videoPlaying();
     expect(page.statuses).toEqual([]);
@@ -2240,7 +2240,7 @@ describe("Loading… on the player's indicator", () => {
     // A photo's events while a video plays, and a video's events once another item is current, are stale.
     page.player.photoLoaded();
     page.player.photoFailed();
-    page.store.pushHistory({ ...VIDEO });
+    page.store.appendHistory({ ...VIDEO });
     page.player.videoPlaying();
     page.player.videoFailed();
     expect(page.store.loading.shown.value).toBe(true);
@@ -2518,7 +2518,7 @@ describe("a file that fails to load", () => {
   });
 
   it("skips a file this browser can't play that Insert put after the playing item by picking again with Insert, keeping the plays ahead after it", async () => {
-    const page = setup({ "rr_device.randomization.behavior": '"insert"' });
+    const page = setup({ "rr_device.playback.playBehavior": '"insert"' });
     seedHistory(page, [VIDEO, PHOTO], 0);
     page.answerRandom(MKV, SECOND_VIDEO);
     answerProbe(page, MKV, () => media(206));

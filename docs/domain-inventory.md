@@ -278,7 +278,12 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - It renders from the tag editor service, and its panels stay empty until it first opens.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/SettingsTab.tsx`
   - the Settings tab:
-    - Playback's Autoplay mode, radio buttons named by their choice, with its line under it and the group's hint under them, Advance after, a setting's field of the field validation pattern, which saves to the store's Advance after and shows the value saved again once the field loses focus or the tab hides or the panel closes, Loop stops autoplay, a checkbox with its hint, and Seek step, radio buttons named by their seconds, kept by the settings.
+    - Playback's settings:
+      - Autoplay mode, radio buttons named by their choice, with its line under it and the group's hint under them.
+      - Advance after, a setting's field of the field validation pattern, which saves to the store's Advance after and shows the value saved again once the field loses focus or the tab hides or the panel closes.
+      - Loop stops autoplay, a checkbox with its hint.
+      - Seek step, radio buttons named by their seconds, kept by the settings.
+      - Play behavior, Insert and Jump, each with its line, and the group's hint, kept by the store.
     - Audio's Volume step, radio buttons named by their percent with the group's hint, then Enhanced audio, a checkbox, both kept by the audio stage.
     - Loudness normalization, a checkbox disabled with its settings while Enhanced audio is off, whose hint then reads "Needs Enhanced audio.", and its Loudness normalization settings, a `details` group closed at first:
       - Target loudness, radio buttons with Automatic's line naming the library's baseline and Manual's Target field under it only while Manual is chosen.
@@ -311,7 +316,6 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - Shuffle, with the Shuffle checkbox, Remember plays for, and Reset now, disabled with its tooltip while it can't reset.
     - Spread, with Spread by folder and Spread by tags, whose All tags and By category are disabled while it is off, By category with the field validation pattern's icon while no category is chosen and its list of categories, shown only while it is chosen.
     - Favor's four options.
-    - Random behavior's Jump and Insert.
   - It renders from the randomization tab service and the store's options.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/RatingStars.tsx`
   - the star control: five stars that show a rating with half stars; a press by any pointer shows the value under it as it moves and sets it on release, a mouse previews the value under it, and a press cancels its `mousedown`, so it takes no focus from another control.
@@ -351,7 +355,6 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the random pick options, their defaults, and Remember plays for's choices.
   - reading them from the per-device store, each one missing or not valid as its default.
   - the request's `options`, with the category ids only under By category.
-  - Random behavior's Jump and Insert.
   - the categories By category lists, those with tags in the tag catalog's order, the chosen ones the list has, and By category's problem with none chosen.
   - the Library tab's Random line, its label, separator, and wording.
 - `src/clients/web/ReelRoulette.WebUI/src/stats/libraryBaseline.ts`
@@ -456,14 +459,15 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - per-screen error boundary: a screen that fails to render stops showing and relays `ui-error screen=<name> error=<type>` to `last.log`.
 - `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts`
   - shared state as signals:
-    - playing item and history, loop and autoplay, presets and the preset menu, applied filter, active preset by id, the random pick options and Random behavior, this device's Shuffle cycle numbers as the last pick or cycle read answered them.
-    - Advance after, the autoplay mode, Loop stops autoplay, Don't record plays, the media sources as last loaded.
+    - playing item and history, loop and autoplay, presets and the preset menu, applied filter, active preset by id, the random pick options, this device's Shuffle cycle numbers as the last pick or cycle read answered them.
+    - Advance after, the autoplay mode, Loop stops autoplay, Play behavior, Don't record plays, the media sources as last loaded.
     - compatibility block and its message, pairing prompt, the server's version and capabilities from the last version check it answered, whether the server can't be reached, whether it serves a different WebUI build from the one the page runs.
     - the library state, its message, whether there is no library, and whether either holds the page back, a running refresh's progress, and the loading holds.
-  - the actions and events that cross screens, among them a file chosen from the library going into history after the playing item, dropping the rest, and a random pick going at its end, or with Insert right after the playing item, keeping every entry.
+  - the actions and events that cross screens, among them an item going into history at its end, or right after the playing item, keeping every entry either way.
   - messages' text, and texts that show nothing, relay to `last.log` as `status=` lines, a repeat at most once a second.
   - It remembers the applied filter, its preset, and whether the filter is the preset's own in the per-device store, written only when that changes, and restores them before the connection starts.
-  - It keeps Loop, Autoplay, the Settings tab's Advance after, 10 seconds until set, its Autoplay mode, Normal until set, and its Loop stops autoplay, on until set, the random pick options and Random behavior, Jump until set, and Don't record plays, off until set, which the player and the library read before each play and which relays a `developer=` line to `last.log` when it changes and when a page loads with it on, in the per-device store.
+  - It keeps Loop, Autoplay, the random pick options, and the Settings tab's Advance after, 10 seconds until set, Autoplay mode, Normal until set, Loop stops autoplay, on until set, and Play behavior, Insert until set, in the per-device store.
+  - It keeps Don't record plays, off until set, in the per-device store, which the player and the library read before each play, and relays a `developer=` line to `last.log` when it changes and when a page loads with it on.
   - On the first preset load, a remembered preset whose own filter applied, and that no other filter has replaced since, applies again as the server has it, so tag renames and deletions made elsewhere reach the filter.
   - Presets reloaded for a preset event or a resync are taken in one batch with the applied filter following the active preset's new filter, when another device changed it while it applied unchanged, without a dropdown pick's `headerFilterChanged`, which `appliedPresetFollowed` stands in for, so the library starts over and the Filter tab keeps its changes.
 - `src/clients/web/ReelRoulette.WebUI/src/state/lastingStates.ts`
@@ -512,7 +516,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts`
   - playback:
     - plays the current item (sets the source and shows the element, then loop, then `play()` through the audio stage).
-    - random pick, which sends the store's options, takes this device's Shuffle cycle numbers from each answer, and goes at the end of history from anywhere in it, or, for Random and R with Insert, right after the playing item, where a file that can't play is skipped by picking again with Insert.
+    - random pick, which sends the store's options, takes this device's Shuffle cycle numbers from each answer, and goes at the end of history from anywhere in it, or, for Random and R with Play behavior's Insert, right after the playing item, where a file that can't play is skipped by picking again with Insert.
     - Previous and Next through history.
     - whether playback waits for the user as Play shows, though not while a video moves on from its end as it repeats or autoplay goes on.
     - whether the media of the attempt playing now failed.
@@ -652,7 +656,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the tag catalog for the Random line, loaded once the server is ready while By category has categories chosen and none has loaded.
     - the Filter and Randomization tabs shown from the Filters and Random lines.
     - a later page's failure, which pops up and keeps the tiles already loaded.
-    - tile play through `POST /api/play/{itemId}`, which holds Loading… while it waits, 10 s at most, joins history, closes the panel as the overlay, and hands the item to the player, or shows its failure in the notice.
+    - tile play through `POST /api/play/{itemId}`, which holds Loading… while it waits, 10 s at most, joins history where Play behavior says, right after the playing item or at the end, closes the panel as the overlay, and hands the item to the player, or shows its failure in the notice.
   - It holds the selection:
     - a tile click that plays or selects, Select in a tile's menu.
     - Select all through `POST /api/library/query-ids` with the window's search and filter, whose answer a selection ending drops.

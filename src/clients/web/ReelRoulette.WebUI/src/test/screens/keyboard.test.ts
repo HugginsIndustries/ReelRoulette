@@ -399,7 +399,8 @@ describe("keyboard shortcuts", () => {
     expect(seekIndicator()).toEqual({ back: "− 5", forward: null });
   });
 
-  it("← and → play the previous and next item, and R picks a new one from the middle of the history", async () => {
+  it("← and → play the previous and next item, and R, with Play behavior on Jump, picks a new one from the middle of the history", async () => {
+    localStorage.setItem("rr_device.playback.playBehavior", '"jump"');
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, THIRD_VIDEO);
     await mount(server);
     await press("k");
@@ -415,13 +416,12 @@ describe("keyboard shortcuts", () => {
     await press("r");
     expect(randomPicks(server)).toBe(3);
     expect(video().src).toContain("item-video-3");
-    // Jump, the default, adds the pick at the end of the history.
+    // Jump adds the pick at the end of the history.
     await press("ArrowLeft");
     expect(video().src).toContain("item-video-2");
   });
 
-  it("R, with Random behavior on Insert, puts the pick right after the playing item, keeping the plays ahead after it", async () => {
-    localStorage.setItem("rr_device.randomization.behavior", '"insert"');
+  it("R, with Play behavior on Insert, its default, puts the pick right after the playing item, keeping the plays ahead after it", async () => {
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, THIRD_VIDEO);
     await mount(server);
     await press("k");

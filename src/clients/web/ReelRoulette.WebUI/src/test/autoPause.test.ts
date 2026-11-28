@@ -150,7 +150,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   const autoTagOpen = signal(false);
   createAutoPause({ mode: signal(mode), panel, overPage: autoTagOpen, player });
 
-  store.pushHistory({ ...item });
+  store.appendHistory({ ...item });
   player.playCurrent();
   return {
     store,

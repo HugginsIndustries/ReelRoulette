@@ -189,7 +189,7 @@ export interface Player {
    */
   noteUserPlay(): void;
   /**
-   * Picks a new item, as Next does at the end of history and Random from anywhere in it, and puts it where Random
+   * Picks a new item, as Next does at the end of history and Random from anywhere in it, and puts it where Play
    * behavior says: at the end with Jump, or right after the playing item with Insert. A press starts the count of files
    * skipped in a row over, as Next, Previous, and the first Play do.
    */
@@ -1517,7 +1517,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
     pickRandom() {
       userPressed();
-      return pick(store.randomBehavior.peek() === "insert" ? "afterCurrent" : "end");
+      return pick(store.playBehavior.peek() === "insert" ? "afterCurrent" : "end");
     },
 
     playOrPause() {

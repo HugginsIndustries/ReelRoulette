@@ -33,44 +33,44 @@ function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, stri
 }
 
 describe("createAppStore", () => {
-  it("starts with the saved Advance after, autoplay settings, random pick options, and Random behavior, and the defaults when they are missing or invalid", () => {
+  it("starts with the saved Advance after, autoplay settings, Play behavior, and random pick options, and the defaults when they are missing or invalid", () => {
     const savedOptions = { ...DEFAULT_RANDOM_OPTIONS, shuffle: false, rememberPlaysForDays: null, favorHigherRated: true };
     const saved = setup({
       saved: {
         "rr_device.playback.advanceAfter": "3600",
         "rr_device.playback.autoplayMode": '"timer"',
         "rr_device.playback.loopStopsAutoplay": "false",
-        "rr_device.randomization.options": JSON.stringify(savedOptions),
-        "rr_device.randomization.behavior": '"insert"'
+        "rr_device.playback.playBehavior": '"jump"',
+        "rr_device.randomization.options": JSON.stringify(savedOptions)
       }
     }).store;
     expect(saved.advanceAfterSeconds.value).toBe(3600);
     expect(saved.autoplayMode.value).toBe("timer");
     expect(saved.loopStopsAutoplay.value).toBe(false);
+    expect(saved.playBehavior.value).toBe("jump");
     expect(saved.randomOptions.value).toEqual(savedOptions);
-    expect(saved.randomBehavior.value).toBe("insert");
 
     const invalid = setup({
       saved: {
         "rr_device.playback.advanceAfter": "3601",
         "rr_device.playback.autoplayMode": '"keep"',
         "rr_device.playback.loopStopsAutoplay": '"no"',
-        "rr_device.randomization.options": '"SpreadMode"',
-        "rr_device.randomization.behavior": '"after"'
+        "rr_device.playback.playBehavior": '"after"',
+        "rr_device.randomization.options": '"SpreadMode"'
       }
     }).store;
     expect(invalid.advanceAfterSeconds.value).toBe(10);
     expect(invalid.autoplayMode.value).toBe("normal");
     expect(invalid.loopStopsAutoplay.value).toBe(true);
+    expect(invalid.playBehavior.value).toBe("insert");
     expect(invalid.randomOptions.value).toEqual(DEFAULT_RANDOM_OPTIONS);
-    expect(invalid.randomBehavior.value).toBe("jump");
 
     const empty = setup().store;
     expect(empty.advanceAfterSeconds.value).toBe(10);
     expect(empty.autoplayMode.value).toBe("normal");
     expect(empty.loopStopsAutoplay.value).toBe(true);
+    expect(empty.playBehavior.value).toBe("insert");
     expect(empty.randomOptions.value).toEqual(DEFAULT_RANDOM_OPTIONS);
-    expect(empty.randomBehavior.value).toBe("jump");
     expect(empty.randomCycle.value).toBeNull();
     expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading…", value: "" }], selectedValue: "", message: true });
   });
@@ -107,6 +107,17 @@ describe("createAppStore", () => {
     expect(changed).toHaveBeenCalledTimes(2);
   });
 
+  it("saves Play behavior on this device, under its own key only", () => {
+    const { store, storage } = setup();
+    store.setPlayBehavior("jump");
+    expect(store.playBehavior.value).toBe("jump");
+    expect(storage.values.get("rr_device.playback.playBehavior")).toBe('"jump"');
+    expect(storage.writtenKeys).toEqual(["rr_device.playback.playBehavior"]);
+
+    const kept = setup({ saved: Object.fromEntries(storage.values) }).store;
+    expect(kept.playBehavior.value).toBe("jump");
+  });
+
   it("starts Loop and Autoplay as kept on this device, off by default, and keeps each change", () => {
     const fresh = setup();
     expect(fresh.store.loop.value).toBe(false);
@@ -125,20 +136,16 @@ describe("createAppStore", () => {
     expect(kept.loop.value).toBe(false);
   });
 
-  it("saves the random pick options and Random behavior on this device, under the device's own keys only", () => {
+  it("saves the random pick options on this device, under the device's own key only", () => {
     const { store, storage } = setup();
     const options = { ...DEFAULT_RANDOM_OPTIONS, spreadByTags: true, tagSpread: "byCategory" as const, spreadCategoryIds: ["people"] };
     store.setRandomOptions(options);
-    store.setRandomBehavior("insert");
     expect(store.randomOptions.value).toEqual(options);
-    expect(store.randomBehavior.value).toBe("insert");
     expect(JSON.parse(storage.values.get("rr_device.randomization.options")!)).toEqual(options);
-    expect(storage.values.get("rr_device.randomization.behavior")).toBe('"insert"');
-    expect(storage.writtenKeys).toEqual(["rr_device.randomization.options", "rr_device.randomization.behavior"]);
+    expect(storage.writtenKeys).toEqual(["rr_device.randomization.options"]);
 
     const kept = setup({ saved: Object.fromEntries(storage.values) }).store;
     expect(kept.randomOptions.value).toEqual(options);
-    expect(kept.randomBehavior.value).toBe("insert");
   });
 
   it("relays a message's text with the playing state, and relays a repeat once a second", () => {
@@ -225,35 +232,7 @@ describe("createAppStore", () => {
     expect(store.selectedPresetValue()).toBe("");
   });
 
-  it("adds a played item to history after the playing one, dropping the rest", () => {
-    const { store } = setup();
-    const item = (itemId: string): PlayingItem => ({
-      id: `/media/${itemId}.mp4`,
-      itemId,
-      displayName: `${itemId}.mp4`,
-      mediaType: "video",
-      mediaUrl: `/api/media/${itemId}`,
-      isFavorite: false,
-      isBlacklisted: false,
-      rating: null
-    });
-
-    store.pushHistory(item("a"));
-    store.pushHistory(item("b"));
-    expect(store.stepHistory(1)).toBe(false);
-    expect(store.stepHistory(-1)).toBe(true);
-    expect(store.current.value?.itemId).toBe("a");
-    expect(store.stepHistory(-1)).toBe(false);
-
-    store.pushHistory(item("c"));
-    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "c"]);
-    expect(store.historyIndex.value).toBe(1);
-    expect(store.stepHistory(-1)).toBe(true);
-    expect(store.stepHistory(1)).toBe(true);
-    expect(store.current.value?.itemId).toBe("c");
-  });
-
-  it("adds a random pick at the end of history from anywhere in it, keeping every entry", () => {
+  it("adds a random pick, or with Jump a file played from the library, at the end of history from anywhere in it, keeping every entry", () => {
     const { store } = setup();
     const item = (itemId: string): PlayingItem => ({
       id: `/media/${itemId}.mp4`,
@@ -269,9 +248,11 @@ describe("createAppStore", () => {
     store.appendHistory(item("a"));
     store.appendHistory(item("b"));
     store.appendHistory(item("c"));
+    expect(store.stepHistory(1)).toBe(false);
     expect(store.stepHistory(-1)).toBe(true);
     expect(store.stepHistory(-1)).toBe(true);
     expect(store.current.value?.itemId).toBe("a");
+    expect(store.stepHistory(-1)).toBe(false);
 
     store.appendHistory(item("d"));
     expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "b", "c", "d"]);
@@ -281,7 +262,7 @@ describe("createAppStore", () => {
     expect(store.current.value?.itemId).toBe("c");
   });
 
-  it("inserts a random pick right after the playing entry, keeping the entries after it", () => {
+  it("inserts a random pick, or with Insert a file played from the library, right after the playing entry, keeping the entries after it", () => {
     const { store } = setup();
     const item = (itemId: string): PlayingItem => ({
       id: `/media/${itemId}.mp4`,

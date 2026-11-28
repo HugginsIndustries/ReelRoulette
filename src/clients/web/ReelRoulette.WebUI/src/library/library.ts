@@ -641,7 +641,12 @@ export function createLibrary(options: LibraryOptions): Library {
         return;
       }
 
-      store.pushHistory(data);
+      // The file goes where Play behavior says: right after the playing item, or at the end. No entry is dropped.
+      if (store.playBehavior.peek() === "insert") {
+        store.insertHistory(data);
+      } else {
+        store.appendHistory(data);
+      }
       void panel.closeIfOverlay();
       trace("info", "library-play-success");
       // The server recorded the play, unless Don't record plays is on, and a file that can't play shows its message

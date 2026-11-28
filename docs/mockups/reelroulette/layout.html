@@ -1926,14 +1926,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <label><input type="checkbox" id="rnd-higher-rated"><span>Higher rated<small>Higher-rated files come up more often. An unrated file counts as 2.5 stars.</small></span></label>
             </div>
           </div>
-          <div class="settings-section">
-            <h3 id="rnd-behavior-label">Random behavior</h3>
-            <div class="choice-stack" role="radiogroup" aria-labelledby="rnd-behavior-label">
-              <label><input type="radio" name="rnd-behavior" value="jump"><span>Jump<small>Adds the pick at the end of the history.</small></span></label>
-              <label><input type="radio" name="rnd-behavior" value="insert"><span>Insert<small>Puts the pick right after the current item, keeping the plays ahead after it.</small></span></label>
-            </div>
-            <p class="setting-hint">For the player's Random button and R.</p>
-          </div>
           <p class="setting-hint">Options apply at once and are kept on this device.</p>
         </div>
       </section>
@@ -1965,6 +1957,14 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 <label><input type="radio" name="set-seek" value="5"> 5 seconds</label>
                 <label><input type="radio" name="set-seek" value="10"> 10 seconds</label>
               </div>
+            </div>
+            <div class="setting">
+              <span class="setting-label" id="set-play-behavior-label">Play behavior</span>
+              <div class="choice-stack" role="radiogroup" aria-labelledby="set-play-behavior-label">
+                <label><input type="radio" name="set-play-behavior" value="insert"><span>Insert<small>Puts the item right after the current one, keeping the plays ahead after it.</small></span></label>
+                <label><input type="radio" name="set-play-behavior" value="jump"><span>Jump<small>Adds the item at the end of the history.</small></span></label>
+              </div>
+              <p class="setting-hint">For the player's Random button, R, and files played from the library.</p>
             </div>
           </div>
           <div class="settings-section">
@@ -3889,8 +3889,8 @@ const state = {
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
-  // Where a pick from the Random button or R goes in the history: jump or insert.
-  randomBehavior: store.get("randomBehavior", "jump"),
+  // Where a pick from the Random button or R, or a file played from the library, goes in the history: insert or jump.
+  playBehavior: store.get("playBehavior", "insert"),
   // Whether the Randomization tab's Shuffle cycle card is open.
   cycleOpen: store.get("cycleOpen", true),
   // The Developer section's settings, which a reset of this device's settings keeps.
@@ -4476,16 +4476,10 @@ function start(item) {
   setLoading("media", true);
   setTimeout(() => load === mediaLoads && setLoading("media", false), instant ? 0 : 300);
 }
-// A file chosen from the library drops the history after the playing item before it's added.
-function pushHistory(item) {
-  history.splice(historyIndex + 1);
-  history.push(item);
-  historyIndex = history.length - 1;
-}
-// A random pick goes at the end of the history, keeping every entry, so Random from the middle keeps the plays ahead.
-// With Random behavior's Insert, a pick from the Random button or R goes right after the current item instead, and the
-// plays ahead follow it.
-function addRandomPick(item, insert) {
+// An item goes at the end of the history, keeping every entry, so a play from the middle keeps the plays ahead. With
+// Play behavior's Insert, a pick from the Random button or R, or a file played from the library, goes right after the
+// current item instead, and the plays ahead follow it.
+function addToHistory(item, insert) {
   if (insert) history.splice(historyIndex + 1, 0, item);
   else history.push(item);
   historyIndex = insert ? historyIndex + 1 : history.length - 1;
@@ -4496,7 +4490,7 @@ const heldBack = () => state.situation === "incompatible" || state.situation ===
 const NO_LIBRARY_PLAY_NOTICE = "Cannot play: the server is running without a library.";
 
 // One random pick at a time, as today: a press while one waits does nothing. `byRandom` is a pick from the Random button
-// or R, which Random behavior places.
+// or R, which Play behavior places.
 function pickRandom(tries = 0, byRandom = false) {
   // The user's own start ends Auto-Pause's hold, as Next, Previous, and a tile do; a pick that skips on doesn't.
   if (!tries) playback.autoHold = false;
@@ -4526,7 +4520,7 @@ function pickRandom(tries = 0, byRandom = false) {
       skipNotice(item);
       return pickRandom(tries + 1, byRandom);
     }
-    addRandomPick(item, byRandom && state.randomBehavior === "insert");
+    addToHistory(item, byRandom && state.playBehavior === "insert");
     start(item);
     setLoading("pick", false);
   };
@@ -4585,7 +4579,7 @@ function chooseItem(item) {
   if (item.missing) return void noticeDialog({ message: "Media not found. The file may have moved or been deleted." });
   // The server can't read the file, so the play is refused and nothing else changes.
   if (state.mediaStalled) return void noticeDialog({ message: failureMessage(item, "unreadable") });
-  pushHistory(item);
+  addToHistory(item, state.playBehavior === "insert");
   start(item);
 }
 
@@ -5289,7 +5283,7 @@ $("play-btn").addEventListener("click", () => {
 });
 $("next-btn").addEventListener("click", () => goNext());
 $("prev-btn").addEventListener("click", () => goPrevious());
-// Random picks a new item from anywhere in the history and places it as Random behavior says: at the end, or right after
+// Random picks a new item from anywhere in the history and places it as Play behavior says: at the end, or right after
 // the current item.
 $("random-btn").addEventListener("click", () => pickRandom(0, true));
 // While Timer mode repeats a stretch, a seek, by the bar, J or L, a double-tap, or a frame step, starts the stretch where it lands,
@@ -8776,8 +8770,6 @@ $("rnd-window").addEventListener("change", () => setRandomOption("window", $("rn
 document.querySelectorAll('input[name="rnd-tag-spread"]').forEach((radio) => {
   radio.addEventListener("change", () => setRandomOption("tagSpread", radio.value));
 });
-// Random behavior, kept on this device, places a pick from the Random button or R.
-bindChoice("rnd-behavior", "randomBehavior", (value) => value);
 // Reset now forgets this device's picks at once, with no confirmation, as the server clears its memory.
 $("rnd-reset").addEventListener("click", () => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Shuffle reset failed: Couldn't reach the server." });
@@ -8906,6 +8898,7 @@ function initLoudnessSettings() {
 function initSettings() {
   bindChoice("set-autoplay", "autoplayMode", String, renderTime);
   bindChoice("set-seek", "seekStep", Number);
+  bindChoice("set-play-behavior", "playBehavior", String);
   bindChoice("set-volstep", "volumeStep", Number);
   $("set-enhanced-audio").checked = state.enhancedAudio;
   $("set-enhanced-audio").addEventListener("change", () => setEnhancedAudio($("set-enhanced-audio").checked));

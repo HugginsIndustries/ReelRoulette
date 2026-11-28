@@ -21,7 +21,7 @@ import {
   type SeekStep
 } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
-import type { AutoplayMode } from "../state/appStore";
+import type { AutoplayMode, PlayBehavior } from "../state/appStore";
 import { WEBUI_API_VERSION } from "../state/serverCompatibility";
 import type { EventStreamState } from "../state/serverConnection";
 import type { FieldProblem } from "../validation/fieldValidation";
@@ -37,6 +37,11 @@ const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
 const VOLUME_STEP_CHOICES: readonly Choice<`${VolumeStep}`>[] = VOLUME_STEPS.map((step) => ({ value: `${step}`, title: `${step}%` }));
 
 const SEEK_STEP_CHOICES: readonly Choice<`${SeekStep}`>[] = SEEK_STEPS.map((step) => ({ value: `${step}`, title: step === 1 ? "1 second" : `${step} seconds` }));
+
+const PLAY_BEHAVIOR_CHOICES: readonly Choice<PlayBehavior>[] = [
+  { value: "insert", title: "Insert", description: "Puts the item right after the current one, keeping the plays ahead after it." },
+  { value: "jump", title: "Jump", description: "Adds the item at the end of the history." }
+];
 
 /** Target loudness's choices, Automatic's line naming the library's baseline once it has loaded. */
 function targetChoices(baseline: number | null): Choice<NormalizationTarget>[] {
@@ -207,8 +212,9 @@ export function SettingsTab() {
 }
 
 /**
- * Autoplay mode, Advance after, and Loop stops autoplay, which the store keeps and the player follows at once, and the
- * seek step, which J and L seek by.
+ * Autoplay mode, Advance after, and Loop stops autoplay, which the store keeps and the player follows at once, the seek
+ * step, which J and L seek by, and Play behavior, which the store keeps for the player's Random button and R and for
+ * files played from the library.
  */
 function PlaybackSettings() {
   const { store, settings } = useApp();
@@ -236,6 +242,14 @@ function PlaybackSettings() {
         choices={SEEK_STEP_CHOICES}
         value={`${settings.seekStep.value}`}
         onChange={(step) => settings.setSeekStep(Number(step) as SeekStep)}
+      />
+      <Choices
+        id="settings-play-behavior"
+        label="Play behavior"
+        choices={PLAY_BEHAVIOR_CHOICES}
+        value={store.playBehavior.value}
+        onChange={store.setPlayBehavior}
+        hint="For the player's Random button, R, and files played from the library."
       />
     </>
   );

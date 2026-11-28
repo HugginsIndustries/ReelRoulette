@@ -2329,7 +2329,8 @@ describe("seek row", () => {
 });
 
 describe("Random", () => {
-  it("sits between Next and Loop, and from the middle of history picks a new item and adds it at the end, keeping the plays ahead", async () => {
+  it("sits between Next and Loop, and with Play behavior on Jump, from the middle of history picks a new item and adds it at the end, keeping the plays ahead", async () => {
+    localStorage.setItem("rr_device.playback.playBehavior", '"jump"');
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, PHOTO_ITEM);
     const { store } = await mountWithServices(server);
     const transport = [...document.querySelectorAll(".overlay-controls-transport button")].map((control) => control.getAttribute("aria-label"));
@@ -2353,8 +2354,7 @@ describe("Random", () => {
     expect(video().src).toBe(SECOND_VIDEO_URL);
   });
 
-  it("with Random behavior on Insert, from the middle of history puts the pick right after the playing item, keeping the plays ahead after it, while Next at the end still adds at the end", async () => {
-    localStorage.setItem("rr_device.randomization.behavior", '"insert"');
+  it("with Play behavior on Insert, its default, from the middle of history puts the pick right after the playing item, keeping the plays ahead after it, while Next at the end still adds at the end", async () => {
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, PHOTO_ITEM);
     const { store } = await mountWithServices(server);
 
@@ -3070,6 +3070,67 @@ describe("other screens", () => {
     expect(server.requests("POST", "/api/play/item-video")).toHaveLength(2);
     expect(playRecords(server)).toBe(1);
     expect(playsCounted(server)).toBe(3);
+  });
+
+  /**
+   * Plays two random picks, goes back one with Previous, and plays the library's photo tile from the overlay, which
+   * closes as it plays.
+   */
+  async function playTileAfterPrevious(): Promise<FakeServer> {
+    setViewport({ width: 600, height: 800 });
+    stubLayoutSize();
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("POST", "/api/library/query", () =>
+      json({
+        items: [{ id: "item-photo", fullPath: PHOTO_ITEM.id, fileName: "beach.jpg", mediaType: 1, tags: [], hasThumbnail: false, width: 1600, height: 1200 }],
+        totalCount: 1,
+        searchBaselineCount: 1
+      })
+    );
+    server.on("POST", "/api/play/item-photo", () => json(PHOTO_ITEM));
+    mountPage({ server });
+    await pageReady(server);
+
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    await click(button("Next"));
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+
+    await openPanel("Library");
+    const tile = await waitFor(() => {
+      const found = document.querySelector('.library-grid-tile[data-item-id="item-photo"]');
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    await click(tile);
+    await waitFor(() => expect(photo().src).toBe(PHOTO_URL));
+    expect(panel().hidden).toBe(true);
+    return server;
+  }
+
+  it("a library tile played after Previous goes right after the playing item with Play behavior's Insert, its default, so Next goes on to the item that came after", async () => {
+    const server = await playTileAfterPrevious();
+
+    await click(button("Next"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+    expect(randomPicks(server)).toBe(2);
+    await click(button("Previous"));
+    expect(photo().src).toBe(PHOTO_URL);
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+  });
+
+  it("a library tile played after Previous goes at the end of the history with Play behavior's Jump, keeping every entry", async () => {
+    localStorage.setItem("rr_device.playback.playBehavior", '"jump"');
+    const server = await playTileAfterPrevious();
+
+    await click(button("Previous"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+    expect(randomPicks(server)).toBe(2);
   });
 });
 

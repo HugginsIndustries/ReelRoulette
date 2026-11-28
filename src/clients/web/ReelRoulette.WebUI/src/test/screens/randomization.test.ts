@@ -164,14 +164,14 @@ beforeEach(() => {
 });
 
 describe("Randomization tab", () => {
-  it("sits between Filter and Settings with the dice icon, and lays out the cycle card, Shuffle, Spread, Favor, and Random behavior with their defaults", async () => {
+  it("sits between Filter and Settings with the dice icon, and lays out the cycle card, Shuffle, Spread, and Favor with their defaults", async () => {
     await mount(serverPicking());
     await openTab();
 
     const tabButton = document.getElementById("panel-tab-randomization")!;
     expect([tabButton.title, tabButton.textContent]).toEqual(["Randomization", "casino"]);
     expect(tab().querySelector("h2")!.textContent).toBe("Randomization");
-    expect([...tab().querySelectorAll("h3")].map((heading) => heading.textContent)).toEqual(["Shuffle cycle", "Shuffle", "Spread", "Favor", "Random behavior"]);
+    expect([...tab().querySelectorAll("h3")].map((heading) => heading.textContent)).toEqual(["Shuffle cycle", "Shuffle", "Spread", "Favor"]);
     expect(checkbox("Shuffle").checked).toBe(true);
     expect([...windowSelect().options].map((option) => option.textContent)).toEqual(["1 day", "7 days", "30 days", "90 days", "Until everything has played"]);
     expect(windowSelect().value).toBe("30");
@@ -182,8 +182,6 @@ describe("Randomization tab", () => {
     expect([radio("All tags").checked, radio("By category").checked]).toEqual([true, false]);
     expect(document.getElementById("randomization-categories")!.hidden).toBe(true);
     expect(["Less played", "Newly added", "Newly created", "Higher rated"].map((label) => checkbox(label).checked)).toEqual([false, false, false, false]);
-    expect([radio("Jump").checked, radio("Insert").checked]).toEqual([true, false]);
-    expect(within(tab()).getByText("For the player's Random button and R.")).toBeTruthy();
     expect(tab().querySelector(".settings-body > p.setting-hint:last-child")!.textContent).toBe("Options apply at once and are kept on this device.");
   });
 
@@ -202,7 +200,6 @@ describe("Randomization tab", () => {
     await click(categoryBox("Places"));
     await click(checkbox("Less played"));
     await click(checkbox("Higher rated"));
-    await click(radio("Insert"));
 
     const sent = {
       shuffle: false,
@@ -229,7 +226,6 @@ describe("Randomization tab", () => {
     await waitFor(() => expect(categoryBox("Places").checked).toBe(true));
     expect(categoryBox("People").checked).toBe(false);
     expect(["Less played", "Newly added", "Newly created", "Higher rated"].map((label) => checkbox(label).checked)).toEqual([true, false, false, true]);
-    expect(radio("Insert").checked).toBe(true);
     await pickRandom(again);
     expect(picks(again).at(-1)!.body.options).toEqual(sent);
   });

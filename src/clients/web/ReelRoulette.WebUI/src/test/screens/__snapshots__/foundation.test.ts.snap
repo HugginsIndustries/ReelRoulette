@@ -352,27 +352,6 @@ exports[`page structure > keeps the starting markup 1`] = `
                       "Higher rated"
                     <small>
                       "Higher-rated files come up more often. An unrated file counts as 2.5 stars."
-            <section class="settings-section">
-              <h3 id="randomization-behavior-section-heading">
-                "Random behavior"
-              <div class="setting">
-                <div aria-labelledby="randomization-behavior-section-heading" class="choice-stack" role="radiogroup">
-                  <label>
-                    <input aria-labelledby="randomization-behavior-jump" name="randomization-behavior" type="radio" value="jump">
-                    <span>
-                      <span id="randomization-behavior-jump">
-                        "Jump"
-                      <small>
-                        "Adds the pick at the end of the history."
-                  <label>
-                    <input aria-labelledby="randomization-behavior-insert" name="randomization-behavior" type="radio" value="insert">
-                    <span>
-                      <span id="randomization-behavior-insert">
-                        "Insert"
-                      <small>
-                        "Puts the pick right after the current item, keeping the plays ahead after it."
-                <p class="setting-hint">
-                  "For the player's Random button and R."
             <p class="setting-hint">
               "Options apply at once and are kept on this device."
       <section aria-labelledby="panel-tab-settings" class="panel-page" hidden="" id="panel-page-settings" role="tabpanel">
@@ -438,6 +417,26 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span>
                       <span id="settings-seek-step-10">
                         "10 seconds"
+              <div class="setting">
+                <span class="setting-label" id="settings-play-behavior-label">
+                  "Play behavior"
+                <div aria-labelledby="settings-play-behavior-label" class="choice-stack" role="radiogroup">
+                  <label>
+                    <input aria-labelledby="settings-play-behavior-insert" name="settings-play-behavior" type="radio" value="insert">
+                    <span>
+                      <span id="settings-play-behavior-insert">
+                        "Insert"
+                      <small>
+                        "Puts the item right after the current one, keeping the plays ahead after it."
+                  <label>
+                    <input aria-labelledby="settings-play-behavior-jump" name="settings-play-behavior" type="radio" value="jump">
+                    <span>
+                      <span id="settings-play-behavior-jump">
+                        "Jump"
+                      <small>
+                        "Adds the item at the end of the history."
+                <p class="setting-hint">
+                  "For the player's Random button, R, and files played from the library."
             <section class="settings-section">
               <h3 id="settings-audio-heading">
                 "Audio"

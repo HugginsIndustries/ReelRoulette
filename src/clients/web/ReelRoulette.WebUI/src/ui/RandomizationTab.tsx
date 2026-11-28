@@ -1,9 +1,9 @@
-import { REMEMBER_PLAYS_FOR, type RandomBehavior, type RandomOptions, type RememberPlaysFor } from "../random/randomOptions";
+import { REMEMBER_PLAYS_FOR, type RandomOptions, type RememberPlaysFor } from "../random/randomOptions";
 import type { CategoryListView, CycleCardView } from "../random/randomizationTab";
 import { isFlagged } from "../validation/fieldValidation";
 import { useApp } from "./appContext";
 import { useFieldValidation } from "./FieldValidation";
-import { Checkbox, Choices, OptionList, Section, type Choice } from "./SettingControls";
+import { Checkbox, OptionList, Section, type Choice } from "./SettingControls";
 import { StatCards, StatCardsMessage } from "./StatCards";
 
 type FavorOption = "favorLessPlayed" | "favorNewlyAdded" | "favorNewlyCreated" | "favorHigherRated";
@@ -15,11 +15,6 @@ const FAVOR_CHOICES: readonly Choice<FavorOption>[] = [
   { value: "favorHigherRated", title: "Higher rated", description: "Higher-rated files come up more often. An unrated file counts as 2.5 stars." }
 ];
 
-const BEHAVIOR_CHOICES: readonly Choice<RandomBehavior>[] = [
-  { value: "jump", title: "Jump", description: "Adds the pick at the end of the history." },
-  { value: "insert", title: "Insert", description: "Puts the pick right after the current item, keeping the plays ahead after it." }
-];
-
 /** Remember plays for's value in its dropdown: the days, or "all" for until everything has played. */
 function windowValue(days: RememberPlaysFor): string {
   return days === null ? "all" : String(days);
@@ -27,7 +22,7 @@ function windowValue(days: RememberPlaysFor): string {
 
 /**
  * The panel's Randomization tab, as the mockup lays it out: the Shuffle cycle card, then Shuffle with Remember plays
- * for and Reset now, Spread, Favor, and Random behavior. Each option applies at once and is kept on this device.
+ * for and Reset now, Spread, and Favor. Each option applies at once and is kept on this device.
  */
 export function RandomizationTab() {
   const { store, randomization } = useApp();
@@ -126,16 +121,6 @@ export function RandomizationTab() {
             choices={FAVOR_CHOICES}
             isChecked={(option) => options[option]}
             onChange={(option, checked) => set({ [option]: checked })}
-          />
-        </Section>
-        <Section id="randomization-behavior-section" title="Random behavior">
-          <Choices
-            id="randomization-behavior"
-            labelledBy="randomization-behavior-section-heading"
-            choices={BEHAVIOR_CHOICES}
-            value={store.randomBehavior.value}
-            onChange={(behavior) => store.setRandomBehavior(behavior)}
-            hint="For the player's Random button and R."
           />
         </Section>
         <p class="setting-hint">Options apply at once and are kept on this device.</p>

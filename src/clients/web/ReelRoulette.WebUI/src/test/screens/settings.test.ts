@@ -716,7 +716,7 @@ describe("Autoplay mode and Loop stops autoplay", () => {
     await openSettings();
     const playback = advanceAfter().closest("section")!;
     const settings = Array.from(playback.querySelectorAll(":scope > .setting"));
-    expect(settings).toHaveLength(4);
+    expect(settings).toHaveLength(5);
     expect(within(settings[0] as HTMLElement).getByRole("radiogroup", { name: "Autoplay mode", hidden: true })).toBeTruthy();
     expect(settings[1]!.contains(advanceAfter())).toBe(true);
     expect(settings[2]!.contains(checkbox("Loop stops autoplay"))).toBe(true);
@@ -786,6 +786,31 @@ describe("Seek step", () => {
     await mount();
     await openSettings();
     expect(radioOf("Seek step", "1 second").checked).toBe(true);
+  });
+});
+
+describe("Play behavior", () => {
+  it("sits last in Playback, after Seek step, Insert first and chosen until set, each with its line and the group with its hint, and is kept after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    const group = within(settingsPage()).getByRole("radiogroup", { name: "Play behavior", hidden: true });
+    const settings = Array.from(advanceAfter().closest("section")!.querySelectorAll(":scope > .setting"));
+    expect(settings.at(-1)!.contains(group)).toBe(true);
+    expect(within(settings.at(-2) as HTMLElement).getByRole("radiogroup", { name: "Seek step", hidden: true })).toBeTruthy();
+    const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
+    expect(names).toEqual(["Insert", "Jump"]);
+    expect([radioOf("Play behavior", "Insert").checked, radioOf("Play behavior", "Jump").checked]).toEqual([true, false]);
+    expect(hintOf(radioOf("Play behavior", "Insert"))).toBe("Puts the item right after the current one, keeping the plays ahead after it.");
+    expect(hintOf(radioOf("Play behavior", "Jump"))).toBe("Adds the item at the end of the history.");
+    expect(hintOf(group)).toBe("For the player's Random button, R, and files played from the library.");
+
+    await click(radioOf("Play behavior", "Jump"));
+    expect(localStorage.getItem("rr_device.playback.playBehavior")).toBe('"jump"');
+    page.unmount();
+
+    await mount();
+    await openSettings();
+    expect(radioOf("Play behavior", "Jump").checked).toBe(true);
   });
 });
 

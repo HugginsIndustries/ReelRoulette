@@ -210,9 +210,10 @@ ReelRoulette is a thin-client, API-first system:
   - A pick the server does not answer within 10 seconds is cancelled, shows "Random selection failed: The server didn't answer in time." in the in-app notice, and relays a `playback=random-pick-timeout` line to `last.log`.
   - A pick that answers after the user started another play since it was last asked for is dropped, and relays a `playback=random-pick-stale` line.
     - The user's plays count from the press of Next or Random, a Previous that steps back, or the choice of a library tile; autoplay and a skip on from a file that failed don't count.
-- The player's Random button (`casino`), between Next and Loop, picks from anywhere in the history, as R does, and puts the pick where the Randomization tab's Random behavior says: at the end with Jump, the default, or right after the playing item with Insert, keeping every entry either way.
-  - A file Insert put there that can't play is skipped by picking again with Insert.
-- Every other random pick, Next and autoplay at the end of the history and Play with nothing playing, goes at the end, while a file chosen from the library drops the entries after the playing one.
+- The player's Random button (`casino`), between Next and Loop, picks from anywhere in the history, as R does.
+- The Settings tab's Play behavior places a pick from the Random button or R, and a file chosen from the library, in the history: right after the playing item with Insert, the default, or at the end with Jump, keeping every entry either way.
+  - A random pick Insert put there that can't play is skipped by picking again with Insert.
+- Every other random pick, Next and autoplay at the end of the history and Play with nothing playing, goes at the end.
 - Each pick sends the Randomization tab's options, and its answer brings this device's Shuffle cycle numbers, which the cycle card shows.
 
 #### Player indicator
@@ -633,8 +634,7 @@ ReelRoulette is a thin-client, API-first system:
   - By category shows the categories that have tags, in the tag catalog's order, as checkboxes kept by category id, so a renamed category stays chosen, or "No tags yet. Add them in the Tags tab.", or "Tag load failed: {why}" when the catalog can't load.
   - With no category chosen it is flagged with the field validation pattern, "Choose at least one category.", holding nothing.
 - Favor has Less played, Newly added, Newly created, and Higher rated, each off by default.
-- Random behavior has Jump, the default, and Insert, kept per device as `randomization.behavior`, for the player's Random button and R.
-- Each checkbox, Reset now, and Random behavior has a one-line hint.
+- Each checkbox and Reset now has a one-line hint.
 - The tab ends "Options apply at once and are kept on this device."
 
 #### Settings tab (the panel's, same shell as the Filter and Tags tabs)
@@ -645,6 +645,7 @@ ReelRoulette is a thin-client, API-first system:
   - Advance after, the timer both modes use and how long a photo shows, a whole number of seconds from 1 to 3600 in a setting's field of the field validation pattern, where anything else, an emptied field included, is flagged with "Use a whole number from 1 to 3600 seconds." and not kept, and the value in use stays, starting at 10 seconds and kept in the per-device store as `playback.advanceAfter`.
   - Loop stops autoplay, on by default, with its hint.
   - Seek step, which J and L seek by, 1 second, 5 seconds, or 10 seconds, 5 by default and kept as `player.seekStep`.
+  - Play behavior, Insert, the default, or Jump, each with its line, kept as `playback.playBehavior`, with the hint "For the player's Random button, R, and files played from the library."
 - Audio has:
   - Volume step, 1, 2, 5, or 10%, 5 by default and kept as `audio.volumeStep`, which [ and ] step by too, with the hint "Also for the scroll wheel and a two-finger drag over the player."
   - Then Enhanced audio, on by default and kept as `audio.enhanced`, described as "Processes audio in the app, for loudness normalization and compression."
@@ -972,7 +973,7 @@ ReelRoulette is a thin-client, API-first system:
   - One Spread part, "Spread by folder", "Spread by tags", or "Spread by folder and tags", where By category names the chosen categories in the tag catalog's order, such as "Spread by folder, People, and Places", and reads "tags" for them until the catalog has loaded, which the tab loads once the server is ready while By category has categories chosen.
   - One Favor part, such as "Favor less played and higher rated".
   - Joined by " · ", or "Pure random" with every option off.
-  - It never names Remember plays for or Random behavior, and tapping or clicking it opens the Randomization tab.
+  - It never names Remember plays for, and tapping or clicking it opens the Randomization tab.
 - Each line ends with a chevron, its text cut off with "…" before it, and tints faintly with the pointer over it on a device that can hover.
 - The controls, in order, are the preset dropdown and search, which share a row from a panel about 546 px wide and stack narrower, then sort with its direction (Name, Last played, Play count, Duration, Date added, Date created, and Rating, which starts on Highest → Lowest, with an unrated file as 0 stars).
   - On a phone on its side the preset and search take the first row and sort spans the second.

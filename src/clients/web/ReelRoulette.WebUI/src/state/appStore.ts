@@ -19,7 +19,7 @@ import {
 } from "../filter/filterStateModel";
 import { statusLogLine } from "../logging/relayLogLines";
 import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds";
-import { isRandomBehavior, readRandomOptions, type RandomBehavior, type RandomOptions } from "../random/randomOptions";
+import { readRandomOptions, type RandomOptions } from "../random/randomOptions";
 import type { components } from "../types/openapi.generated";
 import { DEVELOPER_KEY_PREFIX, isBoolean, isRecord, type DeviceStore } from "./deviceStore";
 
@@ -27,10 +27,10 @@ import { DEVELOPER_KEY_PREFIX, isBoolean, isRecord, type DeviceStore } from "./d
 const ADVANCE_AFTER_KEY = "playback.advanceAfter";
 const AUTOPLAY_MODE_KEY = "playback.autoplayMode";
 const LOOP_STOPS_AUTOPLAY_KEY = "playback.loopStopsAutoplay";
+const PLAY_BEHAVIOR_KEY = "playback.playBehavior";
 const LOOP_KEY = "player.loop";
 const AUTOPLAY_KEY = "player.autoplay";
 const RANDOM_OPTIONS_KEY = "randomization.options";
-const RANDOM_BEHAVIOR_KEY = "randomization.behavior";
 /** The Settings tab's Don't record plays on this device, one of the Developer settings, which a reset keeps. */
 const DONT_RECORD_PLAYS_KEY = `${DEVELOPER_KEY_PREFIX}dontRecordPlays`;
 const DEFAULT_ADVANCE_AFTER_SECONDS = 10;
@@ -56,6 +56,12 @@ export type RandomCycle = components["schemas"]["RandomPickCycleResponse"];
  * after Advance after, a video that hasn't finished too.
  */
 export type AutoplayMode = "normal" | "timer";
+
+/**
+ * Where a pick from the Random button or R, or a file played from the library, goes in the history: right after the
+ * playing item with Insert, or at its end with Jump.
+ */
+export type PlayBehavior = "insert" | "jump";
 
 /** A saved preset as `GET /api/presets` returns it. */
 export type ApiPreset = components["schemas"]["PresetResponse"];
@@ -150,11 +156,6 @@ export interface AppStore {
   readonly activePresetId: Signal<string | null>;
   /** The Randomization tab's options, kept on this device and sent with each random pick. Change them with `setRandomOptions`. */
   readonly randomOptions: ReadonlySignal<RandomOptions>;
-  /**
-   * The Randomization tab's Random behavior, Jump until set, kept on this device: where the player's Random button and
-   * R put a pick in the history. Change it with `setRandomBehavior`.
-   */
-  readonly randomBehavior: ReadonlySignal<RandomBehavior>;
   /** This device's Shuffle cycle numbers, as the last random pick or cycle read answered them, or null before one has. */
   readonly randomCycle: Signal<RandomCycle | null>;
   /**
@@ -169,6 +170,11 @@ export interface AppStore {
    * repeats and nothing advances. Change it with `setLoopStopsAutoplay`.
    */
   readonly loopStopsAutoplay: ReadonlySignal<boolean>;
+  /**
+   * The Settings tab's Play behavior, Insert until set, kept on this device: where a pick from the player's Random
+   * button or R, and a file played from the library, go in the history. Change it with `setPlayBehavior`.
+   */
+  readonly playBehavior: ReadonlySignal<PlayBehavior>;
   /**
    * The Settings tab's Don't record plays on this device, off until set, kept on this device: while it is on, no play
    * here counts, whether a random pick, a history step, or a library play. Change it with `setDontRecordPlays`.
@@ -239,27 +245,23 @@ export interface AppStore {
   selectedPresetValue(): string;
   /** Sets the random pick options and keeps them on this device. */
   setRandomOptions(options: RandomOptions): void;
-  setRandomBehavior(behavior: RandomBehavior): void;
   /** Sets Advance after and keeps it on this device. Anything but a whole number from 1 to 3600 seconds is ignored. */
   setAdvanceAfter(seconds: number): void;
   setAutoplayMode(mode: AutoplayMode): void;
   setLoopStopsAutoplay(on: boolean): void;
+  setPlayBehavior(behavior: PlayBehavior): void;
   /** Sets Don't record plays, keeps it on this device, and writes its `last.log` line. */
   setDontRecordPlays(on: boolean): void;
   setLoop(on: boolean): void;
   setAutoplay(on: boolean): void;
   /**
-   * Makes `item` the playing item and the newest history entry. The entries after the playing one are dropped.
-   */
-  pushHistory(item: PlayingItem): void;
-  /**
    * Makes `item` the playing item and adds it at the end of the history, keeping every entry, as a random pick goes
-   * there from anywhere in it.
+   * there from anywhere in it, and as Jump puts a file played from the library.
    */
   appendHistory(item: PlayingItem): void;
   /**
    * Makes `item` the playing item and puts it in the history right after the playing entry, keeping the entries after
-   * it, as Insert puts a Random pick.
+   * it, as Insert puts a Random pick or a file played from the library.
    */
   insertHistory(item: PlayingItem): void;
   /** Makes the previous or next history entry the playing item. Returns false at either end of history. */
@@ -270,8 +272,8 @@ export interface AppStore {
 export interface AppStoreOptions {
   identity: ClientIdentity;
   /**
-   * Remembers the applied filter and its preset, Advance after, the autoplay settings, Loop, Autoplay, the random pick
-   * options and Random behavior, and Don't record plays on this device.
+   * Remembers the applied filter and its preset, Advance after, the autoplay settings, Play behavior, Loop, Autoplay,
+   * the random pick options, and Don't record plays on this device.
    */
   device: DeviceStore;
   /** Sends one line to the server log. */
@@ -285,6 +287,10 @@ function isAdvanceAfter(value: unknown): value is number {
 
 function isAutoplayMode(value: unknown): value is AutoplayMode {
   return value === "normal" || value === "timer";
+}
+
+function isPlayBehavior(value: unknown): value is PlayBehavior {
+  return value === "insert" || value === "jump";
 }
 
 /** The applied filter and its preset as the store has them, read so an effect follows each. */
@@ -322,8 +328,8 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const advanceAfterSeconds = signal(options.device.read(ADVANCE_AFTER_KEY, DEFAULT_ADVANCE_AFTER_SECONDS, isAdvanceAfter));
   const autoplayMode = signal(options.device.read<AutoplayMode>(AUTOPLAY_MODE_KEY, "normal", isAutoplayMode));
   const loopStopsAutoplay = signal(options.device.read(LOOP_STOPS_AUTOPLAY_KEY, true, isBoolean));
+  const playBehavior = signal(options.device.read<PlayBehavior>(PLAY_BEHAVIOR_KEY, "insert", isPlayBehavior));
   const randomOptions = signal(readRandomOptions(options.device.read<Record<string, unknown> | null>(RANDOM_OPTIONS_KEY, null, isRecord)));
-  const randomBehavior = signal(options.device.read<RandomBehavior>(RANDOM_BEHAVIOR_KEY, "jump", isRandomBehavior));
   const dontRecordPlays = signal(options.device.read(DONT_RECORD_PLAYS_KEY, false, isBoolean));
   // A page that starts with plays not counting says so in `last.log`, as each change does.
   if (dontRecordPlays.peek()) {
@@ -344,11 +350,11 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     appliedFilter: signal(restoredFilter),
     activePresetId: signal<string | null>(remembered?.presetId ?? null),
     randomOptions,
-    randomBehavior,
     randomCycle: signal<RandomCycle | null>(null),
     advanceAfterSeconds,
     autoplayMode,
     loopStopsAutoplay,
+    playBehavior,
     dontRecordPlays,
     sources: signal<FilterSource[] | null>(null),
     compatibilityBlocked,
@@ -446,11 +452,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       options.device.write(RANDOM_OPTIONS_KEY, next);
     },
 
-    setRandomBehavior(behavior) {
-      randomBehavior.value = behavior;
-      options.device.write(RANDOM_BEHAVIOR_KEY, behavior);
-    },
-
     setAdvanceAfter(seconds) {
       if (!isAdvanceAfter(seconds)) {
         return;
@@ -472,6 +473,11 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       emit("autoplaySettingsChanged");
     },
 
+    setPlayBehavior(behavior) {
+      playBehavior.value = behavior;
+      options.device.write(PLAY_BEHAVIOR_KEY, behavior);
+    },
+
     setDontRecordPlays(on) {
       dontRecordPlays.value = on;
       options.device.write(DONT_RECORD_PLAYS_KEY, on);
@@ -486,14 +492,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     setAutoplay(on) {
       autoplay.value = on;
       options.device.write(AUTOPLAY_KEY, on);
-    },
-
-    pushHistory(item) {
-      store.current.value = item;
-      const history = store.history.peek().slice(0, store.historyIndex.peek() + 1);
-      history.push(item);
-      store.history.value = history;
-      store.historyIndex.value = history.length - 1;
     },
 
     appendHistory(item) {

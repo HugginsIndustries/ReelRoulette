@@ -53,13 +53,6 @@ export const REMEMBER_PLAYS_FOR: readonly { value: RememberPlaysFor; label: stri
   { value: null, label: "Until everything has played" }
 ];
 
-/** Where a Random pick goes in the history: at its end, or right after the playing item. */
-export type RandomBehavior = "jump" | "insert";
-
-export function isRandomBehavior(value: unknown): value is RandomBehavior {
-  return value === "jump" || value === "insert";
-}
-
 const FLAGS = ["shuffle", "spreadByFolder", "spreadByTags", "favorLessPlayed", "favorNewlyAdded", "favorNewlyCreated", "favorHigherRated"] as const;
 
 /** The options as this device kept them, each one missing or not valid read as its default. */
