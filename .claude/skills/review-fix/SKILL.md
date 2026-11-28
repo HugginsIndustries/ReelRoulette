@@ -1,17 +1,17 @@
 ---
 name: review-fix
-description: Use when the user asks to fix findings from a review of a branch, usually in the session that built the branch, after the advisor's review. Applies only the findings the user chose, with their decisions, verifies them, and keeps the message draft and records current. Commits on this session's branch only once the user or the advisor says the fixes are ready.
+description: Use when the user or the advisor asks to fix findings from a review of a branch, usually in the session that built the branch, after the advisor's review. Applies only the findings chosen, with their decisions, verifies them, keeps the message draft and records current, and commits on this session's branch once the checks pass.
 ---
 
 # Review fix
 
 Follow `AGENTS.md`.
 
-The user names which review findings to fix, and may add decisions or changes to the suggested fixes. Fix exactly those, as decided. Leave findings the user accepted or declined alone, unless they asked to record or document them.
+The user or the advisor names which review findings to fix, and may add decisions or changes to the suggested fixes. Fix exactly those, as decided. Leave findings that were accepted or declined alone, unless recording or documenting them was asked for.
 
 ## Before changing anything
 
-If a fix turns out larger than the finding described, needs a decision the user didn't give, or would change behavior beyond the finding, stop and say so with options and a recommendation. Otherwise, go ahead without a separate plan; the review already was one.
+If a fix turns out larger than the finding described, needs a decision that wasn't given, or would change behavior beyond the finding, say so with options and a recommendation; in a session the advisor started, keep going as `CLAUDE.md`'s "Other sessions in this repo" section says, and otherwise stop. Otherwise, go ahead without a separate plan; the review already was one.
 
 ## Making the fixes
 
@@ -26,7 +26,7 @@ If a fix turns out larger than the finding described, needs a decision the user 
 - Update milestone evidence in `MILESTONES.md` if the milestone is part of this change.
 - When the user asks to record a finding, add a bug as an issue in `ISSUES.md`, in that file's format, and an improvement as a backlog item or to the existing milestone that will do it, following the maintenance rules in `MILESTONES.md`.
 - When a fix closes an issue in `ISSUES.md`, delete it there.
-- When the user or the advisor says the fixes are ready, commit them on this session's branch per `AGENTS.md`.
+- Once the checks pass, commit the fixes on this session's branch per `AGENTS.md`.
 
 ## Verification
 

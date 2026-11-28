@@ -1,11 +1,13 @@
 ---
 name: implement
-description: Use whenever asked to implement, build, fix, change, or refactor code, or to work on a milestone or tracked item. Plans the change and stops for confirmation before writing any code.
+description: Use whenever asked to implement, build, fix, change, or refactor code, or to work on a milestone or tracked item. Plans the change and stops for confirmation before writing any code, or, in a session the advisor started, sends the plan to the advisor and goes on.
 ---
 
 # Implement
 
 Follow `AGENTS.md`. Read any other repo docs relevant to the task.
+
+In a session the advisor started, `CLAUDE.md`'s "Other sessions in this repo" section replaces every stop for confirmation in this skill: send what would stop to the advisor, with your recommendation, and keep going as that section says.
 
 The task is either described directly or named as an item in `MILESTONES.md`. If it names a tracked item, read that entry in full — it usually records decisions already settled, and re-litigating them wastes the work that settled them.
 
@@ -45,11 +47,11 @@ For milestone work, when a slice lands, set its row in the Slices table to its n
 
 ## Delegating
 
-Delegation never replaces the plan stop: nothing goes to a subagent that writes until the user has confirmed the plan.
+Delegation never replaces the plan stop: nothing goes to a subagent that writes until the user has confirmed the plan, or, in a session the advisor started, until the plan has gone to the advisor.
 
 - Before planning, measurements that don't depend on each other's results go to `investigator` subagents in parallel rather than running one after another in this session. Keep a measurement here only when the next step depends on its result or it's a single quick command.
 - After confirmation, parts of the plan that are independent and touch disjoint files may go to `implementer` subagents, each given its slice verbatim, with the milestone entry's Decisions when the work is a milestone, the exact files it owns, and how to verify it. Parallel implementers never share a file. Keep sequential or tightly coupled work, and anything small, in this session.
-- An implementer that stops on a problem is a blocker under "During implementation": stop and bring it to the user.
+- An implementer that stops on a problem is a blocker under "During implementation": handle it as that section says.
 - This session alone edits the tracker, changelog, commit message, and docs, and writes the final summary. Read each implementer's report, review its changes in the diff, and carry its deviations into the summary.
 - Use `verifier` for verification runs, and check what it reports before fixing anything.
 
@@ -73,6 +75,6 @@ The outcome of verification — what was run, what passed, and the measured resu
 
 Which subagents ran and for what, and anything they reported that changed the work.
 
-## When the work is ready
+## Committing
 
-When the user or the advisor says the work is ready, commit it on this session's branch as `AGENTS.md` says. When they say main has moved, update from main as its Worktrees section says, re-run the checks, and commit.
+Once the checks pass, commit the work on this session's branch as `AGENTS.md` says. When the user or the advisor says main has moved, update from main as its Worktrees section says, re-run the checks, and commit.
