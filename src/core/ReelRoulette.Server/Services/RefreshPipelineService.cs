@@ -34,8 +34,13 @@ public sealed class RefreshPipelineService : BackgroundService
         @"(?:^|\s)(?:Peak|True peak):\s*(?<value>-?\d+(?:\.\d+)?)\s*dBFS\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    /// <summary>A failed run's <c>lastError</c>, whatever failed, since its exception goes only to <c>last.log</c>.</summary>
-    internal const string FailedRunError = "The library refresh failed.";
+    // The stages' ids, as the status's currentStage names them.
+    private const string SourceRefreshStage = "sourceRefresh";
+    private const string NameSortKeysStage = "nameSortKeys";
+    private const string FingerprintScanStage = "fingerprintScan";
+    private const string DurationScanStage = "durationScan";
+    private const string LoudnessScanStage = "loudnessScan";
+    private const string ThumbnailGenerationStage = "thumbnailGeneration";
 
     /// <summary>The integrated loudness ffmpeg's <c>ebur128</c> reports for digital silence, its floor.</summary>
     private const double DigitalSilenceLufs = -70.0;
@@ -61,10 +66,10 @@ public sealed class RefreshPipelineService : BackgroundService
     private DateTimeOffset _nextAutoRunUtc;
     private bool _isRunLoopActive;
     private readonly CancellationTokenSource _shutdown = new();
-    private readonly TaskCompletionSource _ffmpegCheckEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private Task? _ffmpegCheckHold;
+    private readonly TaskCompletionSource _toolCheckEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _toolCheckHold;
     private Func<DateTimeOffset> _progressClock = () => DateTimeOffset.UtcNow;
-    private bool _assumeFfmpegAvailable;
+    private (bool Ffmpeg, bool Ffprobe)? _toolAvailability;
     private Func<string, string, TimeSpan?, CancellationToken, Task<FileLoudnessInfo?>> _analyzeLoudness = AnalyzeLoudnessAsync;
     private Func<string, CancellationToken, Task<TimeSpan?>> _probeDuration = GetVideoDurationAsync;
 
@@ -197,15 +202,15 @@ public sealed class RefreshPipelineService : BackgroundService
     }
 
     /// <summary>
-    /// The next ffmpeg availability check waits on <paramref name="hold"/> inside its try.
-    /// A shutdown cancel is then observed by the same catch as a blocked ffmpeg process.
+    /// The next ffmpeg or ffprobe availability check waits on <paramref name="hold"/> inside its try.
+    /// A shutdown cancel is then observed by the same catch as a blocked tool process.
     /// </summary>
-    internal void HoldNextFfmpegCheck(Task hold)
+    internal void HoldNextToolCheck(Task hold)
     {
-        _ffmpegCheckHold = hold ?? throw new ArgumentNullException(nameof(hold));
+        _toolCheckHold = hold ?? throw new ArgumentNullException(nameof(hold));
     }
 
-    internal Task FfmpegCheckEntered => _ffmpegCheckEntered.Task;
+    internal Task ToolCheckEntered => _toolCheckEntered.Task;
 
     /// <summary>
     /// The clock every stage's progress throttle reads.
@@ -216,11 +221,12 @@ public sealed class RefreshPipelineService : BackgroundService
     }
 
     /// <summary>
-    /// Skips the ffmpeg process check, so the loudness stage runs on a machine without ffmpeg.
+    /// Answers the ffmpeg and ffprobe availability checks without running either, so the stages that need them run,
+    /// or find them missing, whatever the machine has.
     /// </summary>
-    internal void AssumeFfmpegAvailable()
+    internal void SetMediaToolsAvailable(bool ffmpeg = true, bool ffprobe = true)
     {
-        _assumeFfmpegAvailable = true;
+        _toolAvailability = (ffmpeg, ffprobe);
     }
 
     /// <summary>
@@ -337,16 +343,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 IsRunning = true,
                 RunId = Guid.NewGuid().ToString("N"),
                 Trigger = trigger,
-                StartedUtc = DateTimeOffset.UtcNow,
-                Stages =
-                [
-                    NewStage("sourceRefresh"),
-                    NewStage("nameSortKeys"),
-                    NewStage("fingerprintScan"),
-                    NewStage("durationScan"),
-                    NewStage("loudnessScan"),
-                    NewStage("thumbnailGeneration")
-                ]
+                StartedUtc = DateTimeOffset.UtcNow
             };
             runId = _status.RunId;
             PublishStatusLocked();
@@ -401,7 +398,7 @@ public sealed class RefreshPipelineService : BackgroundService
             {
                 // CurrentStage stays the stage the run stopped in, which clients name in their failed line.
                 _status.IsRunning = false;
-                _status.LastError = FailedRunError;
+                _status.Failed = true;
                 _status.CompletedUtc = DateTimeOffset.UtcNow;
                 PublishStatusLocked();
             }
@@ -439,28 +436,47 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private Task RunSourceRefreshAsync(CancellationToken cancellationToken)
     {
-        UpdateStage("sourceRefresh", 5, "Loading sources...");
+        StartStage(SourceRefreshStage);
 
         // Every file this refresh adds shares one date added, so the date added sort orders them by name.
         var addedUtc = DateTime.UtcNow;
-        var sources = _catalog.Session.ReadRefreshSources();
+        var sources = _catalog.Session.ReadRefreshSources()
+            .Where(source => source.IsEnabled && !string.IsNullOrWhiteSpace(source.Id) && !string.IsNullOrWhiteSpace(source.RootPath))
+            .ToList();
         var items = _catalog.Session.ReadRefreshItems().ToList();
         var defaultsChanged = new HashSet<CatalogRefreshItem>();
 
+        int sourceNumber = 0;
         int added = 0;
         int removed = 0;
-        int updated = 0;
         int renamed = 0;
         int moved = 0;
-        int unresolvedQueued = 0;
+        int unmatched = 0;
 
-        for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
+        // The percent follows the sources: source k starts at k - 1 of them, moves on as it fingerprints its new files,
+        // and ends at k.
+        void SetSourceCounts(RefreshStatusSnapshot status, double sourcesDone, int fingerprinted = 0, int toFingerprint = 0)
+        {
+            var stage = status.Stages.SourceRefresh;
+            stage.Source = sourceNumber;
+            stage.SourceCount = sources.Count;
+            stage.NewFilesFingerprinted = fingerprinted;
+            stage.NewFilesToFingerprint = toFingerprint;
+            stage.Added = added;
+            stage.Removed = removed;
+            stage.Renamed = renamed;
+            stage.Moved = moved;
+            stage.Unmatched = unmatched;
+            stage.Percent = StagePercent(sourcesDone, sources.Count);
+        }
+
+        foreach (var source in sources)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var source = sources[sourceIndex];
+            sourceNumber++;
             var sourceId = source.Id;
             var rootPath = source.RootPath;
-            if (string.IsNullOrWhiteSpace(sourceId) || string.IsNullOrWhiteSpace(rootPath) || !source.IsEnabled || !Directory.Exists(rootPath))
+            if (!Directory.Exists(rootPath))
             {
                 continue;
             }
@@ -495,17 +511,11 @@ public sealed class RefreshPipelineService : BackgroundService
                 .Where(path => !existingPaths.Contains(path))
                 .ToList();
 
-            var progressBase = ((sourceIndex + 1) / (double)Math.Max(1, sources.Count)) * 100.0;
-            UpdateStage("sourceRefresh",
-                Math.Clamp((int)Math.Round(progressBase * 0.2), 5, 100),
-                $"Source {sourceIndex + 1}/{sources.Count}: analyzing changes");
+            UpdateStage(SourceRefreshStage, status => SetSourceCounts(status, sourceNumber - 1));
 
             if (missingItems.Count == 0 && newPaths.Count == 0)
             {
-                var pctNoChanges = Math.Clamp((int)Math.Round(progressBase), 10, 100);
-                UpdateStage("sourceRefresh",
-                    pctNoChanges,
-                    $"Sources {sourceIndex + 1}/{sources.Count} (added {added}, removed {removed}, renamed {renamed}, moved {moved})");
+                UpdateStage(SourceRefreshStage, status => SetSourceCounts(status, sourceNumber));
                 continue;
             }
 
@@ -589,13 +599,13 @@ public sealed class RefreshPipelineService : BackgroundService
                     unresolvedNewPaths.Add(path);
                 }
 
-                if (fingerprintCount > 0 && (fingerprintProcessed % 25 == 0 || fingerprintProcessed == fingerprintCount))
+                if (fingerprintProcessed % 25 == 0 || fingerprintProcessed == fingerprintCount)
                 {
-                    var phasePct = 20 + (int)Math.Round((fingerprintProcessed / (double)fingerprintCount) * 50.0);
-                    var sourcePct = ((sourceIndex + phasePct / 100.0) / Math.Max(1, sources.Count)) * 100.0;
-                    UpdateStage("sourceRefresh",
-                        Math.Clamp((int)Math.Round(sourcePct), 10, 100),
-                        $"Source {sourceIndex + 1}/{sources.Count}: fingerprinting {fingerprintProcessed}/{fingerprintCount}");
+                    UpdateStage(SourceRefreshStage, status => SetSourceCounts(
+                        status,
+                        sourceNumber - 1 + fingerprintProcessed / (double)fingerprintCount,
+                        fingerprintProcessed,
+                        fingerprintCount));
                 }
             }
 
@@ -641,7 +651,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
                     if (hadCandidates)
                     {
-                        unresolvedQueued++;
+                        unmatched++;
                         if (!string.IsNullOrWhiteSpace(missing.FullPath))
                         {
                             unresolvedMissingPaths.Add(missing.FullPath);
@@ -654,22 +664,17 @@ public sealed class RefreshPipelineService : BackgroundService
                 var priorPath = missing.FullPath;
                 var oldDir = Path.GetDirectoryName(priorPath) ?? string.Empty;
                 var newDir = Path.GetDirectoryName(matchPath) ?? string.Empty;
-                var oldName = Path.GetFileName(priorPath);
-                var newName = Path.GetFileName(matchPath);
                 PersistMovedItem(missing, sourceId, rootPath, matchPath, defaultsChanged.Contains(missing));
                 defaultsChanged.Remove(missing);
 
+                // Paths compare ignoring case, so a match in the same folder always has another name.
                 if (!oldDir.Equals(newDir, StringComparison.OrdinalIgnoreCase))
                 {
                     moved++;
                 }
-                else if (!string.Equals(oldName, newName, StringComparison.OrdinalIgnoreCase))
-                {
-                    renamed++;
-                }
                 else
                 {
-                    updated++;
+                    renamed++;
                 }
 
                 consumedNewPaths.Add(matchPath);
@@ -680,7 +685,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 cancellationToken.ThrowIfCancellationRequested();
                 if (unresolvedNewPaths.Contains(path))
                 {
-                    unresolvedQueued++;
+                    unmatched++;
                     continue;
                 }
 
@@ -719,14 +724,10 @@ public sealed class RefreshPipelineService : BackgroundService
                 removed++;
             }
 
-            var pct = Math.Clamp((int)Math.Round(((sourceIndex + 1) / (double)Math.Max(1, sources.Count)) * 100.0), 10, 100);
-            UpdateStage("sourceRefresh",
-                pct,
-                $"Sources {sourceIndex + 1}/{sources.Count} (added {added}, removed {removed}, renamed {renamed}, moved {moved}, unresolved {unresolvedQueued})");
+            UpdateStage(SourceRefreshStage, status => SetSourceCounts(status, sourceNumber));
         }
 
-        CompleteStage("sourceRefresh",
-            $"Source refresh complete ({added} added, {removed} removed, {renamed} renamed, {moved} moved, {updated} updated, {unresolvedQueued} unresolved)");
+        CompleteStage(SourceRefreshStage, status => SetSourceCounts(status, sources.Count));
         return Task.CompletedTask;
     }
 
@@ -736,20 +737,19 @@ public sealed class RefreshPipelineService : BackgroundService
     /// </summary>
     internal void RunNameSortKeyStage(CancellationToken cancellationToken)
     {
-        StartStage("nameSortKeys");
+        StartStage(NameSortKeysStage);
         var work = _catalog.Session.ReadNameSortKeyWork();
         var total = work.Items.Count;
         var processed = 0;
-        var updated = 0;
         var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
         foreach (var batch in work.Items.Chunk(NameSortKeyBatchSize))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            updated += _catalog.Session.WriteNameSortKeys(batch);
+            _catalog.Session.WriteNameSortKeys(batch);
             processed += batch.Length;
             if (progressThrottle.TryEnter())
             {
-                UpdateStage("nameSortKeys", (int)Math.Round(processed / (double)total * 100.0), $"Name sort keys {processed}/{total}");
+                UpdateStage(NameSortKeysStage, status => SetCount(status.Stages.NameSortKeys, processed, total));
             }
         }
 
@@ -758,7 +758,7 @@ public sealed class RefreshPipelineService : BackgroundService
             _catalog.Session.SetNameSortKeyVersion();
         }
 
-        CompleteStage("nameSortKeys", $"Name sort keys complete ({updated} updated)");
+        CompleteStage(NameSortKeysStage, status => SetCount(status.Stages.NameSortKeys, processed, total));
     }
 
     internal async Task RunFingerprintStageAsync(CancellationToken cancellationToken)
@@ -767,7 +767,8 @@ public sealed class RefreshPipelineService : BackgroundService
         var items = _catalog.Session.ReadRefreshItems();
         var itemCount = items.Count;
         var workList = new List<CatalogRefreshItem>();
-        var skipped = 0;
+        // Files the check found changed on disk, which hashing counts apart from new files.
+        var changedOnDisk = new HashSet<CatalogRefreshItem>();
         var checkedCount = 0;
         var checkThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
@@ -778,13 +779,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 return;
             }
 
-            var percent = itemCount == 0
-                ? 100
-                : Math.Clamp((int)Math.Round(checkedCount / (double)itemCount * 100.0), 0, 100);
-            UpdateStage(
-                "fingerprintScan",
-                percent,
-                $"Checking files {checkedCount}/{itemCount} ({workList.Count} to hash)");
+            UpdateStage(FingerprintScanStage, status => SetCount(status.Stages.FingerprintScan, checkedCount, itemCount));
         }
 
         PublishCheckProgress(force: true);
@@ -820,11 +815,11 @@ public sealed class RefreshPipelineService : BackgroundService
                  (item.LastWriteTimeUtc.HasValue && !SameUtc(item.LastWriteTimeUtc, write))))
             {
                 item.FingerprintStatus = 3;
+                changedOnDisk.Add(item);
             }
 
             if (!NeedsFingerprintProcessing(item))
             {
-                skipped++;
                 PersistObservedFingerprint(item, size, write, haveStat, defaultsChanged);
                 checkedCount++;
                 PublishCheckProgress(force: false);
@@ -847,30 +842,33 @@ public sealed class RefreshPipelineService : BackgroundService
         var total = workList.Count;
         if (total == 0)
         {
-            CompleteStage("fingerprintScan", $"Fingerprint scan complete (0 hashed, 0 failed, {skipped} skipped)");
+            CompleteStage(FingerprintScanStage);
             return;
         }
 
         var processed = 0;
-        var ready = 0;
+        var changed = 0;
         var failed = 0;
         var progressLock = new object();
         var hashThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
+
+        void SetHashCounts(RefreshStatusSnapshot status)
+        {
+            var stage = status.Stages.FingerprintScan;
+            stage.Phase = RefreshFingerprintStage.Hashing;
+            SetCount(stage, Volatile.Read(ref processed), total);
+            stage.Changed = Volatile.Read(ref changed);
+            stage.Failed = Volatile.Read(ref failed);
+        }
 
         void TryPublishFingerprintProgress(bool force)
         {
             lock (progressLock)
             {
-                if (!hashThrottle.TryEnter(force))
+                if (hashThrottle.TryEnter(force))
                 {
-                    return;
+                    UpdateStage(FingerprintScanStage, SetHashCounts);
                 }
-
-                var hashed = Volatile.Read(ref processed);
-                var readyCount = Volatile.Read(ref ready);
-                var failedCount = Volatile.Read(ref failed);
-                var pct = Math.Clamp((int)Math.Round((hashed / (double)Math.Max(1, total)) * 100.0), 0, 100);
-                UpdateStage("fingerprintScan", pct, $"Fingerprint scan ({hashed} hashed, {readyCount} ready, {failedCount} failed)");
             }
         }
 
@@ -925,7 +923,10 @@ public sealed class RefreshPipelineService : BackgroundService
                         winner.IsStableRead)
                     {
                         PersistHashedFingerprint(item, winner.Fingerprint, 1, winner.FileSizeBytes, winner.LastWriteTimeUtc, DateTime.UtcNow);
-                        Interlocked.Increment(ref ready);
+                        if (changedOnDisk.Contains(item))
+                        {
+                            Interlocked.Increment(ref changed);
+                        }
                     }
                     else
                     {
@@ -938,10 +939,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 });
         }, cancellationToken);
 
-        var readyFinal = Volatile.Read(ref ready);
-        var failedFinal = Volatile.Read(ref failed);
-        var skippedSuffix = skipped > 0 ? $", {skipped} skipped" : string.Empty;
-        CompleteStage("fingerprintScan", $"Fingerprint scan complete ({total} hashed, {readyFinal} ready, {failedFinal} failed{skippedSuffix})");
+        CompleteStage(FingerprintScanStage, SetHashCounts);
     }
 
     private static bool NeedsFingerprintProcessing(CatalogRefreshItem item)
@@ -969,40 +967,50 @@ public sealed class RefreshPipelineService : BackgroundService
     {
         var settings = _coreSettings.GetRefreshSettings();
         var forceFullRescan = settings.ForceRescanDuration;
+        var stoppedForMissingTool = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await RunDurationStageAsync(cancellationToken, forceFullRescan);
+            stoppedForMissingTool = !await RunDurationStageAsync(cancellationToken, forceFullRescan);
         }
         finally
         {
-            if (forceFullRescan && !cancellationToken.IsCancellationRequested)
+            // A forced rescan that ffprobe wasn't found for stays pending, so it runs once ffprobe is there.
+            if (forceFullRescan && !stoppedForMissingTool && !cancellationToken.IsCancellationRequested)
             {
                 ConsumeRefreshRescanFlags(clearDuration: true, clearLoudness: false);
             }
         }
     }
 
-    private async Task RunDurationStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
+    /// <summary>Probes each video's duration that the stage has to scan. Returns false when it stopped because ffprobe wasn't found.</summary>
+    private async Task<bool> RunDurationStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
-        StartStage("durationScan");
+        StartStage(DurationScanStage);
         var videos = DistinctRefreshItemsByPath(_catalog.Session.ReadRefreshItems().Where(item => item.MediaType == 0));
         var filesToScan = forceFullRescan
             ? videos
             : videos.Where(item => item.DurationTicks is not long ticks || ticks <= 0).ToList();
-        var alreadyCachedCount = forceFullRescan ? 0 : videos.Count - filesToScan.Count;
-        var total = videos.Count;
-        var processed = alreadyCachedCount;
-        var updated = 0;
+        var total = filesToScan.Count;
+        var processed = 0;
+        var changed = 0;
+        var failed = 0;
         var processedLock = new object();
-        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
         var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
-        if (filesToScan.Count == 0)
+        if (total == 0)
         {
-            CompleteStage("durationScan", $"Duration scan complete ({total} files, all cached){forcedSuffix}");
-            return;
+            CompleteStage(DurationScanStage, status => status.Stages.DurationScan.Forced = forceFullRescan);
+            return true;
         }
+
+        if (!await VerifyFfprobeAsync(ResolveFfprobePath(), cancellationToken))
+        {
+            CompleteStage(DurationScanStage, status => status.FfprobeNotFound = true);
+            return false;
+        }
+
+        PublishMediaScanStart(DurationScanStage, progressThrottle, total, forceFullRescan);
 
         var scanTasks = filesToScan.Select(async item =>
         {
@@ -1011,31 +1019,31 @@ public sealed class RefreshPipelineService : BackgroundService
                 return;
             }
 
-            if (!File.Exists(item.FullPath))
+            if (File.Exists(item.FullPath))
             {
-                int skippedProcessed;
-                lock (processedLock)
+                var duration = await _probeDuration(item.FullPath, cancellationToken);
+                if (duration.HasValue && duration.Value.TotalSeconds > 0)
                 {
-                    processed++;
-                    skippedProcessed = processed;
-                }
-
-                TryUpdateDurationProgress(progressThrottle, skippedProcessed, total, forceFullRescan);
-                return;
-            }
-
-            var duration = await _probeDuration(item.FullPath, cancellationToken);
-            if (duration.HasValue && duration.Value.TotalSeconds > 0)
-            {
-                var prior = item.DurationTicks;
-                if (prior is not long existing || Math.Abs((TimeSpan.FromTicks(existing) - duration.Value).TotalSeconds) > 0.1)
-                {
-                    lock (_catalogWriteLock)
+                    var prior = item.DurationTicks;
+                    var hadDuration = prior is long existing && existing > 0;
+                    if (!hadDuration || Math.Abs((TimeSpan.FromTicks(prior!.Value) - duration.Value).TotalSeconds) > 0.1)
                     {
-                        _catalog.Session.SetDuration(item.Id, duration.Value.Ticks);
-                    }
+                        lock (_catalogWriteLock)
+                        {
+                            _catalog.Session.SetDuration(item.Id, duration.Value.Ticks);
+                        }
 
-                    Interlocked.Increment(ref updated);
+                        // A first duration isn't a change.
+                        if (hadDuration)
+                        {
+                            Interlocked.Increment(ref changed);
+                        }
+                    }
+                }
+                else
+                {
+                    // The duration stays empty, so the next refresh probes the video again.
+                    Interlocked.Increment(ref failed);
                 }
             }
 
@@ -1046,137 +1054,122 @@ public sealed class RefreshPipelineService : BackgroundService
                 currentProcessed = processed;
             }
 
-            TryUpdateDurationProgress(progressThrottle, currentProcessed, total, forceFullRescan);
+            TryUpdateMediaScanProgress(DurationScanStage, progressThrottle, currentProcessed, total, Volatile.Read(ref changed), Volatile.Read(ref failed));
         });
 
         await Task.WhenAll(scanTasks);
-        CompleteStage("durationScan", $"Duration scan complete ({total} files, {Volatile.Read(ref updated)} updated){forcedSuffix}");
+        CompleteStage(DurationScanStage, status =>
+            SetMediaScanCounts(status, DurationScanStage, Volatile.Read(ref processed), total, Volatile.Read(ref changed), Volatile.Read(ref failed)));
+        return true;
     }
 
     private async Task RunLoudnessStageWithOneShotAsync(CancellationToken cancellationToken)
     {
         var settings = _coreSettings.GetRefreshSettings();
         var forceFullRescan = settings.ForceRescanLoudness;
+        var stoppedForMissingTool = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await RunLoudnessStageAsync(cancellationToken, forceFullRescan);
+            stoppedForMissingTool = !await RunLoudnessStageAsync(cancellationToken, forceFullRescan);
         }
         finally
         {
-            if (forceFullRescan && !cancellationToken.IsCancellationRequested)
+            // A forced rescan that ffmpeg wasn't found for stays pending, so it runs once ffmpeg is there.
+            if (forceFullRescan && !stoppedForMissingTool && !cancellationToken.IsCancellationRequested)
             {
                 ConsumeRefreshRescanFlags(clearDuration: false, clearLoudness: true);
             }
         }
     }
 
-    private async Task RunLoudnessStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
+    /// <summary>Scans each video's loudness that the stage has to scan. Returns false when it stopped because ffmpeg wasn't found.</summary>
+    private async Task<bool> RunLoudnessStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
-        StartStage("loudnessScan");
-        var ffmpegPath = ResolveFfmpegPath();
-        if (!await VerifyFfmpegAsync(ffmpegPath, cancellationToken))
-        {
-            CompleteStage("loudnessScan", "Loudness scan unavailable: ffmpeg not found");
-            return;
-        }
-
+        StartStage(LoudnessScanStage);
         var videos = DistinctRefreshItemsByPath(_catalog.Session.ReadRefreshItems().Where(item => item.MediaType == 0));
         var filesToScan = forceFullRescan
             ? videos
             : videos.Where(NeedsLoudness).ToList();
-        var alreadyScannedCount = forceFullRescan ? 0 : videos.Count - filesToScan.Count;
-        var total = videos.Count;
-        var processed = alreadyScannedCount;
-        var noAudioCount = 0;
-        var errorCount = 0;
-        var updated = 0;
+        var total = filesToScan.Count;
+        var processed = 0;
+        var changed = 0;
+        var failed = 0;
         var processedLock = new object();
-        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
         var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
-        if (filesToScan.Count == 0)
+        if (total == 0)
         {
-            CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, all scanned){forcedSuffix}");
-            return;
+            CompleteStage(LoudnessScanStage, status => status.Stages.LoudnessScan.Forced = forceFullRescan);
+            return true;
         }
 
-        TryUpdateLoudnessProgress(progressThrottle, processed, total, noAudioCount, errorCount, forceFullRescan);
+        var ffmpegPath = ResolveFfmpegPath();
+        if (!await VerifyFfmpegAsync(ffmpegPath, cancellationToken))
+        {
+            CompleteStage(LoudnessScanStage, status => status.FfmpegNotFound = true);
+            return false;
+        }
+
+        PublishMediaScanStart(LoudnessScanStage, progressThrottle, total, forceFullRescan);
 
         var limit = new ParallelOptions { MaxDegreeOfParallelism = LoudnessScanConcurrency, CancellationToken = cancellationToken };
         await Parallel.ForEachAsync(filesToScan, limit, async (item, token) =>
         {
-            if (!File.Exists(item.FullPath))
+            if (File.Exists(item.FullPath))
             {
-                int skippedProcessed;
-                lock (processedLock)
+                var durationForLoudness = item.DurationTicks is long ticks && ticks > 0
+                    ? TimeSpan.FromSeconds(ticks / TimeSpan.TicksPerSecond)
+                    : (TimeSpan?)null;
+                var loudness = await _analyzeLoudness(item.FullPath, ffmpegPath, durationForLoudness, token);
+                if (loudness != null)
                 {
-                    processed++;
-                    skippedProcessed = processed;
-                }
+                    if (PersistLoudness(item, loudness))
+                    {
+                        Interlocked.Increment(ref changed);
+                    }
 
-                TryUpdateLoudnessProgress(progressThrottle, skippedProcessed, total, Volatile.Read(ref noAudioCount), Volatile.Read(ref errorCount), forceFullRescan);
-                return;
-            }
-
-            var durationForLoudness = item.DurationTicks is long ticks && ticks > 0
-                ? TimeSpan.FromSeconds(ticks / TimeSpan.TicksPerSecond)
-                : (TimeSpan?)null;
-            var loudness = await _analyzeLoudness(item.FullPath, ffmpegPath, durationForLoudness, token);
-            if (loudness != null)
-            {
-                if (TryPersistLoudness(item, loudness))
-                {
-                    Interlocked.Increment(ref updated);
-                }
-
-                if (loudness.IsError)
-                {
-                    Interlocked.Increment(ref errorCount);
-                }
-                else if (!loudness.HasAudio)
-                {
-                    Interlocked.Increment(ref noAudioCount);
+                    if (loudness.IsError)
+                    {
+                        Interlocked.Increment(ref failed);
+                    }
                 }
             }
 
             int currentProcessed;
-            int currentNoAudio;
-            int currentErrors;
             lock (processedLock)
             {
                 processed++;
                 currentProcessed = processed;
-                currentNoAudio = noAudioCount;
-                currentErrors = errorCount;
             }
 
-            TryUpdateLoudnessProgress(progressThrottle, currentProcessed, total, currentNoAudio, currentErrors, forceFullRescan);
+            TryUpdateMediaScanProgress(LoudnessScanStage, progressThrottle, currentProcessed, total, Volatile.Read(ref changed), Volatile.Read(ref failed));
         });
 
-        var noAudioText = Volatile.Read(ref noAudioCount) > 0 ? $", {Volatile.Read(ref noAudioCount)} without audio" : string.Empty;
-        var errorText = Volatile.Read(ref errorCount) > 0 ? $", {Volatile.Read(ref errorCount)} errors" : string.Empty;
-        CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, {Volatile.Read(ref updated)} updated{noAudioText}{errorText}){forcedSuffix}");
+        CompleteStage(LoudnessScanStage, status =>
+            SetMediaScanCounts(status, LoudnessScanStage, Volatile.Read(ref processed), total, Volatile.Read(ref changed), Volatile.Read(ref failed)));
+        return true;
     }
 
     internal async Task RunThumbnailStageAsync(CancellationToken cancellationToken)
     {
-        StartStage("thumbnailGeneration");
+        StartStage(ThumbnailGenerationStage);
         Directory.CreateDirectory(_thumbnailDir);
         var items = _catalog.Session.ReadRefreshItems();
         var catalogIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        int generated = 0;
-        int regenerated = 0;
-        int reused = 0;
         int failed = 0;
-        int skippedMissing = 0;
-        int metadataUpdated = 0;
-        int staleRemoved = 0;
         int total = items.Count;
         var ffmpegPath = ResolveFfmpegPath();
         bool ffmpegChecked = false;
         bool ffmpegAvailable = false;
         var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
+
+        void SetGenerateCounts(RefreshStatusSnapshot status, int processed)
+        {
+            SetCount(status.Stages.ThumbnailGeneration, processed, total);
+            status.Stages.ThumbnailGeneration.Failed = failed;
+            status.FfmpegNotFound |= ffmpegChecked && !ffmpegAvailable;
+        }
 
         for (int i = 0; i < items.Count; i++)
         {
@@ -1199,21 +1192,15 @@ public sealed class RefreshPipelineService : BackgroundService
                                   string.Equals(storedRevision, computedRevision, StringComparison.Ordinal);
             if (revisionMatches && hadThumbnailFile)
             {
-                reused++;
                 if (!hasDimensions &&
                     TryReadImageDimensions(thumbPath, out var width, out var height) &&
                     width > 0 &&
                     height > 0)
                 {
                     PersistThumbnail(item, storedRevision, width, height);
-                    metadataUpdated++;
                 }
             }
-            else if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
-            {
-                skippedMissing++;
-            }
-            else
+            else if (!string.IsNullOrWhiteSpace(fullPath) && File.Exists(fullPath))
             {
                 ThumbnailGenerationResult? generatedThumb;
                 if (item.MediaType == 0)
@@ -1224,6 +1211,7 @@ public sealed class RefreshPipelineService : BackgroundService
                         ffmpegChecked = true;
                     }
 
+                    // Without ffmpeg no video gets a thumbnail, which the status says once in place of a failure for each.
                     generatedThumb = ffmpegAvailable
                         ? await TryGenerateVideoThumbnailAsync(
                             fullPath,
@@ -1232,45 +1220,39 @@ public sealed class RefreshPipelineService : BackgroundService
                             ffmpegPath,
                             cancellationToken)
                         : null;
+                    if (generatedThumb is null && ffmpegAvailable)
+                    {
+                        failed++;
+                    }
                 }
                 else
                 {
                     generatedThumb = await TryGeneratePhotoThumbnailAsync(fullPath, thumbPath, cancellationToken);
+                    if (generatedThumb is null)
+                    {
+                        failed++;
+                    }
                 }
 
                 if (generatedThumb is not null)
                 {
                     PersistThumbnail(item, computedRevision, generatedThumb.Width, generatedThumb.Height);
-                    if (!hadThumbnailFile)
-                    {
-                        generated++;
-                    }
-                    else
-                    {
-                        regenerated++;
-                    }
-                }
-                else
-                {
-                    failed++;
                 }
             }
 
-            TryUpdateThumbnailProgress(
-                i + 1,
-                total,
-                generated,
-                regenerated,
-                reused,
-                failed,
-                skippedMissing,
-                progressThrottle,
-                force: i == items.Count - 1);
+            if (progressThrottle.TryEnter(force: i == items.Count - 1))
+            {
+                var processed = i + 1;
+                UpdateStage(ThumbnailGenerationStage, status => SetGenerateCounts(status, processed));
+            }
         }
 
-        staleRemoved = RemoveThumbnailsOutsideCatalog(catalogIds, cancellationToken);
-        CompleteStage("thumbnailGeneration",
-            $"Thumbnail generation complete ({generated} generated, {regenerated} regenerated, {reused} reused, {failed} failed, {metadataUpdated} metadata updated, {skippedMissing} missing source, {staleRemoved} stale removed)");
+        RemoveThumbnailsOutsideCatalog(catalogIds, cancellationToken);
+        CompleteStage(ThumbnailGenerationStage, status =>
+        {
+            status.Stages.ThumbnailGeneration.Failed = failed;
+            status.FfmpegNotFound |= ffmpegChecked && !ffmpegAvailable;
+        });
     }
 
     private void PersistThumbnail(CatalogRefreshItem item, string? revision, int width, int height)
@@ -1307,26 +1289,34 @@ public sealed class RefreshPipelineService : BackgroundService
     /// at most once per <see cref="ScanProgressInterval"/>, with the last always sent, so a cleanup of thousands
     /// publishes a few status events rather than one for each.
     /// </summary>
-    private int RemoveThumbnailsOutsideCatalog(HashSet<string> catalogIds, CancellationToken cancellationToken)
+    private void RemoveThumbnailsOutsideCatalog(HashSet<string> catalogIds, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(_thumbnailDir))
         {
-            return 0;
+            return;
         }
 
         var files = Directory.EnumerateFiles(_thumbnailDir, "*.jpg")
             .Where(file => !catalogIds.Contains(Path.GetFileNameWithoutExtension(file)))
             .ToList();
         var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
-        var removed = 0;
+
+        void PublishCleanupProgress(int processed)
+        {
+            UpdateStage(ThumbnailGenerationStage, status =>
+            {
+                status.Stages.ThumbnailGeneration.Phase = RefreshThumbnailStage.Cleanup;
+                SetCount(status.Stages.ThumbnailGeneration, processed, files.Count);
+            });
+        }
+
         for (var i = 0; i < files.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var file = files[i];
-            if (progressThrottle.TryEnter(force: i == files.Count - 1))
+            if (progressThrottle.TryEnter(force: i == 0))
             {
-                var percent = (int)Math.Round(((i + 1) / (double)files.Count) * 100.0);
-                UpdateStage("thumbnailGeneration", percent, $"Thumbnail cleanup {i + 1}/{files.Count}");
+                PublishCleanupProgress(i);
             }
 
             var hold = Interlocked.Exchange(ref _thumbnailCleanupHold, null);
@@ -1340,7 +1330,6 @@ public sealed class RefreshPipelineService : BackgroundService
             try
             {
                 File.Delete(file);
-                removed++;
             }
             catch
             {
@@ -1348,7 +1337,10 @@ public sealed class RefreshPipelineService : BackgroundService
             }
         }
 
-        return removed;
+        if (files.Count > 0)
+        {
+            PublishCleanupProgress(files.Count);
+        }
     }
 
     private static bool PositiveThumbnailDimension(JsonNode? node)
@@ -1645,9 +1637,10 @@ public sealed class RefreshPipelineService : BackgroundService
     /// <summary>
     /// Stores a scan result and the loudness analysis version it was scanned under, also when nothing else
     /// changed. A failed scan keeps the stored loudness, peak, and analysis version and records its error.
-    /// Returns whether the stored audio, loudness, peak, or error changed, which the stage counts as updated.
+    /// Returns whether the scan changed a value measured before, so neither a first measurement nor a failed scan
+    /// counts as a change.
     /// </summary>
-    private bool TryPersistLoudness(CatalogRefreshItem item, FileLoudnessInfo info)
+    private bool PersistLoudness(CatalogRefreshItem item, FileLoudnessInfo info)
     {
         var hasAudio = info.HasAudio;
         var error = item.LoudnessError;
@@ -1667,6 +1660,15 @@ public sealed class RefreshPipelineService : BackgroundService
         }
 
         changed |= integrated != item.IntegratedLoudness || peak != item.PeakDb;
+
+        // A video without audio, or with its loudness stored, was measured before. A failed scan keeps a video as
+        // having audio without measuring it.
+        var measuredBefore = item.HasAudio == false || item.IntegratedLoudness.HasValue;
+        var valueChanged = !info.IsError &&
+                           measuredBefore &&
+                           (item.HasAudio != hasAudio ||
+                            integrated != item.IntegratedLoudness ||
+                            (item.PeakDb.HasValue && peak != item.PeakDb));
 
         if (info.IsError)
         {
@@ -1693,7 +1695,7 @@ public sealed class RefreshPipelineService : BackgroundService
             _catalog.Session.SetLoudness(item.Id, hasAudio, integrated, peak, error, analysisVersion);
         }
 
-        return changed;
+        return valueChanged;
     }
 
     private static double? Measured(double? stored, double? measured)
@@ -1741,11 +1743,6 @@ public sealed class RefreshPipelineService : BackgroundService
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
 
-    private static string BuildThumbnailProgressMessage(int processed, int total, int generated, int regenerated, int reused, int failed, int skippedMissing)
-    {
-        return $"Thumbnails {processed}/{total} (new {generated}, regen {regenerated}, reused {reused}, failed {failed}, missing {skippedMissing})";
-    }
-
     private static bool TryReadImageDimensions(string path, out int width, out int height)
     {
         width = 0;
@@ -1768,27 +1765,6 @@ public sealed class RefreshPipelineService : BackgroundService
             return false;
         }
     }
-
-    private void TryUpdateThumbnailProgress(
-        int processed,
-        int total,
-        int generated,
-        int regenerated,
-        int reused,
-        int failed,
-        int skippedMissing,
-        RefreshProgressThrottle throttle,
-        bool force)
-    {
-        if (!throttle.TryEnter(force))
-        {
-            return;
-        }
-
-        var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
-        UpdateStage("thumbnailGeneration", pct, BuildThumbnailProgressMessage(processed, total, generated, regenerated, reused, failed, skippedMissing));
-    }
-
 
     /// <summary>
     /// The length a video's thumbnail frames are picked from: the duration the duration stage stored, so the
@@ -2036,54 +2012,44 @@ public sealed class RefreshPipelineService : BackgroundService
     }
 
 
-    private RefreshStageProgress NewStage(string stage)
-    {
-        return new RefreshStageProgress
-        {
-            Stage = stage,
-            Percent = 0,
-            Message = "pending",
-            IsComplete = false
-        };
-    }
-
     /// <summary>
-    /// The run's progress for <paramref name="stage"/>, added when the status doesn't list it yet, and made the run's
-    /// current stage.
+    /// A stage's percent: <paramref name="done"/> of <paramref name="total"/>, rounded, or 0 while it has counted no work.
     /// </summary>
-    private RefreshStageProgress EnterStageLocked(string stage)
-    {
-        var current = _status.Stages.FirstOrDefault(s => string.Equals(s.Stage, stage, StringComparison.OrdinalIgnoreCase));
-        if (current == null)
-        {
-            current = NewStage(stage);
-            _status.Stages.Add(current);
-        }
+    internal static int StagePercent(double done, int total) =>
+        total <= 0 ? 0 : Math.Clamp((int)Math.Round(done / total * 100.0), 0, 100);
 
-        _status.CurrentStage = stage;
-        return current;
+    /// <summary>Sets a counted stage's <paramref name="processed"/> and <paramref name="total"/>, and its percent from them.</summary>
+    private static void SetCount(RefreshCountedStageProgress stage, int processed, int total)
+    {
+        stage.Processed = processed;
+        stage.Total = total;
+        stage.Percent = StagePercent(processed, total);
     }
+
+    private static RefreshStageProgress StageOf(RefreshStages stages, string stage) => stage switch
+    {
+        SourceRefreshStage => stages.SourceRefresh,
+        NameSortKeysStage => stages.NameSortKeys,
+        FingerprintScanStage => stages.FingerprintScan,
+        DurationScanStage => stages.DurationScan,
+        LoudnessScanStage => stages.LoudnessScan,
+        ThumbnailGenerationStage => stages.ThumbnailGeneration,
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Not a refresh stage.")
+    };
 
     /// <summary>
     /// Publishes <paramref name="stage"/> as the run's current stage before its first progress, so clients show the
     /// stage the run is in, and a failure on its first file names it.
     /// </summary>
-    private void StartStage(string stage)
-    {
-        lock (_runLock)
-        {
-            EnterStageLocked(stage);
-            PublishStatusLocked();
-        }
-    }
+    private void StartStage(string stage, Action<RefreshStatusSnapshot>? update = null) => UpdateStage(stage, update ?? (_ => { }));
 
-    private void UpdateStage(string stage, int percent, string message)
+    /// <summary>Makes <paramref name="stage"/> the run's current stage, applies <paramref name="update"/> to the status, and publishes it.</summary>
+    private void UpdateStage(string stage, Action<RefreshStatusSnapshot> update)
     {
         lock (_runLock)
         {
-            var current = EnterStageLocked(stage);
-            current.Percent = Math.Clamp(percent, 0, 100);
-            current.Message = message;
+            _status.CurrentStage = stage;
+            update(_status);
             PublishStatusLocked();
         }
     }
@@ -2101,16 +2067,16 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
-    private void CompleteStage(string stage, string message)
+    /// <summary>Applies the stage's last counts in <paramref name="update"/>, marks it complete at 100%, and publishes the status.</summary>
+    private void CompleteStage(string stage, Action<RefreshStatusSnapshot>? update = null)
     {
-        lock (_runLock)
+        UpdateStage(stage, status =>
         {
-            var current = EnterStageLocked(stage);
-            current.IsComplete = true;
-            current.Percent = 100;
-            current.Message = message;
-            PublishStatusLocked();
-        }
+            update?.Invoke(status);
+            var progress = StageOf(status.Stages, stage);
+            progress.IsComplete = true;
+            progress.Percent = 100;
+        });
     }
 
     private void PublishStatusLocked()
@@ -2131,14 +2097,18 @@ public sealed class RefreshPipelineService : BackgroundService
             StartedUtc = source.StartedUtc,
             CompletedUtc = source.CompletedUtc,
             CurrentStage = source.CurrentStage,
-            LastError = source.LastError,
-            Stages = source.Stages.Select(s => new RefreshStageProgress
+            Failed = source.Failed,
+            FfmpegNotFound = source.FfmpegNotFound,
+            FfprobeNotFound = source.FfprobeNotFound,
+            Stages = new RefreshStages
             {
-                Stage = s.Stage,
-                Percent = s.Percent,
-                Message = s.Message,
-                IsComplete = s.IsComplete
-            }).ToList(),
+                SourceRefresh = source.Stages.SourceRefresh with { },
+                NameSortKeys = source.Stages.NameSortKeys with { },
+                FingerprintScan = source.Stages.FingerprintScan with { },
+                DurationScan = source.Stages.DurationScan with { },
+                LoudnessScan = source.Stages.LoudnessScan with { },
+                ThumbnailGeneration = source.Stages.ThumbnailGeneration with { }
+            },
             KeptSources = source.KeptSources.Select(s => new RefreshKeptSource
             {
                 SourceId = s.SourceId,
@@ -2147,32 +2117,47 @@ public sealed class RefreshPipelineService : BackgroundService
         };
     }
 
-
-    private void TryUpdateDurationProgress(RefreshProgressThrottle throttle, int processed, int total, bool forceFullRescan)
+    /// <summary>Publishes a duration or loudness scan's progress and counts, at most once per interval.</summary>
+    private void TryUpdateMediaScanProgress(
+        string stage,
+        RefreshProgressThrottle throttle,
+        int processed,
+        int total,
+        int changed,
+        int failed)
     {
         if (!throttle.TryEnter())
         {
             return;
         }
 
-        var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
-        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
-        UpdateStage("durationScan", pct, $"Duration scan {processed}/{total}{forcedSuffix}");
+        UpdateStage(stage, status => SetMediaScanCounts(status, stage, processed, total, changed, failed));
     }
 
-    private void TryUpdateLoudnessProgress(RefreshProgressThrottle throttle, int processed, int total, int noAudioCount, int errorCount, bool forceFullRescan)
+    /// <summary>
+    /// Publishes a duration or loudness scan's start once its tool is found: 0 of the videos it scans, and whether the
+    /// rescan is forced, so a slow first video doesn't leave the stage without its count. It starts the throttle's interval.
+    /// </summary>
+    private void PublishMediaScanStart(string stage, RefreshProgressThrottle throttle, int total, bool forced)
     {
-        if (!throttle.TryEnter())
+        throttle.TryEnter(force: true);
+        UpdateStage(stage, status =>
         {
-            return;
-        }
-
-        var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
-        var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : string.Empty;
-        var errorText = errorCount > 0 ? $", {errorCount} errors" : string.Empty;
-        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
-        UpdateStage("loudnessScan", pct, $"Loudness scan {processed}/{total}{noAudioText}{errorText}{forcedSuffix}");
+            SetMediaScanCounts(status, stage, 0, total, 0, 0);
+            MediaScanOf(status, stage).Forced = forced;
+        });
     }
+
+    private static void SetMediaScanCounts(RefreshStatusSnapshot status, string stage, int processed, int total, int changed, int failed)
+    {
+        var scan = MediaScanOf(status, stage);
+        SetCount(scan, processed, total);
+        scan.Changed = changed;
+        scan.Failed = failed;
+    }
+
+    private static RefreshMediaScanStage MediaScanOf(RefreshStatusSnapshot status, string stage) =>
+        stage == DurationScanStage ? status.Stages.DurationScan : status.Stages.LoudnessScan;
 
     private void ConsumeRefreshRescanFlags(bool clearDuration, bool clearLoudness)
     {
@@ -2345,26 +2330,33 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
-    private async Task<bool> VerifyFfmpegAsync(string ffmpegPath, CancellationToken cancellationToken)
+    private Task<bool> VerifyFfmpegAsync(string ffmpegPath, CancellationToken cancellationToken) =>
+        VerifyToolAsync(ffmpegPath, _toolAvailability?.Ffmpeg, cancellationToken);
+
+    private Task<bool> VerifyFfprobeAsync(string ffprobePath, CancellationToken cancellationToken) =>
+        VerifyToolAsync(ffprobePath, _toolAvailability?.Ffprobe, cancellationToken);
+
+    /// <summary>Whether the tool at <paramref name="toolPath"/> runs, by its <c>-version</c>, or the answer tests set.</summary>
+    private async Task<bool> VerifyToolAsync(string toolPath, bool? testAnswer, CancellationToken cancellationToken)
     {
         try
         {
-            var hold = _ffmpegCheckHold;
+            var hold = _toolCheckHold;
             if (hold != null)
             {
-                _ffmpegCheckHold = null;
-                _ffmpegCheckEntered.TrySetResult();
+                _toolCheckHold = null;
+                _toolCheckEntered.TrySetResult();
                 await hold.WaitAsync(cancellationToken);
             }
 
-            if (_assumeFfmpegAvailable)
+            if (testAnswer is bool answer)
             {
-                return true;
+                return answer;
             }
 
             var testStartInfo = new ProcessStartInfo
             {
-                FileName = ffmpegPath,
+                FileName = toolPath,
                 Arguments = "-version",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

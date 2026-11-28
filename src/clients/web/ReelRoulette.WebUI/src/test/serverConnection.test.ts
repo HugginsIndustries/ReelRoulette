@@ -10,6 +10,8 @@ import { createPlayerIndicator } from "../state/lastingStates";
 import { createServerConnection, VERSION_CHECK_TIMEOUT_MS, VERSION_RECHECK_MS } from "../state/serverConnection";
 import { webUiBuildOfHtml, type WebUiBuild } from "../state/webUiBuild";
 import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
+import type { RefreshKeptSource } from "../types/serverContracts";
+import { refreshStatus } from "./refreshStatus";
 import { PAIRING_TOKEN_WRONG } from "./serverReasons";
 
 const COMPATIBLE_VERSION = {
@@ -183,7 +185,7 @@ describe("createServerConnection", () => {
     stream.emit("itemTagsChanged", 3, { resolvedItemIds: ["c"] });
     stream.emit("tagCatalogChanged", 4, { reason: "deleteTag", categories: [], tags: [] });
     stream.emit("sourceStateChanged", 5, { sourceId: "source-1", isEnabled: false });
-    const finished = { snapshot: { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] } };
+    const finished = { snapshot: refreshStatus({ runId: "run-1", completedUtc: "2026-10-07T00:00:00Z" }) };
     stream.emit("refreshStatusChanged", 6, finished);
     stream.emit("refreshStatusChanged", 7, finished);
     const bulkState = { flag: "favorite", value: true, count: 1, items: [], clientId: null };
@@ -213,17 +215,17 @@ describe("createServerConnection", () => {
     await settle();
 
     const stream = sources[0]!;
-    const status = (runId: string, isRunning: boolean, sourceDone: boolean, keptSources: unknown[]) => ({
-      snapshot: {
+    const status = (runId: string, isRunning: boolean, sourceDone: boolean, keptSources: RefreshKeptSource[]) => ({
+      snapshot: refreshStatus({
         isRunning,
         runId,
         currentStage: sourceDone ? "durationScan" : "sourceRefresh",
-        stages: [{ stage: "sourceRefresh", percent: sourceDone ? 100 : 50, message: "", isComplete: sourceDone }],
-        keptSources
-      }
+        keptSources,
+        stages: { sourceRefresh: { percent: sourceDone ? 100 : 50, isComplete: sourceDone } }
+      })
     });
     const first = { sourceId: "src-a", itemCount: 2 };
-    const second = { SourceId: "src-b", ItemCount: 5 };
+    const second = { sourceId: "src-b", itemCount: 5 };
     stream.emit("refreshStatusChanged", 1, status("run-1", true, false, [first]));
     stream.emit("refreshStatusChanged", 2, status("run-1", true, false, [first, second]));
     expect(kept).toEqual([]);
@@ -946,25 +948,25 @@ describe("createServerConnection", () => {
     const stream = sources[0]!;
     statuses.length = 0;
 
-    const running = {
+    const running = refreshStatus({
       isRunning: true,
       runId: "run-1",
       currentStage: "sourceRefresh",
-      stages: [{ stage: "sourceRefresh", percent: 40, message: "Refreshing sources (12 added, 3 removed)", isComplete: false }]
-    };
+      stages: { sourceRefresh: { percent: 40, added: 12, removed: 3 } }
+    });
     stream.emit("refreshStatusChanged", 1, { snapshot: running });
     expect(store.refreshProgress.value).toEqual({ stage: "Refreshing sources", percent: 40 });
     expect(statuses).toEqual([]);
     expect(notified).toEqual([]);
 
-    const finished = { ...running, isRunning: false, completedUtc: "2026-10-07T00:00:00Z" };
+    const finished = { ...running, isRunning: false, currentStage: null, completedUtc: "2026-10-07T00:00:00Z" };
     stream.emit("refreshStatusChanged", 2, { snapshot: finished });
     expect(store.refreshProgress.value).toBeNull();
     stream.emit("refreshStatusChanged", 3, {
-      snapshot: { ...finished, runId: "run-2", lastError: "The library refresh failed." }
+      snapshot: { ...running, isRunning: false, runId: "run-2", completedUtc: "2026-10-07T00:05:00Z", failed: true }
     });
-    stream.emit("refreshStatusChanged", 4, { snapshot: { isRunning: false, stages: [] } });
-    const summary = "Source: added 12, removed 3 · Fingerprint: no data · Duration: no data · Loudness: no data · Thumbnails: no data";
+    stream.emit("refreshStatusChanged", 4, { snapshot: refreshStatus() });
+    const summary = "12 added, 3 removed";
     expect(notified).toEqual([
       {
         kind: "refresh",

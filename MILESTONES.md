@@ -511,7 +511,7 @@ Last milestone completed: M12n1
 | --- | --- | --- |
 | Mockup | ✅ Complete | The progress line of each stage, the finished summary of each kind of run, a failed refresh's wording, which refreshes pop up, and the admin view's Library refresh card text, approved in Firefox on the desktop, on the iPad, and on an Android phone. |
 | Server | ✅ Complete | The thumbnail cleanup's progress counted over the thumbnails it removes and sent at most every 500 ms, each stage published as the current stage when it starts, and a failed refresh worded in plain words with its exception in `last.log`. |
-| Contract | ⏳ Planned | One typed object per stage in the refresh status, with the counts the progress line and the summary need, in place of the stages array and its messages, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`, and the WebUI's finished summary built from them. |
+| Contract | ✅ Complete | One typed object per stage in the refresh status, with the counts the progress line and the summary need, in place of the stages array and its messages, in the server, OpenAPI, the generated WebUI types, and `docs/api.md`, and the WebUI's finished summary built from them. |
 | Progress line and popups | ⏳ Planned | The Now entry's second line while a refresh runs, and an automatic refresh that changes nothing going to the bell's list without a popup. |
 
 #### Mockup slice
@@ -685,6 +685,58 @@ Last milestone completed: M12n1
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- `RefreshStatusSnapshot.stages` is `RefreshStages`, with one record per stage, `RefreshSourceStage`, `RefreshNameSortKeysStage`, `RefreshFingerprintStage`, `RefreshMediaScanStage` for the duration and loudness stages, and `RefreshThumbnailStage`, and every stage message and the text the server built for it are gone (`ApiContracts.cs`, `RefreshPipelineService.cs`).
+- The stages are records, so `CloneStatus` copies each with `with { }`, every field included.
+- `lastError` became `failed`, and the status gained `ffmpegNotFound` and `ffprobeNotFound`.
+- Deviation: the source stage counts `source` of `sourceCount` in place of the Scope's `processed` and `total`, since `processed` would have meant the source it is on, and it counts only enabled sources.
+- The source stage's percent follows the sources, moving within one as it fingerprints that source's new files.
+- The source stage starts with `StartStage` at 0%, as the other stages do, in place of "Loading sources..." at 5%.
+- Planning settled that a missing tool is reported only when a stage had work for it. The duration stage checks for ffprobe, and the loudness stage for ffmpeg, only when they have a video to scan, and the thumbnail stage checks for ffmpeg when a video needs a thumbnail, so a refresh with nothing to scan names no missing tool.
+- A forced duration or loudness rescan whose tool isn't found isn't marked `forced` and keeps its force flag, so it runs once the tool is there, and a stage marks `forced` only once its tool is found.
+- The duration and loudness stages publish 0 of the videos they scan right after their tool check, so a slow first video doesn't leave the stage without its count.
+- `StagePercent` works out every stage's percent, in place of the formula each progress helper repeated.
+- The test seams became `SetMediaToolsAvailable(ffmpeg, ffprobe)`, which can also simulate a missing tool, and `HoldNextToolCheck`, since the duration stage now checks for ffprobe too.
+- Removed with the messages that showed them:
+  - the source stage's `updated` count;
+  - the thumbnail stage's generated, regenerated, reused, metadata, missing, and stale counts;
+  - the loudness stage's no-audio count.
+- In OpenAPI, `currentStage` is an enum of the six stage ids, and every status field is required, so the generated WebUI types have no optional fields.
+- `refreshStatusChanged`'s handler takes the generated `RefreshStatusChangedPayload`, and `refreshProgress`, `settledKeptSources`, `refreshOutcome`, and `newRefreshCompletionRunId` take the generated `RefreshStatusSnapshot` (`src/events/refreshStatusProjection.ts`).
+- `coerceRefreshSnapshot`, its PascalCase fallbacks, and the message parsers, with their "evicted" count, are gone.
+- `refreshSummary` words the finished summary from the counts in three groups, joined by " · ":
+  - the library's changes, joined by ", ", as `REFRESH_RUNS` words them;
+  - "Durations rescanned: {n} changed" or "Loudness rescanned: {n} changed", or "… rescanned: no changes" for a forced rescan that changed nothing;
+  - the problems, joined by ", ": "{n} left unmatched", "{n} fingerprints failed", "{n} duration scans failed", "{n} loudness scans failed", "{n} thumbnails failed", then "ffmpeg not found", "ffprobe not found", or "ffmpeg and ffprobe not found".
+- Planning settled the wording the mockup doesn't show, the failure counts, the missing tools, and a forced rescan that changed nothing, following the mockup's samples.
+- Every `REFRESH_RUNS` sample comes out word for word, so the mockup needed no change.
+- New refresh pipeline tests cover:
+  - the source stage's counts and percent across two enabled sources and a disabled one;
+  - a file changed on disk counted apart from a new one, and hashing starting again at 0;
+  - duration and loudness counting only the videos they scan, every video in a forced rescan, a failed scan, and a changed value apart from a first measurement;
+  - missing tools reported once with no failures, a forced rescan they stopped left pending and run by the next refresh with the tools there, and missing tools not reported when no stage needed them;
+  - the thumbnail stage alone flagging a missing ffmpeg;
+  - the duration stage's count from 0 of the videos it scans.
+- The thumbnail cleanup test checks that the cleanup starts again at 0%. The kept-sources test checks the status and each stage against their schemas (`AssertMatchesRefreshStatusSchema`).
+- Each of these, broken one at a time, fails its test (measured):
+  - duration counting every video;
+  - a first duration counted as a change;
+  - a failed probe not counted;
+  - loudness counting first measurements and error changes;
+  - fingerprint counting every hashed file as changed;
+  - thumbnails counted as failed without ffmpeg;
+  - loudness checking for ffmpeg with nothing to scan;
+  - the cleanup's first count at its first removal;
+  - hashing keeping the check's count.
+  - a forced duration or loudness rescan marked before its tool check, or its force flag cleared with its tool missing;
+  - the duration stage publishing no count before its first probe;
+  - the thumbnail stage not flagging a missing ffmpeg.
+- The WebUI summary tests fail with the summary's zero filter or its problems group broken (measured).
+- `docs/api.md` describes the status and its stages. `CONTEXT.md` describes the finished summary and the duration and loudness stages' work and tools. `docs/domain-inventory.md` describes the projection.
+- The thumbnail cleanup no longer appears in the summary, so the lines in `docs/api.md` and `CONTEXT.md` that said it did were corrected.
+- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and `node docs/mockups/reelroulette/build/check.mjs` pass (measured).
+
 #### Progress line and popups slice
 
 **Scope**
@@ -704,11 +756,12 @@ Last milestone completed: M12n1
 - The Now entry renders a lasting state's `detail` under its text (`EntryRow` in `src/ui/Notifications.tsx`), and the refresh's state sets it to null (`src/state/lastingStates.ts`).
 - The indicator relays its text to `last.log` once per state and title (`createPlayerIndicator` in `src/state/lastingStates.ts`), so a changing second line adds no log lines while it stays out of that key.
 - The player's indicator shows the title and percent and never `detail` (`src/ui/Player.tsx`).
-- The name sort, duration, loudness, and thumbnail stages publish themselves as the current stage when they start, before they have counted their work (`StartStage` in `RefreshPipelineService.cs`), so their first status has no counts. The source stage's first status is "Loading sources..." at 5%, and the fingerprint stage's first already carries its total.
+- The source, name sort, duration, loudness, and thumbnail stages publish themselves as the current stage when they start, before they have counted their work (`StartStage` in `RefreshPipelineService.cs`), so their first status has no counts, while the fingerprint stage's first already carries its total.
 - `notify` pops up unless the popup settings, the open list, fullscreen, or the popup cap stop it, and an entry that doesn't pop up while the list is closed counts as unread (`src/notifications/notifications.ts`).
 - The status's `trigger` is "manual" for a refresh started through `POST /api/refresh/start` or the tray, and "auto" for a scheduled one (`RefreshPipelineService.cs`).
 - The Settings tab's Library refresh popup kind turns every refresh popup off (`src/ui/SettingsTab.tsx`).
 - `countText` groups with `toLocaleString` and adds "s" for any count but 1 (`src/text/countText.ts`).
+- A failure that happens again on every refresh shows in every summary, such as a failed duration probe or a loudness error, and so does a missing ffmpeg or ffprobe while videos are left to scan (`refreshSummary` in `src/events/refreshStatusProjection.ts`). An automatic refresh whose summary names only such problems isn't "No changes", so it would pop up every interval unless this slice's popup rule says otherwise, which this slice settles.
 
 **Acceptance**
 
@@ -2045,7 +2098,7 @@ Last milestone completed: M12n1
 - A canceled run's catch writes `IsRunning = false` onto whatever status is current, so a new run reserved before it runs would show as stopped (inferred).
 - A run notices a cancel between files and stages, not during a source's folder walk or one file's hash, so on a large NAS source a cancel can lag by a whole walk (inferred), which `ISSUES.md` records as "Stopping mid-refresh waits for a file's hash".
 - A run reads the source list once, at its start, so it never sees a source added while it runs.
-- A canceled run already ends with neither `completedUtc` nor `lastError`, which the WebUI shows as idle, with no notice and no `refreshCompleted` reload (`ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure`), so the rows it saved show once the new run finishes.
+- A canceled run already ends with neither `completedUtc` nor `failed`, which the WebUI shows as idle, with no notice and no `refreshCompleted` reload (`ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure`), so the rows it saved show once the new run finishes.
 - Every refresh write commits on its own, per item, or per 1,000 name sort keys, so a canceled run keeps what it wrote.
 - The refresh compares a new path only with its own source's items, and `items.full_path_fold` has no unique index, so a source inside another, or holding one, would get a second row for each shared file (inferred).
 - The refresh skips a disabled source, or one whose folder is missing, with no status entry.

@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import type { RefreshKeptSource } from "../../types/serverContracts";
+import { refreshStatus } from "../refreshStatus";
 import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
   API_BASE_URL,
@@ -336,7 +338,7 @@ function storageKeys(storage: Storage): string[] {
   return keys.sort();
 }
 
-const FINISHED_REFRESH = { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] };
+const FINISHED_REFRESH = refreshStatus({ runId: "run-1", completedUtc: "2026-10-07T00:00:00Z" });
 
 beforeEach(() => {
   resetPage();
@@ -2895,16 +2897,15 @@ describe("kept sources", () => {
   const LOG_LINE = statusLogLine("Library refresh kept the items of sources whose folder listed no media files", null, 0);
 
   /** A refresh status that lists the sources the run kept, while its source stage runs or once it has finished. */
-  function refreshStatus(runId: string, sourceStageDone: boolean, keptSources: Array<{ sourceId: string; itemCount: number }>) {
+  function keptSourcesStatus(runId: string, sourceStageDone: boolean, keptSources: RefreshKeptSource[]) {
     return {
-      snapshot: {
+      snapshot: refreshStatus({
         isRunning: true,
         runId,
-        trigger: "manual",
         currentStage: sourceStageDone ? "fingerprintScan" : "sourceRefresh",
-        stages: [{ stage: "sourceRefresh", percent: sourceStageDone ? 100 : 40, message: "", isComplete: sourceStageDone }],
-        keptSources
-      }
+        keptSources,
+        stages: { sourceRefresh: { percent: sourceStageDone ? 100 : 40, isComplete: sourceStageDone } }
+      })
     };
   }
 
@@ -2912,12 +2913,12 @@ describe("kept sources", () => {
     const { page, server } = await mountLibrary(libraryItems(3), (fake) => fake.on("GET", "/api/sources", () => json(SOURCES)));
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
 
-    page.stream().emit("refreshStatusChanged", 2, refreshStatus("run-1", false, [{ sourceId: "source-1", itemCount: 120 }]));
+    page.stream().emit("refreshStatusChanged", 2, keptSourcesStatus("run-1", false, [{ sourceId: "source-1", itemCount: 120 }]));
     await flush();
     expect(openNotices()).toEqual([]);
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
 
-    page.stream().emit("refreshStatusChanged", 3, refreshStatus("run-1", true, [{ sourceId: "source-1", itemCount: 120 }]));
+    page.stream().emit("refreshStatusChanged", 3, keptSourcesStatus("run-1", true, [{ sourceId: "source-1", itemCount: 120 }]));
     await waitFor(() => expect(openNotices()).toEqual([MOVIES_NOTICE]));
     expect(server.requests("GET", "/api/sources")).toHaveLength(1);
     await waitFor(() => expect(server.logLines()).toContain(LOG_LINE));
@@ -2931,7 +2932,7 @@ describe("kept sources", () => {
     fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
     await flush();
 
-    page.stream().emit("refreshStatusChanged", 4, refreshStatus("run-2", true, [{ sourceId: "source-1", itemCount: 120 }]));
+    page.stream().emit("refreshStatusChanged", 4, keptSourcesStatus("run-2", true, [{ sourceId: "source-1", itemCount: 120 }]));
     await flush();
     expect(openNotices()).toEqual([]);
   });
@@ -2951,7 +2952,7 @@ describe("kept sources", () => {
     page.stream().emit(
       "refreshStatusChanged",
       2,
-      refreshStatus("run-1", true, [
+      keptSourcesStatus("run-1", true, [
         { sourceId: "source-1", itemCount: 120 },
         { sourceId: "source-2", itemCount: 1000 }
       ])
@@ -2982,7 +2983,7 @@ describe("kept sources", () => {
     page.stream().emit(
       "refreshStatusChanged",
       2,
-      refreshStatus("run-1", true, [
+      keptSourcesStatus("run-1", true, [
         { sourceId: "source-1", itemCount: 120 },
         { sourceId: "source-hidden", itemCount: 4 }
       ])

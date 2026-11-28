@@ -2547,26 +2547,159 @@ export interface components {
             level: string;
             message: string;
         };
-        RefreshStageProgress: {
-            stage: string;
-            /** Format: int32 */
-            percent: number;
-            message: string;
-            isComplete: boolean;
-        };
         RefreshStatusSnapshot: {
             isRunning: boolean;
-            runId?: string | null;
+            runId: string | null;
             trigger: string;
             /** Format: date-time */
-            startedUtc?: string | null;
+            startedUtc: string | null;
             /** Format: date-time */
-            completedUtc?: string | null;
-            currentStage?: string | null;
-            lastError?: string | null;
-            stages: components["schemas"]["RefreshStageProgress"][];
+            completedUtc: string | null;
+            /**
+             * @description The stage the run is in, null before its first stage and once it finishes or is cancelled. A failed run keeps the stage it stopped in.
+             * @enum {string|null}
+             */
+            currentStage: "sourceRefresh" | "nameSortKeys" | "fingerprintScan" | "durationScan" | "loudnessScan" | "thumbnailGeneration" | null;
+            /** @description True for a run that failed, which also sets `completedUtc`. Its error goes only to `last.log`, since it can name a file. */
+            failed: boolean;
+            /** @description True when the run had videos to scan for loudness or to make thumbnails of, and ffmpeg wasn't found. */
+            ffmpegNotFound: boolean;
+            /** @description True when the run had videos to scan for their duration, and ffprobe wasn't found. */
+            ffprobeNotFound: boolean;
+            stages: components["schemas"]["RefreshStages"];
             /** @description The sources this run kept because their folder listed no media files while the library held items from them, such as a drive or share that isn't mounted. Empty when the run kept none, and cleared when the next run starts. */
-            keptSources?: components["schemas"]["RefreshKeptSource"][];
+            keptSources: components["schemas"]["RefreshKeptSource"][];
+        };
+        /** @description Each stage's progress and counts, in the order the stages run. Every run starts them at 0. */
+        RefreshStages: {
+            sourceRefresh: components["schemas"]["RefreshSourceStage"];
+            nameSortKeys: components["schemas"]["RefreshNameSortKeysStage"];
+            fingerprintScan: components["schemas"]["RefreshFingerprintStage"];
+            durationScan: components["schemas"]["RefreshMediaScanStage"];
+            loudnessScan: components["schemas"]["RefreshMediaScanStage"];
+            thumbnailGeneration: components["schemas"]["RefreshThumbnailStage"];
+        };
+        /** @description The source stage walks each enabled source's folder, and fingerprints the source's new files that could be its missing files moved or renamed. Its percent follows the sources, moving within one while it fingerprints that source's new files. */
+        RefreshSourceStage: {
+            /** Format: int32 */
+            percent: number;
+            isComplete: boolean;
+            /**
+             * Format: int32
+             * @description The source the stage is on, from 1, or 0 before the first.
+             */
+            source: number;
+            /**
+             * Format: int32
+             * @description How many enabled sources the stage walks.
+             */
+            sourceCount: number;
+            /**
+             * Format: int32
+             * @description How many of the current source's new files the stage has fingerprinted, 0 while it fingerprints none.
+             */
+            newFilesFingerprinted: number;
+            /**
+             * Format: int32
+             * @description How many of the current source's new files the stage fingerprints, 0 while it fingerprints none.
+             */
+            newFilesToFingerprint: number;
+            /** Format: int32 */
+            added: number;
+            /** Format: int32 */
+            removed: number;
+            /** Format: int32 */
+            renamed: number;
+            /** Format: int32 */
+            moved: number;
+            /**
+             * Format: int32
+             * @description Missing files kept because the new files that might be them matched no fingerprint, and new files left out because their fingerprint failed.
+             */
+            unmatched: number;
+        };
+        /** @description The name sort key stage fills missing keys, and recomputes every key after a key version change. */
+        RefreshNameSortKeysStage: {
+            /** Format: int32 */
+            percent: number;
+            isComplete: boolean;
+            /** Format: int32 */
+            processed: number;
+            /**
+             * Format: int32
+             * @description The files whose key the stage writes.
+             */
+            total: number;
+        };
+        /** @description The fingerprint stage checks every file, then hashes those that need it. `processed` and `total` count the phase it's in, so its percent starts again at 0 when hashing starts. */
+        RefreshFingerprintStage: {
+            /** Format: int32 */
+            percent: number;
+            isComplete: boolean;
+            /** @enum {string} */
+            phase: "checking" | "hashing";
+            /** Format: int32 */
+            processed: number;
+            /**
+             * Format: int32
+             * @description Every file while checking, and the files to hash while hashing.
+             */
+            total: number;
+            /**
+             * Format: int32
+             * @description Files hashed again because their size or write time changed, apart from new files.
+             */
+            changed: number;
+            /**
+             * Format: int32
+             * @description Files whose hash failed.
+             */
+            failed: number;
+        };
+        /** @description The duration stage, which probes with ffprobe, or the loudness stage, which scans with ffmpeg. Each scans only the videos it still has to scan, or every video in a forced rescan, and `processed` and `total` count those videos. */
+        RefreshMediaScanStage: {
+            /** Format: int32 */
+            percent: number;
+            isComplete: boolean;
+            /** Format: int32 */
+            processed: number;
+            /**
+             * Format: int32
+             * @description The videos the stage scans.
+             */
+            total: number;
+            /**
+             * Format: int32
+             * @description Videos whose stored value the scan changed, apart from a first measurement.
+             */
+            changed: number;
+            /**
+             * Format: int32
+             * @description Videos whose scan failed, scanned again on the next refresh.
+             */
+            failed: number;
+            /** @description True for a forced rescan of every video, once the stage's tool is found. */
+            forced: boolean;
+        };
+        /** @description The thumbnail stage makes each file's thumbnail that is missing or out of date, then removes the thumbnails of files no longer in the library. `processed` and `total` count the phase it's in, so its percent starts again at 0 when the cleanup starts. */
+        RefreshThumbnailStage: {
+            /** Format: int32 */
+            percent: number;
+            isComplete: boolean;
+            /** @enum {string} */
+            phase: "generating" | "cleanup";
+            /** Format: int32 */
+            processed: number;
+            /**
+             * Format: int32
+             * @description Every file while generating, and the thumbnails to remove during the cleanup.
+             */
+            total: number;
+            /**
+             * Format: int32
+             * @description Files whose thumbnail couldn't be made, not counting videos while ffmpeg isn't found.
+             */
+            failed: number;
         };
         RefreshKeptSource: {
             /** @description The source's id, as `GET /api/sources` lists it. The folder is left out, since the status goes to every client. */

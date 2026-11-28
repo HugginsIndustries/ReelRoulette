@@ -46,33 +46,38 @@ public sealed class RefreshPipelineServiceTests
 
         var final = await WaitForStopAsync(service, TimeSpan.FromSeconds(10));
         Assert.False(final.IsRunning);
-        Assert.Null(final.LastError);
+        Assert.False(final.Failed);
         Assert.Null(final.CompletedUtc);
-        Assert.Contains(final.Stages, stage => !stage.IsComplete);
+        Assert.False(final.Stages.ThumbnailGeneration.IsComplete);
     }
 
-    [Fact]
-    public async Task ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ShutdownCancel_DuringAToolCheck_DoesNotRecordTheToolAsMissing(bool ffprobe)
     {
         using var scope = new DataFolderScope();
-        CatalogSeed.Write(scope.RootPath);
+        var videoPath = Path.Combine(scope.RootPath, "clip.mp4");
+        await File.WriteAllBytesAsync(videoPath, [1, 2, 3]);
+        // A video with a duration has nothing for the duration stage, so the hold lands in the loudness stage's check.
+        CatalogSeed.Write(scope.RootPath, items: [new SeedItem("clip", videoPath) { Duration = ffprobe ? null : TimeSpan.FromSeconds(3) }]);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        service.HoldNextFfmpegCheck(hold.Task);
+        service.HoldNextToolCheck(hold.Task);
 
         var started = service.TryStartManual();
         Assert.True(started.Accepted);
-        await service.FfmpegCheckEntered.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.ToolCheckEntered.WaitAsync(TimeSpan.FromSeconds(10));
         service.CancelRunsForShutdown();
 
         var final = await WaitForStopAsync(service, TimeSpan.FromSeconds(10));
         Assert.False(final.IsRunning);
-        Assert.Null(final.LastError);
+        Assert.False(final.Failed);
         Assert.Null(final.CompletedUtc);
-        var loudness = Assert.Single(final.Stages, stage => stage.Stage == "loudnessScan");
-        Assert.False(loudness.IsComplete);
-        Assert.DoesNotContain("ffmpeg not found", loudness.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(final.FfmpegNotFound);
+        Assert.False(final.FfprobeNotFound);
+        Assert.False((ffprobe ? final.Stages.DurationScan : final.Stages.LoudnessScan).IsComplete);
     }
 
     [Fact]
@@ -98,7 +103,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForStopAsync(service, TimeSpan.FromSeconds(10));
         Assert.False(final.IsRunning);
-        Assert.Null(final.LastError);
+        Assert.False(final.Failed);
         Assert.Null(final.CompletedUtc);
         AssertForcedRescansStillPending(service);
     }
@@ -119,13 +124,31 @@ public sealed class RefreshPipelineServiceTests
 
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
         Assert.False(final.IsRunning);
+        Assert.False(final.Failed);
+        Assert.Null(final.CurrentStage);
+        RefreshStageProgress[] stages =
+        [
+            final.Stages.SourceRefresh,
+            final.Stages.NameSortKeys,
+            final.Stages.FingerprintScan,
+            final.Stages.DurationScan,
+            final.Stages.LoudnessScan,
+            final.Stages.ThumbnailGeneration
+        ];
+        Assert.All(stages, stage => Assert.Equal((true, 100), (stage.IsComplete, stage.Percent)));
+
+        // Each stage becomes the current stage in turn.
+        var replay = state.GetReplayAfter(0);
+        var stageOrder = replay.Events
+            .Select(e => e.Payload)
+            .OfType<RefreshStatusChangedPayload>()
+            .Select(payload => payload.Snapshot.CurrentStage)
+            .OfType<string>()
+            .Distinct()
+            .ToArray();
         Assert.Equal(
             ["sourceRefresh", "nameSortKeys", "fingerprintScan", "durationScan", "loudnessScan", "thumbnailGeneration"],
-            final.Stages.Select(s => s.Stage).ToArray());
-        Assert.All(final.Stages, stage => Assert.True(stage.IsComplete));
-
-        var replay = state.GetReplayAfter(0);
-        Assert.Contains(replay.Events, e => string.Equals(e.EventType, "refreshStatusChanged", StringComparison.Ordinal));
+            stageOrder);
     }
 
     [Fact]
@@ -137,20 +160,22 @@ public sealed class RefreshPipelineServiceTests
         CatalogSeed.Write(scope.RootPath, items: [new SeedItem("clip", videoPath)]);
         var state = new ServerStateService();
         var service = CreateService(state, scope.RootPath);
+        service.SetMediaToolsAvailable();
         service.SetDurationProbe((_, _) => throw new IOException("Cannot read /media/private/clip.mp4"));
 
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
-        Assert.Equal("The library refresh failed.", final.LastError);
+        Assert.True(final.Failed);
         Assert.Equal("durationScan", final.CurrentStage);
         var published = state.GetReplayAfter(0).Events
             .Select(e => e.Payload)
             .OfType<RefreshStatusChangedPayload>()
             .Last()
             .Snapshot;
-        Assert.Equal("The library refresh failed.", published.LastError);
+        Assert.True(published.Failed);
         Assert.Equal("durationScan", published.CurrentStage);
+        Assert.DoesNotContain("/media/private", JsonSerializer.Serialize(published));
 
         var errorLine = Assert.Single(
             File.ReadAllLines(Path.Combine(scope.RootPath, "last.log")),
@@ -202,8 +227,11 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal(existingPath, kept.FullPath);
         Assert.DoesNotContain(itemList, item => string.Equals(item.Id, "item-missing", StringComparison.OrdinalIgnoreCase));
 
-        var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
-        Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            (1, 1, 0, 1, 0, 0, 0),
+            (final.Stages.SourceRefresh.Source, final.Stages.SourceRefresh.SourceCount, final.Stages.SourceRefresh.Added,
+                final.Stages.SourceRefresh.Removed, final.Stages.SourceRefresh.Renamed, final.Stages.SourceRefresh.Moved,
+                final.Stages.SourceRefresh.Unmatched));
         Assert.Empty(ReadSourceRefreshLogLines(scope.RootPath));
         Assert.Empty(final.KeptSources);
     }
@@ -352,8 +380,7 @@ public sealed class RefreshPipelineServiceTests
             Assert.Contains("Keep", kept.Tags);
         }
 
-        var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
-        Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, final.Stages.SourceRefresh.Removed);
 
         var warning = Assert.Single(ReadSourceRefreshLogLines(scope.RootPath));
         Assert.Contains("[server] [warn]", warning);
@@ -370,7 +397,7 @@ public sealed class RefreshPipelineServiceTests
             .Last();
         Assert.Equal(("src-empty", 2), (Assert.Single(published.Snapshot.KeptSources).SourceId, published.Snapshot.KeptSources[0].ItemCount));
         Assert.DoesNotContain(emptyDir, JsonSerializer.Serialize(published.Snapshot));
-        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(published.Snapshot), "RefreshStatusSnapshot");
+        AssertMatchesRefreshStatusSchema(published.Snapshot);
 
         // The next run starts its own list, so a folder that lists files again is no longer kept.
         await File.WriteAllTextAsync(Path.Combine(emptyDir, "one.mp4"), "one");
@@ -424,7 +451,7 @@ public sealed class RefreshPipelineServiceTests
                 ExistingVideo(scope, "no-audio")
             ]);
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         service.SetLoudnessAnalyzer((path, _, _) => Path.GetFileNameWithoutExtension(path) switch
         {
             "measured" => Measured(-20.0, -1.5),
@@ -441,9 +468,8 @@ public sealed class RefreshPipelineServiceTests
         var noAudio = RefreshItem(scope.RootPath, "no-audio");
         Assert.Equal((false, (double?)null, (double?)null), (noAudio.HasAudio, noAudio.IntegratedLoudness, noAudio.PeakDb));
         Assert.All(new[] { measured, noPeak, noAudio }, item => Assert.Equal(LibraryCatalogStore.LoudnessAnalysisVersion, item.LoudnessAnalysisVersion));
-        Assert.Equal(
-            "Loudness scan complete (3 files, 3 updated, 1 without audio)",
-            service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+        // The two changed peaks count as changes, and the first scan of the video without audio doesn't.
+        AssertScanCounts(service.GetStatus().Stages.LoudnessScan, processed: 3, total: 3, changed: 2, failed: 0);
     }
 
     // Counted as audio, the digitally silent track would move the baseline, the 75th percentile, to -30.
@@ -456,7 +482,7 @@ public sealed class RefreshPipelineServiceTests
             sources: [new SeedSource("on", scope.RootPath)],
             items: new[] { "silent", "faint", "loud", "quiet" }.Select(id => ExistingVideo(scope, id) with { SourceId = "on" }));
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         service.SetLoudnessAnalyzer((path, _, _) => Task.FromResult(RefreshPipelineService.ParseLoudnessFromFfmpegOutput(
             Path.GetFileNameWithoutExtension(path) switch
             {
@@ -468,9 +494,7 @@ public sealed class RefreshPipelineServiceTests
 
         await InvokeLoudnessStageAsync(service);
 
-        Assert.Equal(
-            "Loudness scan complete (4 files, 4 updated, 1 without audio)",
-            service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+        AssertScanCounts(service.GetStatus().Stages.LoudnessScan, processed: 4, total: 4, changed: 0, failed: 0);
         Assert.Equal(
             [
                 "with audio: faint, loud, quiet",
@@ -491,7 +515,7 @@ public sealed class RefreshPipelineServiceTests
             scope.RootPath,
             items: [ExistingVideo(scope, "same") with { HasAudio = true, IntegratedLoudness = -20.0, PeakDb = -1.5, LoudnessAnalysisVersion = 1 }]);
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         service.SetLoudnessAnalyzer((_, _, _) => Measured(-20.04, -1.46));
 
         await InvokeLoudnessStageAsync(service);
@@ -499,9 +523,7 @@ public sealed class RefreshPipelineServiceTests
         var same = RefreshItem(scope.RootPath, "same");
         Assert.Equal((-20.0, -1.5), (same.IntegratedLoudness, same.PeakDb));
         Assert.Equal(LibraryCatalogStore.LoudnessAnalysisVersion, same.LoudnessAnalysisVersion);
-        Assert.Equal(
-            "Loudness scan complete (1 files, 0 updated)",
-            service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+        AssertScanCounts(service.GetStatus().Stages.LoudnessScan, processed: 1, total: 1, changed: 0, failed: 0);
     }
 
     [Fact]
@@ -516,7 +538,7 @@ public sealed class RefreshPipelineServiceTests
                 ExistingVideo(scope, "current") with { HasAudio = true, IntegratedLoudness = -18.0, PeakDb = -1.0 }
             ]);
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         service.SetLoudnessAnalyzer((_, _, _) => Task.FromResult<RefreshPipelineService.FileLoudnessInfo?>(new RefreshPipelineService.FileLoudnessInfo
         {
             HasAudio = true,
@@ -566,7 +588,7 @@ public sealed class RefreshPipelineServiceTests
                 ExistingVideo(scope, "never-scanned") with { LoudnessAnalysisVersion = 0 }
             ]);
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         var scanned = new List<string>();
         service.SetLoudnessAnalyzer((path, _, _) =>
         {
@@ -589,7 +611,7 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         CatalogSeed.Write(scope.RootPath, items: Enumerable.Range(0, 6).Select(i => ExistingVideo(scope, $"video-{i}")).ToArray());
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         var running = 0;
         var mostAtOnce = 0;
         var scans = 0;
@@ -680,8 +702,7 @@ public sealed class RefreshPipelineServiceTests
 
         var secondWrite = File.GetLastWriteTimeUtc(thumbPath);
         Assert.True(secondWrite > firstWrite);
-        var stage = completed.Stages.Single(s => s.Stage == "thumbnailGeneration");
-        Assert.Contains("regenerated", stage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, completed.Stages.ThumbnailGeneration.Failed);
     }
 
     [Fact]
@@ -713,9 +734,7 @@ public sealed class RefreshPipelineServiceTests
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
         var secondWrite = File.GetLastWriteTimeUtc(thumbPath);
         Assert.Equal(firstWrite, secondWrite);
-
-        var stage = completed.Stages.Single(s => s.Stage == "thumbnailGeneration");
-        Assert.Contains("reused", stage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, completed.Stages.ThumbnailGeneration.Failed);
     }
 
     [Fact]
@@ -809,9 +828,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(host.Session.SetThumbnail(stored.Id, stored.ThumbnailRevision, null, null));
 
         Assert.True(service.TryStartManual().Accepted);
-        var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
-        var stage = completed.Stages.Single(s => s.Stage == "thumbnailGeneration");
-        Assert.Contains("metadata updated", stage.Message, StringComparison.OrdinalIgnoreCase);
+        await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
         var filled = Assert.Single(host.Session.ReadRefreshItems());
         Assert.Equal(stored.ThumbnailRevision, filled.ThumbnailRevision);
@@ -881,24 +898,24 @@ public sealed class RefreshPipelineServiceTests
         };
         var coreSettings = new CoreSettingsService(options, scope.RootPath);
         var service = new RefreshPipelineService(state, logger, coreSettings, CatalogOpen.Host(scope.RootPath), scope.RootPath);
+        service.SetMediaToolsAvailable();
 
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
-        var durationStage = completed.Stages.Single(s => s.Stage == "durationScan");
-        Assert.Contains("(forced full rescan)", durationStage.Message, StringComparison.OrdinalIgnoreCase);
+        // A forced rescan counts the video that has a duration too.
+        Assert.True(completed.Stages.DurationScan.Forced);
+        AssertScanCounts(completed.Stages.DurationScan, processed: 1, total: 1, changed: 0, failed: 0);
+        Assert.False(completed.Stages.LoudnessScan.Forced);
         var settingsAfterRun = coreSettings.GetRefreshSettings();
         Assert.False(settingsAfterRun.ForceRescanDuration);
         Assert.False(settingsAfterRun.ForceRescanLoudness);
     }
 
     [Theory]
-    [InlineData("RunDurationStageAsync", "durationScan", "Duration scan complete (200 files, 0 updated)")]
-    [InlineData("RunLoudnessStageAsync", "loudnessScan", "Loudness scan complete (200 files, 0 updated)")]
-    public async Task ScanStage_PublishesItsStart_OneProgressEventPerInterval_AndItsCompletion(
-        string methodName,
-        string stage,
-        string completionMessage)
+    [InlineData("RunDurationStageAsync", "durationScan")]
+    [InlineData("RunLoudnessStageAsync", "loudnessScan")]
+    public async Task ScanStage_PublishesItsStart_OneProgressEventPerInterval_AndItsCompletion(string methodName, string stage)
     {
         using var scope = new DataFolderScope();
         var items = Enumerable.Range(0, 200)
@@ -910,7 +927,7 @@ public sealed class RefreshPipelineServiceTests
         var service = CreateService(state, scope.RootPath);
         var frozen = DateTimeOffset.UtcNow;
         service.SetProgressClock(() => frozen);
-        service.AssumeFfmpegAvailable();
+        service.SetMediaToolsAvailable();
         using var subscription = new CancellationTokenSource();
         var reader = state.Subscribe(subscription.Token);
 
@@ -918,13 +935,13 @@ public sealed class RefreshPipelineServiceTests
         Assert.NotNull(method);
         await (Task)method!.Invoke(service, [CancellationToken.None, false])!;
 
-        var stageEvents = new List<RefreshStageProgress>();
+        var stageEvents = new List<RefreshMediaScanStage>();
         while (reader.TryRead(out var envelope))
         {
             if (envelope.EventType == "refreshStatusChanged" &&
                 envelope.Payload is RefreshStatusChangedPayload payload)
             {
-                stageEvents.Add(payload.Snapshot.Stages.Single(s => s.Stage == stage));
+                stageEvents.Add(Assert.IsType<RefreshMediaScanStage>(StageNamed(payload.Snapshot.Stages, stage)));
             }
         }
 
@@ -933,7 +950,317 @@ public sealed class RefreshPipelineServiceTests
         Assert.False(stageEvents[0].IsComplete);
         Assert.False(stageEvents[1].IsComplete);
         Assert.True(stageEvents[2].IsComplete);
-        Assert.Equal(completionMessage, stageEvents[2].Message);
+        // A video missing on disk is skipped without counting it as failed.
+        AssertScanCounts(stageEvents[2], processed: 200, total: 200, changed: 0, failed: 0);
+    }
+
+    [Fact]
+    public async Task SourceStage_CountsEachEnabledSource_ItsRenamesAndUnmatchedFiles_AndTheNewFilesItFingerprints()
+    {
+        using var scope = new DataFolderScope();
+        var rootA = Path.Combine(scope.RootPath, "a");
+        var rootB = Path.Combine(scope.RootPath, "b");
+        var rootOff = Path.Combine(scope.RootPath, "off");
+        Directory.CreateDirectory(rootA);
+        Directory.CreateDirectory(rootB);
+        Directory.CreateDirectory(rootOff);
+
+        // In a, a file renamed on disk; in b, a missing file whose same-sized new neighbor has other content.
+        var oldName = Path.Combine(rootA, "clip.mp4");
+        await File.WriteAllTextAsync(oldName, "renamed-content");
+        var renamedFingerprint = ComputeSha256(oldName);
+        File.Move(oldName, Path.Combine(rootA, "renamed.mp4"));
+        var gonePath = Path.Combine(rootB, "gone.mp4");
+        await File.WriteAllTextAsync(gonePath, "gone-content");
+        var goneFingerprint = ComputeSha256(gonePath);
+        File.Delete(gonePath);
+        await File.WriteAllTextAsync(Path.Combine(rootB, "other.mp4"), "othr-content");
+
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-a", rootA), new SeedSource("src-b", rootB), new SeedSource("src-off", rootOff, IsEnabled: false)],
+            items:
+            [
+                new SeedItem("renamed", oldName)
+                {
+                    SourceId = "src-a", RelativePath = "clip.mp4", FileName = "clip.mp4",
+                    Fingerprint = renamedFingerprint, FingerprintStatus = 1, FileSizeBytes = "renamed-content".Length
+                },
+                new SeedItem("gone", gonePath)
+                {
+                    SourceId = "src-b", RelativePath = "gone.mp4", FileName = "gone.mp4",
+                    Fingerprint = goneFingerprint, FingerprintStatus = 1, FileSizeBytes = "gone-content".Length
+                }
+            ]);
+
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+
+        var source = final.Stages.SourceRefresh;
+        Assert.Equal(
+            (2, 2, 1, 0, 1, 0, 1, 0, 0),
+            (source.Source, source.SourceCount, source.Added, source.Removed, source.Renamed, source.Moved, source.Unmatched,
+                source.NewFilesFingerprinted, source.NewFilesToFingerprint));
+
+        // Each source starts at the share of sources before it, and moves on as it fingerprints its new files.
+        var progress = state.GetReplayAfter(0).Events
+            .Select(e => e.Payload)
+            .OfType<RefreshStatusChangedPayload>()
+            .Where(payload => payload.Snapshot.CurrentStage == "sourceRefresh" && !payload.Snapshot.Stages.SourceRefresh.IsComplete)
+            .Select(payload => payload.Snapshot.Stages.SourceRefresh)
+            .Select(stage => (stage.Source, stage.NewFilesFingerprinted, stage.NewFilesToFingerprint, stage.Percent))
+            .ToList();
+        Assert.Equal(
+            [(0, 0, 0, 0), (1, 0, 0, 0), (1, 1, 1, 50), (1, 0, 0, 50), (2, 0, 0, 50), (2, 1, 1, 100), (2, 0, 0, 100)],
+            progress);
+    }
+
+    [Fact]
+    public async Task FingerprintStage_CountsAFileChangedOnDiskApartFromANewOne_AndStartsAgainAt0WhenHashing()
+    {
+        using var scope = new DataFolderScope();
+        var changedPath = Path.Combine(scope.RootPath, "changed.png");
+        var newPath = Path.Combine(scope.RootPath, "new.png");
+        await File.WriteAllTextAsync(changedPath, "edited content");
+        await File.WriteAllTextAsync(newPath, "new content");
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("changed", changedPath) { MediaType = 1, Fingerprint = "old", FingerprintStatus = 1, FileSizeBytes = 3 },
+                new SeedItem("new", newPath) { MediaType = 1, FingerprintStatus = 0 }
+            ]);
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        var frozen = DateTimeOffset.UtcNow;
+        service.SetProgressClock(() => frozen);
+        using var subscription = new CancellationTokenSource();
+        var reader = state.Subscribe(subscription.Token);
+
+        await service.RunFingerprintStageAsync(CancellationToken.None);
+
+        var stage = service.GetStatus().Stages.FingerprintScan;
+        Assert.Equal((RefreshFingerprintStage.Hashing, 2, 2, 1, 0), (stage.Phase, stage.Processed, stage.Total, stage.Changed, stage.Failed));
+        var progress = new List<(string Phase, int Processed, int Total, int Percent)>();
+        while (reader.TryRead(out var envelope))
+        {
+            var fingerprint = Assert.IsType<RefreshStatusChangedPayload>(envelope.Payload).Snapshot.Stages.FingerprintScan;
+            if (!fingerprint.IsComplete)
+            {
+                progress.Add((fingerprint.Phase, fingerprint.Processed, fingerprint.Total, fingerprint.Percent));
+            }
+        }
+
+        Assert.Equal(
+            [
+                (RefreshFingerprintStage.Checking, 0, 2, 0),
+                (RefreshFingerprintStage.Checking, 2, 2, 100),
+                (RefreshFingerprintStage.Hashing, 0, 2, 0)
+            ],
+            progress);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DurationStage_CountsOnlyTheVideosItScans_AFailedProbe_AndAChangedDurationApartFromAFirstOne(bool forced)
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                ExistingVideo(scope, "has") with { Duration = TimeSpan.FromSeconds(3) },
+                ExistingVideo(scope, "new"),
+                ExistingVideo(scope, "bad"),
+                new SeedItem("photo", Path.Combine(scope.RootPath, "photo.png")) { MediaType = 1 }
+            ]);
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        // Each probe moves the clock on a second, so each video's progress is published.
+        var now = DateTimeOffset.UtcNow;
+        service.SetProgressClock(() => now);
+        service.SetMediaToolsAvailable();
+        service.SetDurationProbe((path, _) =>
+        {
+            now = now.AddSeconds(1);
+            return Task.FromResult<TimeSpan?>(Path.GetFileNameWithoutExtension(path) switch
+            {
+                "has" => TimeSpan.FromSeconds(5),
+                "new" => TimeSpan.FromSeconds(2),
+                _ => null
+            });
+        });
+        using var subscription = new CancellationTokenSource();
+        var reader = state.Subscribe(subscription.Token);
+
+        var method = typeof(RefreshPipelineService).GetMethod("RunDurationStageAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        await (Task)method!.Invoke(service, [CancellationToken.None, forced])!;
+
+        var scan = service.GetStatus().Stages.DurationScan;
+        Assert.Equal(forced, scan.Forced);
+        if (forced)
+        {
+            AssertScanCounts(scan, processed: 3, total: 3, changed: 1, failed: 1);
+            Assert.Equal(TimeSpan.FromSeconds(5).Ticks, RefreshItem(scope.RootPath, "has").DurationTicks);
+        }
+        else
+        {
+            AssertScanCounts(scan, processed: 2, total: 2, changed: 0, failed: 1);
+        }
+
+        // After the start, the stage publishes 0 of the videos it scans before its first probe, and its percent follows
+        // that count.
+        var progress = new List<(int Processed, int Total, int Percent)>();
+        while (reader.TryRead(out var envelope))
+        {
+            var duration = Assert.IsType<RefreshStatusChangedPayload>(envelope.Payload).Snapshot.Stages.DurationScan;
+            if (!duration.IsComplete)
+            {
+                progress.Add((duration.Processed, duration.Total, duration.Percent));
+            }
+        }
+
+        var total = forced ? 3 : 2;
+        Assert.Equal(
+            Enumerable.Range(0, total + 1).Select(done => (done, total, RefreshPipelineService.StagePercent(done, total))).Prepend((0, 0, 0)),
+            progress);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoudnessStage_CountsAFailedScan_AndAChangedValueApartFromAFirstOne_AndEveryVideoInAForcedRescan(bool forced)
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                ExistingVideo(scope, "same") with
+                {
+                    HasAudio = true, IntegratedLoudness = -20.0, PeakDb = -1.5, LoudnessAnalysisVersion = LibraryCatalogStore.LoudnessAnalysisVersion
+                },
+                ExistingVideo(scope, "new"),
+                ExistingVideo(scope, "error")
+            ]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.SetMediaToolsAvailable();
+        service.SetLoudnessAnalyzer((path, _, _) => Path.GetFileNameWithoutExtension(path) switch
+        {
+            "same" => Measured(-14.0, -1.0),
+            "new" => Measured(-20.0, -1.0),
+            _ => Task.FromResult<RefreshPipelineService.FileLoudnessInfo?>(new RefreshPipelineService.FileLoudnessInfo
+            {
+                HasAudio = true,
+                IsError = true,
+                ErrorMessage = "Loudness analysis failed while running ffmpeg."
+            })
+        });
+
+        await InvokeLoudnessStageAsync(service, forced);
+
+        var scan = service.GetStatus().Stages.LoudnessScan;
+        Assert.Equal(forced, scan.Forced);
+        if (forced)
+        {
+            AssertScanCounts(scan, processed: 3, total: 3, changed: 1, failed: 1);
+        }
+        else
+        {
+            AssertScanCounts(scan, processed: 2, total: 2, changed: 0, failed: 1);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingTools_AreReportedOnce_WithNoFailuresCountedForThem(bool forced)
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items: [ExistingVideo(scope, "clip") with { Duration = TimeSpan.FromSeconds(1) }, ExistingVideo(scope, "other")]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.UpdateSettings(new RefreshSettingsSnapshot
+        {
+            AutoRefreshEnabled = true,
+            AutoRefreshIntervalMinutes = 15,
+            ForceRescanDuration = forced,
+            ForceRescanLoudness = forced
+        });
+        service.SetMediaToolsAvailable(ffmpeg: false, ffprobe: false);
+
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+
+        Assert.False(final.Failed);
+        Assert.True(final.FfmpegNotFound);
+        Assert.True(final.FfprobeNotFound);
+        AssertScanCounts(final.Stages.DurationScan, processed: 0, total: 0, changed: 0, failed: 0);
+        AssertScanCounts(final.Stages.LoudnessScan, processed: 0, total: 0, changed: 0, failed: 0);
+        Assert.Equal(0, final.Stages.ThumbnailGeneration.Failed);
+        Assert.All(new[] { final.Stages.DurationScan, final.Stages.LoudnessScan }, scan => Assert.True(scan.IsComplete));
+        if (!forced)
+        {
+            return;
+        }
+
+        // A forced rescan its tool wasn't found for didn't run, so it isn't reported and stays pending.
+        Assert.All(new[] { final.Stages.DurationScan, final.Stages.LoudnessScan }, scan => Assert.False(scan.Forced));
+        AssertForcedRescansStillPending(service);
+
+        // Once the tools are there, the next refresh runs the rescans and clears them.
+        service.SetMediaToolsAvailable();
+        service.SetDurationProbe((_, _) => Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(1)));
+        service.SetLoudnessAnalyzer((_, _, _) => Measured(-20.0, -1.0));
+        Assert.True(service.TryStartManual().Accepted);
+        var next = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+
+        Assert.True(next.Stages.DurationScan.Forced);
+        Assert.True(next.Stages.LoudnessScan.Forced);
+        AssertScanCounts(next.Stages.DurationScan, processed: 2, total: 2, changed: 0, failed: 0);
+        var settings = ReadRefreshSettings(service);
+        Assert.False(settings.ForceRescanDuration);
+        Assert.False(settings.ForceRescanLoudness);
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_ReportsAMissingFfmpeg_WithoutCountingTheVideoAsFailed()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(scope.RootPath, items: [ExistingVideo(scope, "clip")]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.SetMediaToolsAvailable(ffmpeg: false);
+
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+
+        var status = service.GetStatus();
+        Assert.True(status.FfmpegNotFound);
+        Assert.False(status.FfprobeNotFound);
+        Assert.Equal((1, 1, 0), (status.Stages.ThumbnailGeneration.Processed, status.Stages.ThumbnailGeneration.Total, status.Stages.ThumbnailGeneration.Failed));
+        Assert.False(File.Exists(service.GetThumbnailPath("clip")));
+    }
+
+    [Fact]
+    public async Task MissingTools_AreNotReported_WhenNoStageNeedsThem()
+    {
+        using var scope = new DataFolderScope();
+        var photoPath = Path.Combine(scope.RootPath, "photo.png");
+        await WriteTinyPngAsync(photoPath);
+        CatalogSeed.Write(scope.RootPath, items: [new SeedItem("photo", photoPath) { MediaType = 1 }]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.SetMediaToolsAvailable(ffmpeg: false, ffprobe: false);
+
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+
+        Assert.False(final.FfmpegNotFound);
+        Assert.False(final.FfprobeNotFound);
+        Assert.True(File.Exists(service.GetThumbnailPath("photo")));
+        Assert.Equal(0, final.Stages.ThumbnailGeneration.Failed);
     }
 
     [Fact]
@@ -958,7 +1285,7 @@ public sealed class RefreshPipelineServiceTests
         service.RunNameSortKeyStage(CancellationToken.None);
 
         AssertFirstStatusStarts(reader, "nameSortKeys");
-        Assert.Equal("Name sort keys complete (1 updated)", service.GetStatus().Stages.Single(s => s.Stage == "nameSortKeys").Message);
+        Assert.Equal((1, 1), (service.GetStatus().Stages.NameSortKeys.Processed, service.GetStatus().Stages.NameSortKeys.Total));
         Assert.Equal(LibraryCatalogNameSortKey.Compute("beta.mp4"), ReadSortKey(databasePath, "b"));
 
         ExecuteSql(databasePath, "UPDATE items SET file_name_sort_key = x'00' WHERE id IN ('a', 'c');");
@@ -966,7 +1293,7 @@ public sealed class RefreshPipelineServiceTests
 
         service.RunNameSortKeyStage(CancellationToken.None);
 
-        Assert.Equal("Name sort keys complete (2 updated)", service.GetStatus().Stages.Single(s => s.Stage == "nameSortKeys").Message);
+        Assert.Equal((3, 3), (service.GetStatus().Stages.NameSortKeys.Processed, service.GetStatus().Stages.NameSortKeys.Total));
         Assert.Equal(LibraryCatalogNameSortKey.Compute("Alpha.mp4"), ReadSortKey(databasePath, "a"));
         Assert.Equal(LibraryCatalogNameSortKey.Compute("\u017Figma.mp4"), ReadSortKey(databasePath, "c"));
         Assert.Empty(CatalogOpen.Host(scope.RootPath).Session.ReadNameSortKeyWork().Items);
@@ -981,10 +1308,40 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(reader.TryRead(out var envelope));
         var snapshot = Assert.IsType<RefreshStatusChangedPayload>(envelope!.Payload).Snapshot;
         Assert.Equal(stage, snapshot.CurrentStage);
-        var started = snapshot.Stages.Single(s => s.Stage == stage);
+        var started = StageNamed(snapshot.Stages, stage);
         Assert.Equal(0, started.Percent);
-        Assert.Equal("pending", started.Message);
         Assert.False(started.IsComplete);
+    }
+
+    private static RefreshStageProgress StageNamed(RefreshStages stages, string stage) => stage switch
+    {
+        "sourceRefresh" => stages.SourceRefresh,
+        "nameSortKeys" => stages.NameSortKeys,
+        "fingerprintScan" => stages.FingerprintScan,
+        "durationScan" => stages.DurationScan,
+        "loudnessScan" => stages.LoudnessScan,
+        "thumbnailGeneration" => stages.ThumbnailGeneration,
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null)
+    };
+
+    private static void AssertScanCounts(RefreshMediaScanStage scan, int processed, int total, int changed, int failed)
+    {
+        Assert.Equal((processed, total, changed, failed), (scan.Processed, scan.Total, scan.Changed, scan.Failed));
+    }
+
+    /// <summary>Checks the status and each of its stages against their OpenAPI schemas, as the server writes them.</summary>
+    private static void AssertMatchesRefreshStatusSchema(RefreshStatusSnapshot snapshot)
+    {
+        var json = OpenApiSpec.SerializeAsServer(snapshot);
+        OpenApiSpec.AssertMatchesSchema(json, "RefreshStatusSnapshot");
+        var stages = json.GetProperty("stages");
+        OpenApiSpec.AssertMatchesSchema(stages, "RefreshStages");
+        OpenApiSpec.AssertMatchesSchema(stages.GetProperty("sourceRefresh"), "RefreshSourceStage");
+        OpenApiSpec.AssertMatchesSchema(stages.GetProperty("nameSortKeys"), "RefreshNameSortKeysStage");
+        OpenApiSpec.AssertMatchesSchema(stages.GetProperty("fingerprintScan"), "RefreshFingerprintStage");
+        OpenApiSpec.AssertMatchesSchema(stages.GetProperty("durationScan"), "RefreshMediaScanStage");
+        OpenApiSpec.AssertMatchesSchema(stages.GetProperty("loudnessScan"), "RefreshMediaScanStage");
+        OpenApiSpec.AssertMatchesSchema(stages.GetProperty("thumbnailGeneration"), "RefreshThumbnailStage");
     }
 
     private static void ExecuteSql(string databasePath, string sql)
@@ -1163,10 +1520,10 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal(newPath, only.FullPath);
         Assert.Equal(dateAdded, CatalogSeed.ReadDatesAdded(Path.Combine(scope.RootPath, LibraryCatalogStore.DatabaseFileName))["item-1"]);
 
-        var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
-        Assert.Contains("0 added", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("0 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("moved", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            (0, 0, 0, 1),
+            (final.Stages.SourceRefresh.Added, final.Stages.SourceRefresh.Removed, final.Stages.SourceRefresh.Renamed,
+                final.Stages.SourceRefresh.Moved));
     }
 
     [Fact]
@@ -1308,7 +1665,7 @@ public sealed class RefreshPipelineServiceTests
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(90));
-        Assert.Null(completed.LastError);
+        Assert.False(completed.Failed);
 
         var items = LibraryCatalogStore.Read(host.Session.DatabasePath).Items;
         Assert.Equal(2, items.Count);
@@ -1319,8 +1676,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.Contains("Keep", kept.Tags);
         AssertStoredMediaColumns(kept);
         AssertStoredMediaColumns(added);
-        Assert.Contains("1 removed", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("1 added", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((1, 1), (completed.Stages.SourceRefresh.Added, completed.Stages.SourceRefresh.Removed));
     }
 
     [Fact]
@@ -1350,19 +1706,19 @@ public sealed class RefreshPipelineServiceTests
         var service = CreateService(state, scope.RootPath);
         await service.RunFingerprintStageAsync(CancellationToken.None);
 
-        var stage = service.GetStatus().Stages.Single(item => item.Stage == "fingerprintScan");
-        Assert.Equal("Fingerprint scan complete (0 hashed, 0 failed, 1 skipped)", stage.Message);
+        var stage = service.GetStatus().Stages.FingerprintScan;
+        Assert.Equal((RefreshFingerprintStage.Checking, 2, 2, 0, 0), (stage.Phase, stage.Processed, stage.Total, stage.Changed, stage.Failed));
         Assert.Equal(100, stage.Percent);
         Assert.True(stage.IsComplete);
 
         var checking = state.GetReplayAfter(0).Events
             .Select(evt => evt.Payload)
             .OfType<RefreshStatusChangedPayload>()
-            .SelectMany(payload => payload.Snapshot.Stages)
-            .Where(item => item.Stage == "fingerprintScan" && item.Message.Contains("Checking files", StringComparison.Ordinal))
+            .Select(payload => payload.Snapshot.Stages.FingerprintScan)
+            .Where(item => !item.IsComplete)
+            .Select(item => (item.Phase, item.Processed, item.Total, item.Percent))
             .ToList();
-        Assert.Contains(checking, item => item.Message == "Checking files 0/2 (0 to hash)" && item.Percent == 0);
-        Assert.Contains(checking, item => item.Message == "Checking files 2/2 (0 to hash)" && item.Percent == 100);
+        Assert.Equal([(RefreshFingerprintStage.Checking, 0, 2, 0), (RefreshFingerprintStage.Checking, 2, 2, 100)], checking);
     }
 
     [Fact]
@@ -1435,9 +1791,7 @@ public sealed class RefreshPipelineServiceTests
 
         Assert.False(File.Exists(missingSource));
         Assert.Equal(before, File.GetLastWriteTimeUtc(thumbPath));
-        var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
-        Assert.Contains("1 reused", stage.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("0 missing source", stage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, service.GetStatus().Stages.ThumbnailGeneration.Failed);
     }
 
     [Fact]
@@ -1468,8 +1822,7 @@ public sealed class RefreshPipelineServiceTests
         await service.RunThumbnailStageAsync(CancellationToken.None);
 
         Assert.True(File.Exists(service.GetThumbnailPath("thumb-missing-jpeg")));
-        var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
-        Assert.Contains("1 generated", stage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, service.GetStatus().Stages.ThumbnailGeneration.Failed);
     }
 
     [Fact]
@@ -1493,8 +1846,7 @@ public sealed class RefreshPipelineServiceTests
 
         Assert.Equal(0, Volatile.Read(ref probes));
         Assert.True(File.Exists(service.GetThumbnailPath("stored-duration")));
-        var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
-        Assert.Contains("1 generated", stage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, service.GetStatus().Stages.ThumbnailGeneration.Failed);
     }
 
     [Fact]
@@ -1566,14 +1918,14 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
-        Assert.Null(completed.LastError);
+        Assert.False(completed.Failed);
         var items = LibraryCatalogStore.Read(host.Session.DatabasePath).Items;
         Assert.Equal("kept-thumb", Assert.Single(items).Id);
         Assert.True(File.Exists(keptThumb));
         Assert.False(File.Exists(goneThumb));
         Assert.False(File.Exists(orphanThumb));
-        var stage = completed.Stages.Single(item => item.Stage == "thumbnailGeneration");
-        Assert.DoesNotContain("evicted", stage.Message, StringComparison.OrdinalIgnoreCase);
+        var stage = completed.Stages.ThumbnailGeneration;
+        Assert.Equal((RefreshThumbnailStage.Cleanup, 2, 2, 0), (stage.Phase, stage.Processed, stage.Total, stage.Failed));
     }
 
     [Fact]
@@ -1671,8 +2023,7 @@ public sealed class RefreshPipelineServiceTests
         using var cleanupCancel = new CancellationTokenSource();
         var cleanupRun = service.RunThumbnailStageAsync(cleanupCancel.Token);
         await service.ThumbnailCleanupEntered.WaitAsync(TimeSpan.FromSeconds(15));
-        var cleanupStage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
-        Assert.Contains("Thumbnail cleanup", cleanupStage.Message, StringComparison.Ordinal);
+        Assert.Equal(RefreshThumbnailStage.Cleanup, service.GetStatus().Stages.ThumbnailGeneration.Phase);
         Assert.True(File.Exists(orphan));
         cleanupCancel.Cancel();
         cleanupHold.TrySetResult();
@@ -1712,21 +2063,25 @@ public sealed class RefreshPipelineServiceTests
         await service.RunThumbnailStageAsync(CancellationToken.None);
 
         AssertFirstStatusStarts(reader, "thumbnailGeneration");
-        var cleanup = new List<RefreshStageProgress>();
+        var progress = new List<(string Phase, int Processed, int Total, int Percent)>();
         while (reader.TryRead(out var envelope))
         {
-            if (envelope.Payload is RefreshStatusChangedPayload payload)
+            if (envelope.Payload is RefreshStatusChangedPayload payload && !payload.Snapshot.Stages.ThumbnailGeneration.IsComplete)
             {
-                var stage = payload.Snapshot.Stages.Single(s => s.Stage == "thumbnailGeneration");
-                if (stage.Message.StartsWith("Thumbnail cleanup", StringComparison.Ordinal))
-                {
-                    cleanup.Add(stage);
-                }
+                var stage = payload.Snapshot.Stages.ThumbnailGeneration;
+                progress.Add((stage.Phase, stage.Processed, stage.Total, stage.Percent));
             }
         }
 
-        Assert.Equal(["Thumbnail cleanup 1/200", "Thumbnail cleanup 200/200"], cleanup.Select(s => s.Message));
-        Assert.Equal(100, cleanup[^1].Percent);
+        // The cleanup counts only the thumbnails it removes, starting again at 0%.
+        Assert.Equal(
+            [
+                (RefreshThumbnailStage.Generating, 1, 2, 50),
+                (RefreshThumbnailStage.Generating, 2, 2, 100),
+                (RefreshThumbnailStage.Cleanup, 0, 200, 0),
+                (RefreshThumbnailStage.Cleanup, 200, 200, 100)
+            ],
+            progress);
         Assert.All(orphans, path => Assert.False(File.Exists(path)));
         Assert.All(kept, path => Assert.True(File.Exists(path)));
     }
@@ -1784,11 +2139,16 @@ public sealed class RefreshPipelineServiceTests
 
     private static void AssertForcedRescansStillPending(RefreshPipelineService service)
     {
-        var field = typeof(RefreshPipelineService).GetField("_coreSettings", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(field);
-        var settings = ((CoreSettingsService)field!.GetValue(service)!).GetRefreshSettings();
+        var settings = ReadRefreshSettings(service);
         Assert.True(settings.ForceRescanDuration);
         Assert.True(settings.ForceRescanLoudness);
+    }
+
+    private static RefreshSettingsSnapshot ReadRefreshSettings(RefreshPipelineService service)
+    {
+        var field = typeof(RefreshPipelineService).GetField("_coreSettings", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(field);
+        return ((CoreSettingsService)field!.GetValue(service)!).GetRefreshSettings();
     }
 
     private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride, LibraryCatalogHost? catalog = null)

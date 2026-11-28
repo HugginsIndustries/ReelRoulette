@@ -4727,23 +4727,9 @@ components:
         message:
           type: string
 
-    RefreshStageProgress:
-      type: object
-      required: [stage, percent, message, isComplete]
-      properties:
-        stage:
-          type: string
-        percent:
-          type: integer
-          format: int32
-        message:
-          type: string
-        isComplete:
-          type: boolean
-
     RefreshStatusSnapshot:
       type: object
-      required: [isRunning, trigger, stages]
+      required: [isRunning, runId, trigger, startedUtc, completedUtc, currentStage, failed, ffmpegNotFound, ffprobeNotFound, stages, keptSources]
       properties:
         isRunning:
           type: boolean
@@ -4763,13 +4749,23 @@ components:
         currentStage:
           type: string
           nullable: true
-        lastError:
-          type: string
-          nullable: true
+          enum: [sourceRefresh, nameSortKeys, fingerprintScan, durationScan, loudnessScan, thumbnailGeneration]
+          description: >
+            The stage the run is in, null before its first stage and once it finishes or is cancelled. A failed
+            run keeps the stage it stopped in.
+        failed:
+          type: boolean
+          description: >
+            True for a run that failed, which also sets `completedUtc`. Its error goes only to `last.log`, since
+            it can name a file.
+        ffmpegNotFound:
+          type: boolean
+          description: True when the run had videos to scan for loudness or to make thumbnails of, and ffmpeg wasn't found.
+        ffprobeNotFound:
+          type: boolean
+          description: True when the run had videos to scan for their duration, and ffprobe wasn't found.
         stages:
-          type: array
-          items:
-            $ref: "#/components/schemas/RefreshStageProgress"
+          $ref: "#/components/schemas/RefreshStages"
         keptSources:
           type: array
           description: >
@@ -4778,6 +4774,181 @@ components:
             when the next run starts.
           items:
             $ref: "#/components/schemas/RefreshKeptSource"
+
+    RefreshStages:
+      type: object
+      description: Each stage's progress and counts, in the order the stages run. Every run starts them at 0.
+      required: [sourceRefresh, nameSortKeys, fingerprintScan, durationScan, loudnessScan, thumbnailGeneration]
+      properties:
+        sourceRefresh:
+          $ref: "#/components/schemas/RefreshSourceStage"
+        nameSortKeys:
+          $ref: "#/components/schemas/RefreshNameSortKeysStage"
+        fingerprintScan:
+          $ref: "#/components/schemas/RefreshFingerprintStage"
+        durationScan:
+          $ref: "#/components/schemas/RefreshMediaScanStage"
+        loudnessScan:
+          $ref: "#/components/schemas/RefreshMediaScanStage"
+        thumbnailGeneration:
+          $ref: "#/components/schemas/RefreshThumbnailStage"
+
+    RefreshSourceStage:
+      type: object
+      description: >
+        The source stage walks each enabled source's folder, and fingerprints the source's new files that could
+        be its missing files moved or renamed. Its percent follows the sources, moving within one while it
+        fingerprints that source's new files.
+      required: [percent, isComplete, source, sourceCount, newFilesFingerprinted, newFilesToFingerprint, added, removed, renamed, moved, unmatched]
+      properties:
+        percent:
+          type: integer
+          format: int32
+        isComplete:
+          type: boolean
+        source:
+          type: integer
+          format: int32
+          description: The source the stage is on, from 1, or 0 before the first.
+        sourceCount:
+          type: integer
+          format: int32
+          description: How many enabled sources the stage walks.
+        newFilesFingerprinted:
+          type: integer
+          format: int32
+          description: How many of the current source's new files the stage has fingerprinted, 0 while it fingerprints none.
+        newFilesToFingerprint:
+          type: integer
+          format: int32
+          description: How many of the current source's new files the stage fingerprints, 0 while it fingerprints none.
+        added:
+          type: integer
+          format: int32
+        removed:
+          type: integer
+          format: int32
+        renamed:
+          type: integer
+          format: int32
+        moved:
+          type: integer
+          format: int32
+        unmatched:
+          type: integer
+          format: int32
+          description: >
+            Missing files kept because the new files that might be them matched no fingerprint, and new files
+            left out because their fingerprint failed.
+
+    RefreshNameSortKeysStage:
+      type: object
+      description: The name sort key stage fills missing keys, and recomputes every key after a key version change.
+      required: [percent, isComplete, processed, total]
+      properties:
+        percent:
+          type: integer
+          format: int32
+        isComplete:
+          type: boolean
+        processed:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+          description: The files whose key the stage writes.
+
+    RefreshFingerprintStage:
+      type: object
+      description: >
+        The fingerprint stage checks every file, then hashes those that need it. `processed` and `total` count
+        the phase it's in, so its percent starts again at 0 when hashing starts.
+      required: [percent, isComplete, phase, processed, total, changed, failed]
+      properties:
+        percent:
+          type: integer
+          format: int32
+        isComplete:
+          type: boolean
+        phase:
+          type: string
+          enum: [checking, hashing]
+        processed:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+          description: Every file while checking, and the files to hash while hashing.
+        changed:
+          type: integer
+          format: int32
+          description: Files hashed again because their size or write time changed, apart from new files.
+        failed:
+          type: integer
+          format: int32
+          description: Files whose hash failed.
+
+    RefreshMediaScanStage:
+      type: object
+      description: >
+        The duration stage, which probes with ffprobe, or the loudness stage, which scans with ffmpeg. Each scans
+        only the videos it still has to scan, or every video in a forced rescan, and `processed` and `total`
+        count those videos.
+      required: [percent, isComplete, processed, total, changed, failed, forced]
+      properties:
+        percent:
+          type: integer
+          format: int32
+        isComplete:
+          type: boolean
+        processed:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+          description: The videos the stage scans.
+        changed:
+          type: integer
+          format: int32
+          description: Videos whose stored value the scan changed, apart from a first measurement.
+        failed:
+          type: integer
+          format: int32
+          description: Videos whose scan failed, scanned again on the next refresh.
+        forced:
+          type: boolean
+          description: True for a forced rescan of every video, once the stage's tool is found.
+
+    RefreshThumbnailStage:
+      type: object
+      description: >
+        The thumbnail stage makes each file's thumbnail that is missing or out of date, then removes the
+        thumbnails of files no longer in the library. `processed` and `total` count the phase it's in, so its
+        percent starts again at 0 when the cleanup starts.
+      required: [percent, isComplete, phase, processed, total, failed]
+      properties:
+        percent:
+          type: integer
+          format: int32
+        isComplete:
+          type: boolean
+        phase:
+          type: string
+          enum: [generating, cleanup]
+        processed:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+          description: Every file while generating, and the thumbnails to remove during the cleanup.
+        failed:
+          type: integer
+          format: int32
+          description: Files whose thumbnail couldn't be made, not counting videos while ffmpeg isn't found.
 
     RefreshKeptSource:
       type: object

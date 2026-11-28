@@ -553,14 +553,6 @@ public sealed class OperatorTestingActionResponse
     public OperatorTestingStateSnapshot State { get; set; } = new();
 }
 
-public sealed class RefreshStageProgress
-{
-    public string Stage { get; set; } = string.Empty;
-    public int Percent { get; set; }
-    public string Message { get; set; } = string.Empty;
-    public bool IsComplete { get; set; }
-}
-
 public sealed class RefreshStatusSnapshot
 {
     public bool IsRunning { get; set; }
@@ -568,11 +560,93 @@ public sealed class RefreshStatusSnapshot
     public string Trigger { get; set; } = "manual";
     public DateTimeOffset? StartedUtc { get; set; }
     public DateTimeOffset? CompletedUtc { get; set; }
+    /// <summary>The stage the run is in, by its id, such as <c>sourceRefresh</c>. A failed run keeps the stage it stopped in.</summary>
     public string? CurrentStage { get; set; }
-    public string? LastError { get; set; }
-    public List<RefreshStageProgress> Stages { get; set; } = [];
+    /// <summary>Whether the run failed. Its error goes only to <c>last.log</c>, since it can name a file.</summary>
+    public bool Failed { get; set; }
+    /// <summary>Whether the run had videos to scan for loudness or to make thumbnails of while ffmpeg wasn't found.</summary>
+    public bool FfmpegNotFound { get; set; }
+    /// <summary>Whether the run had videos to probe for their duration while ffprobe wasn't found.</summary>
+    public bool FfprobeNotFound { get; set; }
+    public RefreshStages Stages { get; set; } = new();
     /// <summary>The sources this run kept because their folder listed no media files while the library held items from them.</summary>
     public List<RefreshKeptSource> KeptSources { get; set; } = [];
+}
+
+/// <summary>Each refresh stage's progress and counts, as plain numbers the WebUI words.</summary>
+public sealed class RefreshStages
+{
+    public RefreshSourceStage SourceRefresh { get; set; } = new();
+    public RefreshNameSortKeysStage NameSortKeys { get; set; } = new();
+    public RefreshFingerprintStage FingerprintScan { get; set; } = new();
+    public RefreshMediaScanStage DurationScan { get; set; } = new();
+    public RefreshMediaScanStage LoudnessScan { get; set; } = new();
+    public RefreshThumbnailStage ThumbnailGeneration { get; set; } = new();
+}
+
+/// <summary>
+/// A refresh stage's percent and whether it finished. The stages are records, so a status is copied with <c>with { }</c>,
+/// every field included.
+/// </summary>
+public abstract record RefreshStageProgress
+{
+    public int Percent { get; set; }
+    public bool IsComplete { get; set; }
+}
+
+/// <summary>A stage that counts its work: <see cref="Processed"/> of <see cref="Total"/>, in the phase it's in.</summary>
+public abstract record RefreshCountedStageProgress : RefreshStageProgress
+{
+    public int Processed { get; set; }
+    public int Total { get; set; }
+}
+
+public sealed record RefreshSourceStage : RefreshStageProgress
+{
+    /// <summary>The enabled source the stage is on, from 1, or 0 before the first.</summary>
+    public int Source { get; set; }
+    public int SourceCount { get; set; }
+    /// <summary>The current source's new files fingerprinted so far, of <see cref="NewFilesToFingerprint"/>, the ones that could be its missing files moved or renamed.</summary>
+    public int NewFilesFingerprinted { get; set; }
+    public int NewFilesToFingerprint { get; set; }
+    public int Added { get; set; }
+    public int Removed { get; set; }
+    public int Renamed { get; set; }
+    public int Moved { get; set; }
+    /// <summary>Missing files kept because the new files that might be them matched no fingerprint, and new files left out because their fingerprint failed.</summary>
+    public int Unmatched { get; set; }
+}
+
+public sealed record RefreshNameSortKeysStage : RefreshCountedStageProgress;
+
+public sealed record RefreshFingerprintStage : RefreshCountedStageProgress
+{
+    public const string Checking = "checking";
+    public const string Hashing = "hashing";
+
+    public string Phase { get; set; } = Checking;
+    /// <summary>Files hashed again because their size or write time changed, apart from new files.</summary>
+    public int Changed { get; set; }
+    public int Failed { get; set; }
+}
+
+/// <summary>The duration or loudness stage, which counts only the videos it scans, or every video in a forced rescan.</summary>
+public sealed record RefreshMediaScanStage : RefreshCountedStageProgress
+{
+    /// <summary>Videos whose stored value the scan changed, apart from a first measurement.</summary>
+    public int Changed { get; set; }
+    public int Failed { get; set; }
+    public bool Forced { get; set; }
+}
+
+public sealed record RefreshThumbnailStage : RefreshCountedStageProgress
+{
+    public const string Generating = "generating";
+    public const string Cleanup = "cleanup";
+
+    public string Phase { get; set; } = Generating;
+    /// <summary>Files whose thumbnail couldn't be made, not counting videos while ffmpeg isn't found.</summary>
+    public int Failed { get; set; }
 }
 
 /// <summary>A source whose items a refresh kept because its folder listed no media files, such as a share that isn't mounted.</summary>

@@ -839,7 +839,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
   - event envelope parsing/building utilities.
 - `src/clients/web/ReelRoulette.WebUI/src/events/refreshStatusProjection.ts`
-  - reads a refresh status from its event or route (`coerceRefreshSnapshot`), and works out from it the player indicator's progress and stage labels, a finished or failed run's outcome, the kept folders it settled, and whether a run has newly finished.
+  - works out from a refresh status, typed by the generated contract, the player indicator's progress and stage labels, a finished run's summary worded from its counts or a failed run's stage, the kept folders it settled, and whether a run has newly finished.
 - `src/clients/web/ReelRoulette.WebUI/src/config/runtimeConfig.ts`
   - runtime config parsing/validation.
 - `src/clients/web/ReelRoulette.WebUI/src/config/appVersion.ts`

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildEventsUrl, parseEventEnvelope } from "../events/eventEnvelope";
 import {
-  coerceRefreshSnapshot,
   newRefreshCompletionRunId,
-  settledKeptSources,
   refreshOutcome,
-  refreshProgress
+  refreshProgress,
+  refreshSummary,
+  settledKeptSources
 } from "../events/refreshStatusProjection";
+import { refreshStatus } from "./refreshStatus";
 
 describe("event helpers", () => {
   it("builds SSE URL with last revision query", () => {
@@ -38,65 +39,101 @@ describe("event helpers", () => {
   });
 
   it("tells a failed refresh, by the stage it stopped in, from a run that ended without finishing", () => {
-    const failed = refreshOutcome({
-      isRunning: false,
-      trigger: "manual",
-      currentStage: "durationScan",
-      lastError: "The library refresh failed.",
-      completedUtc: "2026-03-29T12:00:00Z",
-      stages: []
-    });
+    const failed = refreshOutcome(
+      refreshStatus({ currentStage: "durationScan", failed: true, completedUtc: "2026-03-29T12:00:00Z" })
+    );
 
     expect(failed).toEqual({ result: "failed", stage: "Scanning durations" });
-    expect(refreshOutcome({ isRunning: false, trigger: "manual", stages: [] })).toEqual({ result: "idle" });
+    expect(refreshOutcome(refreshStatus())).toEqual({ result: "idle" });
   });
 
-  it("builds refresh complete summary segments from stage messages", () => {
-    const outcome = refreshOutcome({
-      isRunning: false,
-      trigger: "manual",
-      completedUtc: "2026-03-29T12:00:00Z",
-      stages: [
-        { stage: "sourceRefresh", percent: 100, message: "Source refresh (0 added, 0 removed)", isComplete: true },
-        { stage: "fingerprintScan", percent: 100, message: "Fingerprint (5 hashed, 10 ready)", isComplete: true },
-        {
-          stage: "durationScan",
-          percent: 100,
-          message: "Duration scan (100 files, all cached)",
-          isComplete: true
-        },
-        {
-          stage: "loudnessScan",
-          percent: 100,
-          message: "Loudness scan (50 files, all cached)",
-          isComplete: true
-        },
-        {
-          stage: "thumbnailGeneration",
-          percent: 100,
-          message: "Thumbnails (3 generated, 2 reused)",
-          isComplete: true
-        }
-      ]
-    });
+  it("gives a finished refresh's summary as its outcome", () => {
+    const outcome = refreshOutcome(
+      refreshStatus({ completedUtc: "2026-03-29T12:00:00Z", stages: { sourceRefresh: { added: 12 } } })
+    );
 
-    expect(outcome).toEqual({
-      result: "finished",
-      segments: [
-        "Source: no changes",
-        "Fingerprint: hashed 5, ready 10",
-        "Duration: files 100, all cached",
-        "Loudness: files 50, all cached",
-        "Thumbnails: generated 3, reused 2"
-      ]
-    });
+    expect(outcome).toEqual({ result: "finished", summary: "12 added" });
+  });
+
+  it("sums up a refresh that changed nothing as No changes, leaving out the work done for new files", () => {
+    const summary = refreshSummary(
+      refreshStatus({
+        completedUtc: "2026-03-29T12:00:00Z",
+        stages: {
+          sourceRefresh: { percent: 100, isComplete: true, sourceCount: 2, newFilesFingerprinted: 4, newFilesToFingerprint: 4 },
+          nameSortKeys: { processed: 30, total: 30 },
+          fingerprintScan: { phase: "hashing", processed: 5, total: 5 },
+          durationScan: { processed: 100, total: 100 },
+          loudnessScan: { processed: 50, total: 50 },
+          thumbnailGeneration: { phase: "cleanup", processed: 3, total: 3 }
+        }
+      })
+    );
+
+    expect(summary).toBe("No changes");
+  });
+
+  it("names only the library's nonzero changes, then the problems", () => {
+    expect(
+      refreshSummary(refreshStatus({ stages: { sourceRefresh: { added: 12, removed: 3, renamed: 2, moved: 1 } } }))
+    ).toBe("12 added, 3 removed, 2 renamed, 1 moved");
+    expect(refreshSummary(refreshStatus({ stages: { fingerprintScan: { changed: 1 } } }))).toBe("1 changed");
+    expect(
+      refreshSummary(refreshStatus({ stages: { sourceRefresh: { added: 12 }, thumbnailGeneration: { failed: 2 } } }))
+    ).toBe("12 added · 2 thumbnails failed");
+    expect(refreshSummary(refreshStatus({ stages: { sourceRefresh: { removed: 3, unmatched: 2 } } }))).toBe(
+      "3 removed · 2 left unmatched"
+    );
+    expect(
+      refreshSummary(
+        refreshStatus({
+          stages: {
+            sourceRefresh: { moved: 4, unmatched: 1 },
+            fingerprintScan: { changed: 2, failed: 3 },
+            durationScan: { failed: 4 },
+            loudnessScan: { failed: 5 },
+            thumbnailGeneration: { failed: 6 }
+          }
+        })
+      )
+    ).toBe(
+      "4 moved, 2 changed · 1 left unmatched, 3 fingerprints failed, 4 duration scans failed, 5 loudness scans failed, 6 thumbnails failed"
+    );
+  });
+
+  it("names a rescan's changes, or that a forced rescan changed nothing", () => {
+    expect(refreshSummary(refreshStatus({ stages: { loudnessScan: { changed: 3 } } }))).toBe("Loudness rescanned: 3 changed");
+    expect(refreshSummary(refreshStatus({ stages: { durationScan: { forced: true }, loudnessScan: { forced: true } } }))).toBe(
+      "Durations rescanned: no changes · Loudness rescanned: no changes"
+    );
+    expect(
+      refreshSummary(
+        refreshStatus({ stages: { sourceRefresh: { added: 1 }, durationScan: { changed: 2, forced: true }, thumbnailGeneration: { failed: 1 } } })
+      )
+    ).toBe("1 added · Durations rescanned: 2 changed · 1 thumbnail failed");
+  });
+
+  it("names a missing ffmpeg or ffprobe once", () => {
+    expect(refreshSummary(refreshStatus({ ffmpegNotFound: true, stages: { sourceRefresh: { added: 12 } } }))).toBe(
+      "12 added · ffmpeg not found"
+    );
+    expect(refreshSummary(refreshStatus({ ffprobeNotFound: true }))).toBe("ffprobe not found");
+    expect(refreshSummary(refreshStatus({ ffmpegNotFound: true, ffprobeNotFound: true, stages: { durationScan: { failed: 1 } } }))).toBe(
+      "1 duration scan failed, ffmpeg and ffprobe not found"
+    );
+  });
+
+  it("groups the summary's numbers as the device writes numbers", () => {
+    expect(
+      refreshSummary(refreshStatus({ stages: { sourceRefresh: { added: 1234 }, thumbnailGeneration: { failed: 5678 } } }))
+    ).toBe(`${(1234).toLocaleString()} added · ${(5678).toLocaleString()} thumbnails failed`);
   });
 
   it("reports each finished refresh run once", () => {
-    const running = { isRunning: true, runId: "run-1", completedUtc: null, stages: [] };
-    const finished = { isRunning: false, runId: "run-1", completedUtc: "2026-10-06T12:00:00Z", stages: [] };
-    const failed = { isRunning: false, runId: "run-2", completedUtc: "2026-10-06T12:05:00Z", lastError: "boom", stages: [] };
-    const canceled = { isRunning: false, runId: "run-3", completedUtc: null, stages: [] };
+    const running = refreshStatus({ isRunning: true, runId: "run-1" });
+    const finished = refreshStatus({ runId: "run-1", completedUtc: "2026-10-06T12:00:00Z" });
+    const failed = refreshStatus({ runId: "run-2", completedUtc: "2026-10-06T12:05:00Z", failed: true });
+    const canceled = refreshStatus({ runId: "run-3" });
 
     expect(newRefreshCompletionRunId(running, null)).toBeNull();
     expect(newRefreshCompletionRunId(finished, null)).toBe("run-1");
@@ -105,25 +142,21 @@ describe("event helpers", () => {
     expect(newRefreshCompletionRunId(canceled, "run-2")).toBeNull();
   });
 
-  it("keeps the sources a refresh kept, from camelCase or PascalCase, and none when the snapshot lists none", () => {
-    expect(coerceRefreshSnapshot({ isRunning: false, keptSources: [{ sourceId: "src-a", itemCount: 2 }] }).keptSources).toEqual([
-      { sourceId: "src-a", itemCount: 2 }
-    ]);
-    expect(coerceRefreshSnapshot({ IsRunning: false, KeptSources: [{ SourceId: "src-b", ItemCount: 1200 }] }).keptSources).toEqual([
-      { sourceId: "src-b", itemCount: 1200 }
-    ]);
-    expect(coerceRefreshSnapshot({ isRunning: true }).keptSources).toEqual([]);
-  });
-
   it("gives the kept sources once the source stage has finished or the run has stopped", () => {
     const keptSources = [{ sourceId: "src-a", itemCount: 2 }];
-    const sourceStage = (isComplete: boolean) => ({ stage: "sourceRefresh", percent: isComplete ? 100 : 40, message: "", isComplete });
+    const status = (isRunning: boolean, sourceDone: boolean) =>
+      refreshStatus({
+        isRunning,
+        currentStage: isRunning ? (sourceDone ? "durationScan" : "sourceRefresh") : null,
+        keptSources,
+        stages: { sourceRefresh: { percent: sourceDone ? 100 : 40, isComplete: sourceDone } }
+      });
 
-    expect(settledKeptSources({ isRunning: true, currentStage: "sourceRefresh", stages: [sourceStage(false)], keptSources })).toEqual([]);
-    expect(settledKeptSources({ isRunning: true, currentStage: "durationScan", stages: [sourceStage(true)], keptSources })).toEqual(keptSources);
+    expect(settledKeptSources(status(true, false))).toEqual([]);
+    expect(settledKeptSources(status(true, true))).toEqual(keptSources);
     // A run that failed or was cancelled in its source stage kept them all the same.
-    expect(settledKeptSources({ isRunning: false, stages: [sourceStage(false)], keptSources })).toEqual(keptSources);
-    expect(settledKeptSources({ isRunning: false, stages: [] })).toEqual([]);
+    expect(settledKeptSources(status(false, false))).toEqual(keptSources);
+    expect(settledKeptSources(refreshStatus())).toEqual([]);
   });
 
   it("gives a running refresh's stage label and percent, Starting before its first stage, and nothing once it stops", () => {
@@ -133,19 +166,13 @@ describe("event helpers", () => {
       ["fingerprintScan", "Fingerprinting files"],
       ["durationScan", "Scanning durations"],
       ["loudnessScan", "Scanning loudness"],
-      ["thumbnailGeneration", "Generating thumbnails"],
-      ["newStage", "newStage"]
-    ];
+      ["thumbnailGeneration", "Generating thumbnails"]
+    ] as const;
     for (const [stage, label] of stages) {
-      const snapshot = {
-        isRunning: true,
-        trigger: "manual",
-        currentStage: stage,
-        stages: [{ stage, percent: 35, message: "Thumbnails 1200/49000 (new 3, regen 0, reused 1197, failed 0, missing 0)", isComplete: false }]
-      };
+      const snapshot = refreshStatus({ isRunning: true, currentStage: stage, stages: { [stage]: { percent: 35 } } });
       expect(refreshProgress(snapshot)).toEqual({ stage: label, percent: 35 });
     }
-    expect(refreshProgress({ isRunning: true, trigger: "manual", currentStage: null, stages: [] })).toEqual({ stage: "Starting", percent: 0 });
-    expect(refreshProgress({ isRunning: false, trigger: "manual", completedUtc: "2026-10-13T10:00:00Z", stages: [] })).toBeNull();
+    expect(refreshProgress(refreshStatus({ isRunning: true }))).toEqual({ stage: "Starting", percent: 0 });
+    expect(refreshProgress(refreshStatus({ completedUtc: "2026-10-13T10:00:00Z" }))).toBeNull();
   });
 });

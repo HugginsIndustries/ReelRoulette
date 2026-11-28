@@ -1,12 +1,5 @@
 import { batch, signal, type ReadonlySignal } from "@preact/signals";
-import {
-  coerceRefreshSnapshot,
-  newRefreshCompletionRunId,
-  refreshOutcome,
-  refreshProgress,
-  settledKeptSources,
-  type RefreshSnapshotInput
-} from "../events/refreshStatusProjection";
+import { newRefreshCompletionRunId, refreshOutcome, refreshProgress, settledKeptSources } from "../events/refreshStatusProjection";
 import { errorText, noticeRequestFailure, refusalError, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { findPresetById } from "../filter/filterStateModel";
@@ -19,7 +12,9 @@ import type {
   BulkItemRatingChangedPayload,
   BulkItemStateChangedPayload,
   ItemsRemovedPayload,
-  RefreshKeptSource
+  RefreshKeptSource,
+  RefreshStatusChangedPayload,
+  RefreshStatusSnapshot
 } from "../types/serverContracts";
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type ApiPreset, type AppStore } from "./appStore";
@@ -210,16 +205,15 @@ export function createServerConnection(options: ServerConnectionOptions): Server
    * How a refresh that isn't running ended: finished, with its summary, or failed, a warning that stays until closed.
    * A cancelled run says nothing, and only relays.
    */
-  function showRefreshOutcome(snapshot: RefreshSnapshotInput): void {
+  function showRefreshOutcome(snapshot: RefreshStatusSnapshot): void {
     const outcome = refreshOutcome(snapshot);
     if (outcome.result === "finished") {
-      const summary = outcome.segments.join(" · ");
       notifications.notify({
         kind: "refresh",
         text: "Library refresh finished",
-        detail: summary,
+        detail: outcome.summary,
         key: "refresh",
-        logText: `Library refresh finished: ${summary}`
+        logText: `Library refresh finished: ${outcome.summary}`
       });
     } else if (outcome.result === "failed") {
       // The server writes the failure to last.log itself, with its error, so the relay sends only the first line.
@@ -561,10 +555,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         presetCatalogChanged(payload) {
           recordPresetEvent(payload);
         },
-        refreshStatusChanged(payload) {
-          const raw = payload?.snapshot || payload?.Snapshot;
-          if (!raw) return;
-          const snapshot = coerceRefreshSnapshot(raw);
+        refreshStatusChanged(payload: RefreshStatusChangedPayload) {
+          const snapshot = payload.snapshot;
           // A running refresh shows on the player's indicator; how it ended pops up.
           const progress = refreshProgress(snapshot);
           store.refreshProgress.value = progress;

@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { renderStartupError } from "../../shell";
+import { refreshStatus } from "../refreshStatus";
 import {
   COMPATIBLE_VERSION,
   FakeServer,
@@ -256,11 +257,7 @@ describe("startup and connection", () => {
     const stream = page.stream();
 
     stream.emit("refreshStatusChanged", 2, {
-      snapshot: {
-        isRunning: true,
-        currentStage: "thumbnailGeneration",
-        stages: [{ stage: "thumbnailGeneration", percent: 40, message: "Thumbnails", isComplete: false }]
-      }
+      snapshot: refreshStatus({ isRunning: true, currentStage: "thumbnailGeneration", stages: { thumbnailGeneration: { percent: 40 } } })
     });
     // The player's indicator shows the stage's label, and relays it.
     await waitFor(() =>
@@ -270,7 +267,7 @@ describe("startup and connection", () => {
     expect(page.server.logLines().some((line) => line.includes("Core refresh: "))).toBe(false);
 
     stream.emit("refreshStatusChanged", 3, {
-      snapshot: { isRunning: false, currentStage: "thumbnailGeneration", lastError: "The library refresh failed.", stages: [] }
+      snapshot: refreshStatus({ currentStage: "thumbnailGeneration", failed: true })
     });
     await waitFor(() => expect(page.server.logLines()).toContain(statusLogLine("Library refresh failed", null, 0)));
     const failedToast = Array.from(document.querySelectorAll("#toasts .toast-text")).find((text) =>
@@ -279,18 +276,14 @@ describe("startup and connection", () => {
     expect(failedToast?.textContent).toContain("Generating thumbnails failed.");
 
     await waitFor(() => expect(page.server.requests("POST", "/api/library/query")).toHaveLength(1));
-    const finished = { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] };
+    const finished = refreshStatus({ runId: "run-1", completedUtc: "2026-10-07T00:00:00Z" });
     stream.emit("refreshStatusChanged", 4, { snapshot: finished });
     stream.emit("refreshStatusChanged", 5, { snapshot: finished });
     await settle();
     expect(page.server.requests("POST", "/api/library/query")).toHaveLength(2);
-    // The finished summary's segments go to the log, as its counts did.
+    // The finished summary goes to the log too.
     expect(page.server.logLines().filter((line) => line.startsWith("status=Library refresh finished"))).toEqual([
-      statusLogLine(
-        "Library refresh finished: Source: no data · Fingerprint: no data · Duration: no data · Loudness: no data · Thumbnails: no data",
-        null,
-        0
-      )
+      statusLogLine("Library refresh finished: No changes", null, 0)
     ]);
   });
 
@@ -364,7 +357,7 @@ describe("message relay", () => {
       expect.arrayContaining(["status=Ready hasCurrent=false attempt=0", "status=Ready (API 2) hasCurrent=false attempt=0"])
     );
 
-    const idle = { snapshot: { isRunning: false, stages: [] } };
+    const idle = { snapshot: refreshStatus() };
     const before = page.server.logLines().length;
     page.stream().emit("refreshStatusChanged", 2, idle);
     page.stream().emit("refreshStatusChanged", 3, idle);

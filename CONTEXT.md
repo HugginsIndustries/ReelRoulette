@@ -144,7 +144,7 @@ ReelRoulette is a thin-client, API-first system:
   - The stage writes that item's revision, width, and height as the item finishes.
   - Browse reads those dimensions from the item row.
   - `hasThumbnail` is still whether that item's JPEG exists.
-  - When the thumbnail stage completes, a JPEG whose item is not in the catalog is deleted, and the finished refresh's summary reports that cleanup.
+  - When the thumbnail stage completes, a JPEG whose item is not in the catalog is deleted.
   - Opening the catalog does not delete those files.
   - There is no thumbnail file-count or byte cap.
 - A catalog backup for that refresh is taken after the refresh finishes and still follows the backup gap.
@@ -180,9 +180,12 @@ ReelRoulette is a thin-client, API-first system:
 - Unified refresh pipeline: stage/status projection, a name sort key stage that fills missing keys and recomputes every key after a key version change, thumbnail generation, library **duration** / **loudness** via **ffmpeg**/**ffprobe**, and server-scheduled **auto-refresh**.
   - The loudness scan measures integrated loudness and true peak with `ebur128`, one video at a time, stores no value where it measured none, counts a track it measures as digital silence, at the -70 LUFS floor with no peak, as no audio, the same as a file without an audio track, and records the loudness analysis version, so a video with audio scanned under an older version is scanned again.
   - A scan that fails keeps the stored loudness and peak and records its error, and the next refresh scans that video again.
+  - A duration probe that fails leaves the duration empty, so the next refresh probes that video again.
+  - The duration and loudness stages scan only the videos they still have to scan, or every video in a forced rescan, and run ffprobe and ffmpeg only when they have a video to scan. While a tool isn't found, the stages that need it skip that work without counting failures, and the status says so once for the run.
+  - The refresh status carries each stage's progress and counts as plain numbers, one typed object per stage, and the WebUI words them.
   - Server shutdown cancels a manual or automatic refresh in progress and does not record that cancellation as a pipeline failure or a completed refresh.
     - Catalog updates that stage has already written stay.
-    - A forced duration or loudness rescan stays pending when shutdown cancels that stage.
+    - A forced duration or loudness rescan stays pending when shutdown cancels that stage, or when the stage's tool isn't found, so it runs once the tool is there.
   - Saving refresh settings schedules the next automatic refresh from the new interval, and clearing a forced rescan keeps the other refresh settings.
   - Clients send refresh **settings** (for example enable/interval) and consume library state via API/SSE only (no authoritative client-side refresh stages or local ffprobe for catalog duration).
 - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
@@ -240,7 +243,8 @@ ReelRoulette is a thin-client, API-first system:
   - A right-click or a long press on the notice opens no menu.
 - None of these states pops up; the list behind the bell shows each active one under Now.
 - A running refresh shows on the player's indicator, and how it ended pops up:
-  - "Library refresh finished" with its consolidated summary as the second line, one segment per stage separated by " · " (including the Fingerprint segment).
+  - "Library refresh finished" with its summary as the second line, naming only what changed: "No changes" when nothing did, and otherwise the library's nonzero changes (added, removed, renamed, moved, and files changed on disk), then each duration or loudness rescan's changes, then any problems (files left unmatched, failed fingerprints, duration and loudness scans, and thumbnails, and a missing ffmpeg or ffprobe), joined by " · ", such as "12 added, 3 removed · 2 thumbnails failed".
+    - A forced rescan that changed nothing says so, such as "Loudness rescanned: no changes".
   - "Library refresh failed" with the stage it stopped in as the second line, such as "Refreshing sources failed.", a warning.
 - `last.log` gets the summary, and the server writes a failed run's error to it itself.
 - A run that ends without finishing or failing, such as one cancelled at shutdown, relays "Core refresh idle." and shows nothing.

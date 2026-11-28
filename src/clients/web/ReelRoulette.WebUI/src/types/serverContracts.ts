@@ -1,6 +1,10 @@
 import type { components } from "./openapi.generated";
 
 export type RefreshStatusSnapshot = components["schemas"]["RefreshStatusSnapshot"];
+/** Each refresh stage's progress and counts, one member per stage. */
+export type RefreshStages = components["schemas"]["RefreshStages"];
+/** `refreshStatusChanged`: the refresh's whole status, sent on every change. */
+export type RefreshStatusChangedPayload = components["schemas"]["RefreshStatusChangedPayload"];
 export type RefreshKeptSource = components["schemas"]["RefreshKeptSource"];
 /** `itemRatingChanged` as the WebUI reads it, each field optional: the item's rating and the one before, in stars. */
 export type ItemRatingChangedPayload = Partial<components["schemas"]["ItemRatingChangedPayload"]>;
