@@ -394,6 +394,7 @@ Last milestone completed: M12n1
 - The mockup needed no change: it already shows the notice, both taps, the Discard question, and the player's touch and menu leaving the notice out as shipped, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, with 98 test files and 2516 tests (measured).
 - `CONTEXT.md` and `docs/domain-inventory.md` describe the notice, its place in the order, its taps, and the shared question.
+- The user's spot check on main after the merge passed: a page left open from before the server's restart showed "ReelRoulette updated · Tap to reload" on the player and in the bell's Now section, and a tap reloaded it.
 
 #### Times and dates slice
 
@@ -443,6 +444,7 @@ Last milestone completed: M12n1
 - The mockup needed no change: it already shows the bell's times, Show seconds with its hint below Popup settings, and the Stats tab's exact times, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, with 98 test files and 2537 tests (measured).
 - `CONTEXT.md` and `docs/domain-inventory.md` describe the bell's times, Show seconds, and the formatters.
+- The user's spot check on main after the merge passed: the bell's times read "HH:MM", with "MM-DD" before them for older messages, and Show seconds added seconds.
 
 #### Kept messages slice
 
@@ -752,6 +754,7 @@ Last milestone completed: M12n1
 - `docs/api.md` describes the status and its stages. `CONTEXT.md` describes the finished summary and the duration and loudness stages' work and tools. `docs/domain-inventory.md` describes the projection.
 - The thumbnail cleanup no longer appears in the summary, so the lines in `docs/api.md` and `CONTEXT.md` that said it did were corrected.
 - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and `node docs/mockups/reelroulette/build/check.mjs` pass (measured).
+- The user's spot check on main after the merge passed: a refresh the user started finished with its summary in plain words.
 
 #### Progress line and popups slice
 
@@ -814,6 +817,7 @@ Last milestone completed: M12n1
 - `CONTEXT.md` describes the progress line and which refreshes pop up, and `docs/domain-inventory.md` the projection, `ofText`, and a quiet message.
 - The quick spot check of a refresh's second line in the bell's list waits for main, since a worktree can't run the server against the user's data.
 - `npm run verify` and `node docs/mockups/reelroulette/build/check.mjs` pass after the update from main (measured).
+- The user's spot check on main after the merge passed: while a refresh the user started ran, the bell's Now entry showed its progress line, and a popup summed it up in plain words when it finished.
 
 #### Release checks
 
@@ -1134,6 +1138,7 @@ Last milestone completed: M12n1
 - After review, a Stats screen test covers the file path's menu closing when another item plays, and an Only this source test a source turned off on the server that starts unchecked; dropping the Stats tab's open override, and having Only this source check every source turned off, each from a copy under `artifacts/scratch/`, failed 1 test each (measured).
 - `npm run verify` passes, with 2,529 tests in 98 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the menus, the preset rows' missing edit button, and the turned-off source's tooltip. The mockup already showed the menus as shipped and didn't change.
+- The user's spot check on main after the merge passed: a preset's menu opened on a right-click or long press, Apply applied the preset, preset rows had no Edit button, a long press on a source offered Only this source, and the header's and Stats tab's file menus still opened and closed when the next item played.
 
 #### Notifications, Auto Tag, and Settings slice
 
@@ -1199,6 +1204,7 @@ Last milestone completed: M12n1
 - Dropping each of those two fixes, from a copy under `artifacts/scratch/`, failed 1 test each (measured).
 - After review, `npm run verify` passes, with 2,563 tests in 98 files on the branch with main merged (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the menus, the shared copy, and the popups inside Auto Tag, and the testing checklist's Release Specific section has the milestone's release checks.
+- The user's spot check on main after the merge passed: Dismiss in a bell message's menu removed just that message with the list staying open, a file row's menu in Auto Tag showed over Auto Tag and its Copy path showed "Path copied." over it at the window's edge, and Copy on Diagnostics' Client ID showed "Client ID copied.".
 
 #### Release checks
 
