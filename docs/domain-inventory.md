@@ -258,9 +258,9 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - the Filter tab, laid out and styled as the mockup shows it with the shared `.btn`, `.ctl`, and `.icon-btn` controls:
     - header with the preset heading.
     - the General, Tags, and Presets sections, each marked while a field in it is flagged.
-    - sources labeled by name and folder.
+    - sources labeled by name and folder, each a menu surface, a source turned off on the server saying so as its tooltip.
     - the Tags section's categories, each with the shared category header and its match mode select, named for its category.
-    - preset rows with a drag handle, the name, and Edit, in a list that grows with the section.
+    - preset rows with a drag handle and the name, each a menu surface, in a list that grows with the section.
     - the footer's icon buttons, Clear all filters, disabled while the filter is the default one, Discard changes, and Apply, both disabled without changes, with Apply orange and showing the unsaved-changes dot while there are some.
   - Basic Filters end with Only unrated, its icon after its label, and Min Rating, the label with the star control beside it, which wrap under the label on a narrow screen.
   - The durations, the new preset name, the Favorites and Blacklisted pair, and the Only unrated and Min Rating pair, whose stars are marked with the checkbox, use the field validation pattern.
@@ -408,7 +408,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Menu.tsx`
   - the app's menu list: items with an icon at their left and a label, red for a destructive action, or disabled with their reason as their tooltip, in groups with a rule between them, a pick closing the menu before its action runs; its container places it.
   - the context menu's host, in the fullscreen stage: the menu showing, at its point, below and to the right of it or on its other side where it would cross the window's edge, kept 8 px inside the window, closed on a press outside it, Escape, a pick, a scroll outside it, a resize, or the browser tab hiding, and the element it acts on tinted while it is open.
-  - `useMenuSurface`: gives a component's element a menu from the groups it gives at the press, tinting the element, with none while it gives null, and the buttons a long press still opens it on.
+  - `useMenuSurface`: gives a component's element a menu from the groups it gives at the press, tinting the element, with none while it gives null, the buttons a long press still opens it on, and an open in place of the context menu's own, which the menus on the playing item use to close it when another item plays.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/menuModel.ts`
   - the menu item type, whose action gets the item's own button, and the app's one context menu: its items, its point, the element it acts on, and what to do once it closes, told whether the user closed it, opening one closing the one before; and the surfaces with a menu, each an element, what a press in it opens the menu on, how to open it, and the buttons inside it that a long press still opens it on, the innermost one under a press winning.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/menuOpener.ts`
@@ -502,7 +502,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
     - the library's baseline, loudness normalization on the playing item and that baseline, compression and its settings, the audio stage, which applies normalization's gain and compression's compressor and asks the player for a new video element once Enhanced audio is off.
     - player, the ratings this device sets and shows, the player's rating on them, the playing item, and the audio stage, the player's controls on whether playback waits for the user and on the bell's list or the rating's popover.
     - the file items for the menus that act on a file, ambient mode on the settings, the playing item, and the player's media failure, the context menu, which a library tile's menu opens in.
-    - library, the tag catalog the Filter, Tags, Stats, and Randomization tabs and the Library tab's Random line share, filter dialog, tag editor, stats tab, the playing item's menus, the menus on tags, and randomization tab, which shows normalization's adjustment with Enhanced audio and sets ratings through them.
+    - library, the tag catalog the Filter, Tags, Stats, and Randomization tabs and the Library tab's Random line share, filter dialog, tag editor, stats tab, the playing item's menus, the menus on tags, the menus on the Filter tab, and randomization tab, which shows normalization's adjustment with Enhanced audio and sets ratings through them.
     - from the runtime config and a page reload when one is given, or the browser's own, for the settings' reset and the update notice.
   - connects:
     - the panel's tabs to the library, tag editor, stats tab, filter dialog, randomization tab, the last two of which open as their tab shows and close as it hides, and Settings tab.
@@ -702,6 +702,9 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
   - Apply closes the panel as the overlay.
   - Whether the filter the tab shows includes a tag: its working copy while it holds unsaved changes, and otherwise the applied filter.
   - Filter by this tag, from a tag's menu: shows the tab on its Tags section, once the load it starts as it shows has landed, with the tag included in the working filter until Apply and the category that lists it expanded.
+  - Load into filter, Update from filter, and Delete…, from a preset row's menu, and Only this source, from a source's menu, which share one path each with Load, Update, Edit Preset's Delete, and a source's check.
+- `src/clients/web/ReelRoulette.WebUI/src/filter/filterMenus.ts`
+  - the menus on the Filter tab: a preset row's, with Apply, shown while the preset isn't the applied filter and disabled with its reason while the tab holds unsaved changes, through the Library tab's preset pick, then Load into filter and Update from filter, shown while the tab's filter isn't the preset's, Update from filter disabled with Update preset's reasons, then Edit… and Delete…; and a source's, with Only this source, or none while it is the only enabled source checked, disabled with its reason on a source turned off on the server.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts`
   - the General tab's Basic Filters, media type, and audio choices with their labels, which the Filters line names them by.
   - the General tab's fields as a draft beside the working filter and their reading into it.

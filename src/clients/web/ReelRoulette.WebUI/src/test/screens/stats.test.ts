@@ -811,6 +811,19 @@ describe("Stats tab's file menus", () => {
     expect(filePath().classList.contains("is-menu-target")).toBe(true);
   });
 
+  it("close when another item plays, which the file's name and path stay shown for", async () => {
+    await mountStats({ items: [itemRow(VIDEO), itemRow(OTHER_VIDEO)], picks: [VIDEO, OTHER_VIDEO] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(rows().Plays).toBe("1"));
+    const path = filePath();
+    await openMenuOn(path);
+
+    await playNext(OTHER_VIDEO);
+    expect(filePath()).toBe(path);
+    expect(fileName().textContent).toBe(OTHER_VIDEO.displayName);
+    expect(contextMenuShown()).toBeNull();
+  });
+
   it("show the path with no button beside it, which the menus replace", async () => {
     await openOnFile({ fileManager: true });
     expect([...filePath().children].map((child) => child.tagName)).toEqual(["CODE"]);

@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, within } from "@testing-library/preact";
+import { useRef } from "preact/hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppServices } from "../../state/appServices";
 import { AppContext } from "../../ui/appContext";
-import { ContextMenuHost, Menu } from "../../ui/Menu";
-import { createContextMenu, type MenuItem } from "../../ui/menuModel";
+import { ContextMenuHost, Menu, useMenuSurface } from "../../ui/Menu";
+import { createContextMenu, type ContextMenuView, type MenuItem } from "../../ui/menuModel";
 import { menuItemIn as item, menuParts as parts } from "./pageHarness";
 
 afterEach(() => {
@@ -151,5 +152,41 @@ describe("the context menu", () => {
     act(() => contextMenu.close());
     expect(row.classList.contains("is-menu-target")).toBe(false);
     row.remove();
+  });
+});
+
+describe("a menu surface", () => {
+  const GROUPS = [[{ label: "Copy name", icon: "content_copy", onPick: () => {} }]];
+
+  /** An element with a menu of one item, opened through `open` when it is given. */
+  function Surface({ open }: { open?: (view: ContextMenuView) => void }) {
+    const element = useRef<HTMLDivElement>(null);
+    useMenuSurface(element, () => GROUPS, { open });
+    return <div id="surface" ref={element}>Name</div>;
+  }
+
+  /** Renders the surface and opens its menu, as a press on it does. */
+  function pressSurface(open?: (view: ContextMenuView) => void) {
+    const contextMenu = createContextMenu();
+    render(
+      <AppContext.Provider value={{ contextMenu } as unknown as AppServices}>
+        <Surface open={open} />
+      </AppContext.Provider>
+    );
+    const surface = document.getElementById("surface")!;
+    act(() => contextMenu.surfaceAt(surface)!.open({ x: 5, y: 6 }));
+    return { contextMenu, surface };
+  }
+
+  it("opens its menu on its element, at the press, through the context menu", () => {
+    const { contextMenu, surface } = pressSurface();
+    expect(contextMenu.view.peek()).toMatchObject({ point: { x: 5, y: 6 }, target: surface, groups: GROUPS });
+  });
+
+  it("opens it through its own open in place of the context menu's, when it is given one", () => {
+    const open = vi.fn((_view: ContextMenuView) => {});
+    const { contextMenu, surface } = pressSurface(open);
+    expect(open.mock.calls).toEqual([[{ point: { x: 5, y: 6 }, target: surface, groups: GROUPS }]]);
+    expect(contextMenu.isOpen.peek()).toBe(false);
   });
 });

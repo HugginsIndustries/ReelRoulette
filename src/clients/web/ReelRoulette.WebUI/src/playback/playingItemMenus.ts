@@ -27,12 +27,14 @@ export interface PlayingItemMenus {
    */
   openPlayerMenu(point: WindowPoint): Promise<void>;
   /**
-   * The header's now-playing name's menu, on `element`: Show stats, then Copy name, Copy path, and Show in File
-   * Manager.
+   * The header's now-playing name's menu: Show stats, then Copy name, Copy path, and Show in File Manager, or null
+   * while nothing plays.
    */
-  openNameMenu(point: WindowPoint, element: Element): void;
-  /** The Stats tab's file name's or path's menu, on `element`: Copy name, Copy path, and Show in File Manager. */
-  openFileMenu(point: WindowPoint, element: Element): void;
+  nameGroups(): MenuGroups | null;
+  /** The Stats tab's file name's and path's menu: Copy name, Copy path, and Show in File Manager, or null while nothing plays. */
+  fileGroups(): MenuGroups | null;
+  /** Opens a menu on the playing item, which closes when another item plays. */
+  show(view: ContextMenuView): void;
 }
 
 export interface PlayingItemMenusOptions {
@@ -148,20 +150,16 @@ export function createPlayingItemMenus(options: PlayingItemMenusOptions): Playin
       playerControls.hold("menu", true);
     },
 
-    openNameMenu(point, element) {
+    nameGroups() {
       const item = store.current.peek();
-      if (item) {
-        dropRead();
-        show({ point, target: element, groups: [[showStats], fileItems(item)] });
-      }
+      return item ? [[showStats], fileItems(item)] : null;
     },
 
-    openFileMenu(point, element) {
+    fileGroups() {
       const item = store.current.peek();
-      if (item) {
-        dropRead();
-        show({ point, target: element, groups: [fileItems(item)] });
-      }
-    }
+      return item ? [fileItems(item)] : null;
+    },
+
+    show
   };
 }

@@ -153,6 +153,20 @@ describe("the now-playing name's menu", () => {
     expect([contextMenuShown(), name().classList.contains("is-menu-target")]).toEqual([null, false]);
   });
 
+  it("closes when another item plays", async () => {
+    const server = await mountPlaying();
+    rightClick(name());
+    await settle();
+    expect(contextMenuShown()).not.toBeNull();
+
+    const second = { ...ITEM, id: "C:\\media\\second.mp4", itemId: "item-second", displayName: "second.mp4", mediaUrl: "/api/media/item-second?token=t" };
+    server.on("POST", "/api/random", () => randomAnswer(second));
+    // A click alone, with no press before it to close the menu.
+    fireEvent.click(screen.getByRole("button", { name: "Next", hidden: true }));
+    await waitFor(() => expect(name().textContent).toBe("second.mp4"));
+    expect(contextMenuShown()).toBeNull();
+  });
+
   it("lists Show in File Manager while the server lists it for this browser, which opens the server's file manager at the item", async () => {
     const server = await mountPlaying(true);
     server.on("POST", "/api/show-in-file-manager/item-video", () => status(204));

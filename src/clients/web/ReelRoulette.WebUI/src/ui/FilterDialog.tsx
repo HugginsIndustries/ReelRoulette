@@ -1,4 +1,5 @@
 import type { JSX, RefObject } from "preact";
+import { useCallback, useRef } from "preact/hooks";
 import type { FilterDialogTab, FilterDialogView } from "../filter/filterDialog";
 import { EARLIEST_DAY, LATEST_DAY } from "../filter/filterDateRange";
 import {
@@ -10,18 +11,20 @@ import {
   MEDIA_TYPES,
   MIN_RATING_LABEL,
   ONLY_UNRATED_LABEL,
+  SOURCE_OFF_REASON,
   filterHeldReason,
   filterTagCategories,
   sourceLabel,
   type DateRangeChoice,
   type FilterAction,
   type FilterField,
+  type FilterSource,
   type FilterTagCategory,
   type FilterTagChip,
   type FlagFilterChoice,
   type GeneralDraft
 } from "../filter/filterDialogModel";
-import { TAG_MATCH_MODE } from "../filter/filterStateModel";
+import { TAG_MATCH_MODE, type PresetRow } from "../filter/filterStateModel";
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import {
@@ -32,8 +35,9 @@ import {
   useFieldValidation,
   type ValidatedControlProps
 } from "./FieldValidation";
+import { useMenuSurface } from "./Menu";
 import { RatingStars } from "./RatingStars";
-import { DragHandle, useReorder } from "./Reorder";
+import { DragHandle, useReorder, type Reorder } from "./Reorder";
 import { TagCategory as Category, tagsInUse } from "./TagCategory";
 
 // The `data-*` attributes keep the markup as it was before the dialog moved to a component; nothing reads them.
@@ -426,10 +430,9 @@ function SourceRows({ view }: { view: FilterDialogView }) {
     <>
       {view.sources.map((source, index) => {
         const enabled = source.isEnabled !== false;
-        const validation = !enabled ? {} : index === first ? pair.control : pair.partner;
-        const row = (
-          <label key={index}><input {...validation} type="checkbox" id={`filter-src-${index}`} data-source-id={source.id} checked={view.general.sourceChecked[index]} disabled={!enabled} onChange={(event) => filterDialog.checkSource(index, event.currentTarget.checked)} /> {sourceLabel(source)}</label>
-        );
+        const validation = !enabled ? undefined : index === first ? pair.control : pair.partner;
+        const row = <SourceRow key={index} index={index} source={source} checked={!!view.general.sourceChecked[index]} validation={validation} />;
+        // A row moving into or out of the wrapper mounts again, so its menu registers on its new label.
         return index === first ? (
           <span key={index} class="vfield vfield-after">
             {row}
@@ -440,6 +443,31 @@ function SourceRows({ view }: { view: FilterDialogView }) {
         );
       })}
     </>
+  );
+}
+
+/**
+ * A source's checkbox in its label, whose menu checks only that source. A source turned off on the server says so as
+ * its tooltip.
+ */
+function SourceRow({
+  index,
+  source,
+  checked,
+  validation
+}: {
+  index: number;
+  source: FilterSource;
+  checked: boolean;
+  /** The sources' shared validation, which a source turned off on the server takes no part in. */
+  validation?: ValidatedControlProps & { ref?: RefObject<HTMLInputElement | null> };
+}) {
+  const { filterDialog, filterMenus } = useApp();
+  const element = useRef<HTMLLabelElement>(null);
+  useMenuSurface(element, () => filterMenus.sourceGroups(index));
+  const enabled = source.isEnabled !== false;
+  return (
+    <label class="menu-surface" ref={element} title={enabled ? undefined : SOURCE_OFF_REASON}><input {...validation} type="checkbox" id={`filter-src-${index}`} data-source-id={source.id} checked={checked} disabled={!enabled} onChange={(event) => filterDialog.checkSource(index, event.currentTarget.checked)} /> {sourceLabel(source)}</label>
   );
 }
 
@@ -589,18 +617,36 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
         <h3>Manage Presets</h3>
         <div class="filter-preset-list themed-scrollbar">
           {view.presets.length > 0 ? (
-            view.presets.map((preset, index) => (
-              <div key={preset.id} ref={reorder.row(preset.id)} class={reorder.dragging === preset.id ? "filter-preset-row is-dragging" : "filter-preset-row"} data-preset-idx={String(index)}>
-                <DragHandle control={reorder.handle(preset.id)} />
-                <span class="filter-preset-name">{preset.name}</span>
-                <button type="button" class="icon-btn" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(preset.id)}><span class="material-symbol-icon">edit_note</span></button>
-              </div>
-            ))
+            view.presets.map((preset, index) => <PresetListRow key={preset.id} preset={preset} index={index} reorder={reorder} />)
           ) : (
             <span class="filter-hint">No presets</span>
           )}
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * A preset in Manage Presets: its drag handle and name, and a menu that applies, loads, updates, edits, or deletes the
+ * preset, where Edit Preset opens.
+ */
+function PresetListRow({ preset, index, reorder }: { preset: PresetRow; index: number; reorder: Reorder }) {
+  const { filterMenus } = useApp();
+  const element = useRef<HTMLDivElement | null>(null);
+  const rowRef = reorder.row(preset.id);
+  const ref = useCallback(
+    (row: HTMLDivElement | null) => {
+      element.current = row;
+      rowRef(row);
+    },
+    [rowRef]
+  );
+  useMenuSurface(element, () => filterMenus.presetGroups(preset.id));
+  return (
+    <div ref={ref} class={reorder.dragging === preset.id ? "filter-preset-row menu-surface is-dragging" : "filter-preset-row menu-surface"} data-preset-idx={String(index)}>
+      <DragHandle control={reorder.handle(preset.id)} />
+      <span class="filter-preset-name">{preset.name}</span>
+    </div>
   );
 }

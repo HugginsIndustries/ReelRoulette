@@ -1,5 +1,5 @@
 import { Fragment } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useRef } from "preact/hooks";
 import type { StatsFileView, StatsLibraryView } from "../stats/statsModel";
 import { useApp } from "./appContext";
 import { useMenuSurface } from "./Menu";
@@ -49,20 +49,11 @@ export function StatsTab() {
  * with a menu that filters by it.
  */
 function FileStats({ file }: { file: StatsFileView }) {
-  const { statsTab, contextMenu, playingMenus } = useApp();
+  const { statsTab, playingMenus } = useApp();
   const name = useRef<HTMLParagraphElement>(null);
   const path = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const removes = [name.current!, path.current!].map((element) =>
-      contextMenu.addSurface({
-        element,
-        menuAt: () => true,
-        open: (_on, point) => playingMenus.openFileMenu(point, element)
-      })
-    );
-    return () => removes.forEach((remove) => remove());
-  }, []);
+  useMenuSurface(name, playingMenus.fileGroups, { open: playingMenus.show });
+  useMenuSurface(path, playingMenus.fileGroups, { open: playingMenus.show });
 
   return (
     <>

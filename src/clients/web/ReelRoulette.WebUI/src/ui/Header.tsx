@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { nowPlayingView } from "../playback/nowPlaying";
 import { useApp } from "./appContext";
 import { HeldButton } from "./FieldValidation";
+import { useMenuSurface } from "./Menu";
 
 /**
  * The top bar: logo, pairing prompt, and the playing file. The stylesheet shows one of the logo's images, by theme and
@@ -41,20 +42,11 @@ function PairingPrompt() {
  * long press opens its menu.
  */
 function NowPlaying() {
-  const { panel, store, contextMenu, playingMenus } = useApp();
+  const { panel, store, playingMenus } = useApp();
   const view = nowPlayingView(store.current.value);
   const name = useRef<HTMLSpanElement>(null);
   const showStats = () => void panel.showTab("stats");
-
-  useLayoutEffect(
-    () =>
-      contextMenu.addSurface({
-        element: name.current!,
-        menuAt: () => (store.current.peek() ? true : null),
-        open: (_on, point) => playingMenus.openNameMenu(point, name.current!)
-      }),
-    []
-  );
+  useMenuSurface(name, playingMenus.nameGroups, { open: playingMenus.show });
   return (
     <div id="now-playing" class="now-playing" style={{ display: view ? "block" : "none" }}>
       <span

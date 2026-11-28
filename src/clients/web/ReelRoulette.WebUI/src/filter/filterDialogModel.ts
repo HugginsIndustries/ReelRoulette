@@ -181,6 +181,9 @@ function removeIgnoringCase(list: string[], value: string): void {
   }
 }
 
+/** A source turned off on the server's tooltip, on its row and its Only this source, since its check can't change. */
+export const SOURCE_OFF_REASON = "This source is turned off on the server";
+
 /** A source's name and, when it has a different one, its folder: "Videos (/media/videos)". */
 export function sourceLabel(source: FilterSource): string {
   const name = source.displayName || "";

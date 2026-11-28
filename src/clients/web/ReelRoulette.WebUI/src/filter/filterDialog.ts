@@ -31,6 +31,7 @@ import {
   editPresetNameProblem,
   filterAsFieldsRead,
   filterFieldProblems,
+  filterHeldReason,
   filterWithGeneralDraft,
   generalDraftAfterApply,
   generalDraftFromFilter,
@@ -146,6 +147,16 @@ export interface FilterDialogView extends FilterDialogState {
    * the default filter for None. Load is then disabled, saying nothing more.
    */
   loadDisabled: boolean;
+  /**
+   * The id of the preset whose filter the working filter, as its General fields read, is, or null. No two presets
+   * share a filter, so there is at most one.
+   */
+  filterPreset: string | null;
+  /**
+   * Why Update from filter, in a preset row's menu, can't save the working filter into the preset, or null: Update
+   * preset's reasons with a preset chosen, a General field's that would hold it included.
+   */
+  updateFromFilterReason: string | null;
   /** Each field's problem, or null while its value is valid. */
   problems: Record<FilterField, FieldProblem | null>;
   /** Whether each field shows its problem. */
@@ -207,6 +218,11 @@ export interface FilterDialog {
   /** Takes General tab fields the user changed. An empty duration means no limit. */
   changeGeneral(change: Partial<Omit<GeneralDraft, "sourceChecked" | "startSourceIds" | "added" | "created">>): void;
   checkSource(index: number, checked: boolean): void;
+  /**
+   * Only this source, in a source's menu: checks the source at `index` and unchecks the other enabled ones. A source
+   * turned off on the server keeps its check, which can't be changed.
+   */
+  onlySource(index: number): void;
   /** Takes a duration's text while it is typed. The working filter takes it when the field changes. */
   typeDuration(which: "min" | "max", text: string): void;
   /**
@@ -240,8 +256,18 @@ export interface FilterDialog {
    * applies it.
    */
   loadPreset(): void;
+  /**
+   * Load into filter, in a preset row's menu: loads the filter of the preset with this id into the tab, as Load does for
+   * the chosen preset, keeping Choose Preset's choice. Nothing while the working filter is already that preset's.
+   */
+  loadIntoFilter(id: string): void;
   /** Saves the working filter into the chosen preset, until Apply saves the list. Held like Apply. */
   updatePreset(): void;
+  /**
+   * Update from filter, in a preset row's menu: saves the working filter into the preset with this id, as Update does
+   * for the chosen preset, until Apply saves the list. Nothing while `updateFromFilterReason` says why it can't.
+   */
+  updateFromFilter(id: string): void;
   typeNewPresetName(text: string): void;
   /**
    * Adds the working filter as the last preset, with the typed name, until Apply saves the list. Disabled while the
@@ -266,6 +292,8 @@ export interface FilterDialog {
    * open with the typed name.
    */
   deleteEditedPreset(): Promise<void>;
+  /** Delete…, in a preset row's menu: asks first, as Edit Preset's Delete does, then deletes it, until Apply saves the list. */
+  deletePreset(id: string): Promise<void>;
   /**
    * A tag was renamed or deleted: `revise` changes the tag lists of the working copy, the preset list, which may hold
    * changes Apply hasn't made, so Apply doesn't put the old name back, and its saved copy.
@@ -337,6 +365,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     // orders Apply's writes finds, whatever the loop's size.
     const plan = presetsChanged ? planPresetWrites(state.savedPresets, state.presets) : null;
     const loop = plan?.loop ? presetLoopReason(plan.loop, state.presets) : null;
+    const update = blockOf("updatePreset", problems, filterReason);
     return {
       ...state,
       headingPreset,
@@ -347,13 +376,15 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       unsaved: !typed || filterDialogHasUnsavedChanges(typed, applied, presetsChanged),
       defaultFilter,
       loadDisabled: !!typed && filterStatesEqualForPresetMatch(typed, chosen?.filterState ?? createDefaultFilterState()),
+      filterPreset: holder?.id ?? null,
+      updateFromFilterReason: update.reason ?? (update.heldBy ? filterHeldReason("updatePreset", update.heldBy) : null),
       problems,
       flagged: Object.fromEntries(Object.entries(problems).map(([field, problem]) => [field, isFlagged(problem)])) as Record<FilterField, boolean>,
       actions: {
         apply: loop ? { disabled: false, heldBy: null, reason: loop.text, blocked: { logText: loop.logText } } : blockOf("apply", problems, null),
         addPreset: blockOf("addPreset", problems, filterReason),
         // Update has nothing to write into on None, which it says before the filter's reasons.
-        updatePreset: blockOf("updatePreset", problems, chosen ? filterReason : NO_CHOSEN_PRESET_REASON)
+        updatePreset: chosen ? update : blockOf("updatePreset", problems, NO_CHOSEN_PRESET_REASON)
       },
       presetEditProblem,
       presetEditFlagged: isFlagged(presetEditProblem)
@@ -724,6 +755,51 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     update({ general, working: filterWithGeneralDraft(current.working, general, current.sources) });
   }
 
+  /** Takes the sources' checks, which the working filter takes at once. */
+  function takeSourceChecks(current: FilterDialogView, sourceChecked: boolean[]): void {
+    const general = { ...current.general, sourceChecked };
+    update({ general, working: filterWithGeneralDraft(current.working, general, current.sources) });
+  }
+
+  /** Loads a preset's filter into the tab, or the default filter for None, keeping the preset list. */
+  function loadInto(current: FilterDialogView, row: PresetRow | undefined): void {
+    const working = row ? cloneFilterState(row.filterState) : createDefaultFilterState();
+    update({ working, headingPreset: row?.id ?? null, general: generalDraftFromFilter(working, current.sources) });
+  }
+
+  /** Saves the working filter into the preset at `index`, until Apply saves the list, and says so. */
+  function updateInto(current: FilterDialogView, index: number): void {
+    const name = current.presets[index]!.name;
+    const working = readGeneral(current);
+    const presets = current.presets.slice();
+    presets[index] = { ...presets[index]!, filterState: cloneFilterState(working) };
+    // The log leaves the preset's name out.
+    notifications.notify({
+      kind: "actions",
+      text: `Updated preset "${name}" locally — Apply to save.`,
+      key: "filter",
+      logText: "Updated preset locally — Apply to save."
+    });
+    update({ working, presets });
+  }
+
+  /** Asks before deleting a preset, and says whether the user confirmed. */
+  function confirmDelete(row: PresetRow): Promise<boolean> {
+    return dialogs.confirm({ message: `Delete preset "${row.name}"?`, confirmLabel: "Delete", danger: true });
+  }
+
+  /**
+   * Deletes the preset with this id, with `change`, until Apply saves the list. The heading's preset goes to None, and
+   * the chosen one does once the list no longer has it.
+   */
+  function removePreset(current: FilterDialogView, id: string, change: Partial<FilterDialogState> = {}): void {
+    update({
+      ...change,
+      presets: current.presets.filter((preset) => preset.id !== id),
+      headingPreset: current.headingPreset === id ? null : current.headingPreset
+    });
+  }
+
   const dialog: FilterDialog = {
     isOpen,
     tab,
@@ -830,8 +906,16 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       }
       const sourceChecked = current.general.sourceChecked.slice();
       sourceChecked[index] = checked;
-      const general = { ...current.general, sourceChecked };
-      update({ general, working: filterWithGeneralDraft(current.working, general, current.sources) });
+      takeSourceChecks(current, sourceChecked);
+    },
+
+    onlySource(index) {
+      const current = view.peek();
+      if (!current?.sources[index]) {
+        return;
+      }
+      const checked = current.general.sourceChecked;
+      takeSourceChecks(current, current.sources.map((source, other) => other === index || (source.isEnabled === false && !!checked[other])));
     },
 
     typeDuration(which, text) {
@@ -949,12 +1033,17 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     loadPreset() {
       const current = view.peek();
-      if (!current || current.loadDisabled) {
-        return;
+      if (current && !current.loadDisabled) {
+        loadInto(current, current.presets.find((row) => row.id === current.chosenPreset));
       }
-      const chosen = current.presets.find((row) => row.id === current.chosenPreset);
-      const working = chosen ? cloneFilterState(chosen.filterState) : createDefaultFilterState();
-      update({ working, headingPreset: chosen?.id ?? null, general: generalDraftFromFilter(working, current.sources) });
+    },
+
+    loadIntoFilter(id) {
+      const current = view.peek();
+      const row = current?.presets.find((preset) => preset.id === id);
+      if (current && row && current.filterPreset !== id) {
+        loadInto(current, row);
+      }
     },
 
     updatePreset() {
@@ -963,21 +1052,17 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         return;
       }
       const index = current.presets.findIndex((row) => row.id === current.chosenPreset);
-      if (index < 0) {
-        return;
+      if (index >= 0) {
+        updateInto(current, index);
       }
-      const name = current.presets[index]!.name;
-      const working = readGeneral(current);
-      const presets = current.presets.slice();
-      presets[index] = { ...presets[index]!, filterState: cloneFilterState(working) };
-      // The log leaves the preset's name out.
-      notifications.notify({
-        kind: "actions",
-        text: `Updated preset "${name}" locally — Apply to save.`,
-        key: "filter",
-        logText: "Updated preset locally — Apply to save."
-      });
-      update({ working, presets });
+    },
+
+    updateFromFilter(id) {
+      const current = view.peek();
+      const index = current ? current.presets.findIndex((row) => row.id === id) : -1;
+      if (current && index >= 0 && !current.updateFromFilterReason) {
+        updateInto(current, index);
+      }
     },
 
     typeNewPresetName(text) {
@@ -1047,20 +1132,25 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       const before = view.peek();
       const edit = before?.presetEdit;
       const removed = edit ? before.presets.find((preset) => preset.id === edit.id) : undefined;
-      if (!edit || !removed) {
+      if (!removed || !(await confirmDelete(removed))) {
         return;
       }
-      const confirmed = await dialogs.confirm({ message: `Delete preset "${removed.name}"?`, confirmLabel: "Delete", danger: true });
       const current = view.peek();
-      if (!confirmed || !current?.presetEdit) {
+      if (current?.presetEdit) {
+        removePreset(current, removed.id, { presetEdit: null });
+      }
+    },
+
+    async deletePreset(id) {
+      const row = view.peek()?.presets.find((preset) => preset.id === id);
+      if (!row || !(await confirmDelete(row))) {
         return;
       }
-      // The heading's preset goes to None, and the chosen one does once the list no longer has it.
-      update({
-        presets: current.presets.filter((preset) => preset.id !== removed.id),
-        headingPreset: current.headingPreset === removed.id ? null : current.headingPreset,
-        presetEdit: null
-      });
+      // The list may have changed while it asked, as when a load took the server's.
+      const current = view.peek();
+      if (current?.presets.some((preset) => preset.id === id)) {
+        removePreset(current, id);
+      }
     }
   };
 

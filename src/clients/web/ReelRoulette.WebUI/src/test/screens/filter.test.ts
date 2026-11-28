@@ -9,9 +9,13 @@ import {
   CLEAR_EDGE_X,
   closeNotices,
   COMPATIBLE_VERSION,
+  contextMenuShown,
   DEFAULT_VIEWPORT,
   FakeServer,
+  fingerPress,
   json,
+  menuItemIn,
+  menuLabels,
   mountPage,
   openNotices,
   pageReady,
@@ -19,9 +23,11 @@ import {
   pointerDown,
   pointerMove,
   pointerUp,
+  popupsShown,
   randomAnswer,
   ratingRequests,
   resetPage,
+  rightClick,
   currentStyle,
   selectedPresetLabel,
   setViewport,
@@ -420,10 +426,6 @@ function presetRow(name: string): HTMLElement {
   return found;
 }
 
-function rowButton(name: string, label: "Edit preset"): HTMLButtonElement {
-  return within(presetRow(name)).getByRole("button", { name: `${label} ${name}` }) as HTMLButtonElement;
-}
-
 function presetHandle(name: string): HTMLButtonElement {
   return within(presetRow(name)).getByRole("button", { name: `Reorder ${name}` }) as HTMLButtonElement;
 }
@@ -468,9 +470,34 @@ async function press(button: HTMLElement): Promise<void> {
   await settle();
 }
 
-/** Opens Edit Preset on a preset row and returns it. */
+/** Opens a preset row's menu with a right-click on its name and returns it. */
+async function openPresetMenu(name: string): Promise<HTMLElement> {
+  rightClick(presetRow(name).querySelector(".filter-preset-name")!);
+  await settle();
+  return contextMenuShown()!;
+}
+
+/** A source's row, the label around its checkbox. */
+function sourceRow(label: string): HTMLLabelElement {
+  return box(label).closest("label")!;
+}
+
+/** Opens a source's menu with a right-click on its row and returns it, or null when it has none. */
+async function openSourceMenu(label: string): Promise<HTMLElement | null> {
+  rightClick(sourceRow(label));
+  await settle();
+  return contextMenuShown();
+}
+
+/** Picks an item in the menu showing. */
+async function pickInMenu(label: string): Promise<void> {
+  await press(menuItemIn(contextMenuShown()!, label));
+}
+
+/** Opens Edit Preset from a preset row's menu and returns it. */
 async function editPreset(name: string): Promise<HTMLDialogElement> {
-  await press(rowButton(name, "Edit preset"));
+  await openPresetMenu(name);
+  await pickInMenu("Edit…");
   const edit = topDialog();
   expect(edit.querySelector("h3")?.textContent).toBe("Edit Preset");
   return edit;
@@ -2270,16 +2297,15 @@ describe("Presets tab", () => {
     expect(presets.list[1]).toEqual(BEACH_PRESET);
   });
 
-  it("each preset row's buttons are its drag handle and Edit preset, named for it", async () => {
+  it("each preset row's only button is its drag handle, named for it, since Edit Preset opens from its menu", async () => {
     await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
 
     for (const name of ["Favorites", "Beach days"]) {
-      const row = presetRow(name);
-      const buttons = Array.from(row.querySelectorAll("button"));
-      expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual([`Reorder ${name}`, `Edit preset ${name}`]);
-      expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder", "Edit preset"]);
+      const buttons = Array.from(presetRow(name).querySelectorAll("button"));
+      expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual([`Reorder ${name}`]);
+      expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder"]);
     }
   });
 
@@ -3231,5 +3257,182 @@ describe("controls kept in place", () => {
     expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
     expect(dialog().querySelector(".filter-preset-list")).toBe(list);
     expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("Draft");
+  });
+});
+
+describe("menus on presets and sources", () => {
+  const APPLY_FIRST = "Apply or discard the Filter tab's changes first";
+  const SOURCE_OFF = "This source is turned off on the server";
+  const MOVIES = "Movies (C:\\media\\movies)";
+  const PHOTOS = "C:\\media\\photos";
+  const ARCHIVE = "Archive (D:\\archive)";
+
+  async function mountPresets(): Promise<FilterPage> {
+    const page = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    return page;
+  }
+
+  it("a preset row's menu offers Apply while the preset isn't the applied filter, and Load into filter and Update from filter while the tab's filter isn't the preset's, tinting the row", async () => {
+    await mountPresets();
+    const every = new Set(["Apply", "Load into filter", "Update from filter", "Edit…", "Delete…"]);
+    expect(menuLabels(await openPresetMenu("Favorites"))).toEqual(every);
+    expect(presetRow("Favorites").classList.contains("is-menu-target")).toBe(true);
+
+    // Favorites is applied, and the tab starts over on it.
+    await pickPreset("preset-favorites");
+    await showTab("Presets");
+    expect(menuLabels(await openPresetMenu("Favorites"))).toEqual(new Set(["Edit…", "Delete…"]));
+    expect(menuLabels(await openPresetMenu("Beach days"))).toEqual(every);
+
+    // Beach days' filter in the tab, not yet applied.
+    await pickInMenu("Load into filter");
+    expect(menuLabels(await openPresetMenu("Beach days"))).toEqual(new Set(["Apply", "Edit…", "Delete…"]));
+    expect(menuLabels(await openPresetMenu("Favorites"))).toEqual(new Set(["Load into filter", "Update from filter", "Edit…", "Delete…"]));
+  });
+
+  it("Apply applies the preset at once, as the Library tab's preset dropdown does, and is disabled while the tab holds unsaved changes", async () => {
+    const { server } = await mountPresets();
+    const before = libraryQueries(server).length;
+    await openPresetMenu("Beach days");
+    await pickInMenu("Apply");
+    await waitFor(() => expect(libraryQueries(server).length).toBe(before + 1));
+    expect(libraryQueries(server)[before].filterState.selectedTags).toEqual(["Beach"]);
+    expect(selectedPresetLabel()).toBe("Beach days");
+    expect(heading()).toBe("Preset: Beach days");
+    expect(applyShowsChanges()).toBe(false);
+
+    // A filter change, and a preset change, would be dropped.
+    await click(box("Only never played"));
+    let item = menuItemIn(await openPresetMenu("Favorites"), "Apply");
+    expect([item.disabled, item.title]).toEqual([true, APPLY_FIRST]);
+    await click(discardButton());
+    await addPreset("Mine");
+    await click(discardButton());
+    const edit = await editPreset("Favorites");
+    fireEvent.input(byId("filter-preset-edit-name"), { target: { value: "Faves" } });
+    await press(byId("filter-preset-edit-save-btn"));
+    expect(edit.open).toBe(false);
+    item = menuItemIn(await openPresetMenu("Faves"), "Apply");
+    expect([item.disabled, item.title]).toEqual([true, APPLY_FIRST]);
+    expect(libraryQueries(server).length).toBe(before + 1);
+  });
+
+  it("Load into filter loads the preset's filter until Apply, keeping Choose Preset's choice", async () => {
+    const { server } = await mountPresets();
+    await chooseInDialog("Favorites");
+    await openPresetMenu("Beach days");
+    await pickInMenu("Load into filter");
+    expect(heading()).toBe("Preset: Beach days");
+    expect(chosenInDialog()).toBe("Favorites");
+    expect(applyShowsChanges()).toBe(true);
+    expect((await applyAndWait(server)).selectedTags).toEqual(["Beach"]);
+  });
+
+  it("Update from filter saves the tab's filter into the preset until Apply, saying so, and is disabled with Update preset's reasons", async () => {
+    const { server, presets } = await mountPresets();
+    const updateItem = async (name: string) => menuItemIn(await openPresetMenu(name), "Update from filter");
+    let item = await updateItem("Favorites");
+    expect([item.disabled, item.title]).toEqual([true, "Choose a filter to save as a preset."]);
+
+    await click(box("Only never played"));
+    item = await updateItem("Favorites");
+    expect(item.disabled).toBe(false);
+    await press(item);
+    await waitFor(() => expect(popupsShown()).toContain('Updated preset "Favorites" locally — Apply to save.'));
+    expect(heading()).toBe("Preset: Favorites");
+    expect(presets.summaries()).toEqual([]);
+
+    // Favorites has the tab's filter now, which no other preset may take.
+    item = await updateItem("Beach days");
+    expect([item.disabled, item.title]).toEqual([true, 'Preset "Favorites" already has this filter.']);
+    // A field that would hold Update preset disables it, saying so, where the button would move to the field.
+    await type(byId("filter-max-dur-text"), "abc");
+    item = await updateItem("Beach days");
+    expect([item.disabled, item.title]).toEqual([true, "Correct the maximum duration first."]);
+    await type(byId("filter-max-dur-text"), "");
+
+    await applyAndWait(server);
+    expect(presets.summaries()).toEqual(["update preset-favorites"]);
+    expect(presets.list[0]).toMatchObject({ name: "Favorites", filterState: { onlyNeverPlayed: true } });
+  });
+
+  it("Edit… opens Edit Preset on the preset, and Delete… asks first and deletes it until Apply", async () => {
+    const { server, presets } = await mountPresets();
+    await editPreset("Beach days");
+    expect(byId<HTMLInputElement>("filter-preset-edit-name").value).toBe("Beach days");
+    await press(buttonIn(topDialog(), "Cancel"));
+    expect(appDialogs()).toEqual([]);
+
+    await openPresetMenu("Beach days");
+    await pickInMenu("Delete…");
+    const confirm = topDialog();
+    expect(document.getElementById(confirm.getAttribute("aria-labelledby")!)?.textContent).toBe('Delete preset "Beach days"?');
+    await press(buttonIn(confirm, "Cancel"));
+    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
+
+    await openPresetMenu("Beach days");
+    await pickInMenu("Delete…");
+    await press(buttonIn(topDialog(), "Delete"));
+    expect(presetRows()).toEqual(["Favorites"]);
+    expect(applyShowsChanges()).toBe(true);
+    expect(presets.summaries()).toEqual([]);
+    await applyAndWait(server);
+    expect(presets.summaries()).toEqual(["delete preset-beach"]);
+  });
+
+  it("a source's Only this source checks only it until Apply, shown while other enabled sources are checked, tinting the row", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+    expect(menuLabels((await openSourceMenu(MOVIES))!)).toEqual(new Set(["Only this source"]));
+    expect(sourceRow(MOVIES).classList.contains("is-menu-target")).toBe(true);
+    await pickInMenu("Only this source");
+    expect([box(MOVIES).checked, box(PHOTOS).checked]).toEqual([true, false]);
+
+    // The only enabled source checked has none, and an unchecked one still does.
+    expect(await openSourceMenu(MOVIES)).toBeNull();
+    expect(menuLabels((await openSourceMenu(PHOTOS))!)).toEqual(new Set(["Only this source"]));
+    // A source turned off on the server keeps its check, which can't change.
+    expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-1", "source-3"]);
+  });
+
+  it("Only this source leaves a source turned off on the server unchecked when it was", async () => {
+    const enabledOnly = { id: "preset-enabled", name: "Enabled sources", filterState: { includedSourceIds: ["source-1", "source-2"] } };
+    const { server } = await mountFilter([enabledOnly]);
+    await pickPreset(enabledOnly.id);
+    await openDialog();
+    expect([box(MOVIES).checked, box(PHOTOS).checked, box(ARCHIVE).checked]).toEqual([true, true, false]);
+
+    await openSourceMenu(PHOTOS);
+    await pickInMenu("Only this source");
+    expect([box(MOVIES).checked, box(PHOTOS).checked, box(ARCHIVE).checked]).toEqual([false, true, false]);
+    expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-2"]);
+  });
+
+  it("a source turned off on the server says so as its row's tooltip and as its disabled Only this source's", async () => {
+    await mountFilter();
+    await openDialog();
+    expect(sourceRow(ARCHIVE).title).toBe(SOURCE_OFF);
+    expect(sourceRow(MOVIES).title).toBe("");
+    const item = menuItemIn((await openSourceMenu(ARCHIVE))!, "Only this source");
+    expect([item.disabled, item.title]).toEqual([true, SOURCE_OFF]);
+  });
+
+  it("open at a long press on a preset row or a source, which it leaves unchecked, but not on a preset's drag handle", async () => {
+    await mountPresets();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    await fingerPress(presetRow("Favorites").querySelector(".filter-preset-name")!, 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Apply", "Load into filter", "Update from filter", "Edit…", "Delete…"]));
+    await fingerPress(presetHandle("Favorites"), 500);
+    expect([contextMenuShown(), presetRows()]).toEqual([null, ["Favorites", "Beach days"]]);
+
+    vi.useRealTimers();
+    await showTab("General");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await fingerPress(sourceRow(PHOTOS), 500);
+    expect(menuLabels(contextMenuShown()!)).toEqual(new Set(["Only this source"]));
+    expect(box(PHOTOS).checked).toBe(true);
   });
 });

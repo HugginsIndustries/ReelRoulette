@@ -792,7 +792,7 @@ ReelRoulette is a thin-client, API-first system:
   - Then Only unrated and Min Rating (set with the rating's stars, which wrap under the label on a narrow screen, and change only the tab's filter, never a rating).
   - Media type.
   - Client source inclusion with each source labeled by its name and, when it differs, its folder, as "Videos (/media/videos)".
-    - A source turned off on the server shows disabled and doesn't count toward the sources checked.
+    - A source turned off on the server shows disabled and doesn't count toward the sources checked, with "This source is turned off on the server" as its tooltip.
   - Audio filter.
   - Minimum and maximum duration typed as whole MM:SS or HH:MM:SS with seconds under 60, and minutes under 60 in HH:MM:SS, or a number of seconds, where an empty field means no limit and its placeholder says "No minimum" or "No maximum".
     - Durations from the server are read leniently, so fractional seconds in a stored preset read as whole seconds.
@@ -807,7 +807,8 @@ ReelRoulette is a thin-client, API-first system:
   - Include/exclude tri-state chips from `POST /api/tag-editor/model`.
   - With no tags it says "No tags yet. Add them in the Tags tab."
 - Presets:
-  - The preset list, by id, which Apply saves one write per changed preset, and preset rows with a drag handle and Edit, which opens Edit Preset with the name and Delete, asking first.
+  - The preset list, by id, which Apply saves one write per changed preset, and preset rows with a drag handle and no edit button.
+  - Edit Preset, with the name and Delete, asking first, opens from Edit… in a preset row's menu, as Context menus below describes.
   - A name another preset has, ignoring case, is flagged.
   - Choose Preset only chooses the preset that its Load (`sync`) and Update (`save`) icon buttons act on:
     - It starts on the preset the heading names, its base while starred, each time the Presets section comes into view.
@@ -895,7 +896,9 @@ ReelRoulette is a thin-client, API-first system:
 
 - The browser's own right-click menu is off across the page except in text fields, textareas and text, search, url, tel, email, password, and number inputs, which keep it for copy, paste, and spell check.
 - A part of the page with a menu registers as a surface with the context menu (`addSurface` in `src/ui/menuModel.ts`), and the elements its menu opens on carry the `menu-surface` class, which turns off the browser's long-press callout and, on a touch screen, text selection.
-  - The surfaces are the library grid, whose tiles carry the class, the player's media area, the header's now-playing name, the Stats tab's file name, path, and tags, and the Tags tab's tags and category headers, which a component gives a menu from its groups with `useMenuSurface` (`src/ui/Menu.tsx`).
+  - The library grid, whose tiles carry the class, and the player's media area register themselves.
+  - A component gives the header's now-playing name, the Stats tab's file name, path, and tags, the Tags tab's tags and category headers, and the Filter tab's preset rows and sources a menu from its groups with `useMenuSurface` (`src/ui/Menu.tsx`).
+  - The name's menu and the Stats tab's file name's and path's open through the menus on the playing item, so they close when another item plays.
 - A mouse's right-click anywhere on a surface opens the innermost surface's menu at the pointer, and one where no menu exists opens nothing.
 - A long press with a finger or a pen (`src/ui/longPress.ts`: half a second, started only by the first finger down, so a pinch never starts one, and cancelled by moving 8 px, a second finger, a scroll the browser takes over, or lifting first) opens it where the press began, except on buttons, but those a surface counts as part of it (`pressOn`), as a tag category's header does its name, drag handles, the rating's stars, and the panel's resize handle.
   - The click it ends with is stopped before anything hears it.
@@ -922,6 +925,15 @@ ReelRoulette is a thin-client, API-first system:
   - A category's holds New tag in this category (`new_label`), which chooses the category in the footer and moves to New tag name at once, so a phone opens its keyboard, then Edit… and Delete…, as Edit Category's, which Uncategorized's leaves out.
   - A Stats tab tag's holds Filter by this tag, with no menu while the filter includes the tag.
   - Filter by this tag shows the Filter tab on its Tags section, once the load it starts as it shows has landed, with the tag included in the working filter, and taken out of its excluded tags, until Apply, and the category that lists it expanded.
+- The menus on the Filter tab (`src/filter/filterMenus.ts`):
+  - A preset row's opens anywhere on it but its drag handle and holds:
+    - Apply (`filter_alt`), which applies the preset at once, as picking it in the Library tab's preset dropdown does, shown while the dropdown doesn't name the preset unstarred, and disabled with "Apply or discard the Filter tab's changes first" while the tab holds unsaved changes.
+    - Then Load into filter (`sync`) and Update from filter (`save`), shown while the tab's filter, as its General fields read, isn't the preset's, which do what Load and Update do for the chosen preset, keeping Choose Preset's choice.
+    - Update from filter is disabled with Update's reasons, a General field's that would hold it included, rather than moving to the field.
+    - Then Edit… (`edit_note`), which opens Edit Preset, and Delete… (`delete`), which asks as Edit Preset's Delete does and waits for Apply.
+  - A source's holds Only this source (`filter_alt`), which checks it and unchecks the other enabled sources until Apply, a source turned off on the server keeping its check.
+    - The only enabled source checked has no menu.
+    - On a source turned off on the server it is disabled with "This source is turned off on the server".
 - The file items (`src/library/fileLocation.ts`) are:
   - Copy name (`content_copy`) and Copy path (`content_copy`), which copy with the Clipboard API where the browser has it, and otherwise, as over plain HTTP from another device, or when the Clipboard API refuses, from a hidden read-only text field in the fullscreen stage with `document.execCommand('copy')`, saying "Name copied." or "Path copied." with the file's name as the popup's second line, or "Couldn't copy the name." or "Couldn't copy the path." in the notice.
   - Show in File Manager (`folder_open`), shown while the last version check listed `api.showInFileManager`, which the server lists only for a browser on the server machine while it has a desktop, which asks the server to open its file manager at the file and says "Opened in the file manager.", and whose refusal shows "Show in File Manager failed: {the server's reason}", or "Show in File Manager failed." without one, in the notice.

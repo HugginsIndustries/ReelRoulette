@@ -765,7 +765,7 @@ Last milestone completed: M12n1
 | Foundation | ✅ Complete | The browser's own menu off across the app except in text fields, a long-press opener shared with the library tiles, whose long press opens their menu, with Select in it, and menus closing on scroll, resize, and the browser tab hiding. |
 | Player | ✅ Complete | Menus on the player's picture, the header's now-playing name, and the Stats tab's file path, and Copy path and Show in File Manager on library tiles. |
 | Tags tab | ✅ Complete | Menus on the Tags tab's tags and categories and on the Stats tab's tags. |
-| Filter tab | ⏳ Planned | Menus on the Filter tab's preset rows and sources. |
+| Filter tab | ✅ Complete | Menus on the Filter tab's preset rows and sources. |
 | Notifications, Auto Tag, and Settings | ⏳ Planned | Menus on the bell's list entries, the popups, Auto Tag's file rows, and the Settings tab's diagnostics IDs, and the unused notification code removed. |
 
 #### Mockup slice
@@ -1024,6 +1024,19 @@ Last milestone completed: M12n1
 - The header's now-playing name's and the Stats tab's file name's and path's menus open as before through `useMenuSurface`, in Header and Stats screen tests.
 - The mockup matches what the slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `src/filter/filterMenus.ts` builds the menus on the Filter tab's preset rows and sources, which `PresetListRow` and `SourceRow` (`src/ui/FilterDialog.tsx`) register through `useMenuSurface`, with the `menu-surface` class. A row's Apply calls the store's `pickHeaderPreset`, as the Library tab's preset dropdown does.
+- The Filter tab's view gained `filterPreset`, the preset whose filter the tab's filter is, and `updateFromFilterReason`, and the tab gained `loadIntoFilter`, `updateFromFilter`, `deletePreset`, and `onlySource`, which share one path each with Load, Update, Edit Preset's Delete, and a source's check.
+- `useMenuSurface` takes an `open` in place of the context menu's own. The playing item's menus give the name's and the file's groups (`nameGroups`, `fileGroups`) and open them through `show`, which closes them when another item plays, so `NowPlaying` and `FileStats` no longer attach their surfaces by hand.
+- Planning settled two points by the mockup, with the advisor's approval: a held Update from filter is disabled with the field's reason, where the button moves to the field, and Only this source leaves a source turned off on the server checked as it was, since its checkbox can't change.
+- happy-dom forwards a label's click to its checkbox, and the opener's click stopper keeps it from toggling, so the test of a long press on a source can fail (measured).
+- Filter screen tests cover each preset row item, Apply's reason, Delete's question, the rows' only button, Only this source, the turned-off source's tooltips, the long presses, and the tint; menu tests cover the open override, and Header and Stats screen tests the name's and the file path's menus closing when another item plays.
+- Breaking Apply's shown rule, its reason, its pick, the Load and Update shown rule, Update's reason, its held reason, Load into filter keeping the choice, Delete's question, Only this source's unchecking, its keeping a turned-off source's check, the source menu's shown rule, the turned-off item's reason, the row's tooltip, the source surface, the preset surface, the click stopper, and the open override, each from a copy under `artifacts/scratch/`, failed 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 14, 1, and 2 tests (measured).
+- After review, a Stats screen test covers the file path's menu closing when another item plays, and an Only this source test a source turned off on the server that starts unchecked; dropping the Stats tab's open override, and having Only this source check every source turned off, each from a copy under `artifacts/scratch/`, failed 1 test each (measured).
+- `npm run verify` passes, with 2,529 tests in 98 files (measured), and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- CHANGELOG.md, CONTEXT.md, and docs/domain-inventory.md describe the menus, the preset rows' missing edit button, and the turned-off source's tooltip. The mockup already showed the menus as shipped and didn't change.
 
 #### Notifications, Auto Tag, and Settings slice
 

@@ -4,6 +4,7 @@ import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDialogs, DISCARD_CHANGES, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
+import { createFilterMenus, type FilterMenus } from "../filter/filterMenus";
 import { createFileLocation } from "../library/fileLocation";
 import { createLibrary, type Library } from "../library/library";
 import { createNotifications, type Notifications } from "../notifications/notifications";
@@ -93,6 +94,8 @@ export interface AppServices {
   playingMenus: PlayingItemMenus;
   /** The menus on tags: the Tags tab's tags' and categories', and the Stats tab's tags'. */
   tagMenus: TagMenus;
+  /** The menus on the Filter tab's preset rows and sources. */
+  filterMenus: FilterMenus;
   /** The Settings tab's settings that nothing else keeps. */
   settings: Settings;
 }
@@ -236,6 +239,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     contextMenu
   });
   const tagMenus = createTagMenus({ tagEditor, filterDialog });
+  const filterMenus = createFilterMenus({ filterDialog, store });
   const randomization = createRandomizationTab({ store, api, connection, tagCatalog, dialogs, notifications, device });
   const settings = createSettings({ device, dialogs, reloadPage });
   const ambient = createAmbient({
@@ -339,6 +343,7 @@ export function createAppServices(config: RuntimeConfig, options: AppServicesOpt
     contextMenu,
     playingMenus,
     tagMenus,
+    filterMenus,
     settings
   };
 }

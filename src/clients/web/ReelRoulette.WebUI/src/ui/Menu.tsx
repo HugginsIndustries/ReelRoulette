@@ -2,7 +2,7 @@ import { Fragment, type RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
 import { useLightDismiss } from "./LightDismiss";
-import { MENU_TARGET_CLASS, type MenuGroups } from "./menuModel";
+import { MENU_TARGET_CLASS, type ContextMenuView, type MenuGroups } from "./menuModel";
 import { placeAtPoint } from "./placement";
 
 export interface MenuProps {
@@ -121,15 +121,22 @@ export function ContextMenuHost() {
   );
 }
 
+export interface MenuSurfaceOptions {
+  /** The buttons inside the element a long press still opens the menu on. */
+  pressOn?: string;
+  /** Opens the menu in place of the context menu's own open, as the menus on the playing item do, to close it later. */
+  open?: (view: ContextMenuView) => void;
+}
+
 /**
  * Gives the element `element` holds a context menu while it is mounted: a right-click or a long press on it opens the
  * groups `groupsFor` gives at that moment, tinting the element, and nothing while it gives null. Without `groupsFor`
- * the element has no menu. `pressOn` names its buttons a long press still opens the menu on.
+ * the element has no menu.
  */
 export function useMenuSurface(
   element: RefObject<Element | null>,
   groupsFor: (() => MenuGroups | null) | undefined,
-  options: { pressOn?: string } = {}
+  options: MenuSurfaceOptions = {}
 ): void {
   const { contextMenu } = useApp();
   // The latest render's `groupsFor` is the one a press asks.
@@ -141,10 +148,11 @@ export function useMenuSurface(
     if (!hasMenu || !target) {
       return;
     }
+    const open = options.open ?? contextMenu.open;
     return contextMenu.addSurface({
       element: target,
       menuAt: () => latest.current?.() ?? null,
-      open: (groups, point) => contextMenu.open({ point, target, groups }),
+      open: (groups, point) => open({ point, target, groups }),
       pressOn: options.pressOn
     });
   }, [hasMenu]);
